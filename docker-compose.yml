@@ -1,0 +1,38 @@
+services:
+  meilisearch:
+    image: getmeili/meilisearch:v1.48.3
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-book-id-search-dev-key}
+      MEILI_ENV: ${MEILI_ENV:-development}
+    ports:
+      - "7700:7700"
+    volumes:
+      - ${MEILI_DATA_DIR:-./meili_data}:/meili_data
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - meilisearch
+    environment:
+      MEILI_HOST: http://meilisearch:7700
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-book-id-search-dev-key}
+      MEILI_INDEX: ${MEILI_INDEX:-books}
+      API_PORT: 3001
+    ports:
+      - "${API_PORT:-3001}:3001"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "${WEB_PORT:-5173}:80"

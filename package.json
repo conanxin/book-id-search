@@ -1,0 +1,29 @@
+{
+  "name": "book-id-search",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @book-id-search/api --filter @book-id-search/web dev",
+    "build": "pnpm --filter @book-id-search/api build && pnpm --filter @book-id-search/web build && tsc -p tsconfig.scripts.json --noEmit",
+    "test": "vitest run",
+    "verify": "tsx scripts/verify.ts",
+    "import:sample": "tsx scripts/import-books.ts --file data/sample-books.txt --reset-index --report reports/latest-import-report.json",
+    "import:file": "tsx scripts/import-books.ts",
+    "audit:parse": "tsx scripts/audit-parse-quality.ts",
+    "preflight:import": "tsx scripts/preflight-import.ts",
+    "check:storage": "tsx scripts/check-storage-targets.ts",
+    "verify:deploy-package": "tsx scripts/verify-deploy-package.ts"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "meilisearch": "^0.52.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.14"
+  }
+}

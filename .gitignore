@@ -1,0 +1,55 @@
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+.vite/
+coverage/
+*.tsbuildinfo
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Private source data. Keep only the small public sample.
+data/*
+!data/.gitkeep
+!data/sample-books.txt
+data/*.csv
+data/*.tsv
+data/*.db
+*.csv
+*.tsv
+*.db
+*.txt
+!data/sample-books.txt
+读秀*.txt
+*读秀*
+*下架书*
+*ss与isbn码*
+*isbn码*
+
+# Generated Meilisearch data and local binaries.
+meili_data/
+meili_data/**
+meilisearch/
+meilisearch/**
+book-id-search-meili/
+book-id-search-meili/**
+dumps/
+snapshots/
+meilisearch.exe
+meilisearch-windows-amd64.exe
+
+# Runtime logs and generated JSON reports.
+*.log
+npm-debug.log*
+pnpm-debug.log*
+reports/*.json
+reports/*.ndjson
+reports/import-checkpoint.json
+reports/import-checkpoint-*.json
+
+# OS/editor artifacts.
+.DS_Store
+Thumbs.db
