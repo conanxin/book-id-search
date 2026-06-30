@@ -1,150 +1,168 @@
 # 腾讯云部署
 
+本项目适合部署到腾讯云轻量应用服务器或 CVM。真实 TXT 数据不进入 GitHub，只上传到服务器私有目录。
+
 ## 推荐配置
 
-- 最低测试：2 核 4GB / 80GB SSD，适合样例、10 万行、50 万行试跑。
-- 推荐全量：4 核 8GB / 160GB SSD，适合 500 万行级别全量导入。
-- 更稳：4 核 16GB / 200GB SSD，适合更从容地导入、重建索引和保留备份。
-- 建议额外预留数据盘，用于 TXT、Meilisearch 数据目录和备份。
-- 生产环境不要把 Meilisearch 数据放在空间很小的系统盘。优先把 `MEILI_DATA_DIR` 指向 SSD 数据盘目录。
+- 最低测试：2 核 4GB / 80GB SSD
+- 推荐全量：4 核 8GB / 160GB SSD
+- 更稳：4 核 16GB / 200GB SSD
 
-## 安装 Docker
+生产环境不要把 Meilisearch 数据放在空间很小的系统盘。推荐：
 
-Ubuntu 示例：
+- 应用目录：`/opt/book-id-search`
+- Meilisearch 数据目录：`/data/book-id-search/meili_data`
+- 私有 TXT 目录：`/data/book-id-search/private-data`
+
+## 端口与公网
+
+- Web 默认端口：`5173`
+- API 默认端口：`3001`
+- Meilisearch 默认只绑定到 `127.0.0.1:7700`
+
+不要把 Meilisearch `7700` 直接暴露到公网。公网访问建议只开放 Web 端口，或在 Nginx/Caddy/腾讯云 EdgeOne 后面绑定域名和 HTTPS。
+
+如确实需要临时调试 Meilisearch 端口，可在 `.env` 中设置：
 
 ```bash
-sudo apt-get update
-sudo apt-get install -y ca-certificates curl gnupg
+MEILI_PORT_BIND=0.0.0.0:7700
+```
+
+调试完成后请改回：
+
+```bash
+MEILI_PORT_BIND=127.0.0.1:7700
+```
+
+## 准备服务器
+
+```bash
+./scripts/deploy/prepare-server.sh
+```
+
+脚本会安装 `git`、`curl`、`tmux`，检查 Docker 和 Docker Compose，并创建：
+
+```text
+/opt/book-id-search
+/data/book-id-search/meili_data
+/data/book-id-search/private-data
+```
+
+如果 Docker 不存在，按脚本提示安装：
+
+```bash
 curl -fsSL https://get.docker.com | sudo sh
-sudo usermod -aG docker $USER
 ```
 
-重新登录后验证：
+## 上传真实 TXT
+
+在本地 Windows 执行：
+
+```powershell
+.\scripts\deploy\upload-data.ps1 -Host "1.2.3.4" -User root -KeyPath "C:\path\to\key.pem"
+```
+
+上传目标：
+
+```text
+/data/book-id-search/private-data/books.txt
+```
+
+不要把真实 TXT 放进 Git 仓库。
+
+## 部署应用
+
+在服务器执行：
 
 ```bash
-docker --version
-docker compose version
+export MEILI_MASTER_KEY="replace-with-a-long-random-secret"
+./scripts/deploy/deploy-app.sh
 ```
 
-## 上传代码
-
-```bash
-git clone <your-repo-url> book-id-search
-cd book-id-search
-cp .env.example .env
-```
-
-编辑 `.env`，把 `MEILI_MASTER_KEY` 改成强随机字符串。
-
-建议设置持久化目录：
-
-```bash
-mkdir -p /data/book-id-search/meili_data
-sed -i 's#MEILI_DATA_DIR=.*#MEILI_DATA_DIR=/data/book-id-search/meili_data#' .env
-```
-
-## 上传 TXT 数据
-
-不要放入 Git。建议放在服务器私有目录：
-
-```bash
-mkdir -p ~/private-data
-scp "读秀512w（下架书及ss与isbn码）.txt" user@server:~/private-data/
-```
-
-## 启动服务
+脚本会 clone/pull `https://github.com/conanxin/book-id-search.git`，写入 `.env`，然后运行：
 
 ```bash
 docker compose up -d --build
 ```
 
-## 导入数据
-
-服务器上安装 Node.js 22 与 pnpm 后执行：
+查看服务状态：
 
 ```bash
-pnpm install
-pnpm import:file -- --file "$HOME/private-data/读秀512w（下架书及ss与isbn码）.txt" --reset-index
-```
-
-如服务器内存紧张，先导入 10 万行：
-
-```bash
-pnpm import:file -- --file "$HOME/private-data/读秀512w（下架书及ss与isbn码）.txt" --limit 100000 --reset-index
-```
-
-全量导入前先做前置检查：
-
-```bash
-pnpm preflight:import -- --file "$HOME/private-data/读秀512w（下架书及ss与isbn码）.txt" --meili-data-dir "$MEILI_DATA_DIR"
-```
-
-建议分阶段导入：
-
-```bash
-pnpm import:file -- --file "$HOME/private-data/读秀512w（下架书及ss与isbn码）.txt" --offset 0 --limit 500000 --reset-index --checkpoint reports/import-checkpoint.json
-pnpm import:file -- --file "$HOME/private-data/读秀512w（下架书及ss与isbn码）.txt" --offset 500000 --limit 500000 --checkpoint reports/import-checkpoint.json
-pnpm import:file -- --file "$HOME/private-data/读秀512w（下架书及ss与isbn码）.txt" --offset 1000000 --checkpoint reports/import-checkpoint.json
-```
-
-断点续跑：
-
-```bash
-pnpm import:file -- --checkpoint reports/import-checkpoint.json --resume
-```
-
-查看 Meilisearch 数据目录大小：
-
-```bash
-du -sh "$MEILI_DATA_DIR"
-df -h "$MEILI_DATA_DIR"
-```
-
-## 绑定域名
-
-1. 在腾讯云 DNS 添加 A 记录指向服务器公网 IP。
-2. 服务器防火墙和腾讯云安全组开放 80/443 端口。
-3. 默认不要公网开放 7700；Meilisearch 只给 API 容器访问。
-4. 如需 HTTPS，可在服务器前接入腾讯云 EdgeOne/CDN，或自行安装 Caddy/Nginx + Let's Encrypt。
-
-## 查看日志
-
-```bash
-docker compose logs -f meilisearch
+docker compose ps
 docker compose logs -f api
 docker compose logs -f web
+docker compose logs -f meilisearch
 ```
 
-## 常见故障
+## 500k 云端验证
 
-- `Meilisearch 暂不可用`：检查 `docker compose ps` 和 `docker compose logs meilisearch`。
-- 导入 401：确认 `.env` 中 `MEILI_MASTER_KEY` 与运行脚本环境一致。
-- 导入慢：增大云硬盘性能，或降低 `--batch-size`。
-- 全量导入内存不足：保留 10 万行可运行索引，升级到 8 GB 内存后重新导入。
-## S14 推荐全量导入参数
-
-S14 benchmark 已用临时 index 验证，不会影响本地 `books` 500k 演示索引。结果显示关闭 `rawInfo` 全文搜索并增大 batch 可以显著提升导入速度：
-
-| config | rows | batch size | rawInfo searchable | rows/sec |
-| --- | ---: | ---: | --- | ---: |
-| baseline-small | 20000 | 5000 | true | 681.43 |
-| compact-search | 20000 | 10000 | false | 1566.17 |
-| larger-batch | 20000 | 20000 | false | 2164.50 |
-
-腾讯云全量导入推荐：
+S15 只建议导入前 500000 行，不直接跑全量。
 
 ```bash
-tmux new -s book-import
-pnpm import:file -- --file "$HOME/private-data/books.txt" --index books --reset-index --batch-size 20000 --search-raw-info false --wait-timeout-ms 900000 --checkpoint reports/import-checkpoint-full.json --report reports/import-full-report.json
+./scripts/deploy/import-500k.sh
 ```
 
-断点续跑：
+脚本会在 `tmux` session `book-import-500k` 中运行：
 
 ```bash
-tmux attach -t book-import
-pnpm import:file -- --checkpoint reports/import-checkpoint-full.json --resume --wait-timeout-ms 900000
+docker compose exec -T api pnpm import:file -- --file /data/private/books.txt --index books --offset 0 --limit 500000 --reset-index --batch-size 20000 --search-raw-info false --wait-timeout-ms 900000 --checkpoint reports/import-checkpoint-500k-cloud.json --report reports/import-500k-cloud-report.json
+```
+
+查看进度：
+
+```bash
+tmux attach -t book-import-500k
+```
+
+验证：
+
+```bash
+./scripts/deploy/verify-remote.sh
+```
+
+如果已经配置公网地址：
+
+```bash
+PUBLIC_URL="http://your-domain-or-ip:5173" ./scripts/deploy/verify-remote.sh
+```
+
+## 推荐生产导入参数
+
+S14 benchmark 推荐：
+
+```bash
+--batch-size 20000 --search-raw-info false --wait-timeout-ms 900000
 ```
 
 `--search-raw-info false` 不删除原始记录，只是不把 `rawInfo` 放进全文搜索字段。SSID、DXID、ISBN、书名、作者、出版社仍可搜索，详情页仍保留原始记录。
 
-建议仍按 4 核 8GB / 160GB SSD 起步，稳妥配置为 4 核 16GB / 200GB SSD。`MEILI_DATA_DIR` 必须放在数据盘，例如 `/data/book-id-search/meili_data`，不要放在小系统盘。
+## 全量导入
+
+S16 使用，不在 S15 执行：
+
+```bash
+docker compose exec -T api pnpm import:file -- --file /data/private/books.txt --index books --reset-index --batch-size 20000 --search-raw-info false --wait-timeout-ms 900000 --checkpoint reports/import-checkpoint-full.json --report reports/import-full-report.json
+```
+
+断点续跑：
+
+```bash
+docker compose exec -T api pnpm import:file -- --checkpoint reports/import-checkpoint-full.json --resume --wait-timeout-ms 900000
+```
+
+建议在 `tmux` 或 `screen` 中运行长时间导入。
+
+## 查看数据目录大小
+
+```bash
+du -sh /data/book-id-search/meili_data
+df -h /data/book-id-search/meili_data
+```
+
+## 常见故障
+
+- Meilisearch 不可用：检查 `docker compose logs -f meilisearch`
+- 导入 401：确认服务器 `.env` 中的 `MEILI_MASTER_KEY` 与容器环境一致
+- 搜索无结果：确认导入报告和 `/api/stats` 的 `numberOfDocuments`
+- 端口打不开：检查腾讯云安全组、防火墙、`WEB_PORT` 和公网绑定
+- 导入中断：使用 checkpoint/resume 继续，不要从 0 重跑

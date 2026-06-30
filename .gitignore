@@ -10,6 +10,7 @@ coverage/
 .env
 .env.*
 !.env.example
+.deploy.env
 
 # Private source data. Keep only the small public sample.
 data/*

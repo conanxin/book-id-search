@@ -1,119 +1,112 @@
 # 运维手册
 
-## 重新导入数据
+## 查看服务状态
 
 ```bash
-pnpm import:file -- --file "/path/to/books.txt" --reset-index
-```
-
-分段导入：
-
-```bash
-pnpm import:file -- --file "/path/to/books.txt" --offset 0 --limit 500000 --reset-index --checkpoint reports/import-checkpoint.json
-pnpm import:file -- --file "/path/to/books.txt" --offset 500000 --limit 500000 --checkpoint reports/import-checkpoint.json
-```
-
-断点续跑：
-
-```bash
-pnpm import:file -- --checkpoint reports/import-checkpoint.json --resume
-```
-
-## 清空索引
-
-最安全方式是重新导入时带 `--reset-index`：
-
-```bash
-pnpm import:file -- --file "/path/to/books.txt" --limit 100000 --reset-index
-```
-
-## 更新代码
-
-```bash
-git pull
-pnpm install
-pnpm build
-docker compose up -d --build
-```
-
-## 查看日志
-
-```bash
+docker compose ps
 docker compose logs -f meilisearch
 docker compose logs -f api
 docker compose logs -f web
 ```
 
-开发模式：
+本地开发：
 
 ```bash
 pnpm dev
 ```
 
-## 备份 Meilisearch 数据目录
+## 重新导入数据
 
-如果使用 `.env` 中的 `MEILI_DATA_DIR` 绑定目录，先查看大小：
+Docker Compose 云端推荐在 API 容器中运行导入脚本。私有 TXT 通过 `BOOK_DATA_DIR` 只读挂载到容器内 `/data/private`。
+
+500000 行验证：
 
 ```bash
-du -sh "$MEILI_DATA_DIR"
-df -h "$MEILI_DATA_DIR"
+./scripts/deploy/import-500k.sh
 ```
 
-先停服务再备份目录：
+或手动执行：
 
 ```bash
-docker compose stop meilisearch
-tar czf backups/meili_data.tgz -C "$MEILI_DATA_DIR" .
-docker compose start meilisearch
+docker compose exec -T api pnpm import:file -- --file /data/private/books.txt --index books --offset 0 --limit 500000 --reset-index --batch-size 20000 --search-raw-info false --wait-timeout-ms 900000 --checkpoint reports/import-checkpoint-500k-cloud.json --report reports/import-500k-cloud-report.json
 ```
 
-如果仍使用 Docker volume，可用：
+全量导入，S16 使用：
 
 ```bash
-docker compose stop meilisearch
-docker run --rm -v book-id-search_meili_data:/data -v "$PWD/backups:/backup" alpine tar czf /backup/meili_data.tgz -C /data .
-docker compose start meilisearch
-```
-
-也可以使用 Meilisearch dump/snapshot 能力，但需要按当前 Meilisearch 版本确认接口。
-
-## 处理导入失败
-
-1. 查看 `reports/latest-import-report.json`。
-2. 检查失败是否来自 Meilisearch 连接、鉴权或磁盘空间。
-3. 用小批量重试：
-
-```bash
-pnpm import:file -- --file "/path/to/books.txt" --limit 10000 --dry-run
-pnpm import:file -- --file "/path/to/books.txt" --limit 100000 --batch-size 1000 --reset-index
-```
-
-4. 若失败来自单行解析，解析器会保留 `rawInfo`，通常不会中断导入。
-## S14 导入性能与运维建议
-
-推荐生产导入参数：
-
-```bash
-pnpm import:file -- --file "/path/to/books.txt" --index books --reset-index --batch-size 20000 --search-raw-info false --wait-timeout-ms 900000 --checkpoint reports/import-checkpoint-full.json --report reports/import-full-report.json
+docker compose exec -T api pnpm import:file -- --file /data/private/books.txt --index books --reset-index --batch-size 20000 --search-raw-info false --wait-timeout-ms 900000 --checkpoint reports/import-checkpoint-full.json --report reports/import-full-report.json
 ```
 
 断点续跑：
 
 ```bash
-pnpm import:file -- --checkpoint reports/import-checkpoint-full.json --resume --wait-timeout-ms 900000
+docker compose exec -T api pnpm import:file -- --checkpoint reports/import-checkpoint-full.json --resume --wait-timeout-ms 900000
 ```
 
-分段导入时，每段完成后先运行：
+长时间导入建议放进 `tmux` 或 `screen`。
+
+## 清空索引
+
+最安全方式是在重新导入时显式使用 `--reset-index`：
 
 ```bash
-pnpm verify
+docker compose exec -T api pnpm import:file -- --file /data/private/books.txt --limit 100000 --reset-index
+```
+
+## 更新代码
+
+```bash
+cd /opt/book-id-search
+git pull --ff-only
+docker compose up -d --build
+```
+
+## 查看统计
+
+```bash
+curl http://127.0.0.1:3001/api/health
 curl http://127.0.0.1:3001/api/stats
 ```
 
-`rawInfo` 搜索取舍：
+## 备份 Meilisearch 数据目录
 
-- `--search-raw-info true`：原始整行也参与搜索，索引更重，导入更慢。
-- `--search-raw-info false`：推荐生产默认。原始整行仍保存在文档和详情页里，但不参与全文搜索。
-- S14 搜索质量对比已验证：SSID、DXID、ISBN、书名、作者、出版社在 `rawInfo=false` 时仍可命中。
+查看大小：
 
-云端长时间导入应在 `tmux` 或 `screen` 里执行，避免 SSH 断开导致进程中止。不要把真实 TXT、`meili_data`、checkpoint JSON、`.env`、日志或二进制文件提交到 Git。
+```bash
+du -sh /data/book-id-search/meili_data
+df -h /data/book-id-search/meili_data
+```
+
+停止服务后备份：
+
+```bash
+docker compose stop meilisearch
+mkdir -p /data/book-id-search/backups
+tar czf /data/book-id-search/backups/meili_data-$(date +%Y%m%d-%H%M%S).tgz -C /data/book-id-search/meili_data .
+docker compose start meilisearch
+```
+
+## 处理导入失败
+
+1. 查看报告：`reports/import-500k-cloud-report.json` 或 `reports/import-full-report.json`
+2. 查看 checkpoint：`reports/import-checkpoint-500k-cloud.json` 或 `reports/import-checkpoint-full.json`
+3. 检查磁盘：`df -h /data/book-id-search/meili_data`
+4. 检查 Meilisearch 日志：`docker compose logs -f meilisearch`
+5. 使用 resume 继续：
+
+```bash
+docker compose exec -T api pnpm import:file -- --checkpoint reports/import-checkpoint-full.json --resume --wait-timeout-ms 900000
+```
+
+解析器会保留 `rawInfo`，单行异常通常不会中断导入；真正需要关注的是 Meilisearch 连接、认证、磁盘空间和任务超时。
+
+## 不进入 Git 的内容
+
+- 真实 TXT
+- `.env`
+- `.deploy.env`
+- `meili_data`
+- checkpoint JSON
+- 日志
+- `meilisearch.exe`
+- 构建产物

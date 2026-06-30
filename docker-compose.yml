@@ -6,7 +6,7 @@ services:
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-book-id-search-dev-key}
       MEILI_ENV: ${MEILI_ENV:-development}
     ports:
-      - "7700:7700"
+      - "${MEILI_PORT_BIND:-127.0.0.1:7700}:7700"
     volumes:
       - ${MEILI_DATA_DIR:-./meili_data}:/meili_data
 
@@ -22,8 +22,12 @@ services:
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-book-id-search-dev-key}
       MEILI_INDEX: ${MEILI_INDEX:-books}
       API_PORT: 3001
+      BOOK_DATA_DIR: /data/private
     ports:
       - "${API_PORT:-3001}:3001"
+    volumes:
+      - ${BOOK_DATA_DIR:-./data}:/data/private:ro
+      - ./reports:/app/reports
 
   web:
     build:
