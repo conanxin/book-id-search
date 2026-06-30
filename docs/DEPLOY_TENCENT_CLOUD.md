@@ -121,3 +121,30 @@ docker compose logs -f web
 - 导入 401：确认 `.env` 中 `MEILI_MASTER_KEY` 与运行脚本环境一致。
 - 导入慢：增大云硬盘性能，或降低 `--batch-size`。
 - 全量导入内存不足：保留 10 万行可运行索引，升级到 8 GB 内存后重新导入。
+## S14 推荐全量导入参数
+
+S14 benchmark 已用临时 index 验证，不会影响本地 `books` 500k 演示索引。结果显示关闭 `rawInfo` 全文搜索并增大 batch 可以显著提升导入速度：
+
+| config | rows | batch size | rawInfo searchable | rows/sec |
+| --- | ---: | ---: | --- | ---: |
+| baseline-small | 20000 | 5000 | true | 681.43 |
+| compact-search | 20000 | 10000 | false | 1566.17 |
+| larger-batch | 20000 | 20000 | false | 2164.50 |
+
+腾讯云全量导入推荐：
+
+```bash
+tmux new -s book-import
+pnpm import:file -- --file "$HOME/private-data/books.txt" --index books --reset-index --batch-size 20000 --search-raw-info false --wait-timeout-ms 900000 --checkpoint reports/import-checkpoint-full.json --report reports/import-full-report.json
+```
+
+断点续跑：
+
+```bash
+tmux attach -t book-import
+pnpm import:file -- --checkpoint reports/import-checkpoint-full.json --resume --wait-timeout-ms 900000
+```
+
+`--search-raw-info false` 不删除原始记录，只是不把 `rawInfo` 放进全文搜索字段。SSID、DXID、ISBN、书名、作者、出版社仍可搜索，详情页仍保留原始记录。
+
+建议仍按 4 核 8GB / 160GB SSD 起步，稳妥配置为 4 核 16GB / 200GB SSD。`MEILI_DATA_DIR` 必须放在数据盘，例如 `/data/book-id-search/meili_data`，不要放在小系统盘。

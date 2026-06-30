@@ -89,3 +89,31 @@ pnpm import:file -- --file "/path/to/books.txt" --limit 100000 --batch-size 1000
 ```
 
 4. 若失败来自单行解析，解析器会保留 `rawInfo`，通常不会中断导入。
+## S14 导入性能与运维建议
+
+推荐生产导入参数：
+
+```bash
+pnpm import:file -- --file "/path/to/books.txt" --index books --reset-index --batch-size 20000 --search-raw-info false --wait-timeout-ms 900000 --checkpoint reports/import-checkpoint-full.json --report reports/import-full-report.json
+```
+
+断点续跑：
+
+```bash
+pnpm import:file -- --checkpoint reports/import-checkpoint-full.json --resume --wait-timeout-ms 900000
+```
+
+分段导入时，每段完成后先运行：
+
+```bash
+pnpm verify
+curl http://127.0.0.1:3001/api/stats
+```
+
+`rawInfo` 搜索取舍：
+
+- `--search-raw-info true`：原始整行也参与搜索，索引更重，导入更慢。
+- `--search-raw-info false`：推荐生产默认。原始整行仍保存在文档和详情页里，但不参与全文搜索。
+- S14 搜索质量对比已验证：SSID、DXID、ISBN、书名、作者、出版社在 `rawInfo=false` 时仍可命中。
+
+云端长时间导入应在 `tmux` 或 `screen` 里执行，避免 SSH 断开导致进程中止。不要把真实 TXT、`meili_data`、checkpoint JSON、`.env`、日志或二进制文件提交到 Git。

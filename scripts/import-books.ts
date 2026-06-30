@@ -7,8 +7,12 @@ import { pathToFileURL } from "node:url";
 import { MeiliSearch } from "meilisearch";
 import { parseBookLine, type BookDocument } from "./parse-line.ts";
 
+const DEFAULT_INDEX = process.env.MEILI_INDEX ?? "books";
+const MIN_TASK_TIMEOUT_MS = 600_000;
+
 interface ImportOptions {
   file: string;
+  index: string;
   limit?: number;
   batchSize: number;
   dryRun: boolean;
@@ -18,6 +22,15 @@ interface ImportOptions {
   checkpoint?: string;
   resume: boolean;
   maxErrors: number;
+  waitTimeoutMs: number;
+  searchRawInfo: boolean;
+  benchmarkLabel?: string;
+  cleanupBenchmarkIndex: boolean;
+  indexWasProvided: boolean;
+  batchSizeWasProvided: boolean;
+  reportWasProvided: boolean;
+  waitTimeoutWasProvided: boolean;
+  searchRawInfoWasProvided: boolean;
 }
 
 interface ImportSamples {
@@ -30,6 +43,10 @@ interface ImportReport {
   dryRun: boolean;
   file: string;
   index: string;
+  batchSize: number;
+  waitTimeoutMs: number;
+  searchRawInfo: boolean;
+  benchmarkLabel: string | null;
   offset: number;
   limit: number | null;
   checkpointPath: string | null;
@@ -44,6 +61,12 @@ interface ImportReport {
   startedAt: string;
   finishedAt: string | null;
   elapsedSeconds: number | null;
+  rowsPerSecond: number | null;
+  meiliTaskCount: number;
+  averageTaskWaitSeconds: number | null;
+  totalTaskWaitSeconds: number;
+  cleanupBenchmarkIndex: boolean;
+  cleanupStatus: "not_requested" | "deleted" | "skipped_default_index" | "failed";
   samples: ImportSamples;
   warnings: string[];
 }
@@ -55,6 +78,9 @@ interface ImportCheckpoint {
   offset: number;
   limit: number | null;
   batchSize: number;
+  waitTimeoutMs: number;
+  searchRawInfo: boolean;
+  benchmarkLabel: string | null;
   lastProcessedLine: number;
   totalLines: number;
   imported: number;
@@ -68,49 +94,110 @@ interface ImportCheckpoint {
   updatedAt: string;
 }
 
+interface TaskWaitStats {
+  count: number;
+  totalSeconds: number;
+}
+
 function parseOptionalInt(value: string | undefined, label: string) {
   const parsed = Number.parseInt(value ?? "", 10);
-  if (!Number.isFinite(parsed)) throw new Error(`${label} 必须是整数`);
+  if (!Number.isFinite(parsed)) throw new Error(`${label} must be an integer`);
   return parsed;
+}
+
+function parseOptionalBoolean(value: string | undefined, label: string) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (normalized === "true") return true;
+  if (normalized === "false") return false;
+  throw new Error(`${label} must be true or false`);
+}
+
+function safeReportIndexName(indexName: string) {
+  return indexName.replace(/[^a-zA-Z0-9_-]+/g, "_") || "index";
+}
+
+function splitArg(arg: string) {
+  const eq = arg.indexOf("=");
+  if (eq === -1) return { name: arg, inlineValue: undefined };
+  return { name: arg.slice(0, eq), inlineValue: arg.slice(eq + 1) };
+}
+
+function roundSeconds(value: number) {
+  return Number(value.toFixed(2));
 }
 
 function parseArgs(argv: string[]): ImportOptions {
   const options: ImportOptions = {
     file: "",
+    index: DEFAULT_INDEX,
     batchSize: 5000,
     dryRun: false,
     resetIndex: false,
     report: "reports/latest-import-report.json",
     offset: 0,
     resume: false,
-    maxErrors: Number.POSITIVE_INFINITY
+    maxErrors: Number.POSITIVE_INFINITY,
+    waitTimeoutMs: MIN_TASK_TIMEOUT_MS,
+    searchRawInfo: true,
+    cleanupBenchmarkIndex: false,
+    indexWasProvided: false,
+    batchSizeWasProvided: false,
+    reportWasProvided: false,
+    waitTimeoutWasProvided: false,
+    searchRawInfoWasProvided: false
   };
 
   for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    if (arg === "--file") options.file = argv[++i] ?? "";
-    else if (arg === "--limit") options.limit = parseOptionalInt(argv[++i], "--limit");
-    else if (arg === "--batch-size") options.batchSize = parseOptionalInt(argv[++i], "--batch-size");
-    else if (arg === "--dry-run") options.dryRun = true;
-    else if (arg === "--reset-index") options.resetIndex = true;
-    else if (arg === "--report") options.report = argv[++i] ?? options.report;
-    else if (arg === "--offset") options.offset = parseOptionalInt(argv[++i], "--offset");
-    else if (arg === "--checkpoint") options.checkpoint = argv[++i] ?? "";
-    else if (arg === "--resume") options.resume = true;
-    else if (arg === "--max-errors") options.maxErrors = parseOptionalInt(argv[++i], "--max-errors");
-    else throw new Error(`未知参数：${arg}`);
+    const { name, inlineValue } = splitArg(argv[i]);
+    const nextValue = () => inlineValue ?? argv[++i] ?? "";
+
+    if (name === "--file") options.file = nextValue();
+    else if (name === "--index") {
+      options.index = nextValue();
+      options.indexWasProvided = true;
+    } else if (name === "--limit") options.limit = parseOptionalInt(nextValue(), "--limit");
+    else if (name === "--batch-size") {
+      options.batchSize = parseOptionalInt(nextValue(), "--batch-size");
+      options.batchSizeWasProvided = true;
+    } else if (name === "--dry-run") options.dryRun = true;
+    else if (name === "--reset-index") options.resetIndex = true;
+    else if (name === "--report") {
+      options.report = nextValue();
+      options.reportWasProvided = true;
+    } else if (name === "--offset") options.offset = parseOptionalInt(nextValue(), "--offset");
+    else if (name === "--checkpoint") options.checkpoint = nextValue();
+    else if (name === "--resume") options.resume = true;
+    else if (name === "--max-errors") options.maxErrors = parseOptionalInt(nextValue(), "--max-errors");
+    else if (name === "--wait-timeout-ms") {
+      options.waitTimeoutMs = parseOptionalInt(nextValue(), "--wait-timeout-ms");
+      options.waitTimeoutWasProvided = true;
+    } else if (name === "--search-raw-info") {
+      options.searchRawInfo = parseOptionalBoolean(nextValue(), "--search-raw-info");
+      options.searchRawInfoWasProvided = true;
+    } else if (name === "--benchmark-label") options.benchmarkLabel = nextValue();
+    else if (name === "--cleanup-benchmark-index") {
+      options.cleanupBenchmarkIndex = parseOptionalBoolean(nextValue(), "--cleanup-benchmark-index");
+    } else throw new Error(`Unknown argument: ${argv[i]}`);
   }
 
-  if (!Number.isFinite(options.batchSize) || options.batchSize <= 0) throw new Error("--batch-size 必须是正整数");
+  if (!options.index) throw new Error("--index must not be empty");
+  if (!Number.isFinite(options.batchSize) || options.batchSize <= 0) throw new Error("--batch-size must be a positive integer");
   if (options.limit !== undefined && (!Number.isFinite(options.limit) || options.limit <= 0)) {
-    throw new Error("--limit 必须是正整数");
+    throw new Error("--limit must be a positive integer");
   }
-  if (!Number.isFinite(options.offset) || options.offset < 0) throw new Error("--offset 必须是非负整数");
+  if (!Number.isFinite(options.offset) || options.offset < 0) throw new Error("--offset must be a non-negative integer");
   if (options.maxErrors !== Number.POSITIVE_INFINITY && (!Number.isFinite(options.maxErrors) || options.maxErrors < 0)) {
-    throw new Error("--max-errors 必须是非负整数");
+    throw new Error("--max-errors must be a non-negative integer");
   }
+  if (!Number.isFinite(options.waitTimeoutMs) || options.waitTimeoutMs <= 0) {
+    throw new Error("--wait-timeout-ms must be a positive integer");
+  }
+  options.waitTimeoutMs = Math.max(options.waitTimeoutMs, MIN_TASK_TIMEOUT_MS);
   if (options.resume && !options.checkpoint) options.checkpoint = "reports/import-checkpoint.json";
-  if (!options.file && !(options.resume && options.checkpoint)) throw new Error("缺少 --file <path>");
+  if (!options.file && !(options.resume && options.checkpoint)) throw new Error("Missing --file <path>");
+  if (!options.reportWasProvided && options.index !== DEFAULT_INDEX) {
+    options.report = path.join("reports", `${safeReportIndexName(options.index)}-import-report.json`);
+  }
 
   return options;
 }
@@ -120,35 +207,53 @@ function readCheckpoint(checkpointPath: string): ImportCheckpoint | null {
   return JSON.parse(readFileSync(checkpointPath, "utf8")) as ImportCheckpoint;
 }
 
-async function waitForTask(client: MeiliSearch, task: { taskUid?: number; uid?: number }) {
+async function waitForTask(
+  client: MeiliSearch,
+  task: { taskUid?: number; uid?: number },
+  taskStats: TaskWaitStats,
+  waitTimeoutMs: number
+) {
   const taskUid = task.taskUid ?? task.uid;
   if (taskUid === undefined) return;
-  const result = await client.tasks.waitForTask(taskUid, { timeout: 600000 });
+  const started = Date.now();
+  const result = await client.tasks.waitForTask(taskUid, { timeout: waitTimeoutMs });
+  taskStats.count += 1;
+  taskStats.totalSeconds += (Date.now() - started) / 1000;
   if (result.status === "failed") {
     throw new Error(result.error?.message ?? `Meilisearch task ${taskUid} failed`);
   }
 }
 
-async function configureIndex(client: MeiliSearch, indexName: string, resetIndex: boolean) {
+async function configureIndex(
+  client: MeiliSearch,
+  indexName: string,
+  resetIndex: boolean,
+  searchRawInfo: boolean,
+  taskStats: TaskWaitStats,
+  waitTimeoutMs: number
+) {
   if (resetIndex) {
     try {
-      await waitForTask(client, await client.deleteIndex(indexName));
+      await waitForTask(client, await client.deleteIndex(indexName), taskStats, waitTimeoutMs);
     } catch {
       // Missing index is fine during a reset.
     }
   }
 
   try {
-    await waitForTask(client, await client.createIndex(indexName, { primaryKey: "id" }));
+    await waitForTask(client, await client.createIndex(indexName, { primaryKey: "id" }), taskStats, waitTimeoutMs);
   } catch {
     // Existing index is fine; settings are refreshed below.
   }
 
   const index = client.index<BookDocument>(indexName);
+  const searchableAttributes = ["title", "author", "publisher", "isbn", "ssid", "dxid"];
+  if (searchRawInfo) searchableAttributes.push("rawInfo");
+
   await waitForTask(
     client,
     await index.updateSettings({
-      searchableAttributes: ["title", "author", "publisher", "isbn", "ssid", "dxid", "rawInfo"],
+      searchableAttributes,
       displayedAttributes: [
         "id",
         "ssid",
@@ -166,7 +271,9 @@ async function configureIndex(client: MeiliSearch, indexName: string, resetIndex
       filterableAttributes: ["year", "publisher", "parseStatus"],
       sortableAttributes: ["year"],
       rankingRules: ["words", "typo", "proximity", "attribute", "sort", "exactness"]
-    })
+    }),
+    taskStats,
+    waitTimeoutMs
   );
   return index;
 }
@@ -184,20 +291,24 @@ function writeReport(report: ImportReport, reportPath: string) {
 function writePrimaryAndLatestReports(report: ImportReport, reportPath: string) {
   writeReport(report, reportPath);
   const latestReportPath = path.join("reports", "latest-import-report.json");
+  if (report.index !== DEFAULT_INDEX) return;
   if (path.normalize(reportPath) !== path.normalize(latestReportPath)) {
     writeReport(report, latestReportPath);
   }
 }
 
-function writeCheckpoint(report: ImportReport, options: ImportOptions, indexName: string, warnings: Set<string>) {
+function writeCheckpoint(report: ImportReport, options: ImportOptions, warnings: Set<string>) {
   if (!options.checkpoint) return;
   const checkpoint: ImportCheckpoint = {
     file: report.file,
-    index: indexName,
+    index: report.index,
     dryRun: report.dryRun,
     offset: report.offset,
     limit: report.limit,
     batchSize: options.batchSize,
+    waitTimeoutMs: options.waitTimeoutMs,
+    searchRawInfo: options.searchRawInfo,
+    benchmarkLabel: options.benchmarkLabel ?? null,
     lastProcessedLine: report.lastProcessedLine,
     totalLines: report.totalLines,
     imported: report.imported,
@@ -214,20 +325,30 @@ function writeCheckpoint(report: ImportReport, options: ImportOptions, indexName
   writeFileSync(options.checkpoint, `${JSON.stringify(checkpoint, null, 2)}\n`, "utf8");
 }
 
+function updateTaskMetrics(report: ImportReport, taskStats: TaskWaitStats) {
+  report.meiliTaskCount = taskStats.count;
+  report.totalTaskWaitSeconds = roundSeconds(taskStats.totalSeconds);
+  report.averageTaskWaitSeconds = taskStats.count ? roundSeconds(taskStats.totalSeconds / taskStats.count) : null;
+}
+
 function progressLine(report: ImportReport, started: number) {
   const elapsedSeconds = Math.max((Date.now() - started) / 1000, 0.001);
   const rate = report.totalLines / elapsedSeconds;
-  return `[import] offset=${report.offset} processed=${report.totalLines} lastLine=${report.lastProcessedLine} imported=${report.imported} weak=${report.weakParsed} failed=${report.failedParsed} elapsed=${elapsedSeconds.toFixed(1)}s rate=${rate.toFixed(1)} lines/s`;
+  return `[import] index=${report.index} offset=${report.offset} processed=${report.totalLines} lastLine=${report.lastProcessedLine} imported=${report.imported} weak=${report.weakParsed} failed=${report.failedParsed} elapsed=${elapsedSeconds.toFixed(1)}s rate=${rate.toFixed(1)} lines/s`;
 }
 
 function applyResume(options: ImportOptions, checkpoint: ImportCheckpoint | null) {
   if (!options.resume) return { options, resumedFrom: null, checkpoint: null };
-  if (!checkpoint) throw new Error(`无法 resume：checkpoint 不存在：${options.checkpoint}`);
+  if (!checkpoint) throw new Error(`Cannot resume: checkpoint does not exist: ${options.checkpoint}`);
 
   const nextOptions = { ...options };
   nextOptions.file = nextOptions.file || checkpoint.file;
   nextOptions.offset = checkpoint.lastProcessedLine;
-  nextOptions.batchSize = options.batchSize || checkpoint.batchSize;
+  if (!options.indexWasProvided) nextOptions.index = checkpoint.index;
+  if (!options.batchSizeWasProvided) nextOptions.batchSize = checkpoint.batchSize;
+  if (!options.waitTimeoutWasProvided) nextOptions.waitTimeoutMs = checkpoint.waitTimeoutMs ?? nextOptions.waitTimeoutMs;
+  if (!options.searchRawInfoWasProvided) nextOptions.searchRawInfo = checkpoint.searchRawInfo ?? nextOptions.searchRawInfo;
+  if (!options.benchmarkLabel) nextOptions.benchmarkLabel = checkpoint.benchmarkLabel ?? undefined;
 
   const originalTarget = checkpoint.limit === null ? null : checkpoint.offset + checkpoint.limit;
   if (options.limit === undefined && originalTarget !== null) {
@@ -242,16 +363,20 @@ export async function runImport(argv = process.argv.slice(2)) {
   const loadedCheckpoint = parsedOptions.resume && parsedOptions.checkpoint ? readCheckpoint(parsedOptions.checkpoint) : null;
   const resumed = applyResume(parsedOptions, loadedCheckpoint);
   const options = resumed.options;
-  if (!existsSync(options.file)) throw new Error(`文件不存在：${options.file}`);
+  if (!existsSync(options.file)) throw new Error(`File does not exist: ${options.file}`);
 
   const host = process.env.MEILI_HOST ?? "http://127.0.0.1:7700";
   const apiKey = process.env.MEILI_MASTER_KEY;
-  const indexName = process.env.MEILI_INDEX ?? "books";
   const started = Date.now();
+  const taskStats: TaskWaitStats = { count: 0, totalSeconds: 0 };
   const report: ImportReport = {
     dryRun: options.dryRun,
     file: options.file,
-    index: indexName,
+    index: options.index,
+    batchSize: options.batchSize,
+    waitTimeoutMs: options.waitTimeoutMs,
+    searchRawInfo: options.searchRawInfo,
+    benchmarkLabel: options.benchmarkLabel ?? null,
     offset: options.offset,
     limit: options.limit ?? null,
     checkpointPath: options.checkpoint ?? null,
@@ -266,6 +391,12 @@ export async function runImport(argv = process.argv.slice(2)) {
     startedAt: resumed.checkpoint?.startedAt ?? new Date(started).toISOString(),
     finishedAt: null,
     elapsedSeconds: null,
+    rowsPerSecond: null,
+    meiliTaskCount: 0,
+    averageTaskWaitSeconds: null,
+    totalTaskWaitSeconds: 0,
+    cleanupBenchmarkIndex: options.cleanupBenchmarkIndex,
+    cleanupStatus: options.cleanupBenchmarkIndex ? "failed" : "not_requested",
     samples: resumed.checkpoint?.samples ?? { ok: [], weak: [], failed: [] },
     warnings: resumed.checkpoint?.warnings ?? []
   };
@@ -274,16 +405,19 @@ export async function runImport(argv = process.argv.slice(2)) {
   const seenIds = new Set<string>();
   const batch: BookDocument[] = [];
   const client = options.dryRun ? null : new MeiliSearch({ host, apiKey });
-  const index = client ? await configureIndex(client, indexName, options.resetIndex && !options.resume) : null;
+  const index = client
+    ? await configureIndex(client, options.index, options.resetIndex && !options.resume, options.searchRawInfo, taskStats, options.waitTimeoutMs)
+    : null;
 
   async function flushBatch() {
     if (!batch.length) return;
     if (index && client) {
-      await waitForTask(client, await index.addDocuments(batch, { primaryKey: "id" }));
+      await waitForTask(client, await index.addDocuments(batch, { primaryKey: "id" }), taskStats, options.waitTimeoutMs);
     }
     report.imported += batch.length;
     batch.length = 0;
-    writeCheckpoint(report, options, indexName, warningSet);
+    updateTaskMetrics(report, taskStats);
+    writeCheckpoint(report, options, warningSet);
   }
 
   const input = createReadStream(options.file, { encoding: "utf8" });
@@ -302,7 +436,7 @@ export async function runImport(argv = process.argv.slice(2)) {
 
     if (!line.trim()) {
       report.skipped += 1;
-      writeCheckpoint(report, options, indexName, warningSet);
+      writeCheckpoint(report, options, warningSet);
       continue;
     }
 
@@ -316,7 +450,7 @@ export async function runImport(argv = process.argv.slice(2)) {
     addSample(report.samples, book);
 
     if (Number.isFinite(options.maxErrors) && report.failedParsed > options.maxErrors) {
-      throw new Error(`failedParsed=${report.failedParsed} 已超过 --max-errors=${options.maxErrors}`);
+      throw new Error(`failedParsed=${report.failedParsed} exceeds --max-errors=${options.maxErrors}`);
     }
 
     batch.push(book);
@@ -328,11 +462,23 @@ export async function runImport(argv = process.argv.slice(2)) {
   }
 
   await flushBatch();
+
+  if (client && options.cleanupBenchmarkIndex) {
+    if (options.index === DEFAULT_INDEX) {
+      report.cleanupStatus = "skipped_default_index";
+    } else {
+      await waitForTask(client, await client.deleteIndex(options.index), taskStats, options.waitTimeoutMs);
+      report.cleanupStatus = "deleted";
+    }
+  }
+
   const finished = Date.now();
   report.finishedAt = new Date(finished).toISOString();
-  report.elapsedSeconds = Number(((finished - started) / 1000).toFixed(2));
+  report.elapsedSeconds = roundSeconds((finished - started) / 1000);
+  report.rowsPerSecond = report.elapsedSeconds ? Number((report.imported / report.elapsedSeconds).toFixed(2)) : null;
   report.warnings = [...warningSet].sort();
-  writeCheckpoint(report, options, indexName, warningSet);
+  updateTaskMetrics(report, taskStats);
+  writeCheckpoint(report, options, warningSet);
   writePrimaryAndLatestReports(report, options.report);
   console.log(progressLine(report, started));
   console.log(`[import] report written: ${options.report}`);
