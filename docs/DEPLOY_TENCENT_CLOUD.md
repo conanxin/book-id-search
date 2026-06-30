@@ -105,7 +105,7 @@ S15 只建议导入前 500000 行，不直接跑全量。
 脚本会在 `tmux` session `book-import-500k` 中运行：
 
 ```bash
-docker compose exec -T api pnpm import:file -- --file /data/private/books.txt --index books --offset 0 --limit 500000 --reset-index --batch-size 20000 --search-raw-info false --wait-timeout-ms 900000 --checkpoint reports/import-checkpoint-500k-cloud.json --report reports/import-500k-cloud-report.json
+docker compose exec -T api pnpm import:file --file /data/private/books.txt --index books --offset 0 --limit 500000 --reset-index --batch-size 20000 --search-raw-info false --wait-timeout-ms 900000 --checkpoint reports/import-checkpoint-500k-cloud.json --report reports/import-500k-cloud-report.json
 ```
 
 查看进度：
@@ -141,13 +141,13 @@ S14 benchmark 推荐：
 S16 使用，不在 S15 执行：
 
 ```bash
-docker compose exec -T api pnpm import:file -- --file /data/private/books.txt --index books --reset-index --batch-size 20000 --search-raw-info false --wait-timeout-ms 900000 --checkpoint reports/import-checkpoint-full.json --report reports/import-full-report.json
+docker compose exec -T api pnpm import:file --file /data/private/books.txt --index books --reset-index --batch-size 20000 --search-raw-info false --wait-timeout-ms 900000 --checkpoint reports/import-checkpoint-full.json --report reports/import-full-report.json
 ```
 
 断点续跑：
 
 ```bash
-docker compose exec -T api pnpm import:file -- --checkpoint reports/import-checkpoint-full.json --resume --wait-timeout-ms 900000
+docker compose exec -T api pnpm import:file --checkpoint reports/import-checkpoint-full.json --resume --wait-timeout-ms 900000
 ```
 
 建议在 `tmux` 或 `screen` 中运行长时间导入。
@@ -166,3 +166,72 @@ df -h /data/book-id-search/meili_data
 - 搜索无结果：确认导入报告和 `/api/stats` 的 `numberOfDocuments`
 - 端口打不开：检查腾讯云安全组、防火墙、`WEB_PORT` 和公网绑定
 - 导入中断：使用 checkpoint/resume 继续，不要从 0 重跑
+
+## Cloud 500k 实测（2026-06-30 · Tencent CVM 118.195.129.137）
+
+实测环境：2c8g / `/dev/vda2` 100G 系统盘，**未挂独立 /data 盘**。
+本轮只跑 500k 验证，**不跑全量**。命令已修掉冗余 `--`：
+
+```bash
+./scripts/deploy/import-500k.sh
+```
+
+实际跑通的命令（容器内 path 为 `/data/private/books.txt`，host 上对应 `/data/book-id-search/private-data/books.txt`）：
+
+```bash
+docker compose exec -T api pnpm import:file \
+  --file /data/private/books.txt \
+  --index books --offset 0 --limit 500000 --reset-index \
+  --batch-size 20000 --search-raw-info false --wait-timeout-ms 900000 \
+  --checkpoint reports/import-checkpoint-500k-cloud.json \
+  --report reports/import-500k-cloud-report.json
+```
+
+实测结果：
+
+| 指标 | 值 |
+|---|---|
+| elapsed | 162.62s |
+| rate | 3074.65 rows/s |
+| totalLines | 500000 |
+| imported | 500000 |
+| failedParsed | 0 |
+| weakParsed | 59332（主要是 missing_isbn） |
+| meili_data | 136K → **1.6 GiB** |
+| disk free | 38 GiB → 36 GiB（Δ ~2 GiB） |
+| `pnpm verify` | **PASS** · 6/6 sample queries 各 5 hits |
+| `/api/stats` | numberOfDocuments=500000, isIndexing=false |
+
+完整报告：`reports/TENCENT_500K_CLOUD_PASS_REPORT.md`，stats 快照：`reports/tencent-500k-stats.json`。
+
+### 已知文档 bug（本次已修）
+
+旧的部署文档和 `scripts/deploy/import-500k.sh` 在 `pnpm import:file` 后多写了 `--`：
+
+```bash
+# WRONG — 触发 "未知参数：--"
+docker compose exec -T api pnpm import:file -- --file /data/private/books.txt ...
+
+# RIGHT — 这次 500k 实测用的就是这个
+docker compose exec -T api pnpm import:file --file /data/private/books.txt ...
+```
+
+本次已经把 `docs/DEPLOY_TENCENT_CLOUD.md`、`docs/OPERATIONS.md`、`scripts/deploy/import-500k.sh` 里的 `--` 都去掉了。
+
+### S16 前置条件（全量导入）
+
+`reports/FULL_IMPORT_PREFLIGHT.md` 当前显示：
+
+```
+[preflight] BLOCKED: estimatedFullIndex=41.75 GiB free=37.19 GiB
+```
+
+也就是当前单系统盘 100G 上不能跑全量。S16 前必须：
+
+1. **挂独立 /data 盘**，**≥100GiB**（推荐 **160GiB+**），把 `/data/book-id-search/meili_data` 迁过去。
+2. **不要**把 `MEILI_PORT_BIND` 改成 `0.0.0.0:7700`（7700 继续只绑 `127.0.0.1`）。
+3. **不要**直接改 Caddy / 80 / 443；用反向代理把 80/443 → 5173/3001 才是稳态。
+4. **不要**碰已经在跑的 `books` 500k 索引；全量用 `--reset-index` 是显式动作。
+5. 跑全量用 `scripts/deploy/import-full.sh`（本仓库新增，未执行）。
+
+公网访问现状与建议收口方式见 `reports/PUBLIC_ACCESS_CHECK.md`。

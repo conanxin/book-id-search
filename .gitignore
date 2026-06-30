@@ -56,3 +56,6 @@ reports/import-checkpoint-*.json
 # OS/editor artifacts.
 .DS_Store
 Thumbs.db
+
+# Allow the cloud 500k stats snapshot artifact to be tracked.
+!reports/tencent-500k-stats.json

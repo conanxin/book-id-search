@@ -204,3 +204,39 @@ docker compose exec -T api pnpm import:file -- --file /data/private/books.txt --
 **为什么全量导入需要较大磁盘？**
 
 Meilisearch 会为中文搜索建立索引。全量导入需要给 TXT、Meilisearch 数据目录和备份预留足够空间，建议至少 160GB SSD。
+
+## Cloud 500k Validation（Tencent CVM · 2026-06-30）
+
+云端真实 TXT 500k 验证已经跑通，**不是**模拟数据。
+
+- 主机：Tencent CVM `ubuntu@118.195.129.137`（2c8g · `/dev/vda2` 100G 系统盘，无独立 /data 盘）
+- 真实 TXT：`/data/book-id-search/private-data/books.txt`（626 MiB · 5,115,734 行 · MD5 `7fe76a1bcbae248b104b86fd29b8b7a8`）
+- 命令：
+
+  ```bash
+  ./scripts/deploy/import-500k.sh
+  ```
+
+- 推荐参数：`--batch-size 20000 --search-raw-info false --wait-timeout-ms 900000`
+- 实测：
+
+  | 指标 | 值 |
+  |---|---|
+  | elapsed | 162.62s |
+  | rate | 3074.65 rows/s |
+  | imported | **500000 / 500000** |
+  | failedParsed | 0 |
+  | weakParsed | 59332（missing_isbn 为主） |
+  | meili_data | 136K → **1.6 GiB** |
+  | root free | 38 GiB → 36 GiB |
+  | `pnpm verify` | **PASS**（6/6 样例查询各 5 hits） |
+  | 7700 公网 | **未开放** ✓ |
+
+- 完整报告：`reports/TENCENT_500K_CLOUD_PASS_REPORT.md`
+- 公网端口现状：`reports/PUBLIC_ACCESS_CHECK.md`
+
+### 全量导入仍不建议在当前盘上跑
+
+`reports/FULL_IMPORT_PREFLIGHT.md` 当前显示 `BLOCKED: estimatedFullIndex=41.75 GiB free=37.19 GiB`。
+S16 前必须挂独立 `/data` 盘（**≥100GiB**，推荐 **160GiB+**），用 `scripts/deploy/import-full.sh`
+跑全量。**不要**改 `MEILI_PORT_BIND`，**不要**碰 Caddy / 80 / 443。

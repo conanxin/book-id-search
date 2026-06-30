@@ -15,7 +15,7 @@ fi
 cd "$APP_DIR"
 
 echo "[import-500k] running 500k import inside api container"
-docker compose exec -T api pnpm import:file -- \
+docker compose exec -T api pnpm import:file \
   --file "$DATA_FILE" \
   --index books \
   --offset 0 \

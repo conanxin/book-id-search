@@ -3,10 +3,10 @@
 ## 结论
 
 - 状态：BLOCKED
-- 文件：`E:\\读秀512w（下架书及ss与isbn码）.txt`
+- 文件：`/data/private/books.txt`
 - 文件大小：625.49 MiB
 - 估算总行数：4,685,280
-- Meilisearch 数据目录：`C:\Users\haili\AppData\Local\Temp\book-id-search-meili\data`
+- Meilisearch 数据目录：`/data/book-id-search/meili_data`
 
 ## 空间估算
 
@@ -15,12 +15,12 @@
 - 估算倍率：1.5
 - 估算全量索引体积：41.75 GiB
 - 建议可用空间：41.87 GiB
-- TXT 所在盘剩余：124.83 GiB
-- Meilisearch 数据盘剩余：6.80 GiB
+- TXT 所在盘剩余：37.19 GiB
+- Meilisearch 数据盘剩余：37.19 GiB
 
 ## 原因
 
-- Meilisearch 数据目录所在盘可用空间 6.80 GiB 小于建议空间 41.87 GiB
+- Meilisearch 数据目录所在盘可用空间 37.19 GiB 小于建议空间 41.87 GiB
 
 ## 建议
 
