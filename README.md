@@ -7,10 +7,14 @@
 ## 当前状态
 
 - 100000 行真实 TXT 导入和搜索验证已通过。
+- 500000 行真实 TXT 导入和搜索验证已通过。
 - 解析审计：`failedParsed=0`，`weakParsed=9813`，弱解析主要原因是 `missing_isbn`。
+- 500000 行压测：`imported=500000`，`failedParsed=0`，`weakParsed=59332`，H: 数据目录约 2.38 GiB，总墙钟耗时约 4.43 小时。
 - 全量索引空间按当前样本估算约 42 GiB，实际部署请预留更多空间。
 - 推荐腾讯云全量配置：4 核 8GB / 160GB SSD 起步，更稳建议 4 核 16GB / 200GB SSD。
 - 当前本机没有 Docker，本地测试使用 Windows Meilisearch binary；生产仍推荐 Docker Compose。
+- Windows 无 Docker 推荐把 Meilisearch 数据目录放到 H: 大盘：`H:\book-id-search\meili_data`。
+- H: 容量足够继续测试，但索引写入较慢，不建议在本机直接跑全量。
 
 ## 功能截图
 
@@ -49,7 +53,7 @@ Windows 无 Docker 时，请看 [docs/RUN_WITHOUT_DOCKER_WINDOWS.md](docs/RUN_WI
 
 ```powershell
 Copy-Item .env.example .env
-C:\tools\meilisearch\meilisearch.exe --db-path D:\book-id-search\meili_data --http-addr 127.0.0.1:7700 --master-key book-id-search-dev-key --env development
+.\scripts\start-meili-windows.ps1
 pnpm install
 pnpm import:sample
 pnpm dev
@@ -82,8 +86,26 @@ pnpm verify
 500000 行压测命令。只有确认 Meilisearch 数据目录已经迁移到剩余空间充足的大盘后再运行：
 
 ```powershell
+pnpm preflight:import -- --file "E:\读秀512w（下架书及ss与isbn码）.txt" --meili-data-dir "H:\book-id-search\meili_data" --report reports/full-import-preflight-h-drive.json
 pnpm import:file -- --file "E:\读秀512w（下架书及ss与isbn码）.txt" --offset 0 --limit 500000 --reset-index --checkpoint reports/import-checkpoint-500k.json --report reports/import-500k-report.json
 ```
+
+500000 行实测报告：
+
+- `reports/REAL_500K_IMPORT_REPORT.md`
+- `reports/REAL_500K_SEARCH_VERIFY.md`
+- `reports/FRONTEND_500K_QA.md`
+- `reports/NEXT_IMPORT_SCALE_RECOMMENDATION.md`
+
+500000 行结果摘要：
+
+- `imported=500000`
+- `failedParsed=0`
+- `weakParsed=59332`
+- Meilisearch 数据目录：`H:\book-id-search\meili_data`
+- H: 数据目录大小约 2.38 GiB
+- 总墙钟耗时约 4.43 小时
+- 结论：本机 500k 可用；本机 100w/全量不推荐作为常规方案，腾讯云全量推荐。
 
 全量导入命令：
 
@@ -135,6 +157,8 @@ pnpm import:file -- --file "$HOME/private-data/books.txt" --offset 0 --limit 500
 pnpm import:file -- --checkpoint reports/import-checkpoint.json --resume
 ```
 
+全量更推荐在腾讯云执行，而不是在当前 Windows 本机 H: 盘上执行。当前本机 500k 已证明功能可用，但导入吞吐偏慢。
+
 详细步骤见 [docs/DEPLOY_TENCENT_CLOUD.md](docs/DEPLOY_TENCENT_CLOUD.md)，日常维护见 [docs/OPERATIONS.md](docs/OPERATIONS.md)。
 
 ## 常见问题
@@ -147,6 +171,8 @@ pnpm import:file -- --checkpoint reports/import-checkpoint.json --resume
 
 **为什么不要把 TXT 放进 Git？**
 真实 TXT 体积大且属于私有数据。Git 仓库只应保存代码、文档和样例数据，真实数据放在本机或服务器私有目录。
+
+同理，Meilisearch 数据目录、checkpoint JSON、`meilisearch.exe`、日志和构建产物也不应提交到 Git。
 
 **为什么全量导入需要较大磁盘？**
 Meilisearch 会为中文全文检索建立索引，索引体积通常大于原始 TXT 的线性切片。当前全量预估约 42 GiB，生产环境建议至少 160GB SSD。

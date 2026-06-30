@@ -49,6 +49,8 @@ function findPrivateDataFiles() {
       }
 
       const lower = entry.name.toLowerCase();
+      if (lower.endsWith(".log") || lower.endsWith(".pid")) continue;
+
       const isAllowedSample = relativePath.replaceAll("\\", "/") === "data/sample-books.txt";
       const isPrivateDataExtension = [".txt", ".csv", ".tsv", ".db"].some((extension) => lower.endsWith(extension));
       const nameLooksPrivate = privateNamePatterns.some((pattern) => pattern.test(entry.name));

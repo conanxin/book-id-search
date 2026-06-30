@@ -123,7 +123,7 @@ function readCheckpoint(checkpointPath: string): ImportCheckpoint | null {
 async function waitForTask(client: MeiliSearch, task: { taskUid?: number; uid?: number }) {
   const taskUid = task.taskUid ?? task.uid;
   if (taskUid === undefined) return;
-  const result = await client.tasks.waitForTask(taskUid, { timeout: 120000 });
+  const result = await client.tasks.waitForTask(taskUid, { timeout: 600000 });
   if (result.status === "failed") {
     throw new Error(result.error?.message ?? `Meilisearch task ${taskUid} failed`);
   }

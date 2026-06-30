@@ -11,6 +11,7 @@ interface PreflightOptions {
   meiliDataDir: string;
   sampleLimit: number;
   estimateMultiplier: number;
+  report: string;
 }
 
 interface DiskInfo {
@@ -46,7 +47,8 @@ function parseArgs(argv: string[]): PreflightOptions {
     file: "",
     meiliDataDir: process.env.MEILI_DATA_DIR || inferRunningMeiliDataDir() || "meili_data",
     sampleLimit: 100000,
-    estimateMultiplier: 1.5
+    estimateMultiplier: 1.5,
+    report: "reports/full-import-preflight.json"
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -55,6 +57,7 @@ function parseArgs(argv: string[]): PreflightOptions {
     else if (arg === "--meili-data-dir") options.meiliDataDir = argv[++i] ?? options.meiliDataDir;
     else if (arg === "--sample-limit") options.sampleLimit = Number.parseInt(argv[++i] ?? "", 10);
     else if (arg === "--estimate-multiplier") options.estimateMultiplier = Number.parseFloat(argv[++i] ?? "");
+    else if (arg === "--report") options.report = argv[++i] ?? options.report;
     else throw new Error(`未知参数：${arg}`);
   }
 
@@ -175,9 +178,23 @@ function directorySizeBytes(targetPath: string) {
   return total;
 }
 
-function writeReports(report: PreflightReport) {
+function markdownPathForReport(reportPath: string) {
+  const normalized = path.normalize(reportPath);
+  if (normalized === path.normalize("reports/full-import-preflight.json")) {
+    return "reports/FULL_IMPORT_PREFLIGHT.md";
+  }
+
+  const parsed = path.parse(reportPath);
+  const base = parsed.name
+    .replace(/^full-import-preflight/i, "FULL_IMPORT_PREFLIGHT")
+    .replace(/-/g, "_")
+    .toUpperCase();
+  return path.join(parsed.dir || "reports", `${base}.md`);
+}
+
+function writeReports(report: PreflightReport, reportPath: string) {
   mkdirSync("reports", { recursive: true });
-  writeFileSync("reports/full-import-preflight.json", `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
   const markdown = `# 全量导入前置检查
 
 ## 结论
@@ -206,7 +223,7 @@ ${report.reasons.map((reason) => `- ${reason}`).join("\n") || "- 无"}
 
 ${report.recommendations.map((item) => `- ${item}`).join("\n")}
 `;
-  writeFileSync("reports/FULL_IMPORT_PREFLIGHT.md", markdown, "utf8");
+  writeFileSync(markdownPathForReport(reportPath), markdown, "utf8");
 }
 
 export async function runPreflight(argv = process.argv.slice(2)) {
@@ -243,7 +260,7 @@ export async function runPreflight(argv = process.argv.slice(2)) {
       recommendations,
       generatedAt: new Date().toISOString()
     };
-    writeReports(report);
+    writeReports(report, options.report);
     console.log(`[preflight] ${report.status}: ${reasons.join("; ")}`);
     return report;
   }
@@ -258,10 +275,10 @@ export async function runPreflight(argv = process.argv.slice(2)) {
   const latestImported = latest?.imported ?? null;
   const baselineImported =
     latestImported && latestImported >= 100000 ? latestImported : markdownBaseline?.imported ?? latestImported ?? null;
-  const baselineIndexBytes =
-    currentDataSize && currentDataSize > 0 && latestImported && latestImported >= 100000
-      ? currentDataSize
-      : markdownBaseline?.indexBytes ?? currentDataSize ?? null;
+  const baselineIndexCandidates = [markdownBaseline?.indexBytes, currentDataSize].filter(
+    (value): value is number => typeof value === "number" && value > 0
+  );
+  const baselineIndexBytes = baselineIndexCandidates.length ? Math.max(...baselineIndexCandidates) : null;
   const fallbackBytesPerDoc = 6500;
   const bytesPerDoc =
     baselineImported && baselineIndexBytes ? baselineIndexBytes / baselineImported : fallbackBytesPerDoc;
@@ -297,7 +314,7 @@ export async function runPreflight(argv = process.argv.slice(2)) {
     generatedAt: new Date().toISOString()
   };
 
-  writeReports(report);
+  writeReports(report, options.report);
   console.log(`[preflight] ${report.status}: estimatedFullIndex=${formatBytes(report.estimatedFullIndexBytes)} free=${formatBytes(report.meiliDisk.freeBytes)}`);
   return report;
 }

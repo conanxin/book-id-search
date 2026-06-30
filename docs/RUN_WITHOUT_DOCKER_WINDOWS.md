@@ -30,6 +30,27 @@ MEILI_INDEX=books
 
 ## 启动 Meilisearch
 
+推荐使用项目里的启动脚本，默认把 Meilisearch 数据目录放到 H: 大盘：
+
+```powershell
+.\scripts\start-meili-windows.ps1
+```
+
+等价命令：
+
+```powershell
+New-Item -ItemType Directory -Force H:\book-id-search\meili_data
+C:\Users\haili\AppData\Local\Temp\book-id-search-meili\meilisearch.exe --db-path H:\book-id-search\meili_data --http-addr 127.0.0.1:7700 --master-key book-id-search-dev-key --env development
+```
+
+如果你的 `meilisearch.exe` 不在默认位置，可以传入路径：
+
+```powershell
+.\scripts\start-meili-windows.ps1 -MeiliExe C:\tools\meilisearch\meilisearch.exe -DbPath H:\book-id-search\meili_data
+```
+
+旧的通用示例：
+
 ```powershell
 New-Item -ItemType Directory -Force C:\data\book-id-search\meili_data
 C:\tools\meilisearch\meilisearch.exe --db-path C:\data\book-id-search\meili_data --http-addr 127.0.0.1:7700 --master-key book-id-search-dev-key --env development
@@ -60,9 +81,37 @@ pnpm import:file -- --file "E:\读秀512w（下架书及ss与isbn码）.txt" --l
 pnpm verify
 ```
 
+## 导入前 500000 行真实 TXT
+
+先确认 preflight 不再因为系统盘空间不足而 BLOCKED：
+
+```powershell
+pnpm preflight:import -- --file "E:\读秀512w（下架书及ss与isbn码）.txt" --meili-data-dir "H:\book-id-search\meili_data" --report reports/full-import-preflight-h-drive.json
+```
+
+再运行 500000 行压测：
+
+```powershell
+pnpm import:file -- --file "E:\读秀512w（下架书及ss与isbn码）.txt" --offset 0 --limit 500000 --reset-index --checkpoint reports/import-checkpoint-500k.json --report reports/import-500k-report.json
+pnpm verify
+```
+
+500000 行实测结果请看 `reports/REAL_500K_IMPORT_REPORT.md`、`reports/REAL_500K_SEARCH_VERIFY.md` 和 `reports/FRONTEND_500K_QA.md`。
+
+当前实测摘要：
+
+- Meilisearch 数据目录：`H:\book-id-search\meili_data`
+- 导入数量：500000
+- `failedParsed=0`
+- `weakParsed=59332`
+- H: 数据目录约 2.38 GiB
+- 总墙钟耗时约 4.43 小时
+- 结论：500000 行本地演示和压测可用；本机继续 1000000 行或全量不推荐作为常规方案，建议腾讯云 Docker Compose 全量导入。
+
 ## 注意事项
 
 - Windows binary 适合本地测试，不建议作为生产部署方式。
 - 全量导入前先运行 `pnpm preflight:import`。
 - Meilisearch 数据目录要放在空间充足的 SSD，不要放在空间很小的系统盘。
-- 真实 TXT 不要复制进项目目录，也不要提交到 Git。
+- 真实 TXT、Meilisearch 数据目录、checkpoint JSON 和 `meilisearch.exe` 不要复制进项目目录，也不要提交到 Git。
+- 当前 H: 容量足够，但实际索引写入较慢；全量导入更建议放到腾讯云或其他 SSD 服务器。

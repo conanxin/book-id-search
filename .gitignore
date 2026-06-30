@@ -43,10 +43,12 @@ meilisearch-windows-amd64.exe
 
 # Runtime logs and generated JSON reports.
 *.log
+*.pid
 npm-debug.log*
 pnpm-debug.log*
 reports/*.json
 reports/*.ndjson
+reports/*.pid
 reports/import-checkpoint.json
 reports/import-checkpoint-*.json
 
