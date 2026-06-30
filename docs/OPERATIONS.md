@@ -136,3 +136,18 @@ docker compose exec -T api pnpm import:file --file /data/private/books.txt ...
 
 `pnpm preflight:import` 同理。`docs/DEPLOY_TENCENT_CLOUD.md`、`docs/OPERATIONS.md`、
 `scripts/deploy/import-500k.sh` 在本次收口（S15H）中已经全部修正。
+### Caddy 反代 reload（2026-06-30）
+
+新增 `books.conanxin.com` 反代到 `127.0.0.1:5173`，TLS 走 Let's Encrypt 自动签发。
+本次 reload 时遇到 `sudo systemctl reload caddy` 在 WSL 容器内返回 `status=226/NAMESPACE`
+（systemd mount namespace 准备失败：`/run/systemd/unit-root/tmp` 不存在）。
+
+绕过方法：
+
+```bash
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo caddy reload --config /etc/caddy/Caddyfile --force
+```
+
+这条直接调用的方式不会触发 systemd namespace，配置立即生效、ACME 自动签发证书。
+后续如果改了 Caddyfile 也要用这套命令而不是 systemctl reload。

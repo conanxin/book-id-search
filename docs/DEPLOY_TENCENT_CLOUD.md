@@ -235,3 +235,58 @@ docker compose exec -T api pnpm import:file --file /data/private/books.txt ...
 5. 跑全量用 `scripts/deploy/import-full.sh`（本仓库新增，未执行）。
 
 公网访问现状与建议收口方式见 `reports/PUBLIC_ACCESS_CHECK.md`。
+### Caddy 反代站点已上线（2026-06-30）
+
+公网入口已收敛到 Caddy：
+
+- 域名：`https://books.conanxin.com` → Caddy → `127.0.0.1:5173`（web 容器）
+- TLS：Let's Encrypt 自动签发 + 自动续期（cert issuer=Let's Encrypt YE2）
+- HTTP/2、HTTPS 都通过验证：
+  - `GET https://books.conanxin.com/` → 200, `via: 1.1 Caddy`
+  - `GET https://books.conanxin.com/api/health` → `{"ok":true,"meili":{"status":"available"},"index":"books"}`
+  - `GET https://books.conanxin.com/api/stats` → `numberOfDocuments=500000`
+  - `GET https://books.conanxin.com/api/search?q=9787538455250` → 命中 13000000_000008232537
+- `music.conanxin.com`（已有站点）**未受影响**
+- `127.0.0.1:7700`（Meili）**未公网**
+
+#### Caddy reload 的坑
+
+- `sudo systemctl reload caddy` 在 WSL 容器内会失败：`status=226/NAMESPACE`，原因是 systemd 启动 caddy reload 子进程时 mount 命名空间失败（`/run/systemd/unit-root/tmp` 不存在）
+- 解决方法：`sudo caddy reload --config /etc/caddy/Caddyfile --force` 直接调用，绕过 systemctl namespace
+
+#### 收口剩余动作（用户手动）
+
+- **关闭 TCP 3001 公网入站**（安全组）：现在 3001 仍公网可访问，验证窗口已结束可以收
+- **关闭 TCP 5173 公网入站**（安全组）：Caddy 通过本机 127.0.0.1:5173 访问 web，公网不再需要
+- **保留 80/443 公网**：Caddy 需要
+- **保留 22**：SSH 需要
+- **不要开放 7700**
+
+#### 当前 Caddy 配置（`/etc/caddy/Caddyfile`）
+
+```
+music.conanxin.com {
+    encode gzip zstd
+    reverse_proxy 127.0.0.1:8787
+    header {
+        X-Frame-Options "DENY"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+}
+
+books.conanxin.com {
+    encode gzip zstd
+    reverse_proxy 127.0.0.1:5173 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+    }
+    header {
+        X-Frame-Options SAMEORIGIN
+        X-Content-Type-Options nosniff
+        Referrer-Policy strict-origin-when-cross-origin
+    }
+}
+```
+
+`X-Forwarded-For` / `X-Forwarded-Proto` 已经被 Caddy reverse_proxy 自动设置，删掉以免 caddy validate warning。

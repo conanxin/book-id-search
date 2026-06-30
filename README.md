@@ -240,3 +240,16 @@ Meilisearch 会为中文搜索建立索引。全量导入需要给 TXT、Meilise
 `reports/FULL_IMPORT_PREFLIGHT.md` 当前显示 `BLOCKED: estimatedFullIndex=41.75 GiB free=37.19 GiB`。
 S16 前必须挂独立 `/data` 盘（**≥100GiB**，推荐 **160GiB+**），用 `scripts/deploy/import-full.sh`
 跑全量。**不要**改 `MEILI_PORT_BIND`，**不要**碰 Caddy / 80 / 443。
+## Caddy Reverse Proxy（2026-06-30）
+
+公网访问入口已经收敛到 Caddy，不再依赖 3001/5173 公网暴露。
+
+- 反代域名：https://books.conanxin.com
+- TLS：Let's Encrypt（auto renewal，签发于 2026-06-30）
+- Caddy 反代目标：127.0.0.1:5173（web 容器）
+- web 容器 nginx 内部把 `/api` 反代到 `api:3001`，前端 `VITE_API_BASE_URL=/api` 已是 baked-in
+- `music.conanxin.com`（已有站点）未受影响
+- Meilisearch 7700 仍只绑 `127.0.0.1`，未公网
+- 完整收口计划与剩余动作：`reports/CADDY_PROXY_APPLIED.md`
+
+> 注意：`systemctl reload caddy` 在 WSL 容器内会触发 systemd namespace 失败（`status=226/NAMESPACE`），但 `caddy validate` 和 `sudo caddy reload --config ... --force` 直接调用均成功。后续 reload 用 `sudo caddy reload --config /etc/caddy/Caddyfile --force` 而不是 systemctl。
