@@ -10,6 +10,10 @@ import { parseBookLine, type BookDocument } from "./parse-line.ts";
 const DEFAULT_INDEX = process.env.MEILI_INDEX ?? "books";
 const MIN_TASK_TIMEOUT_MS = 600_000;
 
+type IndexProfile = "standard" | "minimal";
+type FilterProfile = "standard" | "minimal";
+type SortableProfile = "standard" | "minimal";
+
 interface ImportOptions {
   file: string;
   index: string;
@@ -24,6 +28,11 @@ interface ImportOptions {
   maxErrors: number;
   waitTimeoutMs: number;
   searchRawInfo: boolean;
+  storeRawInfo: boolean;
+  indexProfile: IndexProfile;
+  filterProfile: FilterProfile;
+  sortableProfile: SortableProfile;
+  diskGuardFreeGb?: number;
   benchmarkLabel?: string;
   cleanupBenchmarkIndex: boolean;
   indexWasProvided: boolean;
@@ -31,6 +40,7 @@ interface ImportOptions {
   reportWasProvided: boolean;
   waitTimeoutWasProvided: boolean;
   searchRawInfoWasProvided: boolean;
+  storeRawInfoWasProvided: boolean;
 }
 
 interface ImportSamples {
@@ -46,6 +56,11 @@ interface ImportReport {
   batchSize: number;
   waitTimeoutMs: number;
   searchRawInfo: boolean;
+  storeRawInfo: boolean;
+  indexProfile: IndexProfile;
+  filterProfile: FilterProfile;
+  sortableProfile: SortableProfile;
+  diskGuardFreeGb: number | null;
   benchmarkLabel: string | null;
   offset: number;
   limit: number | null;
@@ -80,6 +95,10 @@ interface ImportCheckpoint {
   batchSize: number;
   waitTimeoutMs: number;
   searchRawInfo: boolean;
+  storeRawInfo: boolean;
+  indexProfile: IndexProfile;
+  filterProfile: FilterProfile;
+  sortableProfile: SortableProfile;
   benchmarkLabel: string | null;
   lastProcessedLine: number;
   totalLines: number;
@@ -139,12 +158,17 @@ function parseArgs(argv: string[]): ImportOptions {
     maxErrors: Number.POSITIVE_INFINITY,
     waitTimeoutMs: MIN_TASK_TIMEOUT_MS,
     searchRawInfo: true,
+    storeRawInfo: true,
+    indexProfile: "standard",
+    filterProfile: "standard",
+    sortableProfile: "standard",
     cleanupBenchmarkIndex: false,
     indexWasProvided: false,
     batchSizeWasProvided: false,
     reportWasProvided: false,
     waitTimeoutWasProvided: false,
-    searchRawInfoWasProvided: false
+    searchRawInfoWasProvided: false,
+    storeRawInfoWasProvided: false
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -174,6 +198,23 @@ function parseArgs(argv: string[]): ImportOptions {
     } else if (name === "--search-raw-info") {
       options.searchRawInfo = parseOptionalBoolean(nextValue(), "--search-raw-info");
       options.searchRawInfoWasProvided = true;
+    } else if (name === "--store-raw-info") {
+      options.storeRawInfo = parseOptionalBoolean(nextValue(), "--store-raw-info");
+      options.storeRawInfoWasProvided = true;
+    } else if (name === "--index-profile") {
+      const value = nextValue();
+      if (value !== "standard" && value !== "minimal") throw new Error("--index-profile must be standard or minimal");
+      options.indexProfile = value;
+    } else if (name === "--filter-profile") {
+      const value = nextValue();
+      if (value !== "standard" && value !== "minimal") throw new Error("--filter-profile must be standard or minimal");
+      options.filterProfile = value;
+    } else if (name === "--sortable-profile") {
+      const value = nextValue();
+      if (value !== "standard" && value !== "minimal") throw new Error("--sortable-profile must be standard or minimal");
+      options.sortableProfile = value;
+    } else if (name === "--disk-guard-free-gb") {
+      options.diskGuardFreeGb = parseOptionalInt(nextValue(), "--disk-guard-free-gb");
     } else if (name === "--benchmark-label") options.benchmarkLabel = nextValue();
     else if (name === "--cleanup-benchmark-index") {
       options.cleanupBenchmarkIndex = parseOptionalBoolean(nextValue(), "--cleanup-benchmark-index");
@@ -229,6 +270,9 @@ async function configureIndex(
   indexName: string,
   resetIndex: boolean,
   searchRawInfo: boolean,
+  indexProfile: IndexProfile,
+  filterProfile: FilterProfile,
+  sortableProfile: SortableProfile,
   taskStats: TaskWaitStats,
   waitTimeoutMs: number
 ) {
@@ -250,26 +294,58 @@ async function configureIndex(
   const searchableAttributes = ["title", "author", "publisher", "isbn", "ssid", "dxid"];
   if (searchRawInfo) searchableAttributes.push("rawInfo");
 
+  let displayedAttributes: string[];
+  if (indexProfile === "minimal") {
+    displayedAttributes = [
+      "id",
+      "ssid",
+      "dxid",
+      "title",
+      "author",
+      "publisher",
+      "year",
+      "pages",
+      "isbn",
+      "parseStatus"
+    ];
+  } else {
+    displayedAttributes = [
+      "id",
+      "ssid",
+      "dxid",
+      "title",
+      "author",
+      "publisher",
+      "year",
+      "pages",
+      "isbn",
+      "rawInfo",
+      "parseStatus",
+      "parseWarnings"
+    ];
+  }
+
+  let filterableAttributes: string[];
+  if (filterProfile === "minimal") {
+    filterableAttributes = ["parseStatus"];
+  } else {
+    filterableAttributes = ["year", "publisher", "parseStatus"];
+  }
+
+  let sortableAttributes: string[];
+  if (sortableProfile === "minimal") {
+    sortableAttributes = [];
+  } else {
+    sortableAttributes = ["year"];
+  }
+
   await waitForTask(
     client,
     await index.updateSettings({
       searchableAttributes,
-      displayedAttributes: [
-        "id",
-        "ssid",
-        "dxid",
-        "title",
-        "author",
-        "publisher",
-        "year",
-        "pages",
-        "isbn",
-        "rawInfo",
-        "parseStatus",
-        "parseWarnings"
-      ],
-      filterableAttributes: ["year", "publisher", "parseStatus"],
-      sortableAttributes: ["year"],
+      displayedAttributes,
+      filterableAttributes,
+      sortableAttributes,
       rankingRules: ["words", "typo", "proximity", "attribute", "sort", "exactness"]
     }),
     taskStats,
@@ -308,6 +384,10 @@ function writeCheckpoint(report: ImportReport, options: ImportOptions, warnings:
     batchSize: options.batchSize,
     waitTimeoutMs: options.waitTimeoutMs,
     searchRawInfo: options.searchRawInfo,
+    storeRawInfo: options.storeRawInfo,
+    indexProfile: options.indexProfile,
+    filterProfile: options.filterProfile,
+    sortableProfile: options.sortableProfile,
     benchmarkLabel: options.benchmarkLabel ?? null,
     lastProcessedLine: report.lastProcessedLine,
     totalLines: report.totalLines,
@@ -348,6 +428,10 @@ function applyResume(options: ImportOptions, checkpoint: ImportCheckpoint | null
   if (!options.batchSizeWasProvided) nextOptions.batchSize = checkpoint.batchSize;
   if (!options.waitTimeoutWasProvided) nextOptions.waitTimeoutMs = checkpoint.waitTimeoutMs ?? nextOptions.waitTimeoutMs;
   if (!options.searchRawInfoWasProvided) nextOptions.searchRawInfo = checkpoint.searchRawInfo ?? nextOptions.searchRawInfo;
+  if (!options.storeRawInfoWasProvided) nextOptions.storeRawInfo = checkpoint.storeRawInfo ?? nextOptions.storeRawInfo;
+  if (checkpoint.indexProfile) nextOptions.indexProfile = checkpoint.indexProfile;
+  if (checkpoint.filterProfile) nextOptions.filterProfile = checkpoint.filterProfile;
+  if (checkpoint.sortableProfile) nextOptions.sortableProfile = checkpoint.sortableProfile;
   if (!options.benchmarkLabel) nextOptions.benchmarkLabel = checkpoint.benchmarkLabel ?? undefined;
 
   const originalTarget = checkpoint.limit === null ? null : checkpoint.offset + checkpoint.limit;
@@ -376,6 +460,11 @@ export async function runImport(argv = process.argv.slice(2)) {
     batchSize: options.batchSize,
     waitTimeoutMs: options.waitTimeoutMs,
     searchRawInfo: options.searchRawInfo,
+    storeRawInfo: options.storeRawInfo,
+    indexProfile: options.indexProfile,
+    filterProfile: options.filterProfile,
+    sortableProfile: options.sortableProfile,
+    diskGuardFreeGb: options.diskGuardFreeGb ?? null,
     benchmarkLabel: options.benchmarkLabel ?? null,
     offset: options.offset,
     limit: options.limit ?? null,
@@ -406,13 +495,16 @@ export async function runImport(argv = process.argv.slice(2)) {
   const batch: BookDocument[] = [];
   const client = options.dryRun ? null : new MeiliSearch({ host, apiKey });
   const index = client
-    ? await configureIndex(client, options.index, options.resetIndex && !options.resume, options.searchRawInfo, taskStats, options.waitTimeoutMs)
+    ? await configureIndex(client, options.index, options.resetIndex && !options.resume, options.searchRawInfo, options.indexProfile, options.filterProfile, options.sortableProfile, taskStats, options.waitTimeoutMs)
     : null;
 
   async function flushBatch() {
     if (!batch.length) return;
     if (index && client) {
-      await waitForTask(client, await index.addDocuments(batch, { primaryKey: "id" }), taskStats, options.waitTimeoutMs);
+      const docs = options.storeRawInfo
+        ? batch
+        : batch.map(({ rawInfo, ...rest }) => ({ ...rest, rawInfo: "" }));
+      await waitForTask(client, await index.addDocuments(docs, { primaryKey: "id" }), taskStats, options.waitTimeoutMs);
     }
     report.imported += batch.length;
     batch.length = 0;

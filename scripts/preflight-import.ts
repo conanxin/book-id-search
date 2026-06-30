@@ -6,12 +6,41 @@ import process from "node:process";
 import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
 
+type Profile = "standard" | "compact" | "minimal";
+
+interface ProfileEstimate {
+  name: Profile;
+  bytesPerDoc: number;
+  description: string;
+}
+
+const PROFILE_ESTIMATES: Record<Profile, ProfileEstimate> = {
+  standard: {
+    name: "standard",
+    bytesPerDoc: 6500,
+    description: "Full features: rawInfo stored, full filters, full sorting (conservative)"
+  },
+  compact: {
+    name: "compact",
+    bytesPerDoc: 3400,
+    description: "Minimal profile with rawInfo stored, minimal filters, no sorting"
+  },
+  minimal: {
+    name: "minimal",
+    bytesPerDoc: 2000,
+    description: "Minimal profile WITHOUT rawInfo stored, minimal filters, no sorting"
+  }
+};
+
 interface PreflightOptions {
   file: string;
   meiliDataDir: string;
   sampleLimit: number;
   estimateMultiplier: number;
   report: string;
+  profile: Profile;
+  estimateFromReport?: string;
+  requiredFreeAfterGb: number;
 }
 
 interface DiskInfo {
@@ -19,6 +48,14 @@ interface DiskInfo {
   root: string;
   freeBytes: number;
   totalBytes: number;
+}
+
+interface ImportReportForEstimate {
+  imported: number;
+  rawDocumentDbSize?: number;
+  meiliDataDirSize?: number;
+  indexProfile?: string;
+  storeRawInfo?: boolean;
 }
 
 interface PreflightReport {
@@ -35,7 +72,20 @@ interface PreflightReport {
   baselineImported: number | null;
   baselineIndexBytes: number | null;
   estimateMultiplier: number;
-  estimatedFullIndexBytes: number;
+  
+  // Profile-based estimates
+  profile: Profile;
+  estimateFromReport: string | null;
+  
+  conservativeEstimateBytes: number;
+  measuredProfileEstimateBytes: number;
+  currentDiskFreeBytes: number;
+  
+  estimatedFreeAfterFullBytes: number;
+  requiredFreeAfterBytes: number;
+  
+  decisionForFull: "SAFE" | "RISKY" | "BLOCKED";
+  
   requiredFreeBytes: number;
   reasons: string[];
   recommendations: string[];
@@ -48,7 +98,9 @@ function parseArgs(argv: string[]): PreflightOptions {
     meiliDataDir: process.env.MEILI_DATA_DIR || inferRunningMeiliDataDir() || "meili_data",
     sampleLimit: 100000,
     estimateMultiplier: 1.5,
-    report: "reports/full-import-preflight.json"
+    report: "reports/full-import-preflight.json",
+    profile: "standard",
+    requiredFreeAfterGb: 15
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -58,6 +110,15 @@ function parseArgs(argv: string[]): PreflightOptions {
     else if (arg === "--sample-limit") options.sampleLimit = Number.parseInt(argv[++i] ?? "", 10);
     else if (arg === "--estimate-multiplier") options.estimateMultiplier = Number.parseFloat(argv[++i] ?? "");
     else if (arg === "--report") options.report = argv[++i] ?? options.report;
+    else if (arg === "--profile") {
+      const value = argv[++i];
+      if (value !== "standard" && value !== "compact" && value !== "minimal") {
+        throw new Error("--profile must be standard, compact, or minimal");
+      }
+      options.profile = value;
+    }
+    else if (arg === "--estimate-from-report") options.estimateFromReport = argv[++i];
+    else if (arg === "--required-free-after-gb") options.requiredFreeAfterGb = Number.parseFloat(argv[++i] ?? "");
     else throw new Error(`未知参数：${arg}`);
   }
 
@@ -65,6 +126,9 @@ function parseArgs(argv: string[]): PreflightOptions {
   if (!Number.isFinite(options.sampleLimit) || options.sampleLimit <= 0) throw new Error("--sample-limit 必须是正整数");
   if (!Number.isFinite(options.estimateMultiplier) || options.estimateMultiplier <= 0) {
     throw new Error("--estimate-multiplier 必须是正数");
+  }
+  if (!Number.isFinite(options.requiredFreeAfterGb) || options.requiredFreeAfterGb < 0) {
+    throw new Error("--required-free-after-gb 必须是非负数");
   }
   return options;
 }
@@ -162,6 +226,27 @@ function readKnownBaselineFromMarkdown() {
   };
 }
 
+function readImportReportForEstimate(reportPath: string): ImportReportForEstimate | null {
+  if (!existsSync(reportPath)) return null;
+  try {
+    const raw = JSON.parse(readFileSync(reportPath, "utf8")) as {
+      imported?: number;
+      rawDocumentDbSize?: number;
+      indexProfile?: string;
+      storeRawInfo?: boolean;
+    };
+    if (!raw.imported || raw.imported <= 0) return null;
+    return {
+      imported: raw.imported,
+      rawDocumentDbSize: raw.rawDocumentDbSize,
+      indexProfile: raw.indexProfile,
+      storeRawInfo: raw.storeRawInfo
+    };
+  } catch {
+    return null;
+  }
+}
+
 function directorySizeBytes(targetPath: string) {
   if (!existsSync(targetPath)) return null;
   const stack = [targetPath];
@@ -204,13 +289,25 @@ function writeReports(report: PreflightReport, reportPath: string) {
 - 文件大小：${formatBytes(report.fileSizeBytes)}
 - 估算总行数：${report.estimatedTotalLines.toLocaleString()}
 - Meilisearch 数据目录：\`${report.meiliDataDir}\`
+- 使用 Profile：${report.profile}
+- 基于报告估算：${report.estimateFromReport || "否"}
 
 ## 空间估算
 
+### Profile 实测估算
+| 项目 | 数值 |
+|------|------|
+| 保守估算（standard） | ${formatBytes(report.conservativeEstimateBytes)} |
+| 实测 Profile 估算 | ${formatBytes(report.measuredProfileEstimateBytes)} |
+| 当前磁盘剩余 | ${formatBytes(report.currentDiskFreeBytes)} |
+| 导入后估算剩余 | ${formatBytes(report.estimatedFreeAfterFullBytes)} |
+| 要求导入后剩余 | ${formatBytes(report.requiredFreeAfterBytes)} |
+| **全量决策** | **${report.decisionForFull}** |
+
+### 基线信息
 - 基线导入行数：${report.baselineImported ?? "未知"}
 - 基线索引体积：${report.baselineIndexBytes ? formatBytes(report.baselineIndexBytes) : "未知，使用保守估算"}
 - 估算倍率：${report.estimateMultiplier}
-- 估算全量索引体积：${formatBytes(report.estimatedFullIndexBytes)}
 - 建议可用空间：${formatBytes(report.requiredFreeBytes)}
 - TXT 所在盘剩余：${formatBytes(report.txtDisk.freeBytes)}
 - Meilisearch 数据盘剩余：${formatBytes(report.meiliDisk.freeBytes)}
@@ -230,6 +327,8 @@ export async function runPreflight(argv = process.argv.slice(2)) {
   const options = parseArgs(argv);
   const reasons: string[] = [];
   const recommendations = [
+    `使用 profile: ${options.profile}`,
+    `目标：导入后剩余 >= ${options.requiredFreeAfterGb} GiB`,
     "最低测试配置：2 核 4GB / 80GB SSD。",
     "推荐全量配置：4 核 8GB / 160GB SSD。",
     "更稳配置：4 核 16GB / 200GB SSD。",
@@ -254,7 +353,14 @@ export async function runPreflight(argv = process.argv.slice(2)) {
       baselineImported: null,
       baselineIndexBytes: null,
       estimateMultiplier: options.estimateMultiplier,
-      estimatedFullIndexBytes: 0,
+      profile: options.profile,
+      estimateFromReport: options.estimateFromReport ?? null,
+      conservativeEstimateBytes: 0,
+      measuredProfileEstimateBytes: 0,
+      currentDiskFreeBytes: 0,
+      estimatedFreeAfterFullBytes: 0,
+      requiredFreeAfterBytes: options.requiredFreeAfterGb * 1024 * 1024 * 1024,
+      decisionForFull: "BLOCKED",
       requiredFreeBytes: 0,
       reasons,
       recommendations,
@@ -272,6 +378,10 @@ export async function runPreflight(argv = process.argv.slice(2)) {
   const latest = readLatestImportReport();
   const markdownBaseline = readKnownBaselineFromMarkdown();
   const currentDataSize = directorySizeBytes(options.meiliDataDir);
+  const reportForEstimate = options.estimateFromReport
+    ? readImportReportForEstimate(options.estimateFromReport)
+    : null;
+  
   const latestImported = latest?.imported ?? null;
   const baselineImported =
     latestImported && latestImported >= 100000 ? latestImported : markdownBaseline?.imported ?? latestImported ?? null;
@@ -279,11 +389,49 @@ export async function runPreflight(argv = process.argv.slice(2)) {
     (value): value is number => typeof value === "number" && value > 0
   );
   const baselineIndexBytes = baselineIndexCandidates.length ? Math.max(...baselineIndexCandidates) : null;
-  const fallbackBytesPerDoc = 6500;
+  
+  // Conservative estimate (standard profile)
+  const fallbackBytesPerDoc = PROFILE_ESTIMATES.standard.bytesPerDoc;
   const bytesPerDoc =
     baselineImported && baselineIndexBytes ? baselineIndexBytes / baselineImported : fallbackBytesPerDoc;
-  const estimatedFullIndexBytes = Math.ceil(bytesPerDoc * estimate.estimatedTotalLines * options.estimateMultiplier);
-  const requiredFreeBytes = Math.ceil(estimatedFullIndexBytes + fileSizeBytes * 0.2);
+  const conservativeEstimateBytes = Math.ceil(bytesPerDoc * estimate.estimatedTotalLines * options.estimateMultiplier);
+  
+  // Measured profile estimate
+  let measuredProfileEstimateBytes: number;
+  if (reportForEstimate && reportForEstimate.imported > 0) {
+    // Use report-based calculation
+    const sampleSize = reportForEstimate.rawDocumentDbSize ?? 0;
+    const scaleFactor = estimate.estimatedTotalLines / reportForEstimate.imported;
+    measuredProfileEstimateBytes = Math.ceil(sampleSize * scaleFactor * options.estimateMultiplier);
+    reasons.push(`使用报告 ${options.estimateFromReport} 进行估算: ${reportForEstimate.imported} 行基线`);
+  } else {
+    // Use profile table lookup
+    measuredProfileEstimateBytes = Math.ceil(
+      PROFILE_ESTIMATES[options.profile].bytesPerDoc * estimate.estimatedTotalLines * options.estimateMultiplier
+    );
+    reasons.push(`使用 profile ${options.profile} 预设值估算: ${PROFILE_ESTIMATES[options.profile].bytesPerDoc} 字节/文档`);
+  }
+  
+  // Calculate free space after full import
+  const currentDiskFreeBytes = meiliDisk.freeBytes;
+  const currentIndexOverhead = currentDataSize ?? 0;
+  const estimatedFreeAfterFullBytes = currentDiskFreeBytes - currentIndexOverhead + measuredProfileEstimateBytes < currentDiskFreeBytes
+    ? currentDiskFreeBytes - measuredProfileEstimateBytes
+    : currentDiskFreeBytes + currentIndexOverhead - measuredProfileEstimateBytes;
+  
+  const requiredFreeAfterBytes = options.requiredFreeAfterGb * 1024 * 1024 * 1024;
+  
+  // Decision for full import
+  let decisionForFull: "SAFE" | "RISKY" | "BLOCKED";
+  if (estimatedFreeAfterFullBytes >= requiredFreeAfterBytes * 1.2) {
+    decisionForFull = "SAFE";
+  } else if (estimatedFreeAfterFullBytes >= requiredFreeAfterBytes) {
+    decisionForFull = "RISKY";
+  } else {
+    decisionForFull = "BLOCKED";
+  }
+  
+  const requiredFreeBytes = Math.ceil(measuredProfileEstimateBytes + fileSizeBytes * 0.2);
 
   if (meiliDisk.freeBytes < requiredFreeBytes) {
     reasons.push(
@@ -292,9 +440,12 @@ export async function runPreflight(argv = process.argv.slice(2)) {
   }
   if (estimate.estimatedTotalLines <= 0) reasons.push("无法估算 TXT 行数");
   if (!baselineImported) reasons.push("缺少可用的 latest-import-report.json 基线，已使用保守估算");
+  if (decisionForFull === "BLOCKED") {
+    reasons.push(`导入后剩余空间 ${formatBytes(estimatedFreeAfterFullBytes)} 小于要求的 ${formatBytes(requiredFreeAfterBytes)}`);
+  }
 
   const report: PreflightReport = {
-    status: reasons.some((reason) => reason.includes("小于建议空间") || reason.includes("不存在")) ? "BLOCKED" : "READY",
+    status: reasons.some((reason) => reason.includes("小于") || reason.includes("不存在")) ? "BLOCKED" : "READY",
     file: options.file,
     fileSizeBytes,
     estimatedTotalLines: estimate.estimatedTotalLines,
@@ -307,7 +458,14 @@ export async function runPreflight(argv = process.argv.slice(2)) {
     baselineImported,
     baselineIndexBytes,
     estimateMultiplier: options.estimateMultiplier,
-    estimatedFullIndexBytes,
+    profile: options.profile,
+    estimateFromReport: options.estimateFromReport ?? null,
+    conservativeEstimateBytes,
+    measuredProfileEstimateBytes,
+    currentDiskFreeBytes,
+    estimatedFreeAfterFullBytes: Math.max(0, estimatedFreeAfterFullBytes),
+    requiredFreeAfterBytes,
+    decisionForFull,
     requiredFreeBytes,
     reasons,
     recommendations,
@@ -315,7 +473,7 @@ export async function runPreflight(argv = process.argv.slice(2)) {
   };
 
   writeReports(report, options.report);
-  console.log(`[preflight] ${report.status}: estimatedFullIndex=${formatBytes(report.estimatedFullIndexBytes)} free=${formatBytes(report.meiliDisk.freeBytes)}`);
+  console.log(`[preflight] ${report.status}: profile=${options.profile} measured=${formatBytes(report.measuredProfileEstimateBytes)} freeAfter=${formatBytes(report.estimatedFreeAfterFullBytes)} decision=${report.decisionForFull}`);
   return report;
 }
 
