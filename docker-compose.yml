@@ -24,7 +24,9 @@ services:
       API_PORT: 3001
       BOOK_DATA_DIR: /data/private
     ports:
-      - "${API_PORT:-3001}:3001"
+      # Bound to host loopback only. Public access is via Caddy → 127.0.0.1:5173 → web nginx → api.
+      # Do NOT change to "0.0.0.0" or remove the loopback prefix; see reports/SECURITY_HARDENING.md.
+      - "127.0.0.1:${API_PORT:-3001}:3001"
     volumes:
       - ${BOOK_DATA_DIR:-./data}:/data/private:ro
       - ./reports:/app/reports
@@ -39,4 +41,5 @@ services:
     depends_on:
       - api
     ports:
-      - "${WEB_PORT:-5173}:80"
+      # Bound to host loopback only. Caddy → 127.0.0.1:5173 (host) → web container :80.
+      - "127.0.0.1:${WEB_PORT:-5173}:80"

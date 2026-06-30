@@ -26,6 +26,37 @@ interface BookDocument {
   parseWarnings: string[];
 }
 
+interface ImportReportFile {
+  dryRun?: boolean;
+  file?: string;
+  index?: string;
+  batchSize?: number;
+  waitTimeoutMs?: number;
+  searchRawInfo?: boolean;
+  offset?: number;
+  limit?: number;
+  checkpointPath?: string;
+  resumedFrom?: string | null;
+  totalLines?: number;
+  imported?: number;
+  skipped?: number;
+  weakParsed?: number;
+  failedParsed?: number;
+  duplicateLikeCount?: number;
+  lastProcessedLine?: number;
+  startedAt?: string;
+  finishedAt?: string;
+  elapsedSeconds?: number;
+  rowsPerSecond?: number;
+  meiliTaskCount?: number;
+  averageTaskWaitSeconds?: number;
+  totalTaskWaitSeconds?: number;
+  cleanupBenchmarkIndex?: boolean;
+  cleanupStatus?: string;
+  samples?: unknown;
+  [key: string]: unknown;
+}
+
 const port = Number.parseInt(process.env.API_PORT ?? "3001", 10);
 const host = process.env.MEILI_HOST ?? "http://127.0.0.1:7700";
 const apiKey = process.env.MEILI_MASTER_KEY;
@@ -72,6 +103,43 @@ function readJsonReport<T>(relativePath: string): T | null {
   } catch {
     return null;
   }
+}
+
+function isLocalhostRequest(req: Request): boolean {
+  const remote = req.ip ?? req.socket.remoteAddress ?? "";
+  // Verbose is only enabled for direct host loopback calls. Express trust proxy is off,
+  // so req.ip reflects the direct peer. Accepted peers:
+  //   127.0.0.1 / ::1 / ::ffff:127.0.0.1   — host loopback
+  //   172.18.0.1                            — docker default bridge gateway for book-id-search_default
+  //                                          (host calls to 127.0.0.1:3001 are DNATted by docker, so the api
+  //                                          container sees the gateway IP rather than 127.0.0.1)
+  // Container-to-container traffic arrives as 172.18.0.2/3/4, so the gateway check is safe.
+  return (
+    remote === "127.0.0.1" ||
+    remote === "::1" ||
+    remote === "::ffff:127.0.0.1" ||
+    remote === "172.18.0.1"
+  );
+}
+
+function buildCompactImportSummary(report: ImportReportFile | null) {
+  if (!report) return null;
+  // Public summary: only the numbers + timing + safe config flags.
+  // Strip: file paths, checkpoint paths, raw samples, internal-only fields.
+  return {
+    totalLines: report.totalLines ?? null,
+    imported: report.imported ?? null,
+    skipped: report.skipped ?? null,
+    weakParsed: report.weakParsed ?? null,
+    failedParsed: report.failedParsed ?? null,
+    duplicateLikeCount: report.duplicateLikeCount ?? null,
+    batchSize: report.batchSize ?? null,
+    searchRawInfo: report.searchRawInfo ?? null,
+    elapsedSeconds: report.elapsedSeconds ?? null,
+    rowsPerSecond: report.rowsPerSecond ?? null,
+    startedAt: report.startedAt ?? null,
+    finishedAt: report.finishedAt ?? null
+  };
 }
 
 async function exactSearch(q: string, limit: number) {
@@ -190,17 +258,37 @@ app.get("/api/books/:id/related", async (req, res) => {
   }
 });
 
-app.get("/api/stats", async (_req, res) => {
+app.get("/api/stats", async (req, res) => {
   try {
     const stats = await index.getStats();
+const verboseRequested = String(req.query.verbose ?? "") === "1";
+    const importReport = readJsonReport<ImportReportFile>("reports/latest-import-report.json");
+    const parseQuality = readJsonReport("reports/parse-quality-audit.json");
+
+    if (verboseRequested && isLocalhostRequest(req)) {
+      // Debug path: only when called from the host loopback. Returns the full report
+      // including samples, rawInfo, file paths, and checkpoint paths. Never exposed to Caddy.
+      return res.json({
+        index: indexName,
+        indexName,
+        numberOfDocuments: stats.numberOfDocuments,
+        isIndexing: stats.isIndexing,
+        stats,
+        lastImportReport: importReport,
+        parseQualityReport: parseQuality,
+        verbose: true
+      });
+    }
+
+    // Public path: compact summary only. No rawInfo, no samples, no internal paths.
     res.json({
       index: indexName,
       indexName,
       numberOfDocuments: stats.numberOfDocuments,
       isIndexing: stats.isIndexing,
       stats,
-      lastImportReport: readJsonReport("reports/latest-import-report.json"),
-      parseQualityReport: readJsonReport("reports/parse-quality-audit.json")
+      lastImportReport: buildCompactImportSummary(importReport),
+      parseQualityReport: null
     });
   } catch (error) {
     sendError(res, 500, "读取统计信息失败，请确认 Meilisearch 和报告文件状态。", error);

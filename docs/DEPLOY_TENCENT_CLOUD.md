@@ -289,4 +289,50 @@ books.conanxin.com {
 }
 ```
 
-`X-Forwarded-For` / `X-Forwarded-Proto` 已经被 Caddy reverse_proxy 自动设置，删掉以免 caddy validate warning。
+`X-Forwarded-For` / `X-Forwarded-Proto` 已经被 Caddy reverse_proxy 自动设置，删掉以免 caddy validate warning。### S15J 公网收口（2026-06-30）
+
+`docker-compose.yml` 已把 api/web host ports 改为 `127.0.0.1`，Meili 保持 `127.0.0.1:7700`：
+
+```yaml
+api:
+  ports:
+    - "127.0.0.1:${API_PORT:-3001}:3001"
+web:
+  ports:
+    - "127.0.0.1:${WEB_PORT:-5173}:80"
+meilisearch:
+  ports:
+    - "${MEILI_PORT_BIND:-127.0.0.1:7700}:7700"
+```
+
+效果：
+
+| 入口 | 公网可达 |
+|---|---|
+| `https://books.conanxin.com/` | ✅ |
+| `https://books.conanxin.com/api/health` | ✅ |
+| `http://118.195.129.137:3001/...` | ❌ docker loopback bind |
+| `http://118.195.129.137:5173/...` | ❌ docker loopback bind |
+| `http://118.195.129.137:7700/...` | ❌ docker loopback bind |
+
+#### /api/stats 公网精简
+
+公开响应去掉：
+
+- `file`（如 `/data/private/books.txt`）
+- `checkpointPath`（如 `reports/import-checkpoint-500k-cloud.json`）
+- `samples`（含 rawInfo 完整 CSV 行）
+- `parseQualityReport` 全文
+
+保留：
+
+- `numberOfDocuments` / `isIndexing`
+- `lastImportReport.{totalLines, imported, skipped, weakParsed, failedParsed, duplicateLikeCount, batchSize, searchRawInfo, elapsedSeconds, rowsPerSecond, startedAt, finishedAt}`
+
+调试 `verbose=1` 仅在 host loopback（`127.0.0.1` / `::1` / `::ffff:127.0.0.1` / `172.18.0.1` docker default bridge gateway）生效。Caddy / 公网 / 容器互调永远拿不到 verbose。
+
+#### 腾讯云安全组
+
+- 保留 22 / 80 / 443
+- 关闭 3001 / 5173
+- 永不开放 7700

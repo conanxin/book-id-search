@@ -252,4 +252,33 @@ S16 前必须挂独立 `/data` 盘（**≥100GiB**，推荐 **160GiB+**），用
 - Meilisearch 7700 仍只绑 `127.0.0.1`，未公网
 - 完整收口计划与剩余动作：`reports/CADDY_PROXY_APPLIED.md`
 
-> 注意：`systemctl reload caddy` 在 WSL 容器内会触发 systemd namespace 失败（`status=226/NAMESPACE`），但 `caddy validate` 和 `sudo caddy reload --config ... --force` 直接调用均成功。后续 reload 用 `sudo caddy reload --config /etc/caddy/Caddyfile --force` 而不是 systemctl。
+> 注意：`systemctl reload caddy` 在 WSL 容器内会触发 systemd namespace 失败（`status=226/NAMESPACE`），但 `caddy validate` 和 `sudo caddy reload --config ... --force` 直接调用均成功。后续 reload 用 `sudo caddy reload --config /etc/caddy/Caddyfile --force` 而不是 systemctl。## Security Hardening（2026-06-30 · S15J）
+
+Caddy 是公网唯一入口。3001/5173/7700 全部绑定 `127.0.0.1`。
+
+| port | service | bind | public via |
+|---|---|---|---|
+| 80/443 | Caddy | `*:80` / `*:443` | direct |
+| 3001 | api | `127.0.0.1:3001` | **never** |
+| 5173 | web host port | `127.0.0.1:5173` | Caddy → 127.0.0.1:5173 only |
+| 7700 | meilisearch | `127.0.0.1:7700` | **never** |
+
+`docker-compose.yml` 已经把 api/web 的 host ports 改写为 `127.0.0.1:${API_PORT:-3001}:3001` 与 `127.0.0.1:${WEB_PORT:-5173}:80`。改回去会让 3001/5173 重新公网暴露。
+
+### /api/stats 公开输出已精简
+
+默认返回 compact 视图，只包含数字 + 时间戳 + 字段分布；**不**返回：
+
+- `file`（内部 TXT 路径）
+- `checkpointPath`（内部 checkpoint 路径）
+- `samples.ok / samples.weak / samples.failed`（含 `rawInfo`）
+- `parseQualityReport` 全文
+
+本地调试可用 `http://127.0.0.1:3001/api/stats?verbose=1`，verbose 仅当请求 IP 是 host loopback（127.0.0.1 / ::1 / ::ffff:127.0.0.1 / 172.18.0.1 docker bridge gateway）才生效。通过 Caddy / 腾讯云公网 IP / 任何容器 → 容器调用永远拿不到 verbose。
+
+### 腾讯云安全组仍建议保留
+
+- 22 / 80 / 443 — 保留
+- 3001 / 5173 / 7700 — 即使 docker 已经绑 loopback，安全组也别开，公网多一道防线
+
+详细：`reports/SECURITY_HARDENING.md`
