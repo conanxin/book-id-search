@@ -282,3 +282,18 @@ Caddy 是公网唯一入口。3001/5173/7700 全部绑定 `127.0.0.1`。
 - 3001 / 5173 / 7700 — 即使 docker 已经绑 loopback，安全组也别开，公网多一道防线
 
 详细：`reports/SECURITY_HARDENING.md`
+## Cloud Demo Live（2026-06-30 · S15L）
+
+云端公网 demo 已经稳定运行，作为当前可访问入口。
+
+- **公网访问地址**：<https://books.conanxin.com/>
+- 数据规模：**500k records**（真实 TXT，5,115,734 行原始库的前 500,000 行）
+- HTTPS：Caddy → 127.0.0.1:5173（web 容器 nginx）→ 127.0.0.1:3001（api 容器）
+- 公网端口现状：
+  - `3001` / `5173` / `7700` **全部不公网**（loopback bind + 腾讯云安全组关入站）
+  - 公网只有 `80` / `443`（Caddy）
+- 全量导入前置：**必须挂独立 `/data` 盘 ≥100GiB（推荐 160GiB+）**，否则会 OOM / 索引盘满。详细见 [reports/FULL_IMPORT_PREFLIGHT.md](reports/FULL_IMPORT_PREFLIGHT.md)
+
+最终公网复核报告：[reports/FINAL_PUBLIC_ACCESS_VERIFICATION.md](reports/FINAL_PUBLIC_ACCESS_VERIFICATION.md)。
+
+当前稳定 tag：`v0.2.2-security-hardening`。
