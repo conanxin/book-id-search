@@ -1,3 +1,30 @@
+export type MatchType =
+  | "exact_identifier"
+  | "exact_isbn"
+  | "exact_ssid"
+  | "exact_dxid"
+  | "exact_title"
+  | "title"
+  | "author"
+  | "publisher"
+  | "mixed"
+  | "unknown";
+
+export interface MatchInfo {
+  type: MatchType;
+  label: string;
+  score: number;
+  fields: string[];
+}
+
+export type QueryType = "isbn" | "ssid" | "dxid" | "numeric" | "text" | "empty";
+
+export interface QueryInfo {
+  original: string;
+  normalized: string;
+  detectedType: QueryType;
+}
+
 export interface Book {
   id: string;
   ssid: string;
@@ -11,9 +38,12 @@ export interface Book {
   rawInfo: string;
   parseStatus: "ok" | "weak" | "failed";
   parseWarnings: string[];
+  match?: MatchInfo;
 }
 
 export interface SearchResponse {
+  query?: string;
+  queryInfo?: QueryInfo;
   total: number;
   page: number;
   limit: number;

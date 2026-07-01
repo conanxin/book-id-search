@@ -5,6 +5,15 @@ import { MeiliSearch } from "meilisearch";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  classifyHit,
+  isExactMatchType,
+  normalizeQuery,
+  rerank as rerankHits,
+  rerankFetchSize,
+  type MatchInfo,
+  type QueryType,
+} from "./search/index.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(currentDir, "../../../");
@@ -158,6 +167,38 @@ async function exactSearch(q: string, limit: number) {
   });
 }
 
+function buildQueryInfo(
+  original: string,
+  normalized: string,
+  detectedType: QueryType
+) {
+  return { original, normalized, detectedType };
+}
+
+function attachMatch<T extends Record<string, unknown>>(
+  hits: T[],
+  originalQuery: string,
+  normalizedQuery: string,
+  detectedType: QueryType
+): Array<T & { match: MatchInfo }> {
+  return hits.map((hit) => ({
+    ...hit,
+    match: classifyHit(hit as any, originalQuery, normalizedQuery, detectedType),
+  }));
+}
+
+function decorateWithMatch<T extends Record<string, unknown>>(
+  hit: T,
+  originalQuery: string,
+  normalizedQuery: string,
+  detectedType: QueryType
+): T & { match: MatchInfo } {
+  return {
+    ...hit,
+    match: classifyHit(hit as any, originalQuery, normalizedQuery, detectedType),
+  };
+}
+
 app.get("/api/health", async (_req, res) => {
   try {
     const health = await client.health();
@@ -171,15 +212,32 @@ app.get("/api/search", async (req: Request, res: Response) => {
   await handleSearch(req, res, index, exactSearch, isExactLike);
 });
 
+export interface HandleSearchOptions {
+  /** Override query normalizer (used by tests). */
+  normalize?: (raw: string) => { original: string; normalized: string; detectedType: QueryType };
+  /** Override classifier (used by tests). */
+  classify?: (hit: any, originalQuery: string, normalizedQuery: string, detectedType: QueryType) => MatchInfo;
+}
+
 export async function handleSearch(
   req: Request,
   res: Response,
   meiliIndex: { search: (q: string, opts: any) => Promise<{ estimatedTotalHits?: number; hits: any[] }> },
   exactSearchImpl: (q: string, limit: number) => Promise<any[]>,
-  isExactLikeImpl: (q: string) => boolean
+  isExactLikeImpl: (q: string) => boolean,
+  options: HandleSearchOptions = {}
 ): Promise<Response | void> {
-  const q = String(req.query.q ?? "").trim();
+  const rawQuery = String(req.query.q ?? "");
   const { page, limit, offset } = readPagination(req);
+
+  // Normalize the query once, before any branching.
+  const normalize = options.normalize ?? ((raw: string) => normalizeQuery(raw));
+  const classify = options.classify ?? ((hit, o, n, t) => classifyHit(hit, o, n, t));
+  const { original, normalized, detectedType } = normalize(rawQuery);
+  const queryInfo = buildQueryInfo(original, normalized, detectedType);
+
+  // Trimmed original is what the rest of the code should compare against.
+  const q = normalized.trim();
 
   try {
     if (!q) {
@@ -190,6 +248,7 @@ export async function handleSearch(
       // minimal index used in S16B full import).
       return res.json({
         query: "",
+        queryInfo,
         page,
         limit,
         total: 0,
@@ -200,21 +259,35 @@ export async function handleSearch(
     if (isExactLikeImpl(q)) {
       const exactHits = await exactSearchImpl(q, limit);
       if (exactHits.length) {
+        // Exact-identifier hits don't need reranking — they're already the
+        // canonical row. We still attach the match block so the front-end
+        // can render the trust badge consistently.
+        const decorated = attachMatch(exactHits, original, normalized, detectedType);
         return res.json({
-          total: exactHits.length,
+          query: original,
+          queryInfo,
+          total: decorated.length,
           page,
           limit,
-          items: exactHits.slice(offset, offset + limit)
+          items: decorated.slice(offset, offset + limit)
         });
       }
     }
 
-    const result = await meiliIndex.search(q, { limit, offset });
+    // Over-fetch so the local rerank can surface a better top-N without
+    // extra round trips.
+    const fetchSize = rerankFetchSize(limit);
+    const result = await meiliIndex.search(q, { limit: fetchSize, offset });
+    const decorated = attachMatch(result.hits, original, normalized, detectedType);
+    rerankHits(decorated);
+
     return res.json({
-      total: result.estimatedTotalHits ?? result.hits.length,
+      query: original,
+      queryInfo,
+      total: result.estimatedTotalHits ?? decorated.length,
       page,
       limit,
-      items: result.hits
+      items: decorated.slice(0, limit)
     });
   } catch (error) {
     return sendError(res, 500, "搜索失败，请检查关键词或稍后重试。", error);

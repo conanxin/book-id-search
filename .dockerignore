@@ -1,0 +1,31 @@
+# Build / dependency artifacts that should never enter Docker build context.
+# Pnpm symlinks in these directories use absolute host paths and break inside
+# containers, so we exclude them and let pnpm install populate node_modules
+# inside the image.
+
+**/node_modules
+**/dist
+**/.vite
+
+# VCS, env, secrets, and editor noise.
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+.vscode
+.idea
+*.swp
+
+# Reports / cache / temp output.
+reports
+.cache
+.tmp
+tmp
+*.log
+.DS_Store
+
+# Project-local data and private assets we must never ship in an image.
+books.txt
+private-data
+meili_data

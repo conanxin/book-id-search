@@ -15,7 +15,8 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { getBook, getRelatedBooks, getStats, searchBooks, type Book, type SearchResponse, type StatsResponse } from "./api";
+import { getBook, getRelatedBooks, getStats, searchBooks, type Book, type MatchInfo, type SearchResponse, type StatsResponse } from "./api";
+import { detailMatchInfo, isExactMatch, matchBadgeLabel, matchBadgeVariant, parseStatusNarrative, explainParseWarnings } from "./match-ui";
 
 // ---------------------------------------------------------------------------
 // Storage: recent search history (last 5 unique queries)
@@ -342,6 +343,68 @@ function StatusBadge({ status }: { status: Book["parseStatus"] }) {
 }
 
 // ---------------------------------------------------------------------------
+// MatchBadge: explains WHY this result is here.
+// Renders the trust badge derived from match.label + an emphasis strip
+// for exact matches. Quiet when match is missing or unknown.
+// ---------------------------------------------------------------------------
+
+function MatchBadge({ match }: { match: Book["match"] }) {
+  if (!match || match.type === "unknown") {
+    // Unknown matches are not surfaced as badges — they would be noise.
+    return null;
+  }
+  const variant = matchBadgeVariant(match);
+  const labelText = matchBadgeLabel(match);
+  if (!labelText) return null;
+  return (
+    <span
+      className={`match-badge match-badge--${variant}`}
+      title={`命中原因：${labelText}`}
+      aria-label={`命中原因：${labelText}`}
+    >
+      {isExactMatch(match) ? <span className="match-badge__dot" aria-hidden="true" /> : null}
+      {labelText}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// TrustHint: parseStatus narrative — Chinese rendering of ok / weak / failed
+// plus the human-readable parse warnings. Pure CSS classes drive the look.
+// ---------------------------------------------------------------------------
+
+function TrustHint({ book }: { book: Book }) {
+  const narrative = parseStatusNarrative(book);
+  const kind = book.parseStatus;
+  return (
+    <div className={`trust-hint trust-hint--${kind}`}>
+      <span className="trust-hint__label">记录状态：</span>
+      <span className="trust-hint__detail">{narrative}</span>
+      {kind === "weak" && book.parseWarnings?.length ? (
+        <div className="trust-hint__warnings" aria-label="弱解析原因">
+          {explainParseWarnings(book.parseWarnings)}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ExactMatchStrip: prominent banner for exact_* matches. Says why this row
+// is at the top of the list. Hidden for partial / mixed / unknown hits.
+// ---------------------------------------------------------------------------
+
+function ExactMatchStrip({ book }: { book: Book }) {
+  if (!isExactMatch(book.match)) return null;
+  return (
+    <div className="exact-match-strip" role="status" aria-live="polite">
+      <span className="exact-match-strip__chip">精确匹配</span>
+      <span className="exact-match-strip__detail">{matchBadgeLabel(book.match)}</span>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Date formatter
 // ---------------------------------------------------------------------------
 
@@ -379,8 +442,10 @@ function fullRecordText(book: Book): string {
 // ---------------------------------------------------------------------------
 
 function BookCard({ book, query }: { book: Book; query: string }) {
+  const exact = isExactMatch(book.match);
   return (
-    <article className="book-card">
+    <article className={`book-card ${exact ? "book-card--exact" : ""}`.trim()}>
+      <ExactMatchStrip book={book} />
       <Link className="book-card__hit" to={`/books/${encodeURIComponent(book.id)}`} aria-label={`查看 ${book.title || "未命名图书"} 详情`}>
         <div className="book-card__main">
           <div className="book-title-row">
@@ -392,6 +457,9 @@ function BookCard({ book, query }: { book: Book; query: string }) {
           <p>
             {query ? <Highlight value={book.author || "作者未知"} query={query} /> : book.author || "作者未知"}
           </p>
+          <div className="book-card__badges">
+            <MatchBadge match={book.match} />
+          </div>
         </div>
         <div className="book-grid">
           <Field label="出版社" value={book.publisher} highlight query={query} />
@@ -402,9 +470,7 @@ function BookCard({ book, query }: { book: Book; query: string }) {
           <Field label="DXID" value={book.dxid} highlight query={query} mono />
         </div>
       </Link>
-      {book.parseStatus === "weak" ? (
-        <div className="parse-hint">本条为弱解析，原始记录已保留。</div>
-      ) : null}
+      <TrustHint book={book} />
       {book.parseStatus === "failed" ? (
         <div className="parse-hint parse-hint--failed">本条解析异常，请谨慎引用。</div>
       ) : null}
@@ -871,11 +937,12 @@ function DetailPage() {
               <StatusBadge status={book.parseStatus} />
             </div>
             <p className="detail__author">{book.author || "作者未知"}</p>
+            <div className="detail__badges">
+              <MatchBadge match={book.match ?? detailMatchInfo(book)} />
+            </div>
           </header>
 
-          {book.parseStatus === "weak" ? (
-            <div className="parse-hint">本条为弱解析，原始记录已保留。</div>
-          ) : null}
+          <TrustHint book={book} />
           {book.parseStatus === "failed" ? (
             <div className="parse-hint parse-hint--failed">本条解析异常，请谨慎引用。</div>
           ) : null}
@@ -896,15 +963,22 @@ function DetailPage() {
             <Field label="出版社" value={book.publisher} />
             <Field label="年份" value={book.year} />
             <Field label="页数" value={book.pages} />
-            <Field label="解析提示" value={book.parseWarnings?.length ? book.parseWarnings.join("，") : "无"} />
+            <Field label="解析提示" value={book.parseWarnings?.length ? explainParseWarnings(book.parseWarnings) : "无"} />
           </div>
 
           <section className="raw-section">
             <div className="section-title-row">
-              <h2>原始记录</h2>
+              <h2 className="raw-info-title">原始 TXT 记录（用于核对）</h2>
               <CopyButton value={book.rawInfo ?? ""} label="原始记录" variant="primary" title="复制原始记录" />
             </div>
-            <pre className="raw-block">{book.rawInfo || "(无原始记录)"}</pre>
+            {book.rawInfo ? (
+              <>
+                <p className="raw-info-note">这是一行原始 TXT 记录，可用于核对解析字段。</p>
+                <pre className="raw-block">{book.rawInfo}</pre>
+              </>
+            ) : (
+              <p className="raw-info-note raw-info-note--empty">当前索引未保存原始记录。</p>
+            )}
           </section>
 
           <section>
