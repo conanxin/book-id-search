@@ -17,18 +17,23 @@
 
 ## 当前验证状态
 
-- 本地真实 TXT 100000 行验证通过
-- 本地真实 TXT 500000 行演示索引验证通过
-- 当前本地 `books` index: `500000` documents
-- 解析失败：`failedParsed=0`
-- 弱解析主要来自缺失 ISBN，`rawInfo` 已保留
-- S14 benchmark 显示 `--search-raw-info false` 对 SSID / DXID / ISBN / 书名 / 作者 / 出版社核心搜索无影响，并显著提升导入速度
-- 全量导入策略结论：`READY_FOR_TENCENT_DEPLOY`
+- **Live: Full Index 已上线 5,115,734 documents（不扩容全量导入成功）**
+- 云端全量导入（生产级，`minimal` profile + `storeRawInfo=true`）通过
+- `pnpm verify`：PASS
+- `failedParsed=287 (~0.0056%)`（数据来源原始记录残缺，非 importer 缺陷）
+- `weakParsed=1,598,107` 主要来自缺失 ISBN，`rawInfo` 已保留
+- 搜索验证：SSID / DXID / ISBN / 书名 / 作者 / 出版社全部通过
+- `/api/stats` 仅返回 compact 字段（`numberOfDocuments` / `isIndexing` / `rawDocumentDbSize`），不泄漏 rawInfo 内容、samples、checkpoint 或路径
+- `3001 / 5173 / 7700` 全部 loopback bind；只有 80 / 443 经 Caddy 公网代理
+- S14 benchmark 显示 `--search-raw-info false` 对 SSID / DXID / ISBN / 书名 / 作者 / 出版社核心搜索无影响
+- 已知问题：`scripts/import-books.ts` 的 `waitForTask` 在 AbortSignal 上累积 listener（未清理），需要后续 patch（已在 S16B-R 报告记录，不影响本次发布）
 
 推荐生产导入参数：
 
 ```bash
---batch-size 20000 --search-raw-info false --wait-timeout-ms 900000
+--batch-size 20000 --search-raw-info false --store-raw-info true \
+  --index-profile minimal --filter-profile minimal --sortable-profile minimal \
+  --wait-timeout-ms 900000 --resume --checkpoint reports/full-import-checkpoint.json
 ```
 
 ## 技术栈
