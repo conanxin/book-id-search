@@ -246,6 +246,106 @@ mark.hl {
   font-size: 12px;
 }
 
+.results__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: -4px 0 14px;
+  padding: 8px 12px;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 14px rgb(23 32 51 / 4%);
+}
+
+.toolbar-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  border-radius: var(--radius-sm);
+  background: #eef3ff;
+  color: var(--color-primary-strong);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 10px;
+  white-space: nowrap;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.toolbar-button:hover:not(:disabled) {
+  background: #dde9ff;
+}
+
+.toolbar-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.results__toolbar-hint {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-left: auto;
+  flex: 0 1 auto;
+}
+
+.results__toolbar-hint kbd {
+  display: inline-block;
+  min-width: 18px;
+  padding: 1px 5px;
+  margin: 0 1px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-bg-soft);
+  color: var(--color-text);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 10px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  z-index: 50;
+  max-width: min(560px, calc(100% - 24px));
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 14px 30px rgb(23 32 51 / 18%);
+  background: var(--color-text);
+  color: #ffffff;
+  animation: toast-in 160ms ease;
+  pointer-events: none;
+}
+
+.toast--success {
+  background: #1d7042;
+}
+
+.toast--error {
+  background: #b12a2a;
+}
+
+.toast--info {
+  background: var(--color-text);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
 .inline-status {
   display: inline-flex;
   align-items: center;
@@ -630,8 +730,19 @@ mark.hl {
     align-items: stretch;
   }
 
-  .copy-button {
+  .copy-button,
+  .toolbar-button {
     justify-content: center;
+  }
+
+  .results__toolbar {
+    gap: 6px;
+  }
+
+  .results__toolbar-hint {
+    width: 100%;
+    margin-left: 0;
+    text-align: left;
   }
 
   .pager {

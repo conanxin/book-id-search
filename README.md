@@ -15,6 +15,18 @@
 - 支持 Windows 无 Docker 本地测试
 - 支持 Docker Compose 部署到腾讯云
 
+### 前端 UX (S17 + S18A)
+
+- 搜索框：placeholder 含书名 / 作者 / 出版社 / ISBN / SSID / DXID；Enter 立即搜索；× 一键清空；300 ms debounce；输入空时显示 `输入关键词开始搜索`
+- 结果高亮：title / author / publisher / isbn / ssid / dxid 内命中的查询词用 `<mark>` 包裹（大小写不敏感，中文原样匹配）
+- 复制按钮：每张卡片可复制 SSID / DXID / ISBN / 整条；详情页可复制 SSID / DXID / ISBN / rawInfo；1.2 s 闪烁提示
+- 结果导出（toolbar）：`复制链接` / `导出当前页 CSV` / `复制本页摘要`；CSV 带 UTF-8 BOM，文件名 `book-search-YYYYMMDD-HHmmss.csv`；摘要格式 `书名｜作者｜出版社｜ISBN｜SSID｜DXID`
+- 键盘快捷键：`/` 聚焦搜索框 · `Esc` 清空 · `Enter` 搜索 · `← / →` 翻页；输入框内不抢键
+- 状态栏：搜索页底部显示 `索引 books · 5,115,734 条 · 索引空闲 · 上次导入 ...`
+- 移动端：760 px → 2 列，480 px → 1 列；等宽字段自动换行；横向无溢出
+- Toast 提示：成功 / 失败 / 信息三种颜色，1.2 s 自动消失，不阻塞复制
+- localStorage 最近 5 个搜索词：点击芯片即可重搜
+
 ## 当前验证状态
 
 - **Live: Full Index 已上线 5,115,734 documents（不扩容全量导入成功）**

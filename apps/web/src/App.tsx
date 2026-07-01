@@ -7,7 +7,10 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  ClipboardList,
   Copy,
+  Download,
+  Link2,
   Loader2,
   Search,
   X,
@@ -128,30 +131,8 @@ function CopyButton({
       flash(false);
       return;
     }
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-        flash(true);
-        return;
-      }
-    } catch {
-      /* fall through to legacy path */
-    }
-    // Legacy fallback for older / restricted environments
-    try {
-      const ta = document.createElement("textarea");
-      ta.value = text;
-      ta.setAttribute("readonly", "");
-      ta.style.position = "absolute";
-      ta.style.left = "-9999px";
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      document.body.removeChild(ta);
-      flash(true);
-    } catch {
-      flash(false);
-    }
+    const ok = await writeClipboard(text);
+    flash(ok);
   };
 
   const icon = failed ? <AlertCircle size={14} /> : copied ? <Check size={14} /> : <Copy size={14} />;
@@ -173,9 +154,147 @@ function CopyButton({
 }
 
 // ---------------------------------------------------------------------------
-// Toast: transient banner shown by CopyButton. Implemented as a small inline
-// status row so we don't add a global toast manager.
+// Shared clipboard helper (used by both CopyButton and toolbar actions)
 // ---------------------------------------------------------------------------
+
+async function writeClipboard(text: string): Promise<boolean> {
+  if (!text) return false;
+  try {
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* fall through to legacy path */
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "absolute";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Toast: transient banner. Keeps a single string + a timer; renders into
+// `.toast` near the top of the page. Auto-dismiss after 1.2 s.
+// ---------------------------------------------------------------------------
+
+type ToastKind = "info" | "success" | "error";
+let toastTimer: number | null = null;
+let toastListener: ((msg: string, kind: ToastKind) => void) | null = null;
+
+export function showToast(message: string, kind: ToastKind = "info") {
+  if (toastListener) toastListener(message, kind);
+}
+
+function showToastInternal(message: string, kind: ToastKind, setter: (v: { message: string; kind: ToastKind } | null) => void) {
+  setter({ message, kind });
+  if (toastTimer !== null) window.clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => {
+    setter(null);
+    toastTimer = null;
+  }, 1200);
+}
+
+function Toast() {
+  const [state, setState] = useState<{ message: string; kind: ToastKind } | null>(null);
+  useEffect(() => {
+    toastListener = (msg, kind) => showToastInternal(msg, kind, setState);
+    return () => {
+      toastListener = null;
+    };
+  }, []);
+  if (!state) return null;
+  return (
+    <div className={`toast toast--${state.kind}`} role="status" aria-live="polite">
+      {state.message}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CSV helpers (RFC 4180-ish). Excel-friendly UTF-8 BOM is prepended by the
+// download path, not here, so unit tests can assert on raw content.
+// ---------------------------------------------------------------------------
+
+const CSV_HEADERS = [
+  "title",
+  "author",
+  "publisher",
+  "year",
+  "pages",
+  "isbn",
+  "ssid",
+  "dxid",
+  "parseStatus",
+] as const;
+
+function csvField(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) return "";
+  const s = String(value);
+  // Quote if it contains comma, quote, CR, or LF. Escape quotes by doubling.
+  if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+function buildCsv(books: Book[]): string {
+  const lines = [CSV_HEADERS.join(",")];
+  for (const b of books) {
+    lines.push(
+      [
+        csvField(b.title),
+        csvField(b.author),
+        csvField(b.publisher),
+        csvField(b.year),
+        csvField(b.pages),
+        csvField(b.isbn),
+        csvField(b.ssid),
+        csvField(b.dxid),
+        csvField(b.parseStatus),
+      ].join(",")
+    );
+  }
+  // Trailing newline keeps Excel happy and matches RFC 4180 last-record
+  // newline (recommended but not required).
+  return lines.join("\r\n") + "\r\n";
+}
+
+function downloadCsv(books: Book[], q: string): boolean {
+  if (!books.length) return false;
+  const body = "\uFEFF" + buildCsv(books); // BOM for Excel + UTF-8
+  const blob = new Blob([body], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const stamp = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const filename = `book-search-${stamp.getFullYear()}${pad(stamp.getMonth() + 1)}${pad(stamp.getDate())}-${pad(stamp.getHours())}${pad(stamp.getMinutes())}${pad(stamp.getSeconds())}.csv`;
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  // Release the blob URL on the next tick — the browser has had a chance to
+  // pick up the click by then.
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  return true;
+}
+
+function buildPageSummary(books: Book[]): string {
+  const parts = books.map((b) =>
+    [b.title || "(未命名)", b.author || "(未知)", b.publisher || "(未知)", b.isbn || "(缺失)", b.ssid, b.dxid].join("｜")
+  );
+  return parts.join("\n");
+}
 
 // ---------------------------------------------------------------------------
 // Field: small label/value pair. `highlight` opts into query highlighting for
@@ -319,6 +438,7 @@ function SearchPage() {
   const [error, setError] = useState("");
   const [statsError, setStatsError] = useState("");
   const [recent, setRecent] = useState<string[]>([]);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   // currentQ = the query that the latest request was fired with. Used by
   // results__bar so it always renders against the query that produced `data`,
@@ -417,6 +537,97 @@ function SearchPage() {
     setParams({ q, page: "1" });
   };
 
+  // ------------------------------------------------------------------
+  // Toolbar actions: copy current URL, export current page CSV, copy
+  // current page summary. Toast on success or failure.
+  // ------------------------------------------------------------------
+  const items = data?.items ?? [];
+
+  const copySearchUrl = useCallback(async () => {
+    const href = window.location.href;
+    const ok = await writeClipboard(href);
+    if (ok) showToast("已复制链接", "success");
+    else showToast("复制链接失败", "error");
+  }, []);
+
+  const exportCurrentCsv = useCallback(() => {
+    if (!items.length) {
+      showToast("当前页没有结果可导出", "info");
+      return;
+    }
+    const ok = downloadCsv(items, currentQ);
+    if (ok) showToast(`已导出当前页 ${items.length} 条 CSV`, "success");
+    else showToast("导出 CSV 失败", "error");
+  }, [items, currentQ]);
+
+  const copyPageSummary = useCallback(async () => {
+    if (!items.length) {
+      showToast("当前页没有结果可复制", "info");
+      return;
+    }
+    const text = buildPageSummary(items);
+    const ok = await writeClipboard(text);
+    if (ok) showToast(`已复制本页 ${items.length} 条摘要`, "success");
+    else showToast("复制摘要失败", "error");
+  }, [items]);
+
+  // ------------------------------------------------------------------
+  // Keyboard shortcuts: / focus search, Esc clear, ←/→ page nav.
+  // Skip when the user is typing in an input/textarea/contenteditable
+  // so we don't fight their edits.
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    const isEditableTarget = (el: EventTarget | null): boolean => {
+      if (!(el instanceof HTMLElement)) return false;
+      const tag = el.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+      if (el.isContentEditable) return true;
+      return false;
+    };
+    const handler = (event: KeyboardEvent) => {
+      // Allow modifier-combos (Ctrl/Cmd/Alt) to pass through — let the browser
+      // handle Ctrl+L (focus address bar), Ctrl+R (reload), etc.
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      const editable = isEditableTarget(event.target);
+      // "/" focuses the search box. Don't intercept when typing.
+      if (event.key === "/" && !editable) {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+        return;
+      }
+      // Esc clears the search box only when focused (avoid swallowing Escape
+      // from fullscreen, modals, etc.). Also handles "blank then Esc leaves
+      // the input" gracefully.
+      if (event.key === "Escape") {
+        if (editable) {
+          if (input.length > 0) {
+            // Clear the input — works regardless of which editable element.
+            const target = event.target as HTMLInputElement | HTMLTextAreaElement;
+            if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+              target.value = "";
+              target.dispatchEvent(new Event("input", { bubbles: true }));
+            }
+          }
+        }
+        return;
+      }
+      // ← / → only when NOT typing — these are page navigation.
+      if (!editable && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+        if (!data || totalPages <= 1) return;
+        event.preventDefault();
+        if (event.key === "ArrowLeft" && urlPage > 1) goPage(urlPage - 1);
+        if (event.key === "ArrowRight" && urlPage < totalPages) goPage(urlPage + 1);
+        return;
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, urlPage, totalPages, input]);
+
+  const hasResults = items.length > 0;
+
   return (
     <main className="page">
       <section className="search-panel">
@@ -427,6 +638,7 @@ function SearchPage() {
         <form className="search-form" onSubmit={submit} role="search">
           <Search size={22} aria-hidden="true" />
           <input
+            ref={searchInputRef}
             value={input}
             onChange={(event) => setInput(event.target.value)}
             placeholder="搜索书名、作者、出版社、ISBN、SSID、DXID"
@@ -494,6 +706,46 @@ function SearchPage() {
             ) : null}
           </div>
         </div>
+
+        {currentQ ? (
+          <div className="results__toolbar" role="toolbar" aria-label="搜索结果操作">
+            <button
+              type="button"
+              className="toolbar-button"
+              onClick={copySearchUrl}
+              title="复制当前搜索链接"
+              aria-label="复制当前搜索链接"
+            >
+              <Link2 size={14} />
+              复制链接
+            </button>
+            <button
+              type="button"
+              className="toolbar-button"
+              onClick={exportCurrentCsv}
+              disabled={!hasResults}
+              title={hasResults ? `导出当前页 ${items.length} 条 CSV` : "当前页没有结果"}
+              aria-label="导出当前页 CSV"
+            >
+              <Download size={14} />
+              导出当前页 CSV
+            </button>
+            <button
+              type="button"
+              className="toolbar-button"
+              onClick={copyPageSummary}
+              disabled={!hasResults}
+              title={hasResults ? `复制当前页 ${items.length} 条摘要` : "当前页没有结果"}
+              aria-label="复制当前页摘要"
+            >
+              <ClipboardList size={14} />
+              复制本页摘要
+            </button>
+            <span className="results__toolbar-hint">
+              快捷键：<kbd>/</kbd> 聚焦 · <kbd>Enter</kbd> 搜索 · <kbd>Esc</kbd> 清空 · <kbd>←</kbd>/<kbd>→</kbd> 翻页
+            </span>
+          </div>
+        ) : null}
 
         {error ? <div className="state state--error" role="alert">{error}</div> : null}
 
@@ -679,9 +931,12 @@ function DetailPage() {
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<SearchPage />} />
-      <Route path="/books/:id" element={<DetailPage />} />
-    </Routes>
+    <>
+      <Routes>
+        <Route path="/" element={<SearchPage />} />
+        <Route path="/books/:id" element={<DetailPage />} />
+      </Routes>
+      <Toast />
+    </>
   );
 }
