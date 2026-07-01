@@ -257,10 +257,33 @@ async function waitForTask(
   const taskUid = task.taskUid ?? task.uid;
   if (taskUid === undefined) return;
   const started = Date.now();
-  const result = await client.tasks.waitForTask(taskUid, { timeout: waitTimeoutMs });
+  // Custom polling loop to avoid AbortSignal listener leak in the SDK's
+  // built-in waitForTask. The SDK's waitForTask creates a new AbortController
+  // per call and registers abort listeners in its http-requests layer that
+  // are only triggered on timeout. On the success path (the common case for
+  // completed tasks), those listeners stay registered on the AbortSignal —
+  // accumulated across thousands of tasks this triggers the
+  // MaxListenersExceededWarning we saw during S16B full import (3611+
+  // listeners before the import stalled).
+  const POLL_INTERVAL_MS = 250;
+  const deadline = started + waitTimeoutMs;
+  let result: Awaited<ReturnType<typeof client.tasks.getTask>> | undefined;
+  for (;;) {
+    if (Date.now() >= deadline) {
+      throw new Error(`Meilisearch task ${taskUid} timed out after ${waitTimeoutMs}ms`);
+    }
+    const current = await client.tasks.getTask(taskUid);
+    if (current.status !== "enqueued" && current.status !== "processing") {
+      result = current;
+      break;
+    }
+    if (Date.now() + POLL_INTERVAL_MS < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    }
+  }
   taskStats.count += 1;
   taskStats.totalSeconds += (Date.now() - started) / 1000;
-  if (result.status === "failed") {
+  if (result && result.status === "failed") {
     throw new Error(result.error?.message ?? `Meilisearch task ${taskUid} failed`);
   }
 }

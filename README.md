@@ -26,7 +26,7 @@
 - `/api/stats` 仅返回 compact 字段（`numberOfDocuments` / `isIndexing` / `rawDocumentDbSize`），不泄漏 rawInfo 内容、samples、checkpoint 或路径
 - `3001 / 5173 / 7700` 全部 loopback bind；只有 80 / 443 经 Caddy 公网代理
 - S14 benchmark 显示 `--search-raw-info false` 对 SSID / DXID / ISBN / 书名 / 作者 / 出版社核心搜索无影响
-- 已知问题：`scripts/import-books.ts` 的 `waitForTask` 在 AbortSignal 上累积 listener（未清理），需要后续 patch（已在 S16B-R 报告记录，不影响本次发布）
+- 已知问题：`scripts/import-books.ts` 的 `waitForTask` 早期版本使用 SDK 内置 `client.tasks.waitForTask` 会在 AbortSignal 上累积 listener（5,000+ 任务后触发 `MaxListenersExceededWarning` 警告 3,611+ 个）。S16C 已用自写轮询循环替换：见 `scripts/import-books.wait-task.test.ts`（5/5 通过，0 AbortSignal listener 累积）。
 
 推荐生产导入参数：
 
