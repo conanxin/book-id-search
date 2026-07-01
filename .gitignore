@@ -5,6 +5,9 @@ dist/
 .vite/
 coverage/
 *.tsbuildinfo
+# npm lockfiles are not used in this pnpm workspace; ignore to prevent drift
+package-lock.json
+**/package-lock.json
 
 # Local environment and secrets
 .env

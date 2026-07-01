@@ -167,23 +167,38 @@ app.get("/api/health", async (_req, res) => {
   }
 });
 
-app.get("/api/search", async (req, res) => {
+app.get("/api/search", async (req: Request, res: Response) => {
+  await handleSearch(req, res, index, exactSearch, isExactLike);
+});
+
+export async function handleSearch(
+  req: Request,
+  res: Response,
+  meiliIndex: { search: (q: string, opts: any) => Promise<{ estimatedTotalHits?: number; hits: any[] }> },
+  exactSearchImpl: (q: string, limit: number) => Promise<any[]>,
+  isExactLikeImpl: (q: string) => boolean
+): Promise<Response | void> {
   const q = String(req.query.q ?? "").trim();
   const { page, limit, offset } = readPagination(req);
 
   try {
     if (!q) {
-      const result = await index.search("", { limit, offset, sort: ["year:desc"] });
+      // Empty query: do not require any sortable attribute. Return a compact
+      // empty payload so the front-end can render a friendly "ready" state
+      // instead of triggering the recent-records branch that depends on
+      // year being sortable (which is not the case for the --sortable-profile
+      // minimal index used in S16B full import).
       return res.json({
-        total: result.estimatedTotalHits ?? result.hits.length,
+        query: "",
         page,
         limit,
-        items: result.hits
+        total: 0,
+        items: []
       });
     }
 
-    if (isExactLike(q)) {
-      const exactHits = await exactSearch(q, limit);
+    if (isExactLikeImpl(q)) {
+      const exactHits = await exactSearchImpl(q, limit);
       if (exactHits.length) {
         return res.json({
           total: exactHits.length,
@@ -194,7 +209,7 @@ app.get("/api/search", async (req, res) => {
       }
     }
 
-    const result = await index.search(q, { limit, offset });
+    const result = await meiliIndex.search(q, { limit, offset });
     return res.json({
       total: result.estimatedTotalHits ?? result.hits.length,
       page,
@@ -204,7 +219,7 @@ app.get("/api/search", async (req, res) => {
   } catch (error) {
     return sendError(res, 500, "搜索失败，请检查关键词或稍后重试。", error);
   }
-});
+}
 
 app.get("/api/books/:id", async (req, res) => {
   try {

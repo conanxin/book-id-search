@@ -58,6 +58,10 @@ function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [statsError, setStatsError] = useState("");
+  // currentQ is the active query used to render the result bar. It's a
+  // plain string so the JSX below can reference it without depending on
+  // the URLSearchParams internals.
+  const currentQ = (params.get("q") ?? "").trim();
 
   useEffect(() => {
     getStats()
@@ -69,6 +73,16 @@ function SearchPage() {
     const q = params.get("q") ?? "";
     const currentPage = Math.max(Number(params.get("page") ?? "1"), 1);
     setInput(q);
+    // Empty query: skip the search request entirely. The API returns a
+    // compact empty payload for /api/search?q= (see S16D-lite), but we
+    // also short-circuit here so the front-end shows the "ready" state
+    // without flashing a 500 error from a previous, broken default sort.
+    if (q.trim() === "") {
+      setLoading(false);
+      setError("");
+      setData({ total: 0, page: currentPage, limit: 20, items: [] });
+      return;
+    }
     setLoading(true);
     setError("");
     searchBooks(q, currentPage)
@@ -118,7 +132,7 @@ function SearchPage() {
 
       <section className="results">
         <div className="results__bar">
-          <span>{data ? `共 ${data.total.toLocaleString()} 条` : "准备搜索"}</span>
+          <span>{data && currentQ ? `共 ${data.total.toLocaleString()} 条` : "准备搜索"}</span>
           {loading ? (
             <span className="inline-status">
               <Loader2 className="spin" size={16} />
@@ -128,7 +142,7 @@ function SearchPage() {
         </div>
 
         {error ? <div className="state state--error">{error}</div> : null}
-        {!loading && !error && data && data.items.length === 0 ? <div className="state">没有找到匹配图书。</div> : null}
+        {!loading && !error && data && currentQ && data.items.length === 0 ? <div className="state">没有找到匹配图书。</div> : null}
 
         <div className="card-list">
           {data?.items.map((book) => (
