@@ -131,6 +131,31 @@ function isLocalhostRequest(req: Request): boolean {
   );
 }
 
+// Fields whose existence in `fieldDistribution` would disclose internal data shapes
+// (raw source records, private config). Stripped from the public /api/stats response.
+// Verbose mode (localhost only) keeps the full distribution.
+const PUBLIC_FIELD_DISTRIBUTION_DENYLIST = new Set([
+  "rawInfo",
+]);
+
+function buildCompactStats(stats: { numberOfDocuments: number; rawDocumentDbSize?: number; avgDocumentSize?: number; isIndexing: boolean; numberOfEmbeddings?: number; numberOfEmbeddedDocuments?: number; fieldDistribution?: Record<string, number> }) {
+  const fd = stats.fieldDistribution as Record<string, number> | undefined;
+  const compactFd = fd
+    ? Object.fromEntries(
+        Object.entries(fd).filter(([k]) => !PUBLIC_FIELD_DISTRIBUTION_DENYLIST.has(k)),
+      )
+    : undefined;
+  return {
+    numberOfDocuments: stats.numberOfDocuments,
+    rawDocumentDbSize: stats.rawDocumentDbSize,
+    avgDocumentSize: stats.avgDocumentSize,
+    isIndexing: stats.isIndexing,
+    numberOfEmbeddings: stats.numberOfEmbeddings,
+    numberOfEmbeddedDocuments: stats.numberOfEmbeddedDocuments,
+    ...(compactFd ? { fieldDistribution: compactFd } : {}),
+  };
+}
+
 function buildCompactImportSummary(report: ImportReportFile | null) {
   if (!report) return null;
   // Public summary: only the numbers + timing + safe config flags.
@@ -374,7 +399,7 @@ const verboseRequested = String(req.query.verbose ?? "") === "1";
       indexName,
       numberOfDocuments: stats.numberOfDocuments,
       isIndexing: stats.isIndexing,
-      stats,
+      stats: buildCompactStats(stats),
       lastImportReport: buildCompactImportSummary(importReport),
       parseQualityReport: null
     });

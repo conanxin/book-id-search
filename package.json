@@ -15,7 +15,8 @@
     "preflight:import": "tsx scripts/preflight-import.ts",
     "check:storage": "tsx scripts/check-storage-targets.ts",
     "benchmark:import": "tsx scripts/benchmark-import-configs.ts",
-    "verify:deploy-package": "tsx scripts/verify-deploy-package.ts"
+    "verify:deploy-package": "tsx scripts/verify-deploy-package.ts",
+    "health:check": "tsx scripts/health-check.ts"
   },
   "dependencies": {
     "dotenv": "^17.2.3",
