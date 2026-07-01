@@ -11,6 +11,8 @@ quality guarantees from S19 still hold.
 - **Periodically** (cron or manual) to detect silent regressions — docs count
   drift, isIndexing stuck true, cert expiry, port exposure.
 - **As a baseline snapshot** for `v0.4.2-search-quality` and future tags.
+- **Daily automated** via cron at 03:30 (server local time) — see the
+  "Daily cron" section below.
 
 ## How to run
 
@@ -124,7 +126,56 @@ The script prints the cert's `notAfter` date. If it's within 30 days:
 ## Files
 
 - `scripts/health-check.ts` — the check itself.
-- `reports/health-check-latest.json` — latest JSON snapshot.
+- `scripts/run-health-check-cron.sh` — cron wrapper that invokes pnpm via
+  the locally-installed binary (bypasses corepack self-bootstrap) and writes
+  per-run logs.
+- `reports/health-check-latest.json` — latest JSON snapshot (overwritten each run).
 - `reports/HEALTH_CHECK_LATEST.md` — latest Markdown snapshot.
 - `reports/HEALTH_CHECK_BASELINE.md` — frozen baseline snapshot for
   `v0.4.2-search-quality`.
+- `logs/health-check/health-check-YYYYMMDD-HHMMSS.log` — per-run logs
+  (14-day retention, auto-pruned by the cron wrapper).
+
+## Daily cron
+
+The repo installs a single cron entry:
+
+```
+30 3 * * * /opt/book-id-search/scripts/run-health-check-cron.sh
+```
+
+Install / inspect:
+
+```bash
+# Install (idempotent — removes any previous copy of this line first)
+( crontab -l 2>/dev/null | grep -v 'run-health-check-cron.sh' ; \
+  echo '30 3 * * * /opt/book-id-search/scripts/run-health-check-cron.sh' ) | crontab -
+
+# Verify
+crontab -l | grep run-health-check-cron
+```
+
+What the wrapper does:
+
+1. `cd /opt/book-id-search`
+2. `mkdir -p logs/health-check`
+3. Sets `NO_PROXY="*"` so the in-VM curl/openssl probes don't get tangled in
+   the sing-box SOCKS proxy.
+4. Invokes the installed pnpm binary directly
+   (`/home/ubuntu/.local/share/pnpm/store/v11/links/@/pnpm/10.33.0/.../pnpm.cjs`)
+   instead of going through corepack — this avoids pnpm's self-bootstrap that
+   would otherwise re-fetch pnpm from `registry.npmmirror.com` (blocked).
+5. Runs `pnpm health:check` with the live defaults (URL, expected docs, IP,
+   output paths).
+6. Writes the full per-run log to
+   `logs/health-check/health-check-YYYYMMDD-HHMMSS.log`.
+7. Prunes logs older than 14 days.
+8. Exits with `0` (PASS) / `1` (WARN) / `2` (FAIL) / `4` (pnpm binary missing).
+
+A failed daily run will leave a log on disk; the simplest manual re-run is:
+
+```bash
+/opt/book-id-search/scripts/run-health-check-cron.sh
+echo "exit=$?"
+tail -25 logs/health-check/$(ls -t logs/health-check/ | head -1)
+```
