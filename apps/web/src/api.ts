@@ -152,6 +152,14 @@ export function searchAiIntent(query: string): Promise<AiSearchResponse> {
 // S22A — AI book detail insight
 // ---------------------------------------------------------------------------
 
+export interface BibliographicQuality {
+  parseStatus: string;
+  missingFields: string[];
+  abnormalFields: string[];
+  warnings: string[];
+  trustHints: string[];
+}
+
 export interface BookInsightBasis {
   id: string;
   title: string;
@@ -186,6 +194,7 @@ export interface BookInsightResponse {
   bookId: string;
   cache?: { hit: boolean; ttlSeconds?: number };
   basis: BookInsightBasis;
+  quality: BibliographicQuality;
   insight: BookInsight;
   source: "ai" | "rule_based_fallback";
 }

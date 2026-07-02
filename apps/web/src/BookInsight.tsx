@@ -160,10 +160,32 @@ function InsightBody({
   data: BookInsightResponse;
   onSwitchToNormalSearch: (q: string) => void;
 }) {
-  const { insight, basis } = data;
+  const { insight, basis, quality } = data;
+  const hasQualityBadges = quality.missingFields.length > 0 || quality.parseStatus !== "ok";
+
   return (
     <div className="book-insight__body">
       <p className="book-insight__scope">{insight.scopeNote}</p>
+
+      {hasQualityBadges ? (
+        <div className="book-insight__quality">
+          {quality.missingFields.includes("isbn") ? (
+            <span className="quality-badge quality-badge--warning">
+              <AlertTriangle size={11} /> 缺 ISBN
+            </span>
+          ) : null}
+          {quality.parseStatus === "weak" ? (
+            <span className="quality-badge quality-badge--weak">
+              <AlertTriangle size={11} /> 弱解析
+            </span>
+          ) : null}
+          {quality.parseStatus === "failed" ? (
+            <span className="quality-badge quality-badge--error">
+              <XCircle size={11} /> 解析失败
+            </span>
+          ) : null}
+        </div>
+      ) : null}
 
       <InsightSection label="简短解读">
         <p className="book-insight__summary">{insight.shortSummary}</p>

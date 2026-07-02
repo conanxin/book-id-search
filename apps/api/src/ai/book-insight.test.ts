@@ -2,7 +2,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   runBookInsight,
   _clearInsightCache,
+  deriveBibliographicGaps,
   type BookInsightResponse,
+  type BookInsightBasis,
 } from "./book-insight.js";
 import { SimpleCache } from "./cache.js";
 import type { ChatCompletionResponse } from "./minimax.js";
@@ -413,7 +415,7 @@ describe("runBookInsight — edge cases", () => {
   beforeEach(() => _clearInsightCache());
   afterEach(() => _clearInsightCache());
 
-  it("weak parseStatus: trust level = low, basis includes warnings", async () => {
+  it("weak parseStatus + missing ISBN: trust level downgraded to medium, basis includes warnings", async () => {
     const chat = vi.fn().mockResolvedValue(okInsight(VALID_INSIGHT_JSON));
     const r = await runBookInsight(WEAK_BOOK.id, {
       isEnabled: () => true,
@@ -422,6 +424,10 @@ describe("runBookInsight — edge cases", () => {
     });
     expect(r.basis.parseStatus).toBe("weak");
     expect(r.basis.parseWarnings).toContain("缺 ISBN");
+    expect(r.quality.missingFields).toContain("isbn");
+    expect(r.insight.trustAssessment.level).toBe("medium");
+    expect(r.insight.caveats.some((c) => c.includes("ISBN") && c.includes("缺"))).toBe(true);
+    expect(r.insight.caveats.some((c) => c.includes("弱解析"))).toBe(true);
   });
 
   it("AI returns trust level out of enum → falls back to basis-driven", async () => {
@@ -451,5 +457,94 @@ describe("runBookInsight — edge cases", () => {
         chat: vi.fn(),
       }),
     ).rejects.toBeInstanceOf(Error);
+  });
+
+  it("forbidden full-content phrases are stripped from all fields", async () => {
+    const chat = vi.fn().mockResolvedValue(
+      okInsight(JSON.stringify({
+        shortSummary: "本书详细介绍了编织技法，本书讲述了钩针基础，销量很高。",
+        subjectTags: ["手工编织"],
+        bibliographicSignals: ["内容详尽的图解，读者评价很高", "影响力很大"],
+        caveats: ["作者生平未知", "本书讲述了钩针基础。"],
+      })),
+    );
+    const r = await runBookInsight(FULL_BOOK.id, {
+      isEnabled: () => true,
+      bookLookup: makeBookLookup(),
+      chat,
+    });
+    // sentences with forbidden phrases are dropped entirely
+    expect(r.insight.shortSummary).not.toContain("本书详细介绍");
+    expect(r.insight.shortSummary).not.toContain("本书讲述了");
+    expect(r.insight.shortSummary).not.toContain("销量");
+    // bibliographicSignals: sentence-level drops
+    expect(r.insight.bibliographicSignals.join("|")).not.toContain("内容详尽");
+    expect(r.insight.bibliographicSignals.join("|")).not.toContain("读者评价");
+    expect(r.insight.bibliographicSignals.join("|")).not.toContain("影响力");
+    // caveats: both forbidden-bearing sentences dropped
+    expect(r.insight.caveats.join("|")).not.toContain("作者生平");
+    expect(r.insight.caveats.join("|")).not.toContain("本书讲述了");
+    // dangling punctuation must not leak through
+    expect(r.insight.caveats.join("|")).not.toMatch(/^、|，、|、，|，$/);
+  });
+});
+
+describe("deriveBibliographicGaps — quality analysis", () => {
+  const BASE_BASIS: BookInsightBasis = {
+    id: "x",
+    title: "Test",
+    author: "Test",
+    publisher: "Test",
+    year: 2020,
+    pages: 100,
+    isbn: "9781234567890",
+    ssid: "12345678",
+    dxid: "000012345678",
+    parseStatus: "ok",
+    parseWarnings: [],
+    rawInfoExcerpt: "raw data",
+    rawInfoTruncated: false,
+  };
+
+  it("ok book with isbn: no missing fields, trust hints empty", () => {
+    const q = deriveBibliographicGaps(BASE_BASIS);
+    expect(q.missingFields).not.toContain("isbn");
+    expect(q.trustHints).not.toContain("ISBN 缺失，无法用 ISBN 进行版本核对");
+  });
+
+  it("missing isbn: missingFields includes isbn, trustHint added", () => {
+    const q = deriveBibliographicGaps({ ...BASE_BASIS, isbn: "" });
+    expect(q.missingFields).toContain("isbn");
+    expect(q.trustHints).toContain("ISBN 缺失，无法用 ISBN 进行版本核对");
+  });
+
+  it("weak parseStatus: trustHint includes weak parse warning", () => {
+    const q = deriveBibliographicGaps({ ...BASE_BASIS, parseStatus: "weak" });
+    expect(q.trustHints).toContain("记录为弱解析，应结合原始 TXT 记录核对");
+  });
+
+  it("no rawInfo: trustHint includes no rawInfo warning", () => {
+    const q = deriveBibliographicGaps({ ...BASE_BASIS, rawInfoExcerpt: "" });
+    expect(q.trustHints).toContain("当前索引未保存原始记录，无法核对字段");
+  });
+
+  it("year 0 or null: abnormalFields includes year", () => {
+    const q0 = deriveBibliographicGaps({ ...BASE_BASIS, year: 0 });
+    expect(q0.abnormalFields).toContain("year");
+    const qNull = deriveBibliographicGaps({ ...BASE_BASIS, year: null });
+    expect(qNull.abnormalFields).toContain("year");
+  });
+
+  it("pages 0 or null: abnormalFields includes pages", () => {
+    const q0 = deriveBibliographicGaps({ ...BASE_BASIS, pages: 0 });
+    expect(q0.abnormalFields).toContain("pages");
+    const qNull = deriveBibliographicGaps({ ...BASE_BASIS, pages: null });
+    expect(qNull.abnormalFields).toContain("pages");
+  });
+
+  it("warnings merges parseWarnings and derived warnings", () => {
+    const q = deriveBibliographicGaps({ ...BASE_BASIS, isbn: "", parseWarnings: ["existing_warn"] });
+    expect(q.warnings).toContain("existing_warn");
+    expect(q.warnings).toContain("missing_isbn");
   });
 });
