@@ -46,6 +46,8 @@ meilisearch.exe
 meilisearch-windows-amd64.exe
 
 # Runtime logs and generated JSON reports.
+logs/
+**/logs/
 *.log
 *.pid
 npm-debug.log*

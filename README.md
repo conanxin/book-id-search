@@ -207,6 +207,17 @@ docker compose exec -T api pnpm import:file -- --file /data/private/books.txt --
 - [腾讯云部署](docs/DEPLOY_TENCENT_CLOUD.md)
 - [运维手册](docs/OPERATIONS.md)
 - [Windows 无 Docker 本地运行](docs/RUN_WITHOUT_DOCKER_WINDOWS.md)
+- [AI 质量回归](docs/AI_QUALITY_REGRESSION.md)
+
+## AI 质量周检（S23）
+
+每周日 04:20 由 `scripts/run-ai-quality-weekly.sh` 跑一次完整的 AI 质量回归，
+目的是在「代码没动」的情况下也能发现模型 / 提示词 / 清洗逻辑的漂移。
+
+- 与每日 03:30 的健康检查互不重叠（健康检查不调用 AI）
+- 日志保留 56 天：`/opt/book-id-search/logs/ai-quality/`
+- 手动跑：`/opt/book-id-search/scripts/run-ai-quality-weekly.sh`
+- 详细说明：`docs/AI_QUALITY_REGRESSION.md#weekly-ai-quality-check`
 
 ## 常见问题
 

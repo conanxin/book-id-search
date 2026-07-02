@@ -95,6 +95,35 @@ If `pnpm` fails with a proxy error, use `tsx` directly via `./node_modules/.bin/
 - A weekly cadence (e.g. Sunday 03:00) is sufficient and far cheaper.
 - If you need to confirm after a deployment, run it manually.
 
+## Forbidden-claim detection rules (S23.1)
+
+The `no-forbidden-claims` check is intentionally narrow. It only flags
+**positive unsupported full-text claims** (e.g. "本书详细介绍了披肩制作流程",
+"内容详尽", "获得多项国家级奖项") — these are things the AI is asserting
+as fact, but cannot possibly know from the bibliographic record alone.
+
+It **does NOT** flag legitimate negative / limitation phrasing like:
+
+| Allowed (case passes) | Why |
+|---|---|
+| `但本书未提供目录或内容简介` | Negator "未提供" + term "内容简介" within Rule A's 12-char window |
+| `缺少作者背景和内容简介等辅助验证信息` | Negator "缺少" + term "内容简介" within 7 chars |
+| `以下分析仅基于书目信息，不涉及图书全文` | Global meta-limitation cue (Rule C) |
+| `目录缺失，建议结合原始记录核对` | Term "目录" + missing-marker "缺失" (Rule B) |
+| `由于无法判断具体章节内容，trust = low` | "无法判断具体" + meta-limitation cue |
+
+| Forbidden (case fails) | Why |
+|---|---|
+| `本书详细介绍了披肩制作流程` | Term `本书详细介绍了` is a positive-claim phrase (always flagged) |
+| `内容详尽，适合作为入门教材` | Term `内容详尽` is a positive-claim phrase |
+| `本书获得奖项` | Term `获得奖项` is a positive-claim phrase |
+| `读者评价认为本书非常实用` | Term `读者评价` has no negation/missing-marker around it |
+
+The full detection logic is in
+`scripts/ai-quality-regression.ts` → `findForbiddenClaimHits`, which is
+unit-tested in `scripts/ai-quality-regression.test.ts` (40 tests
+covering both directions and edge cases).
+
 ## When a case fails
 
 1. Re-run the case in isolation: `tsx scripts/ai-quality-regression.ts --case <id>`.
@@ -106,3 +135,76 @@ If `pnpm` fails with a proxy error, use `tsx` directly via `./node_modules/.bin/
 3. Fix the prompt / sanitizer, then re-run. If you change a case to be less
    strict, document why in the case comment.
 4. Only commit + tag if the new run is `PASS` or `WARN` with no safety violations.
+
+## Weekly AI Quality Check
+
+The weekly cron (`scripts/run-ai-quality-weekly.sh`) runs the full regression
+suite once a week against the live deployment, so we catch model drift /
+sanitizer regressions even when no code changed.
+
+| Item | Value |
+|---|---|
+| Cron schedule | `20 4 * * 0` (Sunday 04:20, Asia/Shanghai host time) |
+| Wrapper | `/opt/book-id-search/scripts/run-ai-quality-weekly.sh` |
+| Log dir | `/opt/book-id-search/logs/ai-quality/` (gitignored) |
+| Retention | 56 days (`find -mtime +56 -delete`) |
+| Max AI calls / run | 10 (same as manual `pnpm ai:quality`) |
+| Public URL | `https://books.conanxin.com` |
+| Reports | `ai-quality-YYYYMMDD-HHMMSS.{json,md,log}` |
+
+The daily `30 3 * * *` health check is **unrelated** and stays untouched —
+it does not call any AI endpoint.
+
+### Why weekly, not daily
+
+- AI calls cost real money and rate-limited API quota.
+- Model output variance over hours is noise; weekly cadence is sufficient
+  to catch real drift.
+- Daily health check (`run-health-check-cron.sh`) covers the **service**
+  (Meili up, books count unchanged, public HTTPS reachable). The weekly
+  AI check covers **model + prompt + sanitizer** quality.
+
+### How to run it manually
+
+```bash
+/opt/book-id-search/scripts/run-ai-quality-weekly.sh
+echo $?
+ls -lt /opt/book-id-search/logs/ai-quality/ | head
+tail -100 /opt/book-id-search/logs/ai-quality/ai-quality-*.md | tail -60
+```
+
+The wrapper sets `NO_PROXY=*` and uses the local `./node_modules/.bin/tsx`,
+so it does **not** try to call `pnpm` / `corepack` / npm registry from cron
+(avoids the ECONNREFUSED-on-npmmirror footgun). If `tsx` is missing the
+wrapper exits `2` instead of attempting a network install.
+
+### Reading the latest report
+
+```bash
+ls -t /opt/book-id-search/logs/ai-quality/ai-quality-*.md | head -1 | xargs less
+# or just look at the JSON for machine-readable details
+ls -t /opt/book-id-search/logs/ai-quality/ai-quality-*.json | head -1 | xargs jq .status
+```
+
+The wrapper propagates the underlying script's exit code:
+
+| Wrapper exit | Meaning | Action |
+|---|---|---|
+| `0` | PASS — no action needed | ok |
+| non-zero | FAIL / WARN / blocked | open the latest `.md`, see "Findings" + "Failed cases" |
+
+If exit is non-zero:
+
+1. Read the latest `ai-quality-*.md` and identify the failing case(s).
+2. Run the failing case in isolation: `./node_modules/.bin/tsx scripts/ai-quality-regression.ts --case <id> --public-url https://books.conanxin.com`.
+3. Decide whether the failure is in prompt / sanitizer / provider / case strictness
+   (see "When a case fails" above).
+4. Fix the underlying cause, then re-run the full weekly wrapper.
+
+### Why logs/ are gitignored
+
+- Logs contain AI response bodies (redacted but still verbose).
+- Logs drift the working tree on every weekly tick → noisy `git status`.
+- We only commit code, scripts, docs and reports — never logs.
+
+The gitignore line is `logs/` (added in S23). `*.log` was already ignored.

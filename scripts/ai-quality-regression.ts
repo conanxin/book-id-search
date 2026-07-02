@@ -503,26 +503,37 @@ async function runBookInsightCase(baseUrl: string, c: BookInsightCase): Promise<
 
   if (c.expected.forbiddenClaims && c.expected.forbiddenClaims.length > 0) {
     const dump = JSON.stringify(insight ?? {});
-    // The "negative-claim allowlist" lets a phrase appear when the AI is
-    // explicitly saying it's missing/has no version of that claim. This
-    // matches phrases like "缺少内容简介", "无目录", "没有作者简介".
-    const NEG_CLAIM_PATTERNS: Record<string, RegExp> = {
-      "内容简介": /(缺少|没有|无|不含|未见|并未提供|缺乏|未提供)\s*内容简介/,
-      "目录": /(缺少|没有|无|不含|未见|并未提供|缺乏|未提供)\s*目录/,
-      "读者评价": /(缺少|没有|无|不含|未见|并未提供|缺乏|未提供)\s*读者评价/,
-      "作者生平": /(缺少|没有|无|不含|未见|并未提供|缺乏|未提供)\s*作者生平/,
-      "序言": /(缺少|没有|无|不含|未见|并未提供|缺乏|未提供)\s*序言/,
-    };
-    const hits = c.expected.forbiddenClaims.filter((p) => {
-      if (!dump.includes(p)) return false;
-      const allow = NEG_CLAIM_PATTERNS[p];
-      if (allow && allow.test(dump)) return false;
-      return true;
-    });
-    if (hits.length === 0) {
-      checks.push({ name: "no-forbidden-claims", status: "PASS" });
+    // S23.1: classify each forbidden term as either a "positive" full-text
+    // claim (still FAILs the case) or a "negated" limitation phrasing
+    // (allowed). The detector is sentence/phrase-aware: a term is negated
+    // when it is preceded by a Chinese negator within ~12 chars, or
+    // followed by a missing/limitation marker within ~12 chars, or appears
+    // inside a sentence that opens with a metadata-limitation cue
+    // (e.g. "仅基于书目信息"). See `findForbiddenClaimHits` for details.
+    const { positive, negated } = findForbiddenClaimHits(
+      dump,
+      c.expected.forbiddenClaims,
+    );
+    if (positive.length === 0) {
+      if (negated.length > 0) {
+        checks.push({
+          name: "no-forbidden-claims",
+          status: "PASS",
+          detail: `negated-limitation-allowed: ${negated.join(", ")}`,
+        });
+      } else {
+        checks.push({ name: "no-forbidden-claims", status: "PASS" });
+      }
     } else {
-      checks.push({ name: "no-forbidden-claims", status: "FAIL", detail: `hits: ${hits.join(", ")}` });
+      const detailParts = [`hits: ${positive.join(", ")}`];
+      if (negated.length > 0) {
+        detailParts.push(`negated-limitation-allowed: ${negated.join(", ")}`);
+      }
+      checks.push({
+        name: "no-forbidden-claims",
+        status: "FAIL",
+        detail: detailParts.join("; "),
+      });
     }
   }
 
@@ -576,6 +587,166 @@ function aggregateStatus(checks: CaseResult["checks"]): "PASS" | "WARN" | "FAIL"
   if (checks.some((c) => c.status === "FAIL")) return "FAIL";
   if (checks.some((c) => c.status === "WARN")) return "WARN";
   return "PASS";
+}
+
+/**
+ * S23.1 — forbidden-claim classifier.
+ *
+ * Given the (JSON-stringified) insight text and a list of forbidden terms,
+ * return:
+ *   - `positive`: terms that appear without any negation/limitation
+ *     context around them — these are real forbidden full-text claims
+ *     and the case should FAIL.
+ *   - `negated`: terms that appear ONLY in a negative-limitation context
+ *     (AI explicitly saying "we don't have / haven't read / can't judge
+ *     this kind of information") — these are legitimate caveats and the
+ *     case should PASS.
+ *
+ * Detection rules (S23.1). A term occurrence is "negated" if ANY of the
+ * following holds, evaluated per-occurrence:
+ *
+ *   A. Negator-before, term within 0–12 Chinese chars after the negator:
+ *      (未提供|没有|无|不含|未见|并未提供|缺乏|未提供|不提供|并未|暂未|
+ *       不包含|不含有|未包含|未含有|没有.{0,4}完整|无.{0,4}完整|
+ *       缺.{0,4}完整|无.{0,4}资料|缺.{0,4}资料|无法.{0,4}(判断|获知|
+ *       确认|得知)|不能.{0,4}(判断|确认))
+ *
+ *   B. Term-before, missing/limitation marker within 0–12 chars after the
+ *      term (catches "内容简介 缺失" / "目录 未提供" etc.):
+ *      (缺失|缺少|未提供|不可得|无法获知|无法确认|暂缺|未获得|
+ *       不可.{0,2}知|不完整|无完整|不齐全|暂未获得|未.{0,2}包含|
+ *       暂未.{0,2}提供)
+ *
+ *   C. The full text opens a sentence with a metadata-limitation cue.
+ *      If the *entire* text contains a phrase like
+ *      (仅基于书目信息|不代表图书全文|未获得全文|没有图书全文|
+ *       无法判断具体章节|无法判断目录|不能判断具体内容|
+ *       未涉及图书全文|不涉及图书全文|以下分析仅基于|未参考任何外部),
+ *      then ALL occurrences of the configured forbidden terms within
+ *      that text are considered negated (the AI is in a meta-caveat
+ *      mode). This is the broadest catch — e.g. "以下分析仅基于书目
+ *      信息，…不涉及图书全文" would let any 书-content term be allowed.
+ *
+ * The function is exported so it can be unit-tested directly in
+ * `scripts/ai-quality-regression.test.ts`.
+ */
+export function findForbiddenClaimHits(
+  text: string,
+  terms: string[],
+): { positive: string[]; negated: string[] } {
+  const positive: string[] = [];
+  const negated: string[] = [];
+  if (!text || !terms || terms.length === 0) {
+    return { positive, negated };
+  }
+
+  // A term is a "positive-claim phrase" if it embeds a positive verb
+  // structure (介绍 / 讲述 / 深入 / 指出 / 获得 / 详尽 / 被翻译 / 显示 /
+  // 包括 / 认为). For these terms, the negative-limitation rules
+  // (Rule A / B / C) do NOT apply: if the AI uses one of these
+  // phrases, it is making a claim, period. The AI cannot meaningfully
+  // say "未提供...本书详细介绍了..." — the phrase itself is the
+  // assertion. So any appearance of a positive-claim term in the
+  // text is treated as a positive hit.
+  const POSITIVE_VERB_RE =
+    /介绍|讲述|深入|指出|获得|获奖|详尽|详细|被翻译|显示|包括|认为/;
+  const isPositiveClaimTerm = (t: string): boolean => POSITIVE_VERB_RE.test(t);
+
+  // Rule C — global metadata-limitation sentence cue. When the text
+  // contains one of these, every NON-positive-claim term is considered
+  // "negated". Positive-claim phrases (Rule above) are unaffected.
+  const META_LIMITATION_CUES = [
+    "仅基于书目信息",
+    "不代表图书全文",
+    "未获得全文",
+    "没有图书全文",
+    "无法判断具体章节",
+    "无法判断目录",
+    "不能判断具体内容",
+    "未涉及图书全文",
+    "不涉及图书全文",
+    "以下分析仅基于",
+    "未参考任何外部",
+    "仅基于用户提供的书目字段",
+  ];
+  const hasGlobalMetaLimitation = META_LIMITATION_CUES.some((cue) =>
+    text.includes(cue),
+  );
+
+  // Rule A — negator (or "cannot judge") before the term, 0–12 chars.
+  // Order in the alternation matters for greedy matching: longer
+  // compound negators (没有完整) must come before shorter stems (没有)
+  // that overlap them, otherwise the regex engine will bind to the
+  // shorter alternative and miss the completeness cue. Same for
+  // 无法判断 vs 无, 不能判断 vs 不能.
+  const NEG_BEFORE = new RegExp(
+    "(缺少|没有|无|不含|未见|并未|并未提供|缺乏|未提供|不提供|暂未|" +
+      "不包含|不含有|未包含|未含有|没有.{0,4}完整|无.{0,4}完整|缺.{0,4}完整|" +
+      "无.{0,4}资料|缺.{0,4}资料|缺.{0,4}信息|无.{0,4}信息|没有.{0,4}信息|" +
+      "无法.{0,4}(判断|获知|确认|得知|阅读)|不能.{0,4}(判断|确认|阅读)|" +
+      "暂未.{0,4}(获得|提供|获取))[^\\n，。、;；]{0,12}",
+    "g",
+  );
+  // Rule B — missing/limitation marker after the term, 0–12 chars.
+  const NEG_AFTER = new RegExp(
+    "[^\\n，。、;；]{0,12}(缺失|缺少|未提供|不可得|无法获知|无法确认|" +
+      "暂缺|未获得|不可.{0,2}知|不完整|无完整|不齐全|暂未获得|" +
+      "未.{0,2}包含|暂未.{0,2}提供)",
+    "g",
+  );
+
+  for (const term of terms) {
+    if (!term) continue;
+    if (!text.includes(term)) continue;
+
+    // Positive-claim phrases: any appearance is a positive hit.
+    if (isPositiveClaimTerm(term)) {
+      positive.push(term);
+      continue;
+    }
+
+    let isNegated = false;
+
+    // Rule C: global meta-limitation cue
+    if (hasGlobalMetaLimitation) {
+      isNegated = true;
+    }
+
+    // Rule A: negator before
+    if (!isNegated) {
+      const reBefore = new RegExp(
+        "(缺少|没有|无|不含|未见|并未|并未提供|缺乏|未提供|不提供|暂未|" +
+          "不包含|不含有|未包含|未含有|没有.{0,4}完整|无.{0,4}完整|缺.{0,4}完整|" +
+          "无.{0,4}资料|缺.{0,4}资料|缺.{0,4}信息|无.{0,4}信息|没有.{0,4}信息|" +
+          "无法.{0,4}(判断|获知|确认|得知|阅读)|不能.{0,4}(判断|确认|阅读)|" +
+          "暂未.{0,4}(获得|提供|获取))[^\\n，。、;；]{0,12}" +
+          escapeRegExp(term),
+        "g",
+      );
+      if (reBefore.test(text)) isNegated = true;
+    }
+
+    // Rule B: missing-marker after
+    if (!isNegated) {
+      const reAfter = new RegExp(
+        escapeRegExp(term) +
+          "[^\\n，。、;；]{0,12}(缺失|缺少|未提供|不可得|无法获知|无法确认|" +
+          "暂缺|未获得|不可.{0,2}知|不完整|无完整|不齐全|暂未获得|" +
+          "未.{0,2}包含|暂未.{0,2}提供)",
+        "g",
+      );
+      if (reAfter.test(text)) isNegated = true;
+    }
+
+    if (isNegated) negated.push(term);
+    else positive.push(term);
+  }
+
+  return { positive, negated };
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function stripBookToSafe(b: any) {
