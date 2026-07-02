@@ -1,0 +1,47 @@
+[
+  {
+    "wereadBookId": "wr_sample_book_0001",
+    "title": "示例建筑史",
+    "author": "示例作者 A",
+    "isbn": "9787000000001",
+    "category": "示例/历史/建筑",
+    "cover": null,
+    "rating": 4.5,
+    "readingStatus": "finished",
+    "progress": 100,
+    "noteCount": 2,
+    "highlightCount": 3,
+    "lastReadAt": "2026-05-01T10:00:00.000Z",
+    "updatedAt": "2026-05-01T10:00:00.000Z"
+  },
+  {
+    "wereadBookId": "wr_sample_book_0002",
+    "title": "示例小说",
+    "author": "示例作者 B",
+    "isbn": "9787000000002",
+    "category": "示例/文学/小说",
+    "cover": null,
+    "rating": 3.5,
+    "readingStatus": "reading",
+    "progress": 42,
+    "noteCount": 1,
+    "highlightCount": 1,
+    "lastReadAt": "2026-06-15T20:30:00.000Z",
+    "updatedAt": "2026-06-15T20:30:00.000Z"
+  },
+  {
+    "wereadBookId": "wr_sample_book_0003",
+    "title": "示例技术手册",
+    "author": "示例作者 C",
+    "isbn": null,
+    "category": "示例/技术/手册",
+    "cover": null,
+    "rating": null,
+    "readingStatus": "not_started",
+    "progress": 0,
+    "noteCount": 0,
+    "highlightCount": 0,
+    "lastReadAt": null,
+    "updatedAt": "2026-04-10T08:00:00.000Z"
+  }
+]

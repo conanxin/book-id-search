@@ -33,6 +33,16 @@ data/*.db
 *ss与isbn码*
 *isbn码*
 
+# Private user data — never commit (WeRead private snapshots, personal exports, sqlite, etc.)
+private-data/
+private-data/**
+data/weread-private/
+*.sqlite
+*.sqlite3
+*.db
+*.db-wal
+*.db-shm
+
 # Generated Meilisearch data and local binaries.
 meili_data/
 meili_data/**

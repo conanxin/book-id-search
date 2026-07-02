@@ -1,0 +1,32 @@
+[
+  {
+    "wereadBookId": "wr_sample_book_0001",
+    "noteId": "wr_sample_note_0001_a",
+    "type": "highlight",
+    "chapterTitle": "示例章节 1",
+    "text": "这是一条示例高亮文本，不包含真实阅读笔记内容。",
+    "comment": null,
+    "createdAt": "2026-04-20T09:00:00.000Z",
+    "updatedAt": "2026-04-20T09:00:00.000Z"
+  },
+  {
+    "wereadBookId": "wr_sample_book_0001",
+    "noteId": "wr_sample_note_0001_b",
+    "type": "thought",
+    "chapterTitle": "示例章节 2",
+    "text": "这是一条示例想法文本，不包含真实阅读笔记内容。",
+    "comment": "示例评论：仅用于 schema 校验。",
+    "createdAt": "2026-04-25T15:00:00.000Z",
+    "updatedAt": "2026-04-25T15:00:00.000Z"
+  },
+  {
+    "wereadBookId": "wr_sample_book_0002",
+    "noteId": "wr_sample_note_0002_a",
+    "type": "highlight",
+    "chapterTitle": null,
+    "text": "示例高亮第二条。",
+    "comment": null,
+    "createdAt": "2026-06-10T20:00:00.000Z",
+    "updatedAt": "2026-06-10T20:00:00.000Z"
+  }
+]

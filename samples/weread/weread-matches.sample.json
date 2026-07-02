@@ -1,0 +1,38 @@
+[
+  {
+    "wereadBookId": "wr_sample_book_0001",
+    "catalogId": "ssid_sample_0001",
+    "ssid": "ssid_sample_0001",
+    "dxid": "dxid_sample_0001",
+    "isbn": "9787000000001",
+    "matchMethod": "isbn",
+    "matchConfidence": "high",
+    "titleSimilarity": 1.0,
+    "authorSimilarity": 1.0,
+    "confirmedByUser": false
+  },
+  {
+    "wereadBookId": "wr_sample_book_0002",
+    "catalogId": "ssid_sample_0002",
+    "ssid": "ssid_sample_0002",
+    "dxid": "dxid_sample_0002",
+    "isbn": "9787000000002",
+    "matchMethod": "isbn",
+    "matchConfidence": "high",
+    "titleSimilarity": 1.0,
+    "authorSimilarity": 1.0,
+    "confirmedByUser": false
+  },
+  {
+    "wereadBookId": "wr_sample_book_0003",
+    "catalogId": "ssid_sample_0003",
+    "ssid": "ssid_sample_0003",
+    "dxid": "dxid_sample_0003",
+    "isbn": null,
+    "matchMethod": "title_similarity",
+    "matchConfidence": "medium",
+    "titleSimilarity": 0.78,
+    "authorSimilarity": 0.5,
+    "confirmedByUser": false
+  }
+]
