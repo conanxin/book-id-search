@@ -235,7 +235,9 @@ async function main(): Promise<void> {
 
   // 2. Query catalog for each
   const results: BookWithCandidates[] = [];
+  let processed = 0;
   for (const book of wereadBooks) {
+    processed += 1;
     const queries = buildQueries(book);
     if (queries.length === 0) {
       console.warn(`[weread:match] Skipping ${book.wereadBookId}: no viable search query`);
@@ -260,8 +262,8 @@ async function main(): Promise<void> {
       try {
         const res = await fetch(url.toString());
         if (!res.ok) continue;
-        const json = (await res.json()) as { results?: CatalogResult[] };
-        const catalogResults = json.results ?? [];
+        const json = (await res.json()) as { results?: CatalogResult[]; items?: CatalogResult[] };
+        const catalogResults = json.items ?? json.results ?? [];
         if (catalogResults.length === 0) continue;
 
         for (const result of catalogResults) {
@@ -304,9 +306,12 @@ async function main(): Promise<void> {
       author: book.author,
       candidates: top5,
     });
-    console.log(
-      `  ✓ ${book.wereadBookId}: ${book.title} → ${top5.length} candidate(s) [top: ${top5[0]?.matchConfidence ?? "-"}]`,
-    );
+    // stdout: counts only, never print titles/authors
+    if (top5.length > 0) {
+      console.log(`  ✓ ${processed}/${wereadBooks.length}: ${top5.length} candidate(s) [top: ${top5[0]?.matchConfidence ?? "-"}]`);
+    } else if (processed % 100 === 0) {
+      console.log(`  ... ${processed}/${wereadBooks.length} processed, no candidates yet`);
+    }
   }
 
   // 3. Write output
