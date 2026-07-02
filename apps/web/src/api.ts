@@ -147,3 +147,53 @@ export function searchAiIntent(query: string): Promise<AiSearchResponse> {
     body: JSON.stringify({ query }),
   });
 }
+
+// ---------------------------------------------------------------------------
+// S22A — AI book detail insight
+// ---------------------------------------------------------------------------
+
+export interface BookInsightBasis {
+  id: string;
+  title: string;
+  author: string;
+  publisher: string;
+  year: number | null;
+  pages: number | null;
+  isbn: string;
+  ssid: string;
+  dxid: string;
+  parseStatus: string;
+  parseWarnings: string[];
+  rawInfoExcerpt: string;
+  rawInfoTruncated: boolean;
+}
+
+export interface BookInsight {
+  scopeNote: string;
+  shortSummary: string;
+  subjectTags: string[];
+  likelyAudience: string;
+  bibliographicSignals: string[];
+  searchSuggestions: string[];
+  trustAssessment: {
+    level: "high" | "medium" | "low";
+    reasons: string[];
+  };
+  caveats: string[];
+}
+
+export interface BookInsightResponse {
+  bookId: string;
+  cache?: { hit: boolean; ttlSeconds?: number };
+  basis: BookInsightBasis;
+  insight: BookInsight;
+  source: "ai" | "rule_based_fallback";
+}
+
+export function getBookInsight(bookId: string): Promise<BookInsightResponse> {
+  return requestJson<BookInsightResponse>("/ai/book-insight", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ bookId }),
+  });
+}

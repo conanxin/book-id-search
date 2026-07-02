@@ -1385,3 +1385,201 @@ mark.hl {
     justify-content: center;
   }
 }
+
+/* ----- S22A book insight ----- */
+.book-insight {
+  margin: 24px 0;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.book-insight__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.book-insight__header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+.book-insight__disclaimer {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--color-text-muted, #888);
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
+.book-insight__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  padding: 8px 14px;
+  background: rgba(120, 160, 220, 0.15);
+  border: 1px solid rgba(120, 160, 220, 0.3);
+  border-radius: 6px;
+  color: var(--color-text, #ddd);
+  cursor: pointer;
+  font-weight: 500;
+}
+.book-insight__button:hover:not(:disabled) {
+  background: rgba(120, 160, 220, 0.25);
+  border-color: rgba(120, 160, 220, 0.5);
+}
+.book-insight__button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.book-insight__notice {
+  font-size: 13px;
+  color: var(--color-text-muted, #888);
+  font-style: italic;
+}
+.book-insight__error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #e0a0a0;
+  padding: 8px;
+  background: rgba(220, 100, 100, 0.1);
+  border-radius: 4px;
+  margin-top: 8px;
+}
+.book-insight__retry {
+  margin-left: auto;
+  font-size: 12px;
+  padding: 3px 10px;
+  background: transparent;
+  border: 1px solid currentColor;
+  color: inherit;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.book-insight__scope {
+  font-size: 12px;
+  color: var(--color-text-muted, #aaa);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 6px 10px;
+  border-radius: 4px;
+  margin: 0 0 14px;
+  line-height: 1.5;
+}
+.book-insight__section {
+  margin-bottom: 12px;
+}
+.book-insight__label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted, #999);
+  margin-bottom: 4px;
+}
+.book-insight__summary {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--color-text, #ddd);
+  margin: 0;
+}
+.book-insight__text {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text, #ddd);
+  margin: 0;
+}
+.book-insight__list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-text, #ddd);
+}
+.book-insight__list li {
+  margin-bottom: 2px;
+}
+.book-insight__list--caveats {
+  color: var(--color-text-muted, #aaa);
+  font-size: 12px;
+}
+.book-insight__trust {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.book-insight__trust-level {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 12px;
+}
+.trust--high .book-insight__trust-level {
+  background: rgba(140, 200, 140, 0.18);
+  color: #a8d8a8;
+}
+.trust--medium .book-insight__trust-level {
+  background: rgba(220, 180, 100, 0.18);
+  color: #e0c890;
+}
+.trust--low .book-insight__trust-level {
+  background: rgba(220, 100, 100, 0.18);
+  color: #e0a0a0;
+}
+.book-insight__trust-reasons {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 11px;
+  color: var(--color-text-muted, #999);
+  list-style: disc;
+}
+.book-insight__basis {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--color-text-muted, #888);
+}
+.book-insight__basis summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.book-insight__basis summary::-webkit-details-marker { display: none; }
+.book-insight__basis-body {
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.book-insight__basis-body p { margin: 0; }
+
+@media (max-width: 480px) {
+  .book-insight {
+    padding: 12px;
+  }
+  .book-insight__button {
+    width: 100%;
+    justify-content: center;
+  }
+  .book-insight__trust {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .book-insight__trust-reasons {
+    padding-left: 0;
+  }
+}

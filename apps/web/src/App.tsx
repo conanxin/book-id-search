@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { getBook, getRelatedBooks, getStats, searchBooks, type Book, type MatchInfo, type SearchResponse, type StatsResponse } from "./api";
+import BookInsightSection from "./BookInsight";
 import { detailMatchInfo, isExactMatch, matchBadgeLabel, matchBadgeVariant, parseStatusNarrative, explainParseWarnings } from "./match-ui";
 import AiSearchPanel from "./AiSearchPanel";
 
@@ -994,6 +995,8 @@ function DetailPage() {
             <Field label="页数" value={book.pages} />
             <Field label="解析提示" value={book.parseWarnings?.length ? explainParseWarnings(book.parseWarnings) : "无"} />
           </div>
+
+          <BookInsightSection bookId={book.id} />
 
           <section className="raw-section">
             <div className="section-title-row">

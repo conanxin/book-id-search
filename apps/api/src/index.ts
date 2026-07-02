@@ -12,6 +12,11 @@ import {
   type AiItem,
 } from "./ai/search-intent.js";
 import {
+  runBookInsight,
+  BookNotFoundError,
+  AiInsightDisabledError,
+} from "./ai/book-insight.js";
+import {
   classifyHit,
   isExactMatchType,
   normalizeQuery,
@@ -280,6 +285,42 @@ app.post("/api/ai/search-intent", async (req: Request, res: Response) => {
 /** Lightweight probe for the frontend to know whether the AI tab should show. */
 app.get("/api/ai/status", (_req: Request, res: Response) => {
   return res.json({ enabled: isAiEnabled() });
+});
+
+/**
+ * S22A: AI book detail insight.
+ * POST /api/ai/book-insight
+ *   body: { bookId: string }
+ *   returns: { bookId, basis, insight, cache?, source }
+ * 404 when book not found; 503 when AI disabled; 502 on upstream failure.
+ */
+app.post("/api/ai/book-insight", async (req: Request, res: Response) => {
+  const bookId = typeof req.body?.bookId === "string" ? req.body.bookId : "";
+  if (!bookId.trim()) {
+    return sendError(res, 400, "请求体需要非空的 bookId 字段。");
+  }
+  try {
+    const result = await runBookInsight(bookId, {
+      isEnabled: () => isAiEnabled(),
+      bookLookup: async (id) => {
+        try {
+          const doc = await index.getDocument(id);
+          return (doc as unknown as Record<string, unknown>) ?? null;
+        } catch {
+          return null;
+        }
+      },
+    });
+    return res.json(result);
+  } catch (e) {
+    if (e instanceof BookNotFoundError) {
+      return sendError(res, 404, "未找到这本书，无法生成 AI 分析。");
+    }
+    if (e instanceof AiInsightDisabledError) {
+      return sendError(res, 503, "AI 找书功能未启用，请设置 MINIMAX_API_KEY 与 AI_FEATURES_ENABLED=true。");
+    }
+    return sendError(res, 502, "AI 服务暂时不可用，请稍后再试。");
+  }
 });
 
 export interface HandleSearchOptions {
