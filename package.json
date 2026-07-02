@@ -8,6 +8,7 @@
     "dev": "pnpm --parallel --filter @book-id-search/api --filter @book-id-search/web dev",
     "build": "pnpm --filter @book-id-search/api build && pnpm --filter @book-id-search/web build && tsc -p tsconfig.scripts.json --noEmit",
     "test": "vitest run",
+    "ai:probe": "tsx scripts/ai-probe.ts",
     "verify": "tsx scripts/verify.ts",
     "import:sample": "tsx scripts/import-books.ts --file data/sample-books.txt --reset-index --report reports/latest-import-report.json",
     "import:file": "tsx scripts/import-books.ts",

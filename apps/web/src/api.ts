@@ -77,8 +77,8 @@ export interface StatsResponse {
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3001/api";
 
-async function requestJson<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`);
+async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, init);
   const data = await response.json().catch(() => null);
   if (!response.ok) {
     throw new Error(data?.error?.message ?? "请求失败");
@@ -101,4 +101,35 @@ export function getRelatedBooks(id: string) {
 
 export function getStats() {
   return requestJson<StatsResponse>("/stats");
+}
+
+// ---------------------------------------------------------------------------
+// S21A — AI-assisted natural-language search
+// ---------------------------------------------------------------------------
+
+export interface AiItem extends Book {
+  aiReason?: string;
+}
+
+export interface AiSearchResponse {
+  query: string;
+  ai: {
+    understanding: string;
+    searchQueries: string[];
+    keywords: string[];
+  };
+  items: AiItem[];
+  warnings: string[];
+}
+
+export function getAiStatus(): Promise<{ enabled: boolean }> {
+  return requestJson<{ enabled: boolean }>("/ai/status");
+}
+
+export function searchAiIntent(query: string): Promise<AiSearchResponse> {
+  return requestJson<AiSearchResponse>("/ai/search-intent", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query }),
+  });
 }

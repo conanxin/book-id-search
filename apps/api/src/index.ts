@@ -6,6 +6,12 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  AiDisabledError,
+  isAiEnabled,
+  runAiSearchIntent,
+  type AiItem,
+} from "./ai/search-intent.js";
+import {
   classifyHit,
   isExactMatchType,
   normalizeQuery,
@@ -235,6 +241,45 @@ app.get("/api/health", async (_req, res) => {
 
 app.get("/api/search", async (req: Request, res: Response) => {
   await handleSearch(req, res, index, exactSearch, isExactLike);
+});
+
+/**
+ * S21A: AI-assisted natural-language search.
+ * POST /api/ai/search-intent
+ *   body: { query: string }
+ *   returns: AiSearchResponse with merged + aiReason-tagged items.
+ * Returns 503 when AI is disabled (no MINIMAX_API_KEY or AI_FEATURES_ENABLED!=true).
+ */
+app.post("/api/ai/search-intent", async (req: Request, res: Response) => {
+  const query = typeof req.body?.query === "string" ? req.body.query : "";
+  if (!query.trim()) {
+    return sendError(res, 400, "请求体需要非空的 query 字段。");
+  }
+  try {
+    const result = await runAiSearchIntent(query, {
+      isEnabled: () => isAiEnabled(),
+      searchFn: async (q, limit) => {
+        const result = await index.search(q, { limit });
+        return result.hits as unknown as AiItem[];
+      },
+    });
+    return res.json(result);
+  } catch (e) {
+    if (e instanceof AiDisabledError) {
+      return sendError(res, 503, "AI 找书功能未启用，请设置 MINIMAX_API_KEY 与 AI_FEATURES_ENABLED=true。");
+    }
+    const msg = (e as Error)?.message ?? "AI search failed";
+    // Don't echo error.message verbatim — it might mention provider details.
+    if (msg.toLowerCase().includes("minimax")) {
+      return sendError(res, 502, "AI 服务暂时不可用，请稍后再试。");
+    }
+    return sendError(res, 500, "AI 找书请求失败，请稍后再试。");
+  }
+});
+
+/** Lightweight probe for the frontend to know whether the AI tab should show. */
+app.get("/api/ai/status", (_req: Request, res: Response) => {
+  return res.json({ enabled: isAiEnabled() });
 });
 
 export interface HandleSearchOptions {

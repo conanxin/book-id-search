@@ -13,10 +13,12 @@ import {
   Link2,
   Loader2,
   Search,
+  Sparkles,
   X,
 } from "lucide-react";
 import { getBook, getRelatedBooks, getStats, searchBooks, type Book, type MatchInfo, type SearchResponse, type StatsResponse } from "./api";
 import { detailMatchInfo, isExactMatch, matchBadgeLabel, matchBadgeVariant, parseStatusNarrative, explainParseWarnings } from "./match-ui";
+import AiSearchPanel from "./AiSearchPanel";
 
 // ---------------------------------------------------------------------------
 // Storage: recent search history (last 5 unique queries)
@@ -494,7 +496,9 @@ function SearchPage() {
   const [params, setParams] = useSearchParams();
   const urlQ = params.get("q") ?? "";
   const urlPage = Math.max(Number(params.get("page") ?? "1"), 1);
+  const urlMode = params.get("mode") === "ai" ? "ai" : "search";
 
+  const [mode, setMode] = useState<"search" | "ai">(urlMode);
   const [input, setInput] = useState(urlQ);
   const [debouncedQ, setDebouncedQ] = useState(urlQ);
   const [limit, setLimit] = useState(PAGE_SIZE);
@@ -696,6 +700,30 @@ function SearchPage() {
 
   return (
     <main className="page">
+      <div className="mode-tabs" role="tablist" aria-label="搜索模式">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === "search"}
+          className={`mode-tab ${mode === "search" ? "mode-tab--active" : ""}`}
+          onClick={() => setMode("search")}
+        >
+          <Search size={14} /> 普通搜索
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === "ai"}
+          className={`mode-tab ${mode === "ai" ? "mode-tab--active" : ""}`}
+          onClick={() => setMode("ai")}
+        >
+          <Sparkles size={14} /> AI 找书
+        </button>
+      </div>
+
+      {mode === "ai" ? (
+        <AiSearchPanel />
+      ) : (
       <section className="search-panel">
         <div className="brand-row">
           <BookOpen size={28} />
@@ -748,6 +776,7 @@ function SearchPage() {
           <Field label="last import" value={formatDate(stats?.lastImportReport?.finishedAt)} />
         </div>
       </section>
+      )}
 
       <section className="results">
         <div className="results__bar">

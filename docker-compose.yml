@@ -17,6 +17,12 @@ services:
     restart: unless-stopped
     depends_on:
       - meilisearch
+    # Load AI feature flags and MiniMax credentials from host .env at container
+    # start (NOT baked into image; .dockerignore excludes .env from build ctx).
+    # Required for POST /api/ai/search-intent (S21A). Existing explicit
+    # `environment:` entries below take precedence and keep working unchanged.
+    env_file:
+      - .env
     environment:
       MEILI_HOST: http://meilisearch:7700
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-book-id-search-dev-key}
