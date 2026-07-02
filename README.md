@@ -208,6 +208,7 @@ docker compose exec -T api pnpm import:file -- --file /data/private/books.txt --
 - [运维手册](docs/OPERATIONS.md)
 - [Windows 无 Docker 本地运行](docs/RUN_WITHOUT_DOCKER_WINDOWS.md)
 - [AI 质量回归](docs/AI_QUALITY_REGRESSION.md)
+- [搜索质量回归](docs/SEARCH_QUALITY_REGRESSION.md)
 
 ## AI 质量周检（S23）
 
@@ -218,6 +219,18 @@ docker compose exec -T api pnpm import:file -- --file /data/private/books.txt --
 - 日志保留 56 天：`/opt/book-id-search/logs/ai-quality/`
 - 手动跑：`/opt/book-id-search/scripts/run-ai-quality-weekly.sh`
 - 详细说明：`docs/AI_QUALITY_REGRESSION.md#weekly-ai-quality-check`
+
+## 搜索质量周检（S25B）
+
+每周日 04:40 由 `scripts/run-search-quality-weekly.sh` 跑一次 17 个
+case 的搜索质量回归——纯 HTTP，不调用 MiniMax，目的是在「代码没动」
+的情况下也能发现清理 / 意图 / 路由的回归。
+
+- 紧接每周日 04:20 的 AI 质量周检（先后 20 分钟）
+- 日志保留 56 天：`/opt/book-id-search/logs/search-quality/`
+- 手动跑：`/opt/book-id-search/scripts/run-search-quality-weekly.sh`
+  或 `pnpm search:quality`
+- 详细说明：`docs/SEARCH_QUALITY_REGRESSION.md`
 
 ## 搜索质量框架（S24）
 
@@ -234,7 +247,8 @@ docker compose exec -T api pnpm import:file -- --file /data/private/books.txt --
 NO_PROXY="*" no_proxy="*" ./node_modules/.bin/tsx scripts/search-quality-regression.ts
 ```
 
-15 个回归 case，目标 13 PASS / 2 WARN（语料覆盖）/ 0 FAIL。详细报告：
+17 个回归 case（S25A 起），基线 17 PASS / 0 WARN / 0 FAIL。详细报告：
+`reports/SEARCH_QUALITY_WARN_CLEANUP_REPORT.md`，框架总览：
 `reports/SEARCH_QUALITY_FRAMEWORK_REPORT.md`
 
 ## 常见问题

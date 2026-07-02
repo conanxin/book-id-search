@@ -66,15 +66,23 @@ interface Report {
   cases: CaseResult[];
 }
 
-function parseArgs(argv: string[]): { publicUrl: string } {
+function parseArgs(argv: string[]): { publicUrl: string; json?: string; markdown?: string } {
   let publicUrl = process.env.PUBLIC_URL ?? "https://books.conanxin.com";
+  let json: string | undefined;
+  let markdown: string | undefined;
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === "--public-url" && argv[i + 1]) {
       publicUrl = argv[i + 1];
       i += 1;
+    } else if (argv[i] === "--json" && argv[i + 1]) {
+      json = argv[i + 1];
+      i += 1;
+    } else if (argv[i] === "--markdown" && argv[i + 1]) {
+      markdown = argv[i + 1];
+      i += 1;
     }
   }
-  return { publicUrl };
+  return { publicUrl, json, markdown };
 }
 
 async function callSearch(publicUrl: string, q: string, limit: number): Promise<{ status: number; body: ApiSearchResponse | null; error?: string }> {
@@ -197,6 +205,9 @@ function bump(s: CaseResult["status"], next: "WARN" | "FAIL"): CaseResult["statu
   return s;
 }
 
+// Exported for unit tests (S25B).
+export { parseArgs, bump, overallStatus, buildMarkdown, evalCase };
+
 function overallStatus(cases: CaseResult[]): "PASS" | "WARN" | "FAIL" {
   if (cases.some((c) => c.status === "FAIL")) return "FAIL";
   if (cases.some((c) => c.status === "WARN")) return "WARN";
@@ -244,7 +255,7 @@ function buildMarkdown(report: Report): string {
 }
 
 async function main(): Promise<void> {
-  const { publicUrl } = parseArgs(process.argv.slice(2));
+  const { publicUrl, json, markdown } = parseArgs(process.argv.slice(2));
   const startedAt = new Date().toISOString();
   console.log(`[search-quality] Running ${SEARCH_QUALITY_CASES.length} cases against ${publicUrl}`);
   const cases: CaseResult[] = [];
@@ -269,12 +280,16 @@ async function main(): Promise<void> {
   const report: Report = { startedAt, finishedAt, publicUrl, totals, cases };
   const md = buildMarkdown(report);
 
-  // Persist to logs/search-quality/ so future weekly runs can diff.
+  // Persist to logs/search-quality/ by default; --markdown / --json
+  // override the path (used by the weekly wrapper to point at its
+  // timestamped log files and keep the working tree drift-free).
   const logDir = path.join(process.cwd(), "logs", "search-quality");
   mkdirSync(logDir, { recursive: true });
   const ts = new Date().toISOString().replace(/[:.]/g, "-").replace(/T/, "_").slice(0, 19);
-  const mdPath = path.join(logDir, `search-quality-${ts}.md`);
-  const jsonPath = path.join(logDir, `search-quality-${ts}.json`);
+  const defaultMd = path.join(logDir, `search-quality-${ts}.md`);
+  const defaultJson = path.join(logDir, `search-quality-${ts}.json`);
+  const mdPath = markdown ?? defaultMd;
+  const jsonPath = json ?? defaultJson;
   writeFileSync(mdPath, md);
   writeFileSync(jsonPath, JSON.stringify(report, null, 2));
 
@@ -283,11 +298,17 @@ async function main(): Promise<void> {
   console.log(`Markdown: ${mdPath}`);
   console.log(`JSON: ${jsonPath}`);
 
+  // Exit codes (S25B):
+  //   0 = all PASS
+  //   1 = at least one WARN, no FAIL
+  //   2 = at least one FAIL
+  //   3 = unhandled runtime error (set by main().catch below)
   const overall = overallStatus(cases);
-  if (overall === "FAIL") process.exit(1);
+  if (overall === "FAIL") process.exit(2);
+  if (overall === "WARN") process.exit(1);
 }
 
 main().catch((e) => {
   console.error("[search-quality] unhandled error:", e);
-  process.exit(2);
+  process.exit(3);
 });
