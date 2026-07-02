@@ -12,6 +12,8 @@ import {
   runAiSearchIntent,
   AiDisabledError,
 } from "./search-intent.js";
+import { SimpleCache } from "./cache.js";
+import { _clearDefaultCache, type AiSearchResponse } from "./search-intent.js";
 
 const FAKE_KEY = "test-key-abcdef0123456789";
 const BASE = "https://api.minimax.example/v1";
@@ -61,6 +63,8 @@ describe("minimax client", () => {
     delete process.env.MINIMAX_MODEL;
     delete process.env.MINIMAX_WIRE_API;
     delete process.env.AI_FEATURES_ENABLED;
+    // Clear the module-level default cache so prior tests don't pollute
+    _clearDefaultCache();
   });
   afterEach(() => {
     delete process.env.MINIMAX_API_KEY;
@@ -246,6 +250,13 @@ describe("extractReasons", () => {
 });
 
 describe("runAiSearchIntent", () => {
+  beforeEach(() => {
+    _clearDefaultCache();
+  });
+  afterEach(() => {
+    _clearDefaultCache();
+  });
+
   it("throws AiDisabledError when not enabled", async () => {
     await expect(
       runAiSearchIntent("hello", {
@@ -267,7 +278,7 @@ describe("runAiSearchIntent", () => {
       chat,
       searchFn,
     });
-    expect(out.warnings).toContain("ai_plan_parse_failed_fallback_to_raw_query");
+    expect(out.warnings.some((w) => w.includes("fallback_to_raw_query"))).toBe(true);
     expect(searchFn).toHaveBeenCalledWith("want a raw hit", expect.any(Number));
     expect(out.items).toHaveLength(1);
   });
@@ -338,28 +349,35 @@ describe("runAiSearchIntent", () => {
     const chat = vi
       .fn()
       .mockResolvedValueOnce(okChat('{"searchQueries":["q1","q2"],"keywords":[],"reason":"r"}'));
-    const searchFn = vi.fn().mockResolvedValue([]);
+    const searchFn = vi.fn().mockResolvedValue([]); // both AI queries AND raw fallback = 0
     const out = await runAiSearchIntent("anything", {
       isEnabled: () => true,
       chat,
       searchFn,
     });
     expect(out.items).toHaveLength(0);
-    expect(out.warnings).toContain("no_meili_hits");
+    // New behavior (S21A-TP2): warns AND marks fallbackUsed
+    expect(out.warnings.some((w) => /no_meili_hits|fallback/i.test(w))).toBe(true);
+    expect(out.ai.fallbackUsed).toBe(true);
   });
 
-  it("propagates chat failure on plan step", async () => {
-    const chat = vi.fn().mockResolvedValueOnce(errChat("down", 502));
-    await expect(
-      runAiSearchIntent("anything", {
-        isEnabled: () => true,
-        chat,
-        searchFn: async () => [],
-      }),
-    ).rejects.toThrow(/unavailable/);
+  it("propagates chat failure on plan step → now falls back to raw query (S21A-TP2)", async () => {
+    const chat = vi
+      .fn()
+      .mockResolvedValueOnce(errChat("down", 502))
+      .mockResolvedValueOnce(okChat('{"reasons":[]}'));
+    const searchFn = vi.fn().mockResolvedValue([makeBook("a_1", "T")]);
+    const out = await runAiSearchIntent("anything", {
+      isEnabled: () => true,
+      chat,
+      searchFn,
+    });
+    // S21A-TP2 graceful fallback: no throw, items present from raw search
+    expect(out.ai.fallbackUsed).toBe(true);
+    expect(out.items).toHaveLength(1);
   });
 
-  it("skips reason attachment when second chat fails", async () => {
+  it("skips AI reason when second chat fails, but attaches fallback reason (S21A-TP2)", async () => {
     const chat = vi
       .fn()
       .mockResolvedValueOnce(okChat('{"searchQueries":["q"],"keywords":[],"reason":"r"}'))
@@ -370,8 +388,10 @@ describe("runAiSearchIntent", () => {
       chat,
       searchFn,
     });
-    expect(out.items[0].aiReason).toBeUndefined();
-    expect(out.warnings.some((w) => w.startsWith("ai_reason_failed"))).toBe(true);
+    // S21A-TP2: aiReason is now always set (fallback to deterministic text)
+    expect(out.items[0].aiReason).toBeDefined();
+    expect(out.items[0].aiReason).toContain("这条记录来自真实书目库");
+    expect(out.warnings.some((w) => w.startsWith("ai_reason"))).toBe(true);
   });
 
   it("truncates user query to maxQueryChars", async () => {
@@ -394,6 +414,13 @@ describe("runAiSearchIntent", () => {
 });
 
 describe("redaction safety in orchestrator error paths", () => {
+  beforeEach(() => {
+    _clearDefaultCache();
+  });
+  afterEach(() => {
+    _clearDefaultCache();
+  });
+
   it("does not include api key in thrown error", async () => {
     const chat = vi.fn().mockResolvedValue(errChat("down", 502));
     try {
@@ -405,5 +432,257 @@ describe("redaction safety in orchestrator error paths", () => {
     } catch (e) {
       expect((e as Error).message).not.toContain(FAKE_KEY);
     }
+  });
+});
+
+describe("runAiSearchIntent — cache, evidence, fallback (S21A-TP2)", () => {
+  // Helper: stable env so cache key is reproducible
+  beforeEach(() => {
+    process.env.MINIMAX_API_KEY = FAKE_KEY;
+    process.env.MINIMAX_BASE_URL = BASE;
+    process.env.MINIMAX_MODEL = "test-model";
+    process.env.MINIMAX_WIRE_API = "openai_chat";
+    _clearDefaultCache();
+  });
+  afterEach(() => {
+    delete process.env.MINIMAX_API_KEY;
+    delete process.env.MINIMAX_BASE_URL;
+    delete process.env.MINIMAX_MODEL;
+    delete process.env.MINIMAX_WIRE_API;
+    _clearDefaultCache();
+  });
+
+  it("first call invokes chat; second call hits cache and skips chat", async () => {
+    const cache: SimpleCache<AiSearchResponse> = new SimpleCache({ ttlMs: 5 * 60 * 1000, maxEntries: 100 });
+    const chat = vi
+      .fn()
+      .mockResolvedValueOnce(okChat('{"searchQueries":["q1"],"keywords":[],"reason":"r"}'))
+      .mockResolvedValueOnce(okChat('{"reasons":[{"id":"a_1","reason":"hit"}]}'));
+    const searchFn = vi.fn().mockResolvedValue([makeBook("a_1", "T")]);
+    const deps = { isEnabled: () => true, chat, searchFn, cache, cacheVersion: "t1" };
+
+    const r1 = await runAiSearchIntent("披肩", deps);
+    expect(r1.cache?.hit).toBe(false);
+    expect(chat).toHaveBeenCalledTimes(2); // plan + reason
+    expect(searchFn).toHaveBeenCalledTimes(1);
+
+    const r2 = await runAiSearchIntent("披肩", deps);
+    expect(r2.cache?.hit).toBe(true);
+    expect(r2.cache?.ttlSeconds).toBe(300);
+    // chat was NOT called again (only the 2 calls from r1)
+    expect(chat).toHaveBeenCalledTimes(2);
+    // searchFn was NOT called again
+    expect(searchFn).toHaveBeenCalledTimes(1);
+    // response body is the same
+    expect(r2.query).toBe(r1.query);
+    expect(r2.items[0].id).toBe(r1.items[0].id);
+  });
+
+  it("expired cache calls chat again", async () => {
+    let now = 0;
+    const cache: SimpleCache<AiSearchResponse> = new SimpleCache({ ttlMs: 1000, maxEntries: 100, now: () => now });
+    const chat = vi
+      .fn()
+      .mockResolvedValueOnce(okChat('{"searchQueries":["q"],"keywords":[],"reason":"r"}'))
+      .mockResolvedValueOnce(okChat('{"reasons":[]}'))
+      .mockResolvedValueOnce(okChat('{"searchQueries":["q"],"keywords":[],"reason":"r"}'))
+      .mockResolvedValueOnce(okChat('{"reasons":[]}'));
+    const searchFn = vi.fn().mockResolvedValue([makeBook("a_1", "T")]);
+    const deps = { isEnabled: () => true, chat, searchFn, cache, cacheVersion: "t1" };
+
+    await runAiSearchIntent("披肩", deps);
+    now = 1500; // expired
+    await runAiSearchIntent("披肩", deps);
+    expect(chat).toHaveBeenCalledTimes(4);
+  });
+
+  it("does not cache responses with provider errors (chat_failed warning)", async () => {
+    const cache: SimpleCache<AiSearchResponse> = new SimpleCache({ ttlMs: 60000, maxEntries: 100 });
+    const chat = vi
+      .fn()
+      .mockResolvedValueOnce(okChat('{"searchQueries":["q"],"keywords":[],"reason":"r"}'))
+      .mockResolvedValueOnce(errChat("down", 502));
+    const searchFn = vi.fn().mockResolvedValue([makeBook("a_1", "T")]);
+    const deps = { isEnabled: () => true, chat, searchFn, cache, cacheVersion: "t1" };
+
+    await runAiSearchIntent("披肩", deps);
+    // Since chat_reason failed, warning includes "ai_reason_chat_failed" → not cached
+    expect(cache.get("t1::openai_chat::test-model::披肩")).toBeUndefined();
+  });
+
+  it("different query does not share cache", async () => {
+    const cache: SimpleCache<AiSearchResponse> = new SimpleCache({ ttlMs: 60000, maxEntries: 100 });
+    const chat = vi
+      .fn()
+      .mockResolvedValueOnce(okChat('{"searchQueries":["a"],"keywords":[],"reason":"r"}'))
+      .mockResolvedValueOnce(okChat('{"reasons":[]}'))
+      .mockResolvedValueOnce(okChat('{"searchQueries":["b"],"keywords":[],"reason":"r"}'))
+      .mockResolvedValueOnce(okChat('{"reasons":[]}'));
+    const searchFn = vi.fn().mockResolvedValue([makeBook("a_1", "T")]);
+    const deps = { isEnabled: () => true, chat, searchFn, cache, cacheVersion: "t1" };
+
+    const r1 = await runAiSearchIntent("披肩", deps);
+    const r2 = await runAiSearchIntent("吊带", deps);
+    expect(r1.cache?.hit).toBe(false);
+    expect(r2.cache?.hit).toBe(false);
+    expect(chat).toHaveBeenCalledTimes(4);
+  });
+
+  it("duplicate hits merge matchedQueries", async () => {
+    const chat = vi
+      .fn()
+      .mockResolvedValueOnce(okChat('{"searchQueries":["q1","q2"],"keywords":[],"reason":"r"}'))
+      .mockResolvedValueOnce(okChat('{"reasons":[]}'));
+    const searchFn = vi
+      .fn()
+      .mockResolvedValueOnce([makeBook("a_1", "T")])  // q1 hit
+      .mockResolvedValueOnce([makeBook("a_1", "T")]); // q2 also hit
+    const out = await runAiSearchIntent("anything", {
+      isEnabled: () => true,
+      chat,
+      searchFn,
+    });
+    expect(out.items[0].aiEvidence?.matchedQueryCount).toBe(2);
+    expect(out.items[0].aiEvidence?.matchedQueries).toEqual(["q1", "q2"]);
+    expect(out.items[0].aiEvidence?.source).toBe("ai_query");
+  });
+
+  it("multi-query hit outranks single-query hit", async () => {
+    const chat = vi
+      .fn()
+      .mockResolvedValueOnce(okChat('{"searchQueries":["q1","q2"],"keywords":[],"reason":"r"}'))
+      .mockResolvedValueOnce(okChat('{"reasons":[]}'));
+    const a1 = makeBook("a_1", "multi hit");
+    const searchFn = vi
+      .fn()
+      .mockResolvedValueOnce([a1, makeBook("b_1", "single hit q1 only")])  // q1: a_1 AND b_1
+      .mockResolvedValueOnce([a1]);                                         // q2: a_1 again
+    const out = await runAiSearchIntent("anything", {
+      isEnabled: () => true,
+      chat,
+      searchFn,
+    });
+    // a_1 hit both queries (matchedQueryCount=2), b_1 only q1 (matchedQueryCount=1)
+    expect(out.items[0].id).toBe("a_1");
+    expect(out.items[0].aiEvidence?.matchedQueryCount).toBe(2);
+  });
+
+  it("ok parseStatus outranks weak when matched-count equal", async () => {
+    const chat = vi
+      .fn()
+      .mockResolvedValueOnce(okChat('{"searchQueries":["q"],"keywords":[],"reason":"r"}'))
+      .mockResolvedValueOnce(okChat('{"reasons":[]}'));
+    const weak = makeBook("w_1", "Weak");
+    (weak as any).parseStatus = "weak";
+    const ok = makeBook("o_1", "OK");
+    (ok as any).parseStatus = "ok";
+    const searchFn = vi.fn().mockResolvedValue([weak, ok]); // weak first in Meili
+    const out = await runAiSearchIntent("anything", {
+      isEnabled: () => true,
+      chat,
+      searchFn,
+    });
+    // Both have matchedQueryCount=1, but ok outranks weak
+    expect(out.items[0].id).toBe("o_1");
+  });
+
+  it("aiReason id whitelist still works — fake ids dropped", async () => {
+    const chat = vi
+      .fn()
+      .mockResolvedValueOnce(okChat('{"searchQueries":["q"],"keywords":[],"reason":"r"}'))
+      .mockResolvedValueOnce(
+        okChat(
+          '{"reasons":[{"id":"a_1","reason":"real"},{"id":"fake_id","reason":"hallucinated"}]}',
+        ),
+      );
+    const searchFn = vi.fn().mockResolvedValue([makeBook("a_1", "T")]);
+    const out = await runAiSearchIntent("anything", {
+      isEnabled: () => true,
+      chat,
+      searchFn,
+    });
+    expect(out.items[0].aiReason).toBe("real");
+  });
+
+  it("aiReason fallback when AI returns nothing", async () => {
+    const chat = vi
+      .fn()
+      .mockResolvedValueOnce(okChat('{"searchQueries":["q1"],"keywords":[],"reason":"r"}'))
+      .mockResolvedValueOnce(okChat('{"reasons":[]}'));
+    const searchFn = vi.fn().mockResolvedValue([makeBook("a_1", "T")]);
+    const out = await runAiSearchIntent("披肩", {
+      isEnabled: () => true,
+      chat,
+      searchFn,
+    });
+    expect(out.items[0].aiReason).toContain("这条记录来自真实书目库");
+    expect(out.items[0].aiReason).toContain("q1");
+  });
+
+  it("AI queries no hit → fallback to raw query and find items", async () => {
+    const chat = vi
+      .fn()
+      .mockResolvedValueOnce(okChat('{"searchQueries":["nonsense_query_xyz"],"keywords":[],"reason":"r"}'))
+      .mockResolvedValueOnce(okChat('{"reasons":[]}'));
+    const searchFn = vi
+      .fn()
+      .mockResolvedValueOnce([])                           // AI query → no hit
+      .mockResolvedValueOnce([makeBook("a_1", "Found by raw")]); // raw query → hit
+    const out = await runAiSearchIntent("披肩", {
+      isEnabled: () => true,
+      chat,
+      searchFn,
+    });
+    expect(out.ai.fallbackUsed).toBe(true);
+    expect(out.ai.fallbackReason).toBeTruthy();
+    expect(out.items.length).toBe(1);
+    expect(out.items[0].id).toBe("a_1");
+    expect(out.items[0].aiEvidence?.source).toBe("fallback_query");
+  });
+
+  it("fallback also no hit → 200 with empty items and warning", async () => {
+    const chat = vi
+      .fn()
+      .mockResolvedValueOnce(okChat('{"searchQueries":["nope"],"keywords":[],"reason":"r"}'))
+      .mockResolvedValueOnce(okChat('{"reasons":[]}'));
+    const searchFn = vi.fn().mockResolvedValue([]); // everything empty
+    const out = await runAiSearchIntent("想找一本蓝色封面讲月球茶壶维修的中文书", {
+      isEnabled: () => true,
+      chat,
+      searchFn,
+    });
+    expect(out.items).toHaveLength(0);
+    expect(out.ai.fallbackUsed).toBe(true);
+    expect(out.warnings.some((w) => /no_meili_hits|fallback/i.test(w))).toBe(true);
+  });
+
+  it("AI chat plan failure → fallback to raw query", async () => {
+    const chat = vi
+      .fn()
+      .mockResolvedValueOnce(errChat("down", 502))
+      .mockResolvedValueOnce(okChat('{"reasons":[]}'));
+    const searchFn = vi.fn().mockResolvedValue([makeBook("a_1", "T")]);
+    const out = await runAiSearchIntent("披肩", {
+      isEnabled: () => true,
+      chat,
+      searchFn,
+    });
+    expect(out.ai.fallbackUsed).toBe(true);
+    expect(out.items.length).toBe(1);
+  });
+
+  it("no key leak in warnings or response", async () => {
+    const chat = vi
+      .fn()
+      .mockResolvedValueOnce(errChat(`Bearer ${FAKE_KEY} invalid`, 502))
+      .mockResolvedValueOnce(okChat('{"reasons":[]}'));
+    const searchFn = vi.fn().mockResolvedValue([makeBook("a_1", "T")]);
+    const out = await runAiSearchIntent("q", {
+      isEnabled: () => true,
+      chat,
+      searchFn,
+    });
+    const dump = JSON.stringify(out);
+    expect(dump).not.toContain(FAKE_KEY);
   });
 });

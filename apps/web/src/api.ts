@@ -107,8 +107,16 @@ export function getStats() {
 // S21A — AI-assisted natural-language search
 // ---------------------------------------------------------------------------
 
+export interface AiEvidence {
+  matchedQueries: string[];
+  matchedQueryCount: number;
+  source: "ai_query" | "fallback_query";
+  rankScore: number;
+}
+
 export interface AiItem extends Book {
   aiReason?: string;
+  aiEvidence?: AiEvidence;
 }
 
 export interface AiSearchResponse {
@@ -117,9 +125,15 @@ export interface AiSearchResponse {
     understanding: string;
     searchQueries: string[];
     keywords: string[];
+    fallbackUsed: boolean;
+    fallbackReason?: string;
   };
   items: AiItem[];
   warnings: string[];
+  cache?: {
+    hit: boolean;
+    ttlSeconds?: number;
+  };
 }
 
 export function getAiStatus(): Promise<{ enabled: boolean }> {
