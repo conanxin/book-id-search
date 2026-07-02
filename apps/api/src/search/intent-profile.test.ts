@@ -78,4 +78,29 @@ describe("detectIntentProfile (S24-2)", () => {
     const r = detectIntentProfile("鲁迅文集");
     expect(r.type).toBe("literature");
   });
+
+  it("S25A: 辽代佛塔古建筑 -> academic_research (建筑/佛塔 triggers)", () => {
+    // No "研究/论文/学术/考古/史料/理论" token. Only 佛塔+古建筑 triggers.
+    const r = detectIntentProfile("辽代佛塔古建筑");
+    expect(r.type).toBe("academic_research");
+  });
+
+  it("S25A: 佛塔寺院建筑研究 -> academic_research (multi-trigger)", () => {
+    const r = detectIntentProfile("佛塔寺院建筑研究");
+    expect(r.type).toBe("academic_research");
+    expect(r.confidence).not.toBe("low");
+  });
+
+  it("S25A: 北京旅游指南 -> travel_guide (no academic terms)", () => {
+    // Regression check: adding 佛塔/建筑 must NOT pull 北京旅游指南
+    // into academic_research.
+    const r = detectIntentProfile("北京旅游指南");
+    expect(r.type).toBe("travel_guide");
+  });
+
+  it("S25A: 寺院遗址文物 -> academic_research (3 academic triggers, high confidence)", () => {
+    const r = detectIntentProfile("寺院遗址文物");
+    expect(r.type).toBe("academic_research");
+    expect(r.confidence).toBe("high");
+  });
 });

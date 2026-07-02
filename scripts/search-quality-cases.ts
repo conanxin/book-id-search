@@ -59,25 +59,44 @@ export const SEARCH_QUALITY_CASES: SearchQualityCase[] = [
     },
   },
   {
-    id: "liao-buddhist-pagoda",
-    description: "有没有关于辽代佛塔的书 — must clean to 辽代佛塔",
-    q: "有没有关于辽代佛塔的书",
+    id: "isbn-spoken",
+    description: "ISBN 是 978-7-5384-5525-0 的书 — labeled ISBN extraction (S25A) must detect isbn, normalize to compact 13-digit, and surface the canonical record",
+    q: "ISBN 是 978-7-5384-5525-0 的书",
     expectations: {
-      cleaned: "辽代佛塔",
-      intentType: "academic_research",
-      topResultsShouldContainAnyTerms: ["佛塔", "辽", "建筑"],
+      // S25A: labeled identifier extraction in normalize.ts forces
+      // detectedType=isbn and normalized=9787538455250 (compact).
+      // /api/search then hits the exact-ISBN branch and returns the
+      // canonical record id=13000000_000008232537 at the top.
+      detectedType: "isbn",
+      topId: "13000000_000008232537",
     },
   },
   {
-    id: "isbn-spoken",
-    description: "ISBN 是 978-7-5384-5525-0 的书 — natural-language ISBN lookup (pre-existing normalize behavior, may not detect isbn prefix; the trailing number alone is precise enough to find the right book)",
-    q: "ISBN 是 978-7-5384-5525-0 的书",
+    id: "liao-buddhist-pagoda",
+    description: "有没有关于辽代佛塔的书 — must detect academic_research intent (S25A: 佛塔/建筑 added as academic triggers), and top results should mention Buddhist-architecture terms",
+    q: "有没有关于辽代佛塔的书",
     expectations: {
-      // detectedType is currently "text" because normalize doesn't
-      // strip "ISBN 是" — pre-existing behavior, not a search-quality
-      // regression. We only require the cleanup to remove "的书".
-      removedPhrasesIncludes: ["的书"],
-      topResultsShouldContainAnyTerms: ["时尚秋冬披肩", "吊带"],
+      // S25A: 佛塔 is now an academic_research trigger (was general).
+      intentType: "academic_research",
+      topResultsShouldContainAnyTerms: ["佛塔", "辽", "塔", "建筑", "寺"],
+    },
+  },
+  {
+    id: "ssid-spoken",
+    description: "SSID 是 13000000 — labeled SSID extraction (S25A) must detect ssid and surface the canonical record",
+    q: "SSID 是 13000000",
+    expectations: {
+      detectedType: "ssid",
+      topId: "13000000_000008232537",
+    },
+  },
+  {
+    id: "dxid-spoken",
+    description: "DXID 是 000008232537 — labeled DXID extraction (S25A) must detect dxid and surface the canonical record (leading zeros preserved)",
+    q: "DXID 是 000008232537",
+    expectations: {
+      detectedType: "dxid",
+      topId: "13000000_000008232537",
     },
   },
   {

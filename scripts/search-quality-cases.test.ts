@@ -5,8 +5,8 @@ import { SEARCH_QUALITY_CASES } from "./search-quality-cases.js";
 // the case definitions + that the runner's eval logic is reachable.
 
 describe("SEARCH_QUALITY_CASES (S24-C6)", () => {
-  it("contains at least 15 cases", () => {
-    expect(SEARCH_QUALITY_CASES.length).toBeGreaterThanOrEqual(15);
+  it("contains at least 17 cases", () => {
+    expect(SEARCH_QUALITY_CASES.length).toBeGreaterThanOrEqual(17);
   });
 
   it("every case has an id, description, q, and expectations", () => {
