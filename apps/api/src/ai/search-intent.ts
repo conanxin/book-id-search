@@ -48,6 +48,7 @@ import {
   buildAiCacheKey,
   type SimpleCacheOptions,
 } from "./cache.js";
+import { detectIntentProfile, rankSearchResults, type IntentProfile } from "../search/index.js";
 
 export interface AiItem {
   id: string;
@@ -64,6 +65,14 @@ export interface AiItem {
   match?: unknown;
   aiReason?: string;
   aiEvidence?: AiEvidence;
+  ranking?: {
+    score: number;
+    fieldHits: string[];
+    phraseMatch: boolean;
+    intentBoosts: string[];
+    intentPenalties: string[];
+    evidence: string[];
+  };
 }
 
 export interface AiEvidence {
@@ -77,6 +86,8 @@ export interface AiSearchPlan {
   searchQueries: string[];
   keywords: string[];
   reason: string;
+  intentType?: IntentProfile["type"];
+  intentLabel?: string;
 }
 
 export interface AiSearchResponse {
@@ -85,6 +96,8 @@ export interface AiSearchResponse {
     understanding: string;
     searchQueries: string[];
     keywords: string[];
+    intentType: IntentProfile["type"];
+    intentLabel: string;
     fallbackUsed: boolean;
     fallbackReason?: string;
   };
@@ -236,6 +249,16 @@ export async function runAiSearchIntent(
     if (!plan) planParseFailed = true;
   }
 
+  // S24-C4: Determine intent — from plan or fallback to detectIntentProfile.
+  // If the AI plan returned intentType/intentLabel, use them; otherwise
+  // run local intent detection on the original query or first searchQuery.
+  const planIntent = plan?.intentType;
+  const planLabel = plan?.intentLabel;
+  const fallbackQuery = plan?.searchQueries[0] ?? q;
+  const detected = detectIntentProfile(fallbackQuery);
+  const intentType: IntentProfile["type"] = planIntent ?? detected.type;
+  const intentLabel = planLabel ?? detected.label;
+
   // Step 2: determine queries — AI plan or fallback to raw query.
   let queries: string[];
   let usingFallback = false;
@@ -291,30 +314,53 @@ export async function runAiSearchIntent(
     }
   }
 
-  // Step 4: re-rank by evidence.
-  const parseStatusWeight: Record<string, number> = {
-    ok: 0,
-    weak: -1,
-    failed: -2,
+  // Step 4: S24-C4 — unified rerank with intent awareness.
+  // Build per-item intent-aware score. Items that matched multiple
+  // AI search queries get a strong boost so the multi-query
+  // evidence stays primary (this preserves the S21 evidence-based
+  // ranking semantics while layering intent on top).
+  const hitsForRerank = items.map(([, e]) => ({
+    ...e.item,
+    _aiMatchedCount: e.matched.length,
+  }));
+  // Build context — use the user's original query, not the AI-generated ones,
+  // because the intent was classified from the *user's intent*, not an
+  // intermediate search string.
+  const rerankContext = {
+    originalQuery: q,
+    normalizedQuery: q,
+    cleanedQuery: q,
+    queryTerms: queries,
+    detectedType: "text" as const,
+    intentProfile: detectIntentProfile(q),
   };
-  function rankOf(entry: { matched: string[]; firstRank: number; item: AiItem }): number {
-    const matchedCount = entry.matched.length;
-    const parseBonus = parseStatusWeight[entry.item.parseStatus ?? "ok"] ?? 0;
-    // matchedCount contributes 100, parseStatus contributes 0..2, firstRank breaks ties
-    return matchedCount * 100 + parseBonus * 10 - entry.firstRank * 0.01;
-  }
-  items.sort((a, b) => rankOf(b[1]) - rankOf(a[1]));
-  const topItems = items.slice(0, finalCount).map(([, e]) => e.item);
+  const ranked = rankSearchResults(hitsForRerank as any, rerankContext) as unknown as AiItem[];
+  // Override rank with the S21 evidence-based ranking: matchedCount
+  // is primary, parseStatus secondary, ranking.score tertiary. This
+  // preserves "multi-query hit outranks single-query hit" while
+  // still using the intent-aware ranking as the tiebreaker.
+  ranked.sort((a, b) => {
+    const ma = ((a as any)._aiMatchedCount as number) ?? 0;
+    const mb = ((b as any)._aiMatchedCount as number) ?? 0;
+    if (ma !== mb) return mb - ma;
+    const sa = a.ranking?.score ?? 0;
+    const sb = b.ranking?.score ?? 0;
+    if (sa !== sb) return sb - sa;
+    return 0;
+  });
+  const topItems = ranked.slice(0, finalCount);
 
   // Attach aiEvidence
   for (let i = 0; i < topItems.length; i++) {
-    const [, entry] = items[i];
-    topItems[i].aiEvidence = {
-      matchedQueries: entry.matched,
-      matchedQueryCount: entry.matched.length,
-      source: usingFallback ? "fallback_query" : "ai_query",
-      rankScore: Number(rankOf(entry).toFixed(2)),
-    };
+    const [, entry] = items.find(([id]) => id === topItems[i].id) ?? [null, null];
+    if (entry) {
+      topItems[i].aiEvidence = {
+        matchedQueries: entry.matched,
+        matchedQueryCount: entry.matched.length,
+        source: usingFallback ? "fallback_query" : "ai_query",
+        rankScore: topItems[i].ranking?.score ?? 0,
+      };
+    }
   }
 
   // Step 5: ask MiniMax to write per-item reasons (only if we have items).
@@ -368,6 +414,8 @@ export async function runAiSearchIntent(
       understanding: plan?.reason || q,
       searchQueries: queries,
       keywords: plan?.keywords ?? [],
+      intentType,
+      intentLabel,
       fallbackUsed: usingFallback || planParseFailed,
       fallbackReason: usingFallback
         ? planParseFailed

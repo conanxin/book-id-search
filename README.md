@@ -219,6 +219,24 @@ docker compose exec -T api pnpm import:file -- --file /data/private/books.txt --
 - 手动跑：`/opt/book-id-search/scripts/run-ai-quality-weekly.sh`
 - 详细说明：`docs/AI_QUALITY_REGRESSION.md#weekly-ai-quality-check`
 
+## 搜索质量框架（S24）
+
+普通搜索和 AI 找书现在共享一套「查询清洗 + 意图识别 + 统一重排」框架。
+
+- `q=查一下北京旅游的书` → 自动清理为 `北京旅游`，识别为 `旅行指南` 类，错误命中「查斯特菲尔德伯爵家训」已修复
+- 精确 ISBN/SSID/DXID 不被清理，仍走精确匹配
+- 每个结果附带 `ranking` 字段（分数 / 命中字段 / 意图加权 / 证据）
+- 前端显示：已自动忽略 X · 实际搜索：Y · 识别为：旅行指南类检索
+
+手动验证：
+
+```bash
+NO_PROXY="*" no_proxy="*" ./node_modules/.bin/tsx scripts/search-quality-regression.ts
+```
+
+15 个回归 case，目标 13 PASS / 2 WARN（语料覆盖）/ 0 FAIL。详细报告：
+`reports/SEARCH_QUALITY_FRAMEWORK_REPORT.md`
+
 ## 常见问题
 
 **为什么搜不到图书简介？**

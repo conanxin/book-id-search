@@ -19,6 +19,7 @@ import {
   type AiItem,
   type AiSearchResponse,
 } from "./api";
+import { RankingChips } from "./QueryInfoBar";
 
 /**
  * S21A-TP2 — AI-assisted natural-language book search, polished.
@@ -205,6 +206,11 @@ export default function AiSearchPanel() {
               <Sparkles size={14} /> AI 理解
             </div>
             <div className="ai-section__body">{result.ai.understanding}</div>
+            {result.ai.intentLabel ? (
+              <div className="ai-section__chips">
+                <span className="ai-chip ai-chip--intent">识别为：{result.ai.intentLabel}类检索</span>
+              </div>
+            ) : null}
           </div>
 
           {/* Section: 搜索词 (clickable) */}
@@ -355,6 +361,7 @@ function AiCandidate({ item }: { item: AiItem }) {
           <Sparkles size={12} /> {item.aiReason}
         </div>
       ) : null}
+      <RankingChips ranking={item.ranking as any} />
     </li>
   );
 }

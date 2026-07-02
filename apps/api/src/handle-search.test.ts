@@ -359,7 +359,15 @@ describe("handleSearch — empty query", () => {
     expect(meili.search).not.toHaveBeenCalled();
     expect(res.body).toEqual({
       query: "",
-      queryInfo: { original: "", normalized: "", detectedType: "empty" },
+      queryInfo: expect.objectContaining({
+        original: "",
+        normalized: "",
+        cleaned: "",
+        detectedType: "empty",
+        cleanupApplied: false,
+        removedPhrases: [],
+        intentType: "general",
+      }),
       page: 1,
       limit: 20,
       total: 0,
@@ -393,8 +401,8 @@ describe("handleSearch — non-empty query", () => {
     const req = mockReq("9787538455250");
     const res = mockRes();
     await handleSearch(req, res, meili, exactSearchImpl, isExactLikeImpl);
-    // The S19-4 over-fetch uses limit * 3 (capped at 100) — for default limit=20 that's 60.
-    expect(meili.search).toHaveBeenCalledWith("9787538455250", { limit: 60, offset: 0 });
+    // The S24-3 over-fetch uses limit * 5 (capped at 120) — for default limit=20 that's 100.
+    expect(meili.search).toHaveBeenCalledWith("9787538455250", { limit: 100, offset: 0 });
     expect((res.body as any).total).toBe(1);
     expect((res.body as any).items[0].title).toBe("时尚秋冬披肩、吊带");
     expect((res.body as any).queryInfo.detectedType).toBe("isbn");
@@ -431,7 +439,7 @@ describe("handleSearch — non-empty query", () => {
     const req = mockReq("时尚秋冬");
     const res = mockRes();
     await handleSearch(req, res, meili, exactSearchImpl, isExactLikeImpl);
-    expect(meili.search).toHaveBeenCalledWith("时尚秋冬", { limit: 60, offset: 0 });
+    expect(meili.search).toHaveBeenCalledWith("时尚秋冬", { limit: 100, offset: 0 });
     expect((res.body as any).total).toBe(2955);
     expect((res.body as any).items).toHaveLength(2);
     expect((res.body as any).items[0].match.label).toBe("书名命中");
@@ -488,8 +496,8 @@ describe("handleSearch — non-empty query", () => {
     const req = { query: { q: "时尚秋冬", page: "2", limit: "5" } } as unknown as Request;
     const res = mockRes();
     await handleSearch(req, res, meili, exactSearchImpl, isExactLikeImpl);
-    // fetchSize = limit*3 capped at 100 → 15 here; offset = (2-1)*5 = 5
-    expect(meili.search).toHaveBeenCalledWith("时尚秋冬", { limit: 15, offset: 5 });
+    // fetchSize = limit*5 capped at 120 → 25 here; offset = (2-1)*5 = 5
+    expect(meili.search).toHaveBeenCalledWith("时尚秋冬", { limit: 25, offset: 5 });
     expect((res.body as any).page).toBe(2);
     expect((res.body as any).limit).toBe(5);
     expect((res.body as any).items.length).toBeLessThanOrEqual(5);
@@ -515,5 +523,122 @@ describe("handleSearch — exact-identifier path", () => {
     expect(meili.search).not.toHaveBeenCalled();
     expect((res.body as any).items[0].match.type).toBe("exact_isbn");
     expect((res.body as any).items[0].match.label).toBe("ISBN 精确匹配");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S24 search quality framework — integration tests
+// ---------------------------------------------------------------------------
+
+describe("handleSearch — S24 cleanup + intent + rerank", () => {
+  it("'查一下北京旅游的书' cleans to '北京旅游' and detects travel_guide intent", async () => {
+    const meili = {
+      search: vi.fn(async (_q: string, _opts: any) => ({
+        estimatedTotalHits: 5,
+        hits: [
+          { id: "1", title: "查斯特菲尔德伯爵家训", author: "查斯特", parseStatus: "ok" },
+          { id: "2", title: "北京旅游完全指南", author: "李华", parseStatus: "ok" },
+          { id: "3", title: "北京旅游发展研究报告", author: "社科院", parseStatus: "ok" },
+          { id: "4", title: "北京自助游攻略", author: "王明", parseStatus: "ok" },
+          { id: "5", title: "上海小吃地图", author: "陈志", parseStatus: "ok" },
+        ],
+      })),
+    };
+    const req = mockReq("查一下北京旅游的书");
+    const res = mockRes();
+    await handleSearch(req, res, meili, exactSearchImpl, isExactLikeImpl);
+    expect(res.statusCode).toBe(200);
+    const qi = (res.body as any).queryInfo;
+    expect(qi.cleaned).toBe("北京旅游");
+    expect(qi.cleanupApplied).toBe(true);
+    expect(qi.removedPhrases).toContain("查一下");
+    expect(qi.removedPhrases).toContain("的书");
+    expect(qi.intentType).toBe("travel_guide");
+    expect(qi.intentLabel).toBe("旅行指南");
+    // The travel-guide row should outrank the "查斯特菲尔德" row
+    // even though the latter is lexically "closer" to the original.
+    const items = (res.body as any).items;
+    expect(items[0].title).toBe("北京旅游完全指南");
+    // 查斯特菲尔德 must be ranked AFTER all real travel titles.
+    const chesterfieldIdx = items.findIndex((i: any) => i.title === "查斯特菲尔德伯爵家训");
+    const firstTravelIdx = items.findIndex((i: any) => i.title.includes("北京旅游"));
+    expect(firstTravelIdx).toBe(0);
+    expect(chesterfieldIdx).toBeGreaterThanOrEqual(firstTravelIdx + 1);
+    // Meili should be searched with the CLEANED query, not the raw one.
+    expect(meili.search).toHaveBeenCalledWith("北京旅游", expect.objectContaining({ limit: expect.any(Number) }));
+  });
+
+  it("identifier queries (ISBN) skip cleanup and keep raw query", async () => {
+    const meili = {
+      search: vi.fn(async () => ({ estimatedTotalHits: 0, hits: [] })),
+    };
+    const exactImpl = vi.fn(async () => [
+      { id: "13000000_000008232537", title: "时尚秋冬披肩、吊带", isbn: "9787538455250", parseStatus: "ok" },
+    ]);
+    const req = mockReq("9787538455250");
+    const res = mockRes();
+    await handleSearch(req, res, meili, exactImpl, isExactLikeImpl);
+    expect(res.statusCode).toBe(200);
+    const qi = (res.body as any).queryInfo;
+    expect(qi.cleanupApplied).toBe(false);
+    expect(qi.removedPhrases).toEqual([]);
+    expect(qi.intentType).toBe("general");
+    expect(qi.detectedType).toBe("isbn");
+  });
+
+  it("empty query returns 200 with items=[]", async () => {
+    const meili = {
+      search: vi.fn(async () => ({ estimatedTotalHits: 0, hits: [] })),
+    };
+    const req = mockReq("");
+    const res = mockRes();
+    await handleSearch(req, res, meili, exactSearchImpl, isExactLikeImpl);
+    expect(res.statusCode).toBe(200);
+    expect((res.body as any).items).toEqual([]);
+    expect((res.body as any).queryInfo.intentType).toBe("general");
+    expect((res.body as any).queryInfo.cleaned).toBe("");
+  });
+
+  it("every item has a ranking block with score + evidence", async () => {
+    const meili = {
+      search: vi.fn(async () => ({
+        estimatedTotalHits: 3,
+        hits: [
+          { id: "1", title: "北京旅游完全指南", parseStatus: "ok" },
+          { id: "2", title: "北京旅游手册", parseStatus: "ok" },
+          { id: "3", title: "上海旅游", parseStatus: "ok" },
+        ],
+      })),
+    };
+    const req = mockReq("北京旅游");
+    const res = mockRes();
+    await handleSearch(req, res, meili, exactSearchImpl, isExactLikeImpl);
+    const items = (res.body as any).items;
+    expect(items.length).toBeGreaterThan(0);
+    for (const it of items) {
+      expect(it.ranking).toBeDefined();
+      expect(typeof it.ranking.score).toBe("number");
+      expect(Array.isArray(it.ranking.fieldHits)).toBe(true);
+      expect(Array.isArray(it.ranking.evidence)).toBe(true);
+    }
+  });
+
+  it("'北京旅游发展研究' cleans to '北京旅游发展研究' and detects academic_research", async () => {
+    const meili = {
+      search: vi.fn(async () => ({
+        estimatedTotalHits: 3,
+        hits: [
+          { id: "1", title: "北京旅游发展研究报告", parseStatus: "ok" },
+          { id: "2", title: "北京旅游完全指南", parseStatus: "ok" },
+        ],
+      })),
+    };
+    const req = mockReq("北京旅游发展研究");
+    const res = mockRes();
+    await handleSearch(req, res, meili, exactSearchImpl, isExactLikeImpl);
+    const qi = (res.body as any).queryInfo;
+    // Cleanup keeps "研究" since it's not in our operation list.
+    expect(qi.cleaned).toContain("研究");
+    expect(qi.intentType).toBe("academic_research");
   });
 });

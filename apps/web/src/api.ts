@@ -19,10 +19,34 @@ export interface MatchInfo {
 
 export type QueryType = "isbn" | "ssid" | "dxid" | "numeric" | "text" | "empty";
 
+export type IntentType =
+  | "travel_guide"
+  | "practical_manual"
+  | "academic_research"
+  | "literature"
+  | "textbook"
+  | "reference"
+  | "general";
+
 export interface QueryInfo {
   original: string;
   normalized: string;
+  cleaned?: string;
   detectedType: QueryType;
+  cleanupApplied?: boolean;
+  removedPhrases?: string[];
+  cleanupConfidence?: "none" | "low" | "medium" | "high";
+  intentType?: IntentType;
+  intentLabel?: string;
+}
+
+export interface RankingEvidence {
+  score: number;
+  fieldHits: string[];
+  phraseMatch: boolean;
+  intentBoosts: string[];
+  intentPenalties: string[];
+  evidence: string[];
 }
 
 export interface Book {
@@ -39,6 +63,7 @@ export interface Book {
   parseStatus: "ok" | "weak" | "failed";
   parseWarnings: string[];
   match?: MatchInfo;
+  ranking?: RankingEvidence;
 }
 
 export interface SearchResponse {
@@ -125,6 +150,8 @@ export interface AiSearchResponse {
     understanding: string;
     searchQueries: string[];
     keywords: string[];
+    intentType?: IntentType;
+    intentLabel?: string;
     fallbackUsed: boolean;
     fallbackReason?: string;
   };

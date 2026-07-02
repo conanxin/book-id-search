@@ -20,6 +20,7 @@ import { getBook, getRelatedBooks, getStats, searchBooks, type Book, type MatchI
 import BookInsightSection from "./BookInsight";
 import { detailMatchInfo, isExactMatch, matchBadgeLabel, matchBadgeVariant, parseStatusNarrative, explainParseWarnings } from "./match-ui";
 import AiSearchPanel from "./AiSearchPanel";
+import { QueryInfoBar, RankingChips } from "./QueryInfoBar";
 
 // ---------------------------------------------------------------------------
 // Storage: recent search history (last 5 unique queries)
@@ -463,6 +464,7 @@ function BookCard({ book, query }: { book: Book; query: string }) {
           <div className="book-card__badges">
             <MatchBadge match={book.match} />
           </div>
+          <RankingChips ranking={book.ranking} />
         </div>
         <div className="book-grid">
           <Field label="出版社" value={book.publisher} highlight query={query} />
@@ -780,6 +782,7 @@ function SearchPage() {
       )}
 
       <section className="results">
+        <QueryInfoBar queryInfo={data?.queryInfo} />
         <div className="results__bar">
           <span className="results__count">
             {data && currentQ

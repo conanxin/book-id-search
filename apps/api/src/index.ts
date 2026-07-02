@@ -22,8 +22,13 @@ import {
   normalizeQuery,
   rerank as rerankHits,
   rerankFetchSize,
+  cleanNaturalLanguageQuery,
+  detectIntentProfile,
+  rankSearchResults,
   type MatchInfo,
   type QueryType,
+  type CleanedQuery,
+  type IntentProfile,
 } from "./search/index.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
@@ -203,12 +208,36 @@ async function exactSearch(q: string, limit: number) {
   });
 }
 
+interface ExtendedQueryInfo {
+  original: string;
+  normalized: string;
+  cleaned: string;
+  detectedType: QueryType;
+  cleanupApplied: boolean;
+  removedPhrases: string[];
+  cleanupConfidence: CleanedQuery["cleanupConfidence"];
+  intentType: IntentProfile["type"];
+  intentLabel: string;
+}
+
 function buildQueryInfo(
   original: string,
   normalized: string,
+  cleaned: CleanedQuery,
+  intent: IntentProfile,
   detectedType: QueryType
-) {
-  return { original, normalized, detectedType };
+): ExtendedQueryInfo {
+  return {
+    original,
+    normalized,
+    cleaned: cleaned.cleaned,
+    detectedType,
+    cleanupApplied: cleaned.changed,
+    removedPhrases: cleaned.removedPhrases,
+    cleanupConfidence: cleaned.cleanupConfidence,
+    intentType: intent.type,
+    intentLabel: intent.label,
+  };
 }
 
 function attachMatch<T extends Record<string, unknown>>(
@@ -345,18 +374,51 @@ export async function handleSearch(
   const normalize = options.normalize ?? ((raw: string) => normalizeQuery(raw));
   const classify = options.classify ?? ((hit, o, n, t) => classifyHit(hit, o, n, t));
   const { original, normalized, detectedType } = normalize(rawQuery);
-  const queryInfo = buildQueryInfo(original, normalized, detectedType);
 
-  // Trimmed original is what the rest of the code should compare against.
-  const q = normalized.trim();
+  // S24-1 / S24-2: Cleanup + Intent detection.
+  // Skip cleanup for exact-identifiers — they use exactSearch directly.
+  // For text queries, we clean and also detect intent, then search using
+  // the cleaned query.
+  const isIdentifierType =
+    detectedType === "isbn" || detectedType === "ssid" || detectedType === "dxid";
+
+  let cleanedQuery: CleanedQuery;
+  let intent: IntentProfile;
+  let searchQuery: string;
+
+  if (isIdentifierType) {
+    // Identifier: no cleanup, no intent.
+    cleanedQuery = {
+      original: normalized,
+      cleaned: normalized,
+      removedPhrases: [],
+      changed: false,
+      cleanupConfidence: "none",
+    };
+    intent = {
+      type: "general",
+      label: "通用检索",
+      positiveTerms: [],
+      negativeTerms: [],
+      confidence: "none",
+    };
+    searchQuery = normalized;
+  } else {
+    // Natural language: cleanup + intent detection.
+    cleanedQuery = cleanNaturalLanguageQuery(normalized, detectedType);
+    // If cleanup produced an empty string (all removed), fall back to
+    // normalized.
+    searchQuery = cleanedQuery.cleaned.trim() || normalized;
+    intent = detectIntentProfile(searchQuery);
+  }
+
+  const queryInfo = buildQueryInfo(original, normalized, cleanedQuery, intent, detectedType);
 
   try {
-    if (!q) {
+    if (!normalized.trim()) {
       // Empty query: do not require any sortable attribute. Return a compact
-      // empty payload so the front-end can render a friendly "ready" state
-      // instead of triggering the recent-records branch that depends on
-      // year being sortable (which is not the case for the --sortable-profile
-      // minimal index used in S16B full import).
+      // empty payload so the front-end can render a friendly "ready" state.
+      // Extended queryInfo fields are included here for consistency.
       return res.json({
         query: "",
         queryInfo,
@@ -367,38 +429,61 @@ export async function handleSearch(
       });
     }
 
-    if (isExactLikeImpl(q)) {
-      const exactHits = await exactSearchImpl(q, limit);
+    if (isExactLikeImpl(searchQuery) && isIdentifierType) {
+      const exactHits = await exactSearchImpl(searchQuery, limit);
       if (exactHits.length) {
         // Exact-identifier hits don't need reranking — they're already the
         // canonical row. We still attach the match block so the front-end
         // can render the trust badge consistently.
-        const decorated = attachMatch(exactHits, original, normalized, detectedType);
+        const decorated = attachMatch(exactHits, original, searchQuery, detectedType);
+        // Exact IDs: no local intent rerank, but still include a default
+        // ranking block for schema consistency.
+        const ranked = decorated.map((item) => ({
+          ...item,
+          ranking: {
+            score: 1000,
+            fieldHits: ["exact_identifier"],
+            phraseMatch: false,
+            intentBoosts: [],
+            intentPenalties: [],
+            evidence: ["标识符精确匹配"],
+          },
+        }));
         return res.json({
           query: original,
           queryInfo,
-          total: decorated.length,
+          total: ranked.length,
           page,
           limit,
-          items: decorated.slice(offset, offset + limit)
+          items: ranked.slice(offset, offset + limit)
         });
       }
     }
 
-    // Over-fetch so the local rerank can surface a better top-N without
-    // extra round trips.
-    const fetchSize = rerankFetchSize(limit);
-    const result = await meiliIndex.search(q, { limit: fetchSize, offset });
-    const decorated = attachMatch(result.hits, original, normalized, detectedType);
-    rerankHits(decorated);
+    // S24-3: Intent-aware over-fetch + unified rerank.
+    // Bump fetchSize from 3x → 5x to give the intent reranker more
+    // candidates to promote.
+    const fetchSize = Math.min(Math.max(limit, 1) * 5, 120);
+    const result = await meiliIndex.search(searchQuery, { limit: fetchSize, offset });
+
+    const decorated = attachMatch(result.hits, original, searchQuery, detectedType);
+    const rerankContext = {
+      originalQuery: original,
+      normalizedQuery: normalized,
+      cleanedQuery: searchQuery,
+      queryTerms: [searchQuery], // TODO: richer term extraction
+      detectedType,
+      intentProfile: intent,
+    };
+    const ranked = rankSearchResults(decorated, rerankContext);
 
     return res.json({
       query: original,
       queryInfo,
-      total: result.estimatedTotalHits ?? decorated.length,
+      total: result.estimatedTotalHits ?? ranked.length,
       page,
       limit,
-      items: decorated.slice(0, limit)
+      items: ranked.slice(0, limit)
     });
   } catch (error) {
     return sendError(res, 500, "搜索失败，请检查关键词或稍后重试。", error);
