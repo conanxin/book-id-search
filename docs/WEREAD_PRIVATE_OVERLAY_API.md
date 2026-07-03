@@ -7,6 +7,7 @@ Private, read-only API endpoints that expose a minimal, redacted view of your We
 - `GET /api/private/weread/summary` — aggregate counts only.
 - `GET /api/private/weread/status?catalogId=<catalogId>` — per-book reading status.
 - `POST /api/private/weread/status/batch` — batch reading status for up to 100 catalogIds.
+- `GET /api/private/weread/trends` — counts-only notes/highlights trend (S27B).
 
 ## Authentication
 
@@ -149,6 +150,26 @@ This overlay has no effect on `/api/search`, `/api/stats`, `/api/health`, or AI 
 - `500` — server error reading private data.
 
 Error responses only contain a short `error` string; no token or private data is returned.
+
+## `GET /api/private/weread/trends`
+
+返回 7/30/90 天窗口和全部时间窗口的笔记/划线统计，仅统计数量，不返回任何正文、章节标题或微信读书内部 ID。
+
+响应字段：
+
+- `generatedAt` — 聚合时间（ISO 字符串）。
+- `windows.days7` / `days30` / `days90` — 窗口计数对象，包含 `total` / `activeDays` / `activeBooks` / `highlights` / `thoughts` / `reviews` / `unknown`，以及 `daily`（仅 days7/30/90 含，每个元素 `{date, total, highlights, thoughts, reviews, unknown}`）。
+- `windows.allTime` — 全部时间窗口（不含 `daily`）。
+- `confirmedOnly` — 仅统计已确认匹配书籍的笔记：`total` / `activeBooks` / `highlights` / `thoughts` / `reviews` / `unknown`。
+- `coverage` — `notesWithDate` / `notesWithoutDate` / `dateCoverageRatio`。
+
+日期聚合规则：
+
+- 优先 `note.createdAt`，缺失时回退到 `note.updatedAt`；两者皆缺或解析失败计入 `notesWithoutDate`。
+- 按 UTC 日期 `YYYY-MM-DD` 聚合，避免时区歧义。
+- 全部时间窗口 `daily` 字段不返回，避免响应过大。
+
+错误响应与其它 `/api/private/weread/*` 端点一致：`401` 缺 token，`403` token 无效，`404` overlay 未启用，`500` 读数据失败。
 
 ## Frontend usage
 

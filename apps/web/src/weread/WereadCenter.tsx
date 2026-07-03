@@ -1,13 +1,22 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, BookOpen, Lock, Loader2, AlertCircle, Search, XCircle, RefreshCw, Shield, EyeOff } from "lucide-react";
+import { ArrowLeft, BookOpen, Lock, Loader2, AlertCircle, XCircle, RefreshCw, Shield, EyeOff, BarChart3 } from "lucide-react";
 import {
   clearWereadToken,
   fetchWereadSummary,
+  fetchWereadTrends,
   formatWereadCenterSummary,
   getWereadToken,
   saveWereadToken,
   type WereadSummary,
+  type WereadTrends,
 } from "../wereadPrivate";
+import {
+  formatTrendWindow,
+  getActivityLevel,
+  getTrendCards,
+  getTrendCoverageLabel,
+  type WereadTrendView,
+} from "./wereadCenterModel";
 
 function StatCard({
   label,
@@ -41,10 +50,75 @@ function PrivacyItem({ text }: { text: string }) {
   );
 }
 
+function TrendBars({ daily }: { daily: Array<{ date: string; total: number }> }) {
+  if (daily.length === 0) {
+    return <div className="weread-trend-bars__empty">暂无最近 30 天的每日记录。</div>;
+  }
+  const max = Math.max(1, ...daily.map((d) => d.total));
+  return (
+    <div className="weread-trend-bars" aria-label="最近 30 天每日新增">
+      {daily.map((d) => {
+        const heightPct = Math.round((d.total / max) * 100);
+        return (
+          <div key={d.date} className="weread-trend-bar" title={`${d.date}: ${d.total}`}>
+            <div className="weread-trend-bar__fill" style={{ height: `${heightPct}%` }} />
+            <span className="weread-trend-bar__label">{d.date.slice(5)}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TrendContent({ trends }: { trends: WereadTrends }) {
+  const view: WereadTrendView = formatTrendWindow(trends);
+  const cards = getTrendCards(view);
+  const activity = getActivityLevel(view);
+  const activityLabels: Record<typeof activity, string> = {
+    quiet: "静默期",
+    normal: "正常",
+    active: "活跃",
+    intense: "非常活跃",
+  };
+  return (
+    <>
+      <div className="weread-trend-meta">
+        <span className="weread-trend-meta__pill">{activityLabels[activity]}</span>
+        <span>日期覆盖率 {getTrendCoverageLabel(view)}</span>
+      </div>
+      <div className="weread-trend-grid">
+        {cards.map((card) => (
+          <StatCard key={card.label} label={card.label} value={card.value} />
+        ))}
+      </div>
+      <div className="weread-trend-card">
+        <h3 className="weread-trend-card__title">类型分布（全部时间）</h3>
+        <div className="weread-trend-grid">
+          <StatCard label="划线" value={view.highlightsTotal} />
+          <StatCard label="想法" value={view.thoughtsTotal} />
+          <StatCard label="书评" value={view.reviewsTotal} />
+          <StatCard label="未知类型" value={view.unknownTotal} />
+        </div>
+      </div>
+      <div className="weread-trend-card">
+        <h3 className="weread-trend-card__title">最近 30 天每日新增</h3>
+        <TrendBars daily={view.daily30} />
+      </div>
+      <p className="weread-center-card__note">
+        <EyeOff size={14} aria-hidden="true" />
+        只显示数量统计，不显示笔记或划线的原文，不返回微信读书内部 ID。
+      </p>
+    </>
+  );
+}
+
 export default function WereadCenter() {
   const [token, setToken] = useState("");
   const [storedToken, setStoredToken] = useState<string | null>(getWereadToken());
   const [summary, setSummary] = useState<WereadSummary | null>(null);
+  const [trends, setTrends] = useState<WereadTrends | null>(null);
+  const [trendsStatus, setTrendsStatus] = useState<"idle" | "loading" | "error" | "ok">("idle");
+  const [trendsError, setTrendsError] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "error" | "disabled">("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -64,6 +138,9 @@ export default function WereadCenter() {
       setSummary(s);
       setStatus(s.ok ? "idle" : "error");
       if (!s.ok) setError("私有 API 返回异常");
+      if (s.ok) {
+        void loadTrends(t);
+      }
     } catch (err) {
       setStatus("error");
       const msg = err instanceof Error ? err.message : "连接失败";
@@ -79,6 +156,24 @@ export default function WereadCenter() {
     }
   }
 
+  async function loadTrends(t: string) {
+    setTrendsStatus("loading");
+    setTrendsError(null);
+    try {
+      const resp = await fetchWereadTrends(t);
+      if (resp.ok && resp.trends) {
+        setTrends(resp.trends);
+        setTrendsStatus("ok");
+      } else {
+        setTrendsStatus("error");
+        setTrendsError(resp.error ?? "趋势数据不可用");
+      }
+    } catch {
+      setTrendsStatus("error");
+      setTrendsError("趋势数据暂不可用");
+    }
+  }
+
   function handleConnect() {
     if (!token.trim()) return;
     saveWereadToken(token.trim());
@@ -90,6 +185,9 @@ export default function WereadCenter() {
     clearWereadToken();
     setStoredToken(null);
     setSummary(null);
+    setTrends(null);
+    setTrendsStatus("idle");
+    setTrendsError(null);
     setStatus("idle");
     setError(null);
     setToken("");
@@ -213,6 +311,25 @@ export default function WereadCenter() {
               <PrivacyItem text="不进入 Meilisearch" />
             </ul>
           </div>
+
+          {trends || trendsStatus === "loading" || trendsStatus === "error" ? (
+            <div className="weread-center-card weread-trend-section">
+              <h2 className="weread-center-card__title">
+                <BarChart3 size={16} aria-hidden="true" /> 阅读趋势
+              </h2>
+              {trends ? (
+                <TrendContent trends={trends} />
+              ) : trendsStatus === "loading" ? (
+                <div className="weread-trend-meta">
+                  <Loader2 size={14} className="spin" /> 趋势数据加载中…
+                </div>
+              ) : (
+                <div className="weread-trend-error">
+                  <AlertCircle size={14} /> {trendsError ?? "趋势数据暂不可用"}
+                </div>
+              )}
+            </div>
+          ) : null}
 
           <div className="weread-center-card">
             <h2 className="weread-center-card__title">使用说明</h2>

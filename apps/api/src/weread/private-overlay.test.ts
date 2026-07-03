@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  buildNotesTrend,
   clearWereadOverlayCache,
   getWereadStatusByCatalogId,
   getWereadStatusesByCatalogIds,
@@ -198,5 +199,126 @@ describe("private-overlay", () => {
     const d1 = loadWereadOverlay(tmpDir);
     const d2 = loadWereadOverlay(tmpDir);
     expect(d1).toBe(d2);
+  });
+});
+
+describe("buildNotesTrend", () => {
+  const now = Date.now();
+  const day = 86400;
+  const ts = (offsetDays: number) => Math.floor(now / 1000) - offsetDays * day;
+
+  function makeNote(
+    wereadBookId: string,
+    type: "note" | "highlight" | "thought" | "review",
+    createdAt: number | string | null,
+    extras: Record<string, unknown> = {}
+  ) {
+    return { wereadBookId, type, createdAt, ...extras };
+  }
+
+  it("aggregates by 7/30/90 day windows and classifies types", () => {
+    const notes = [
+      makeNote("wb1", "highlight", ts(2)),
+      makeNote("wb1", "highlight", ts(5)),
+      makeNote("wb2", "thought", ts(20)),
+      makeNote("wb3", "review", ts(50)),
+      makeNote("wb4", "note", ts(120)),
+    ];
+    const trends = buildNotesTrend(notes as any, []);
+    expect(trends.windows.days7.total).toBe(2);
+    expect(trends.windows.days7.highlights).toBe(2);
+    expect(trends.windows.days30.total).toBe(3);
+    expect(trends.windows.days30.thoughts).toBe(1);
+    expect(trends.windows.days90.total).toBe(4);
+    expect(trends.windows.days90.reviews).toBe(1);
+    expect(trends.windows.allTime.total).toBe(5);
+  });
+
+  it("counts activeBooks and activeDays", () => {
+    const notes = [
+      makeNote("wb1", "highlight", ts(1)),
+      makeNote("wb1", "thought", ts(1)),
+      makeNote("wb2", "highlight", ts(3)),
+      makeNote("wb3", "review", ts(10)),
+    ];
+    const trends = buildNotesTrend(notes as any, []);
+    expect(trends.windows.days30.activeBooks).toBe(3);
+    expect(trends.windows.days30.activeDays).toBeGreaterThanOrEqual(2);
+  });
+
+  it("counts notesWithoutDate for missing/invalid dates", () => {
+    const notes = [
+      makeNote("wb1", "highlight", ts(1)),
+      makeNote("wb2", "highlight", null),
+      makeNote("wb3", "highlight", undefined),
+      makeNote("wb4", "highlight", "not-a-date"),
+    ];
+    const trends = buildNotesTrend(notes as any, []);
+    expect(trends.coverage.notesWithDate).toBe(1);
+    expect(trends.coverage.notesWithoutDate).toBe(3);
+    expect(trends.coverage.dateCoverageRatio).toBe(0.25);
+  });
+
+  it("uses updatedAt as fallback when createdAt is missing", () => {
+    const notes = [
+      { wereadBookId: "wb1", type: "highlight", updatedAt: ts(2) },
+    ];
+    const trends = buildNotesTrend(notes as any, []);
+    expect(trends.coverage.notesWithDate).toBe(1);
+    expect(trends.windows.days7.total).toBe(1);
+  });
+
+  it("filters confirmedOnly stats by confirmed book ids", () => {
+    const notes = [
+      makeNote("wb1", "highlight", ts(1)),
+      makeNote("wb2", "highlight", ts(1)),
+      makeNote("wb3", "highlight", ts(1)),
+    ];
+    const confirmed = [
+      { wereadBookId: "wb1", catalogId: "13000000_000000000001", ssid: "x", dxid: "y", matchMethod: "isbn" as const, matchConfidence: "high" as const, decisionSource: "auto_seed" as const },
+      { wereadBookId: "wb2", catalogId: "13000000_000000000002", ssid: "x", dxid: "y", matchMethod: "isbn" as const, matchConfidence: "high" as const, decisionSource: "auto_seed" as const },
+    ];
+    const trends = buildNotesTrend(notes as any, confirmed as any);
+    expect(trends.confirmedOnly.total).toBe(2);
+    expect(trends.confirmedOnly.activeBooks).toBe(2);
+    expect(trends.confirmedOnly.highlights).toBe(2);
+  });
+
+  it("returns daily series for 7/30/90 windows only", () => {
+    const notes = [
+      makeNote("wb1", "highlight", ts(1)),
+      makeNote("wb2", "highlight", ts(3)),
+    ];
+    const trends = buildNotesTrend(notes as any, []);
+    expect(trends.windows.days7.daily).toBeDefined();
+    expect(trends.windows.days30.daily).toBeDefined();
+    expect(trends.windows.days90.daily).toBeDefined();
+    expect((trends.windows.allTime as any).daily).toBeUndefined();
+  });
+
+  it("response is fully redacted", () => {
+    const notes = [
+      { wereadBookId: "wb1", type: "highlight", createdAt: ts(1), note: "secret note", comment: "secret comment", chapterTitle: "Ch secret", noteId: "abc123", highlightId: "def456" },
+    ];
+    const trends = buildNotesTrend(notes as any, []);
+    const json = JSON.stringify(trends);
+    expect(json).not.toContain("secret note");
+    expect(json).not.toContain("secret comment");
+    expect(json).not.toContain("Ch secret");
+    expect(json).not.toContain("abc123");
+    expect(json).not.toContain("def456");
+    expect(json).not.toContain("wereadBookId");
+    expect(json).not.toContain("noteId");
+    expect(json).not.toContain("highlightId");
+    expect(json).not.toContain("chapterTitle");
+  });
+
+  it("handles empty notes", () => {
+    const trends = buildNotesTrend([], []);
+    expect(trends.windows.days7.total).toBe(0);
+    expect(trends.windows.allTime.total).toBe(0);
+    expect(trends.coverage.notesWithDate).toBe(0);
+    expect(trends.coverage.notesWithoutDate).toBe(0);
+    expect(trends.coverage.dateCoverageRatio).toBe(0);
   });
 });

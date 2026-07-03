@@ -20,6 +20,7 @@ import {
   checkPrivateAuth,
 } from "./weread/private-auth.js";
 import {
+  buildNotesTrend,
   getWereadOverlayDataDir,
   getWereadStatusByCatalogId,
   getWereadStatusesByCatalogIds,
@@ -547,6 +548,22 @@ app.get("/api/private/weread/summary", async (_req: Request, res: Response) => {
     });
   } catch (error) {
     return sendError(res, 500, "读取 WeRead 摘要失败。", error);
+  }
+});
+
+app.get("/api/private/weread/trends", async (_req: Request, res: Response) => {
+  const auth = checkPrivateAuth(_req.headers.authorization, _req.headers["x-private-token"] as string | undefined);
+  if (!auth.ok) {
+    return res.status(auth.status).json({ ok: false, error: auth.message });
+  }
+  try {
+    const data = loadWereadOverlay(getWereadOverlayDataDir());
+    const allNotes = Array.from(data.notesByBook.values()).flat();
+    const confirmed = Array.from(data.confirmedByCatalogId.values());
+    const trends = buildNotesTrend(allNotes, confirmed);
+    res.json({ ok: true, trends });
+  } catch (error) {
+    return sendError(res, 500, "读取 WeRead 趋势失败。", error);
   }
 });
 

@@ -37,6 +37,69 @@ export interface WereadStatus {
   };
 }
 
+export interface WereadTrendPoint {
+  date: string;
+  total: number;
+  highlights: number;
+  thoughts: number;
+  reviews: number;
+  unknown: number;
+}
+
+export interface WereadTrendWindow {
+  total: number;
+  activeDays: number;
+  activeBooks: number;
+  highlights: number;
+  thoughts: number;
+  reviews: number;
+  unknown: number;
+  daily?: WereadTrendPoint[];
+}
+
+export interface WereadTrendAllTimeWindow {
+  total: number;
+  activeDays: number;
+  activeBooks: number;
+  highlights: number;
+  thoughts: number;
+  reviews: number;
+  unknown: number;
+}
+
+export interface WereadConfirmedOnlyStats {
+  total: number;
+  activeBooks: number;
+  highlights: number;
+  thoughts: number;
+  reviews: number;
+  unknown: number;
+}
+
+export interface WereadTrendCoverage {
+  notesWithDate: number;
+  notesWithoutDate: number;
+  dateCoverageRatio: number;
+}
+
+export interface WereadTrends {
+  generatedAt: string;
+  windows: {
+    days7: WereadTrendWindow;
+    days30: WereadTrendWindow;
+    days90: WereadTrendWindow;
+    allTime: WereadTrendAllTimeWindow;
+  };
+  confirmedOnly: WereadConfirmedOnlyStats;
+  coverage: WereadTrendCoverage;
+}
+
+export interface WereadTrendsResponse {
+  ok: boolean;
+  trends?: WereadTrends;
+  error?: string;
+}
+
 export interface WereadCenterSummaryView {
   booksCount: number;
   notesCount: number;
@@ -112,6 +175,10 @@ export function fetchWereadSummary(token: string): Promise<WereadSummary> {
 
 export function fetchWereadStatus(token: string, catalogId: string): Promise<WereadStatus> {
   return privateRequestJson<WereadStatus>(token, `/private/weread/status?catalogId=${encodeURIComponent(catalogId)}`);
+}
+
+export function fetchWereadTrends(token: string): Promise<WereadTrendsResponse> {
+  return privateRequestJson<WereadTrendsResponse>(token, "/private/weread/trends");
 }
 
 const statusCache = new Map<string, Promise<WereadStatus>>();

@@ -297,3 +297,212 @@ export function getWereadStatusesByCatalogIds(
   }
   return results;
 }
+
+// ---------- notes trend ----------
+
+export type WereadTrendPoint = {
+  date: string;
+  total: number;
+  highlights: number;
+  thoughts: number;
+  reviews: number;
+  unknown: number;
+};
+
+export type WereadTrendWindow = {
+  total: number;
+  activeDays: number;
+  activeBooks: number;
+  highlights: number;
+  thoughts: number;
+  reviews: number;
+  unknown: number;
+  daily?: WereadTrendPoint[];
+};
+
+export type WereadTrends = {
+  generatedAt: string;
+  windows: {
+    days7: WereadTrendWindow;
+    days30: WereadTrendWindow;
+    days90: WereadTrendWindow;
+    allTime: Omit<WereadTrendWindow, "daily">;
+  };
+  confirmedOnly: Omit<WereadTrendWindow, "daily" | "activeDays">;
+  coverage: {
+    notesWithDate: number;
+    notesWithoutDate: number;
+    dateCoverageRatio: number;
+  };
+};
+
+type NoteDateInfo = {
+  dateStr: string;
+  ts: number;
+  valid: boolean;
+};
+
+function parseNoteDate(note: WereadNote): NoteDateInfo {
+  const raw = note.createdAt ?? note.updatedAt;
+  if (!raw) return { dateStr: "", ts: 0, valid: false };
+
+  let ts: number;
+  if (typeof raw === "number") {
+    ts = raw;
+  } else if (typeof raw === "string") {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed)) {
+      ts = parsed;
+    } else {
+      const d = new Date(raw);
+      if (Number.isFinite(d.getTime())) {
+        ts = d.getTime() / 1000;
+      } else {
+        return { dateStr: "", ts: 0, valid: false };
+      }
+    }
+  } else {
+    return { dateStr: "", ts: 0, valid: false };
+  }
+
+  const d = new Date(ts * 1000);
+  if (!Number.isFinite(d.getTime())) return { dateStr: "", ts: 0, valid: false };
+
+  const dateStr = d.toISOString().slice(0, 10);
+  return { dateStr, ts, valid: true };
+}
+
+function aggregateTypeCounts(notes: WereadNote[]): {
+  highlights: number;
+  thoughts: number;
+  reviews: number;
+  unknown: number;
+} {
+  let highlights = 0, thoughts = 0, reviews = 0, unknown = 0;
+  for (const n of notes) {
+    switch (n.type) {
+      case "highlight":
+        highlights += 1;
+        break;
+      case "thought":
+        thoughts += 1;
+        break;
+      case "review":
+        reviews += 1;
+        break;
+      default:
+        unknown += 1;
+    }
+  }
+  return { highlights, thoughts, reviews, unknown };
+}
+
+function buildWindow(
+  notes: WereadNote[],
+  cutoffTs: number,
+  includeDaily: boolean
+): WereadTrendWindow {
+  const filtered = notes.filter((n) => {
+    const dateInfo = parseNoteDate(n);
+    return dateInfo.valid && dateInfo.ts >= cutoffTs;
+  });
+
+  const { highlights, thoughts, reviews, unknown } = aggregateTypeCounts(filtered);
+
+  const dailyPoints: WereadTrendPoint[] = [];
+  if (includeDaily) {
+    const byDate = new Map<string, { total: number; highlights: number; thoughts: number; reviews: number; unknown: number }>();
+    for (const n of filtered) {
+      const { dateStr } = parseNoteDate(n);
+      const existing = byDate.get(dateStr) ?? { total: 0, highlights: 0, thoughts: 0, reviews: 0, unknown: 0 };
+      existing.total += 1;
+      switch (n.type) {
+        case "highlight":
+          existing.highlights += 1;
+          break;
+        case "thought":
+          existing.thoughts += 1;
+          break;
+        case "review":
+          existing.reviews += 1;
+          break;
+        default:
+          existing.unknown += 1;
+      }
+      byDate.set(dateStr, existing);
+    }
+
+    for (const [date, counts] of byDate.entries()) {
+      dailyPoints.push({ date, ...counts });
+    }
+    dailyPoints.sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  const activeBooks = new Set(filtered.map((n) => n.wereadBookId).filter(Boolean)).size;
+  const activeDays = includeDaily ? dailyPoints.length : new Set(filtered.map((n) => parseNoteDate(n).dateStr).filter(Boolean)).size;
+
+  return {
+    total: filtered.length,
+    activeDays,
+    activeBooks,
+    highlights,
+    thoughts,
+    reviews,
+    unknown,
+    daily: includeDaily ? dailyPoints : undefined,
+  };
+}
+
+export function buildNotesTrend(
+  notes: WereadNote[],
+  confirmedMatches: ConfirmedMatch[]
+): WereadTrends {
+  const now = Date.now();
+  const nowTs = now / 1000;
+
+  const allNotes = notes ?? [];
+
+  let notesWithDate = 0;
+  let notesWithoutDate = 0;
+  for (const n of allNotes) {
+    if (parseNoteDate(n).valid) notesWithDate += 1;
+    else notesWithoutDate += 1;
+  }
+
+  const days7 = buildWindow(allNotes, nowTs - 7 * 86400, true);
+  const days30 = buildWindow(allNotes, nowTs - 30 * 86400, true);
+  const days90 = buildWindow(allNotes, nowTs - 90 * 86400, true);
+  const allTime = buildWindow(allNotes, 0, false);
+
+  const confirmedBookIds = new Set(confirmedMatches.map((m) => m.wereadBookId).filter(Boolean));
+  const confirmedNotes = allNotes.filter((n) => confirmedBookIds.has(n.wereadBookId));
+  const confirmedCounts = aggregateTypeCounts(confirmedNotes);
+
+  return {
+    generatedAt: new Date(now).toISOString(),
+    windows: {
+      days7,
+      days30,
+      days90,
+      allTime: {
+        total: allTime.total,
+        activeDays: allTime.activeDays,
+        activeBooks: allTime.activeBooks,
+        highlights: allTime.highlights,
+        thoughts: allTime.thoughts,
+        reviews: allTime.reviews,
+        unknown: allTime.unknown,
+      },
+    },
+    confirmedOnly: {
+      total: confirmedNotes.length,
+      activeBooks: new Set(confirmedNotes.map((n) => n.wereadBookId).filter(Boolean)).size,
+      ...confirmedCounts,
+    },
+    coverage: {
+      notesWithDate,
+      notesWithoutDate,
+      dateCoverageRatio: allNotes.length > 0 ? Number((notesWithDate / allNotes.length).toFixed(4)) : 0,
+    },
+  };
+}

@@ -2063,3 +2063,117 @@ mark.hl {
     padding-left: 0;
   }
 }
+
+/* ---------------------------------------------------------------
+ * S27B WeRead Center trend
+ * --------------------------------------------------------------- */
+.weread-trend-section .weread-center-card__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.weread-trend-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.weread-trend-meta__pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(64, 158, 255, 0.15);
+  color: #8eb8ff;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.weread-trend-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.weread-trend-card {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.weread-trend-card__title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.weread-trend-bars {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(8px, 1fr);
+  align-items: end;
+  gap: 2px;
+  height: 80px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.weread-trend-bar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  min-width: 4px;
+}
+
+.weread-trend-bar__fill {
+  width: 100%;
+  min-height: 2px;
+  background: linear-gradient(180deg, #6cb1ff 0%, #409eff 100%);
+  border-radius: 2px 2px 0 0;
+  transition: opacity 0.15s;
+}
+
+.weread-trend-bar__label {
+  position: absolute;
+  bottom: -16px;
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.4);
+  white-space: nowrap;
+  transform: rotate(-45deg);
+  transform-origin: left bottom;
+}
+
+.weread-trend-bars__empty {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  padding: 12px 0;
+  text-align: center;
+}
+
+.weread-trend-error {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #f7a26a;
+  font-size: 13px;
+  padding: 6px 0;
+}
+
+@media (max-width: 480px) {
+  .weread-trend-grid {
+    grid-template-columns: 1fr;
+  }
+  .weread-trend-bar__label {
+    display: none;
+  }
+}
