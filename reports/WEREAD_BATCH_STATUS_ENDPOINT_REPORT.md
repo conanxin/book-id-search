@@ -1,6 +1,6 @@
 # WeRead Batch Status Endpoint Report
 
-STATUS: WARN
+STATUS: PASS
 
 ## SCOPE
 
@@ -25,7 +25,9 @@ STATUS: WARN
 
 - `wereadPrivate.ts` client unit tests cover batch request URL, method, headers, body, deduplication, and fallback to single status.
 - Production web bundle contains `/private/weread/status/batch` endpoint string (verified in `apps/web/dist/assets/index-*.js`).
-- Browser network smoke test was attempted but the browser tooling timed out, so live UI verification is incomplete.
+- Browser network smoke: observed live `POST /api/private/weread/status/batch` with HTTP 200.
+- No token or request headers captured in the report.
+- Public search behavior remained unaffected.
 - Fallback to single `GET /api/private/weread/status?catalogId=...` is available when batch is unavailable.
 - Existing `WereadBadge` / `WereadPrivatePanel` UI components still use `fetchWereadStatusesForBooks` unchanged.
 
@@ -57,11 +59,9 @@ STATUS: WARN
 
 ## REPO RESULT
 
-- No commit/tag yet.
-- Pending: commit and tag based on Git safety check.
+- Commit `b89cd1a` pushed to `main`.
+- Tag `v0.8.2-weread-batch-status` pushed.
 
 ## NEXT STEP
 
-- Complete browser network smoke (if tooling recovers) to verify `/api/private/weread/status/batch` is actually called by the live UI.
-- After successful smoke, apply tag `v0.8.2-weread-batch-status`.
-- Then proceed to S26G (notes-count-only overlay) or confirm more matches.
+- Proceed to S26G (notes-count-only overlay) or confirm more matches.
