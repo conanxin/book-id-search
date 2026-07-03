@@ -1121,6 +1121,233 @@ mark.hl {
     justify-content: center;
   }
 }
+/* ---------------------------------------------------------------
+ * WeRead Center page
+ * --------------------------------------------------------------- */
+.weread-center-page {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+.weread-center-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  padding: 32px 16px 24px;
+  color: var(--color-primary);
+}
+
+.weread-center-hero h1 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.weread-center-hero__subtitle {
+  margin: 0;
+  color: var(--color-text-muted);
+  max-width: 560px;
+}
+
+.weread-center-panel {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow-card);
+  margin-bottom: 20px;
+}
+
+.weread-center-hint {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.weread-center-link-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.weread-center-link,
+.weread-center-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-primary);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-card);
+}
+
+.weread-center-link:hover,
+.weread-center-button:hover {
+  background: var(--color-bg-soft);
+  text-decoration: none;
+}
+
+.weread-center-button {
+  cursor: pointer;
+  margin-top: 12px;
+}
+
+.weread-center-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.weread-center-card {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.weread-center-card__title {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.weread-center-card__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.weread-stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-soft);
+  min-width: 0;
+}
+
+.weread-stat-card__label {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.weread-stat-card__value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--color-primary);
+  line-height: 1.2;
+  word-break: break-all;
+}
+
+.weread-stat-card__suffix {
+  font-size: 14px;
+  font-weight: 500;
+  margin-left: 2px;
+  color: var(--color-text-muted);
+}
+
+.weread-stat-card__hint {
+  font-size: 11px;
+  color: var(--color-text-faint);
+}
+
+.weread-privacy-card {
+  grid-column: span 2;
+}
+
+.weread-privacy-card__list,
+.weread-center-card__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.weread-privacy-card__item,
+.weread-center-card__list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--color-text);
+}
+
+.weread-center-card__note {
+  margin-top: auto;
+  padding-top: 12px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.weread-center-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.weread-center-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  font-size: 13px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-card);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.weread-center-actions button:hover {
+  background: var(--color-bg-soft);
+}
+
+.weread-center-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.weread-center-footer {
+  margin-top: 24px;
+  display: flex;
+  justify-content: center;
+}
+
+@media (max-width: 720px) {
+  .weread-center-grid {
+    grid-template-columns: 1fr;
+  }
+  .weread-center-card {
+    grid-column: auto !important;
+  }
+  .weread-center-card__stats {
+    grid-template-columns: 1fr;
+  }
+  .weread-center-page {
+    padding: 16px 12px 32px;
+  }
+}
+
 /* -----------------------------------------------------------------------
  * S21A — mode tabs + AI 找书 panel
  * -------------------------------------------------------------------- */

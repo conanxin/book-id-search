@@ -357,3 +357,12 @@ Caddy 是公网唯一入口。3001/5173/7700 全部绑定 `127.0.0.1`。
 最终公网复核报告：[reports/FINAL_PUBLIC_ACCESS_VERIFICATION.md](reports/FINAL_PUBLIC_ACCESS_VERIFICATION.md)。
 
 当前稳定 tag：`v0.2.2-security-hardening`。
+
+## WeRead Center
+
+独立的微信读书私有数据入口：<https://books.conanxin.com/weread>
+
+- 输入 private token 后显示 counts-only 统计。
+- 不显示笔记/划线正文，不暴露微信读书内部 ID。
+- 不影响主搜索，不写入 Meilisearch。
+- 详见 [docs/WEREAD_CENTER.md](docs/WEREAD_CENTER.md)。

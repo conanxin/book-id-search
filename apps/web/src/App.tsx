@@ -24,6 +24,7 @@ import { QueryInfoBar, RankingChips } from "./QueryInfoBar";
 import WereadPrivatePanel from "./WereadPrivatePanel";
 import WereadBadge from "./WereadBadge";
 import { fetchWereadStatusesForBooks, fetchWereadStatus, getWereadToken, isWereadEnabled, type WereadStatus } from "./wereadPrivate";
+import WereadCenter from "./weread/WereadCenter";
 
 // ---------------------------------------------------------------------------
 // Storage: recent search history (last 5 unique queries)
@@ -762,6 +763,12 @@ function SearchPage() {
       ) : (
       <section className="search-panel">
         <WereadPrivatePanel />
+        <div className="weread-center-link-row">
+          <a href="/weread" className="weread-center-link">
+            <BookOpen size={14} />
+            微信读书中心
+          </a>
+        </div>
         <div className="brand-row">
           <BookOpen size={28} />
           <h1>图书 SSID / DXID 检索</h1>
@@ -1105,6 +1112,7 @@ export default function App() {
     <>
       <Routes>
         <Route path="/" element={<SearchPage />} />
+        <Route path="/weread" element={<WereadCenter />} />
         <Route path="/books/:id" element={<DetailPage />} />
       </Routes>
       <Toast />

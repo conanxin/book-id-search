@@ -37,6 +37,19 @@ export interface WereadStatus {
   };
 }
 
+export interface WereadCenterSummaryView {
+  booksCount: number;
+  notesCount: number;
+  confirmedMatchesCount: number;
+  confirmedWithNotesCount: number;
+  confirmedWithHighlightsCount: number;
+  totalConfirmedNoteRecords: number;
+  matchRatePercent: number;
+  notesPerConfirmedMatch: number;
+  hasNotes: boolean;
+  privacyCopy: string;
+}
+
 const TOKEN_KEY = "book-id-search:weread-private-token";
 
 function getStorage(): Storage | null {
@@ -200,4 +213,43 @@ export async function fetchWereadStatusesForBooks(
 
 export function clearWereadStatusCache(): void {
   statusCache.clear();
+}
+
+export function formatWereadCenterSummary(summary: WereadSummary | null): WereadCenterSummaryView {
+  const safe = (n: number | undefined) => (typeof n === "number" && !Number.isNaN(n) ? n : 0);
+  const booksCount = safe(summary?.booksCount);
+  const notesCount = safe(summary?.notesCount);
+  const confirmedMatchesCount = safe(summary?.confirmedMatchesCount);
+  const confirmedWithNotesCount = safe(summary?.confirmedWithNotesCount);
+  const confirmedWithHighlightsCount = safe(summary?.confirmedWithHighlightsCount);
+  const totalConfirmedNoteRecords = safe(summary?.totalConfirmedNoteRecords);
+  const matchRatePercent = booksCount > 0 ? Math.round((confirmedMatchesCount / booksCount) * 1000) / 10 : 0;
+  const notesPerConfirmedMatch = confirmedMatchesCount > 0 ? Math.round(totalConfirmedNoteRecords / confirmedMatchesCount) : 0;
+  return {
+    booksCount,
+    notesCount,
+    confirmedMatchesCount,
+    confirmedWithNotesCount,
+    confirmedWithHighlightsCount,
+    totalConfirmedNoteRecords,
+    matchRatePercent,
+    notesPerConfirmedMatch,
+    hasNotes: notesCount > 0,
+    privacyCopy: "Token 仅保存在 sessionStorage，不显示笔记或划线的原文，不返回微信读书内部 ID。",
+  };
+}
+
+export const WEREAD_FORBIDDEN_WORDS = [
+  "wereadBookId",
+  "noteId",
+  "highlightId",
+  "chapterTitle",
+  "笔记正文",
+  "划线正文",
+  "笔记原文",
+  "划线原文",
+];
+
+export function hasForbiddenWereadText(value: string): boolean {
+  return WEREAD_FORBIDDEN_WORDS.some((word) => value.includes(word));
 }
