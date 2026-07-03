@@ -17,6 +17,15 @@ import {
   AiInsightDisabledError,
 } from "./ai/book-insight.js";
 import {
+  checkPrivateAuth,
+} from "./weread/private-auth.js";
+import {
+  getWereadOverlayDataDir,
+  getWereadStatusByCatalogId,
+  getWereadSummary,
+  loadWereadOverlay,
+} from "./weread/private-overlay.js";
+import {
   classifyHit,
   isExactMatchType,
   normalizeQuery,
@@ -516,6 +525,44 @@ async function addRelated(
     if (target.length >= maxItems) return;
   }
 }
+
+app.get("/api/private/weread/summary", async (_req: Request, res: Response) => {
+  const auth = checkPrivateAuth(_req.headers.authorization, _req.headers["x-private-token"] as string | undefined);
+  if (!auth.ok) {
+    return res.status(auth.status).json({ ok: false, error: auth.message });
+  }
+  try {
+    const data = loadWereadOverlay(getWereadOverlayDataDir());
+    const summary = getWereadSummary(data);
+    res.json({
+      ok: true,
+      dataAvailable: summary.dataAvailable,
+      booksCount: summary.booksCount,
+      notesCount: summary.notesCount,
+      confirmedMatchesCount: summary.confirmedMatchesCount,
+    });
+  } catch (error) {
+    return sendError(res, 500, "读取 WeRead 摘要失败。", error);
+  }
+});
+
+app.get("/api/private/weread/status", async (req: Request, res: Response) => {
+  const auth = checkPrivateAuth(req.headers.authorization, req.headers["x-private-token"] as string | undefined);
+  if (!auth.ok) {
+    return res.status(auth.status).json({ ok: false, error: auth.message });
+  }
+  const catalogId = String(req.query.catalogId ?? "").trim();
+  if (!catalogId || !/^[0-9]+_[0-9]{12}$/.test(catalogId)) {
+    return sendError(res, 400, "catalogId 格式不正确。");
+  }
+  try {
+    const data = loadWereadOverlay(getWereadOverlayDataDir());
+    const status = getWereadStatusByCatalogId(data, catalogId);
+    res.json(status);
+  } catch (error) {
+    return sendError(res, 500, "读取 WeRead 状态失败。", error);
+  }
+});
 
 app.get("/api/books/:id/related", async (req, res) => {
   try {

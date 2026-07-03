@@ -29,6 +29,9 @@ services:
       MEILI_INDEX: ${MEILI_INDEX:-books}
       API_PORT: 3001
       BOOK_DATA_DIR: /data/private
+      WEREAD_OVERLAY_ENABLED: ${WEREAD_OVERLAY_ENABLED:-false}
+      WEREAD_PRIVATE_API_TOKEN: ${WEREAD_PRIVATE_API_TOKEN:-}
+      WEREAD_PRIVATE_DATA_DIR: /app/private-data/weread
     ports:
       # Bound to host loopback only. Public access is via Caddy → 127.0.0.1:5173 → web nginx → api.
       # Do NOT change to "0.0.0.0" or remove the loopback prefix; see reports/SECURITY_HARDENING.md.
@@ -36,6 +39,7 @@ services:
     volumes:
       - ${BOOK_DATA_DIR:-./data}:/data/private:ro
       - ./reports:/app/reports
+      - ./private-data/weread:/app/private-data/weread:ro
 
   web:
     build:
