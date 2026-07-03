@@ -48,6 +48,39 @@ The API response never includes:
 
 Response only includes aggregated counts and matched status metadata (`readingStatus`, `progress`, `noteCount`, `highlightCount`, `matchMethod`, `matchConfidence`, `decisionSource`).
 
+## Notes counts-only overlay
+
+For matched books, the status response includes a counts-only summary of the WeRead notes associated with that book. This is computed from `weread-notes.snapshot.json` and is never written to Meilisearch.
+
+### `notesSummary` fields
+
+| field | meaning |
+|-------|---------|
+| `total` | total number of note/highlight/thought/review records |
+| `highlights` | records with `type: "highlight"` |
+| `thoughts` | records with `type: "thought"` |
+| `reviews` | records with `type: "review"` |
+| `unknown` | records with any other type (including `type: "note"`) |
+| `hasNotes` | `true` if `total > 0` |
+
+### Duplicate catalogId aggregation
+
+If more than one WeRead record is confirmed to the same catalogId, `matchedRecordsCount` reports how many records were matched, and `notesSummary` aggregates the counts from **all** of those records. The response still does **not** contain any `wereadBookId`, note text, or title.
+
+### No note content endpoint
+
+There is no endpoint to retrieve note text, highlight text, comments, chapter titles, or `noteId`/`highlightId`. The overlay intentionally only exposes counts.
+
+## Summary aggregate fields
+
+`GET /api/private/weread/summary` now also returns:
+
+| field | meaning |
+|-------|---------|
+| `confirmedWithNotesCount` | matched catalogIds with at least one note record |
+| `confirmedWithHighlightsCount` | matched catalogIds with at least one highlight |
+| `totalConfirmedNoteRecords` | sum of all note records across matched catalogIds |
+
 ## Relationship to public search
 
 This overlay has no effect on `/api/search`, `/api/stats`, `/api/health`, or AI search. It is a separate, authenticated route.
@@ -85,6 +118,15 @@ This overlay has no effect on `/api/search`, `/api/stats`, `/api/health`, or AI 
         "progress": 100,
         "noteCount": 12,
         "highlightCount": 34,
+        "matchedRecordsCount": 1,
+        "notesSummary": {
+          "total": 46,
+          "highlights": 34,
+          "thoughts": 8,
+          "reviews": 0,
+          "unknown": 4,
+          "hasNotes": true
+        },
         "matchMethod": "isbn",
         "matchConfidence": "high",
         "decisionSource": "auto_seed"

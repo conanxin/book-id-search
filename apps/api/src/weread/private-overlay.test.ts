@@ -41,6 +41,8 @@ describe("private-overlay", () => {
       { wereadBookId: "wb1", type: "note" },
       { wereadBookId: "wb1", type: "highlight" },
       { wereadBookId: "wb2", type: "note" },
+      { wereadBookId: "wb2", type: "review" },
+      { wereadBookId: "wb2", type: "thought" },
     ]);
     writeFixture("derived/latest/weread-matches.confirmed.json", [
       {
@@ -52,13 +54,25 @@ describe("private-overlay", () => {
         matchConfidence: "high",
         decisionSource: "auto_seed",
       },
+      {
+        wereadBookId: "wb2",
+        catalogId: "13000000_000000000002",
+        ssid: "13000000",
+        dxid: "000000000002",
+        matchMethod: "isbn",
+        matchConfidence: "high",
+        decisionSource: "auto_seed",
+      },
     ]);
     const data = loadWereadOverlay(tmpDir);
     const summary = getWereadSummary(data);
     expect(summary.dataAvailable).toBe(true);
     expect(summary.booksCount).toBe(2);
-    expect(summary.notesCount).toBe(3);
-    expect(summary.confirmedMatchesCount).toBe(1);
+    expect(summary.notesCount).toBe(5);
+    expect(summary.confirmedMatchesCount).toBe(2);
+    expect(summary.confirmedWithNotesCount).toBe(2);
+    expect(summary.confirmedWithHighlightsCount).toBe(1);
+    expect(summary.totalConfirmedNoteRecords).toBe(5);
   });
 
   it("status for matched catalogId returns redacted status", () => {
@@ -88,11 +102,23 @@ describe("private-overlay", () => {
     expect(status.weread?.progress).toBe(100);
     expect(status.weread?.noteCount).toBe(1);
     expect(status.weread?.highlightCount).toBe(1);
+    expect(status.weread?.notesSummary).toEqual({
+      total: 2,
+      highlights: 1,
+      thoughts: 0,
+      reviews: 0,
+      unknown: 1,
+      hasNotes: true,
+    });
+    expect(status.weread?.matchedRecordsCount).toBe(1);
     // must not leak private fields
     const json = JSON.stringify(status);
     expect(json).not.toContain("wereadBookId");
     expect(json).not.toContain("private note text");
     expect(json).not.toContain("private comment");
+    expect(json).not.toContain("noteId");
+    expect(json).not.toContain("highlightId");
+    expect(json).not.toContain("chapterTitle");
     expect(json).not.toContain("title");
     expect(json).not.toContain("author");
   });
@@ -102,7 +128,7 @@ describe("private-overlay", () => {
       { wereadBookId: "wb1", readingStatus: "finished", progress: 100, lastReadAt: "2026-01-01T00:00:00Z" },
     ]);
     writeFixture("snapshots/latest/weread-notes.snapshot.json", [
-      { wereadBookId: "wb1", type: "note", note: "private note text" },
+      { wereadBookId: "wb1", type: "note", note: "private note text", chapterTitle: "Ch1" },
       { wereadBookId: "wb1", type: "highlight", comment: "private comment" },
     ]);
     writeFixture("derived/latest/weread-matches.confirmed.json", [
@@ -128,10 +154,21 @@ describe("private-overlay", () => {
     ]);
     expect(results["13000000_000000000001"].matched).toBe(true);
     expect(results["00000000_000000000000"].matched).toBe(false);
+    expect(results["13000000_000000000001"].weread?.notesSummary).toEqual({
+      total: 2,
+      highlights: 1,
+      thoughts: 0,
+      reviews: 0,
+      unknown: 1,
+      hasNotes: true,
+    });
     const json = JSON.stringify(results);
     expect(json).not.toContain("wereadBookId");
     expect(json).not.toContain("private note text");
     expect(json).not.toContain("private comment");
+    expect(json).not.toContain("chapterTitle");
+    expect(json).not.toContain("noteId");
+    expect(json).not.toContain("highlightId");
     expect(json).not.toContain("title");
     expect(json).not.toContain("author");
   });

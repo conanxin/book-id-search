@@ -45,6 +45,7 @@ class MemoryStorage implements Storage {
 describe("wereadPrivate", () => {
   const originalFetch = globalThis.fetch;
   const fetchMock = vi.fn(async () => new Response("{}"));
+  const TOKEN = "book-id-search:weread-private-token";
 
   beforeEach(() => {
     (globalThis as unknown as { sessionStorage: Storage }).sessionStorage.clear();
@@ -82,6 +83,9 @@ describe("wereadPrivate", () => {
           booksCount: 1,
           notesCount: 2,
           confirmedMatchesCount: 3,
+          confirmedWithNotesCount: 1,
+          confirmedWithHighlightsCount: 2,
+          totalConfirmedNoteRecords: 5,
         })
       )
     );
@@ -133,6 +137,15 @@ describe("wereadPrivate", () => {
                 progress: 100,
                 noteCount: 1,
                 highlightCount: 2,
+                matchedRecordsCount: 1,
+                notesSummary: {
+                  total: 3,
+                  highlights: 2,
+                  thoughts: 0,
+                  reviews: 0,
+                  unknown: 1,
+                  hasNotes: true,
+                },
                 matchMethod: "isbn",
                 matchConfidence: "high",
                 decisionSource: "auto",

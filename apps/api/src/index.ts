@@ -541,6 +541,9 @@ app.get("/api/private/weread/summary", async (_req: Request, res: Response) => {
       booksCount: summary.booksCount,
       notesCount: summary.notesCount,
       confirmedMatchesCount: summary.confirmedMatchesCount,
+      confirmedWithNotesCount: summary.confirmedWithNotesCount,
+      confirmedWithHighlightsCount: summary.confirmedWithHighlightsCount,
+      totalConfirmedNoteRecords: summary.totalConfirmedNoteRecords,
     });
   } catch (error) {
     return sendError(res, 500, "读取 WeRead 摘要失败。", error);

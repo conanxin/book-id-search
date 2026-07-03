@@ -4,6 +4,18 @@ export interface WereadSummary {
   booksCount: number;
   notesCount: number;
   confirmedMatchesCount: number;
+  confirmedWithNotesCount?: number;
+  confirmedWithHighlightsCount?: number;
+  totalConfirmedNoteRecords?: number;
+}
+
+export interface WereadNotesSummary {
+  total: number;
+  highlights: number;
+  thoughts: number;
+  reviews: number;
+  unknown: number;
+  hasNotes: boolean;
 }
 
 export interface WereadStatus {
@@ -15,6 +27,8 @@ export interface WereadStatus {
     progress?: number | null;
     noteCount?: number;
     highlightCount?: number;
+    matchedRecordsCount?: number;
+    notesSummary?: WereadNotesSummary;
     lastReadAt?: string | null;
     updatedAt?: string | null;
     matchMethod?: string;

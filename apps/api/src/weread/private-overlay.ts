@@ -35,9 +35,10 @@ export type WereadBook = {
 
 export type WereadNote = {
   wereadBookId: string;
-  type?: "note" | "highlight" | "thought" | "review";
+  type?: "note" | "highlight" | "thought" | "review" | "unknown";
   note?: string | null;
   comment?: string | null;
+  chapterTitle?: string | null;
   [key: string]: unknown;
 };
 
@@ -60,12 +61,24 @@ export type WereadOverlayData = {
   generatedAt?: string;
 };
 
+export type WereadNotesCountSummary = {
+  total: number;
+  highlights: number;
+  thoughts: number;
+  reviews: number;
+  unknown: number;
+  hasNotes: boolean;
+};
+
 export type WereadSummary = {
   enabled: true;
   dataAvailable: boolean;
   booksCount: number;
   notesCount: number;
   confirmedMatchesCount: number;
+  confirmedWithNotesCount?: number;
+  confirmedWithHighlightsCount?: number;
+  totalConfirmedNoteRecords?: number;
   generatedAt?: string;
 };
 
@@ -77,6 +90,8 @@ export type WereadStatus = {
     progress?: number | null;
     noteCount?: number;
     highlightCount?: number;
+    matchedRecordsCount?: number;
+    notesSummary?: WereadNotesCountSummary;
     lastReadAt?: string | null;
     updatedAt?: string | null;
     matchMethod?: string;
@@ -170,25 +185,74 @@ function countNotesByType(notes: WereadNote[] | undefined): { noteCount: number;
   return { noteCount, highlightCount };
 }
 
+function buildNotesCountSummary(notes: WereadNote[] | undefined): WereadNotesCountSummary {
+  const summary = {
+    total: 0,
+    highlights: 0,
+    thoughts: 0,
+    reviews: 0,
+    unknown: 0,
+    hasNotes: false,
+  };
+  if (!notes) return summary;
+  for (const n of notes) {
+    summary.total += 1;
+    switch (n.type) {
+      case "highlight":
+        summary.highlights += 1;
+        break;
+      case "thought":
+        summary.thoughts += 1;
+        break;
+      case "review":
+        summary.reviews += 1;
+        break;
+      default:
+        summary.unknown += 1;
+    }
+  }
+  summary.hasNotes = summary.total > 0;
+  return summary;
+}
+
 export function getWereadSummary(data: WereadOverlayData): WereadSummary {
+  let confirmedWithNotesCount = 0;
+  let confirmedWithHighlightsCount = 0;
+  let totalConfirmedNoteRecords = 0;
+  for (const match of data.confirmedByCatalogId.values()) {
+    const bookNotes = data.notesByBook.get(match.wereadBookId) ?? [];
+    const summary = buildNotesCountSummary(bookNotes);
+    if (summary.total > 0) confirmedWithNotesCount += 1;
+    if (summary.highlights > 0) confirmedWithHighlightsCount += 1;
+    totalConfirmedNoteRecords += summary.total;
+  }
+
   return {
     enabled: true,
     dataAvailable: data.dataAvailable,
     booksCount: data.books.size,
     notesCount: Array.from(data.notesByBook.values()).reduce((acc, arr) => acc + arr.length, 0),
     confirmedMatchesCount: data.confirmedByCatalogId.size,
+    confirmedWithNotesCount,
+    confirmedWithHighlightsCount,
+    totalConfirmedNoteRecords,
     generatedAt: data.generatedAt,
   };
 }
 
 export function getWereadStatusByCatalogId(data: WereadOverlayData, catalogId: string): WereadStatus {
-  const match = data.confirmedByCatalogId.get(catalogId);
-  if (!match) {
+  const matches = getConfirmedMatchesByCatalogId(data, catalogId);
+  if (matches.length === 0) {
     return { matched: false, catalogId };
   }
-  const book = data.books.get(match.wereadBookId);
-  const notes = data.notesByBook.get(match.wereadBookId) ?? [];
-  const { noteCount, highlightCount } = countNotesByType(notes);
+  const primary = matches[0];
+  const book = data.books.get(primary.wereadBookId);
+  const allNotes = matches
+    .flatMap((m) => data.notesByBook.get(m.wereadBookId) ?? [])
+    .filter((n) => n != null);
+  const { noteCount, highlightCount } = countNotesByType(allNotes);
+  const notesSummary = buildNotesCountSummary(allNotes);
+
   return {
     matched: true,
     catalogId,
@@ -197,13 +261,23 @@ export function getWereadStatusByCatalogId(data: WereadOverlayData, catalogId: s
       progress: typeof book?.progress === "number" ? book.progress : null,
       noteCount,
       highlightCount,
+      matchedRecordsCount: matches.length,
+      notesSummary,
       lastReadAt: book?.lastReadAt ?? null,
       updatedAt: book?.updatedAt ?? null,
-      matchMethod: match.matchMethod,
-      matchConfidence: match.matchConfidence,
-      decisionSource: match.decisionSource,
+      matchMethod: primary.matchMethod,
+      matchConfidence: primary.matchConfidence,
+      decisionSource: primary.decisionSource,
     },
   };
+}
+
+function getConfirmedMatchesByCatalogId(data: WereadOverlayData, catalogId: string): ConfirmedMatch[] {
+  const matches: ConfirmedMatch[] = [];
+  for (const match of data.confirmedByCatalogId.values()) {
+    if (match.catalogId === catalogId) matches.push(match);
+  }
+  return matches;
 }
 
 export function getWereadOverlayDataDir(): string {
