@@ -136,6 +136,18 @@ export function authorMatches(a: string, b: string): boolean {
   return authorOverlap(a, b) >= 0.8;
 }
 
+export function isValidCatalogId(value: string): boolean {
+  return /^\d{8}_\d{12}$/.test(value);
+}
+
+export function isValidCatalogCandidate(candidate: MatchCandidate): boolean {
+  if (!candidate) return false;
+  if (!isValidCatalogId(candidate.catalogId)) return false;
+  if (!candidate.ssid || !/^\d{8}$/.test(candidate.ssid)) return false;
+  if (!candidate.dxid || !/^\d{12}$/.test(candidate.dxid)) return false;
+  return true;
+}
+
 export function isAmbiguousTopCandidates(item: ReviewItem): boolean {
   if (item.candidates.length < 2) return false;
   const top = item.candidates[0];
@@ -190,6 +202,7 @@ async function main(): Promise<void> {
     skippedAuthorMismatch: 0,
     skippedAmbiguous: 0,
     skippedNoCandidate: 0,
+    skippedInvalidCatalogId: 0,
     skippedMax: 0,
   };
 
@@ -226,6 +239,10 @@ async function main(): Promise<void> {
     }
     if (!authorMatches(item.wereadAuthor, top.author)) {
       stats.skippedAuthorMismatch += 1;
+      continue;
+    }
+    if (!isValidCatalogCandidate(top)) {
+      stats.skippedInvalidCatalogId += 1;
       continue;
     }
     if (args.maxAutoAccept !== null && stats.autoAccepted >= args.maxAutoAccept) {
@@ -267,6 +284,7 @@ async function main(): Promise<void> {
   console.log(`[weread:review:auto-accept-title-author] skippedAuthorMismatch=${stats.skippedAuthorMismatch}`);
   console.log(`[weread:review:auto-accept-title-author] skippedAmbiguous=${stats.skippedAmbiguous}`);
   console.log(`[weread:review:auto-accept-title-author] skippedNoCandidate=${stats.skippedNoCandidate}`);
+  console.log(`[weread:review:auto-accept-title-author] skippedInvalidCatalogId=${stats.skippedInvalidCatalogId}`);
   console.log(`[weread:review:auto-accept-title-author] skippedMax=${stats.skippedMax}`);
   if (args.dryRun) {
     console.log("[weread:review:auto-accept-title-author] DRY_RUN: no files modified");

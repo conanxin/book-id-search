@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   authorMatches,
   isAmbiguousTopCandidates,
+  isValidCatalogId,
+  isValidCatalogCandidate,
   normalizeAuthor,
   normalizeTitle,
   shouldAutoAcceptTitleAuthor,
