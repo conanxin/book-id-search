@@ -21,6 +21,9 @@ import BookInsightSection from "./BookInsight";
 import { detailMatchInfo, isExactMatch, matchBadgeLabel, matchBadgeVariant, parseStatusNarrative, explainParseWarnings } from "./match-ui";
 import AiSearchPanel from "./AiSearchPanel";
 import { QueryInfoBar, RankingChips } from "./QueryInfoBar";
+import WereadPrivatePanel from "./WereadPrivatePanel";
+import WereadBadge from "./WereadBadge";
+import { fetchWereadStatusesForBooks, fetchWereadStatus, getWereadToken, isWereadEnabled, type WereadStatus } from "./wereadPrivate";
 
 // ---------------------------------------------------------------------------
 // Storage: recent search history (last 5 unique queries)
@@ -445,7 +448,7 @@ function fullRecordText(book: Book): string {
 // buttons stop propagation so they don't accidentally trigger navigation.
 // ---------------------------------------------------------------------------
 
-function BookCard({ book, query }: { book: Book; query: string }) {
+function BookCard({ book, query, weread }: { book: Book; query: string; weread?: WereadStatus | null }) {
   const exact = isExactMatch(book.match);
   return (
     <article className={`book-card ${exact ? "book-card--exact" : ""}`.trim()}>
@@ -463,6 +466,7 @@ function BookCard({ book, query }: { book: Book; query: string }) {
           </p>
           <div className="book-card__badges">
             <MatchBadge match={book.match} />
+            <WereadBadge status={weread} compact />
           </div>
           <RankingChips ranking={book.ranking} />
         </div>
@@ -511,6 +515,9 @@ function SearchPage() {
   const [error, setError] = useState("");
   const [statsError, setStatsError] = useState("");
   const [recent, setRecent] = useState<string[]>([]);
+  const [wereadToken, setWereadToken] = useState<string | null>(getWereadToken());
+  const [wereadStatuses, setWereadStatuses] = useState<Record<string, WereadStatus>>({});
+  const [wereadLoading, setWereadLoading] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   // currentQ = the query that the latest request was fired with. Used by
@@ -533,6 +540,32 @@ function SearchPage() {
       cancelled = true;
     };
   }, []);
+
+  // Load WeRead statuses for the current page when token/results change.
+  useEffect(() => {
+    if (!wereadToken || !isWereadEnabled() || !data?.items.length) {
+      setWereadStatuses({});
+      setWereadLoading(false);
+      return;
+    }
+    const ids = data.items.map((b) => b.id).filter(Boolean);
+    if (!ids.length) return;
+    let cancelled = false;
+    setWereadLoading(true);
+    fetchWereadStatusesForBooks(wereadToken, ids)
+      .then((statuses) => {
+        if (!cancelled) setWereadStatuses(statuses);
+      })
+      .catch(() => {
+        /* ignore private API failures */
+      })
+      .finally(() => {
+        if (!cancelled) setWereadLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [wereadToken, data?.items]);
 
   // Debounce input -> debouncedQ (300ms). URL stays in sync only on submit /
   // page change so we don't shove half-typed queries into the address bar.
@@ -728,6 +761,7 @@ function SearchPage() {
         <AiSearchPanel />
       ) : (
       <section className="search-panel">
+        <WereadPrivatePanel />
         <div className="brand-row">
           <BookOpen size={28} />
           <h1>图书 SSID / DXID 检索</h1>
@@ -854,7 +888,7 @@ function SearchPage() {
 
         <div className="card-list">
           {data?.items.map((book) => (
-            <BookCard key={book.id} book={book} query={currentQ} />
+            <BookCard key={book.id} book={book} query={currentQ} weread={wereadStatuses[book.id]} />
           ))}
         </div>
 
@@ -916,6 +950,8 @@ function DetailPage() {
   const [related, setRelated] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [wereadStatus, setWereadStatus] = useState<WereadStatus | null>(null);
+  const [wereadLoading, setWereadLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -933,6 +969,31 @@ function DetailPage() {
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  // Load WeRead status for the detail page book when token is available.
+  useEffect(() => {
+    if (!id || !isWereadEnabled()) {
+      setWereadStatus(null);
+      return;
+    }
+    const token = getWereadToken();
+    if (!token) return;
+    let cancelled = false;
+    setWereadLoading(true);
+    fetchWereadStatus(token, id)
+      .then((s) => {
+        if (!cancelled) setWereadStatus(s.matched ? s : null);
+      })
+      .catch(() => {
+        /* ignore private API failures */
+      })
+      .finally(() => {
+        if (!cancelled) setWereadLoading(false);
       });
     return () => {
       cancelled = true;
@@ -972,6 +1033,7 @@ function DetailPage() {
             <p className="detail__author">{book.author || "作者未知"}</p>
             <div className="detail__badges">
               <MatchBadge match={book.match ?? detailMatchInfo(book)} />
+              <WereadBadge status={wereadStatus} />
             </div>
           </header>
 

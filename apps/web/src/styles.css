@@ -831,6 +831,161 @@ mark.hl {
   color: var(--color-error-text);
 }
 
+/* S26E — WeRead private mode panel and badge */
+.weread-private-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.weread-private-form,
+.weread-private-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-card);
+  font-size: 13px;
+}
+
+.weread-private-form input[type="password"] {
+  flex: 1 1 180px;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 5px;
+  font-size: 13px;
+}
+
+.weread-private-form button,
+.weread-private-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 5px;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.weread-private-form button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.weread-private-clear {
+  background: transparent;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  margin-left: auto;
+}
+
+.weread-private-label {
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.weread-private-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.weread-private-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.weread-private-summary span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(47, 111, 237, 0.08);
+  color: var(--color-primary-strong);
+}
+
+.weread-private-error {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--color-error-text);
+}
+
+.weread-badge,
+.weread-badge-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-ok-text);
+  background: var(--color-ok-bg);
+  border: 1px solid rgba(29, 112, 66, 0.18);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+.weread-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  margin-top: 10px;
+  max-width: 100%;
+}
+
+.weread-badge__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.weread-badge__state {
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
+.weread-badge__confidence {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(47, 111, 237, 0.1);
+  color: var(--color-primary-strong);
+}
+
+.weread-badge__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.weread-badge__stats span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .detail {
   display: grid;
   gap: 18px;
