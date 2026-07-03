@@ -73,13 +73,25 @@ type DuplicateGroup = {
   entries: { wereadBookId: string; catalogId: string; ssid: string; dxid: string; matchMethod: MatchMethod }[];
 };
 
+type DuplicateAllowItem = {
+  catalogId: string;
+  decision: "allow_same_catalog_multiple_weread_records";
+  reasonCode: "same_work_duplicate" | "edition_alias" | "intentional_aggregate";
+  decidedAt: string;
+  decidedBy: string;
+};
+
 type AuditSummary = {
-  status: "PASS" | "WARN" | "BLOCKED";
+  status: "PASS" | "PASS_WITH_ALLOWED_DUPLICATE" | "WARN" | "BLOCKED";
   confirmedEntries: number;
   uniqueWereadBookIds: number;
   uniqueCatalogIds: number;
   duplicateCatalogIdGroups: number;
   duplicateCatalogIdEntries: number;
+  allowedDuplicateCatalogIdGroups: number;
+  allowedDuplicateCatalogIdEntries: number;
+  unresolvedDuplicateCatalogIdGroups: number;
+  unresolvedDuplicateCatalogIdEntries: number;
   duplicateWereadBookIdGroups: number;
   duplicateWereadBookIdEntries: number;
   invalidRows: number;
@@ -104,6 +116,7 @@ type AuditOutput = {
 interface Args {
   confirmedPath: string;
   reviewPath: string;
+  allowDuplicatesPath: string | null;
   outPath: string;
   summaryPath: string;
 }
@@ -117,6 +130,7 @@ function parseArgs(argv: string[]): Args {
   return {
     confirmedPath: get("--confirmed") ?? "private-data/weread/derived/latest/weread-matches.confirmed.json",
     reviewPath: get("--review") ?? "private-data/weread/derived/latest/weread-match-review.json",
+    allowDuplicatesPath: get("--allow-duplicates"),
     outPath: get("--out") ?? "private-data/weread/derived/latest/weread-confirmed-audit.json",
     summaryPath: get("--summary") ?? "private-data/weread/derived/latest/weread-confirmed-audit-summary.json",
   };
@@ -197,6 +211,11 @@ async function main(): Promise<void> {
     if (r?.wereadBookId) reviewByWereadId.set(r.wereadBookId, r);
   }
 
+  const allowList: DuplicateAllowItem[] = args.allowDuplicatesPath && fs.existsSync(args.allowDuplicatesPath)
+    ? JSON.parse(fs.readFileSync(args.allowDuplicatesPath, "utf8"))
+    : [];
+  const allowedCatalogIds = new Set(allowList.map((a) => a.catalogId));
+
   // validation
   const auditRows: AuditRow[] = confirmed.map((row) => {
     const invalidReasons = validateRow(row);
@@ -232,6 +251,10 @@ async function main(): Promise<void> {
     uniqueCatalogIds: new Set(confirmed.map((r) => r.catalogId)).size,
     duplicateCatalogIdGroups: catalogIdGroups.length,
     duplicateCatalogIdEntries: catalogIdGroups.reduce((acc, g) => acc + g.count, 0),
+    allowedDuplicateCatalogIdGroups: 0,
+    allowedDuplicateCatalogIdEntries: 0,
+    unresolvedDuplicateCatalogIdGroups: catalogIdGroups.length,
+    unresolvedDuplicateCatalogIdEntries: catalogIdGroups.reduce((acc, g) => acc + g.count, 0),
     duplicateWereadBookIdGroups: wereadBookIdGroups.length,
     duplicateWereadBookIdEntries: wereadBookIdGroups.reduce((acc, g) => acc + g.count, 0),
     invalidRows: invalidRows.length,
@@ -244,13 +267,31 @@ async function main(): Promise<void> {
     generatedAt: new Date().toISOString(),
   };
 
+  // split catalogId duplicates into allowed and unresolved
+  const allowedCatalogIdGroups: DuplicateGroup[] = [];
+  const unresolvedCatalogIdGroups: DuplicateGroup[] = [];
+  for (const g of catalogIdGroups) {
+    if (allowedCatalogIds.has(g.key)) {
+      allowedCatalogIdGroups.push(g);
+    } else {
+      unresolvedCatalogIdGroups.push(g);
+    }
+  }
+  summary.allowedDuplicateCatalogIdGroups = allowedCatalogIdGroups.length;
+  summary.allowedDuplicateCatalogIdEntries = allowedCatalogIdGroups.reduce((acc, g) => acc + g.count, 0);
+  summary.unresolvedDuplicateCatalogIdGroups = unresolvedCatalogIdGroups.length;
+  summary.unresolvedDuplicateCatalogIdEntries = unresolvedCatalogIdGroups.reduce((acc, g) => acc + g.count, 0);
+
   if (invalidRows.length > 0 || wereadBookIdGroups.length > 0 || consistencyErrors.length > 0) {
     summary.status = "BLOCKED";
-  } else if (consistencyWarnings.length > 0 || catalogIdGroups.length > 0) {
+  } else if (unresolvedCatalogIdGroups.length > 0 || consistencyWarnings.length > 0) {
     summary.status = "WARN";
+  } else if (allowedCatalogIdGroups.length > 0) {
+    summary.status = "PASS_WITH_ALLOWED_DUPLICATE";
   } else {
     summary.status = "PASS";
   }
+
 
   const output: AuditOutput = {
     summary,
@@ -270,6 +311,10 @@ async function main(): Promise<void> {
   console.log(`[weread:confirmed:audit] uniqueCatalogIds=${summary.uniqueCatalogIds}`);
   console.log(`[weread:confirmed:audit] duplicateCatalogIdGroups=${summary.duplicateCatalogIdGroups}`);
   console.log(`[weread:confirmed:audit] duplicateCatalogIdEntries=${summary.duplicateCatalogIdEntries}`);
+  console.log(`[weread:confirmed:audit] allowedDuplicateCatalogIdGroups=${summary.allowedDuplicateCatalogIdGroups}`);
+  console.log(`[weread:confirmed:audit] allowedDuplicateCatalogIdEntries=${summary.allowedDuplicateCatalogIdEntries}`);
+  console.log(`[weread:confirmed:audit] unresolvedDuplicateCatalogIdGroups=${summary.unresolvedDuplicateCatalogIdGroups}`);
+  console.log(`[weread:confirmed:audit] unresolvedDuplicateCatalogIdEntries=${summary.unresolvedDuplicateCatalogIdEntries}`);
   console.log(`[weread:confirmed:audit] duplicateWereadBookIdGroups=${summary.duplicateWereadBookIdGroups}`);
   console.log(`[weread:confirmed:audit] duplicateWereadBookIdEntries=${summary.duplicateWereadBookIdEntries}`);
   console.log(`[weread:confirmed:audit] invalidRows=${summary.invalidRows}`);
@@ -281,7 +326,7 @@ async function main(): Promise<void> {
   console.log(`[weread:confirmed:audit] decisionSourceDistribution=${JSON.stringify(summary.decisionSourceDistribution)}`);
 
   if (summary.status === "BLOCKED") process.exit(1);
-  if (summary.status === "WARN") process.exit(0);
+  process.exit(0);
 }
 
 if (process.argv[1] && import.meta.url === new URL(process.argv[1], "file:").href) {

@@ -195,6 +195,71 @@ describe("audit-confirmed-matches", () => {
     expect(summary.reviewConsistencyWarnings).toBe(1);
   });
 
+  it("duplicate catalogId with allowlist PASS_WITH_ALLOWED_DUPLICATE", () => {
+    const confirmedPath = path.join(tmpDir, "confirmed.json");
+    const reviewPath = path.join(tmpDir, "review.json");
+    const allowPath = path.join(tmpDir, "allowlist.json");
+    const outPath = path.join(tmpDir, "audit.json");
+    const summaryPath = path.join(tmpDir, "summary.json");
+    fs.writeFileSync(
+      confirmedPath,
+      JSON.stringify([
+        makeConfirmed({ wereadBookId: "weread-1", catalogId: "13000000_000000000001" }),
+        makeConfirmed({ wereadBookId: "weread-2", catalogId: "13000000_000000000001" }),
+      ])
+    );
+    fs.writeFileSync(reviewPath, JSON.stringify([makeReview(), makeReview({ reviewId: "rev-2", wereadBookId: "weread-2" })]));
+    fs.writeFileSync(allowPath, JSON.stringify([
+      {
+        catalogId: "13000000_000000000001",
+        decision: "allow_same_catalog_multiple_weread_records",
+        reasonCode: "same_work_duplicate",
+        decidedAt: "2026-07-03T00:00:00.000Z",
+        decidedBy: "local-user",
+      },
+    ]));
+
+    const stdout = runAudit(
+      `--confirmed ${confirmedPath} --review ${reviewPath} --allow-duplicates ${allowPath} --out ${outPath} --summary ${summaryPath}`
+    );
+    expect(stdout).toContain("STATUS=PASS_WITH_ALLOWED_DUPLICATE");
+    const summary = JSON.parse(fs.readFileSync(summaryPath, "utf8"));
+    expect(summary.duplicateCatalogIdGroups).toBe(1);
+    expect(summary.allowedDuplicateCatalogIdGroups).toBe(1);
+    expect(summary.unresolvedDuplicateCatalogIdGroups).toBe(0);
+  });
+
+  it("invalid row with allowlist still BLOCKED", () => {
+    const confirmedPath = path.join(tmpDir, "confirmed.json");
+    const reviewPath = path.join(tmpDir, "review.json");
+    const allowPath = path.join(tmpDir, "allowlist.json");
+    const outPath = path.join(tmpDir, "audit.json");
+    const summaryPath = path.join(tmpDir, "summary.json");
+    fs.writeFileSync(
+      confirmedPath,
+      JSON.stringify([
+        makeConfirmed({ wereadBookId: "weread-1", catalogId: "13000000_000000000001" }),
+        makeConfirmed({ wereadBookId: "weread-2", catalogId: "13000000_000000000001", matchMethod: "bad" }),
+      ])
+    );
+    fs.writeFileSync(reviewPath, JSON.stringify([makeReview(), makeReview({ reviewId: "rev-2", wereadBookId: "weread-2" })]));
+    fs.writeFileSync(allowPath, JSON.stringify([
+      {
+        catalogId: "13000000_000000000001",
+        decision: "allow_same_catalog_multiple_weread_records",
+        reasonCode: "same_work_duplicate",
+        decidedAt: "2026-07-03T00:00:00.000Z",
+        decidedBy: "local-user",
+      },
+    ]));
+
+    expect(() =>
+      runAudit(
+        `--confirmed ${confirmedPath} --review ${reviewPath} --allow-duplicates ${allowPath} --out ${outPath} --summary ${summaryPath}`
+      )
+    ).toThrow();
+  });
+
   it("stdout does not leak wereadBookId or catalogId", () => {
     const confirmedPath = path.join(tmpDir, "confirmed.json");
     const reviewPath = path.join(tmpDir, "review.json");
