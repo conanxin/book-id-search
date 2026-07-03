@@ -33,11 +33,18 @@
 - 不显示用户真实书架列表。
 - 公开访问者看不到任何微信读书信息，也不会触发私有 API 请求。
 
-## 当前限制
+## 性能
 
-- 当前 `confirmedMatchesCount = 51`，因此只有 51 条已确认匹配的书会显示徽章。
-- 非确认匹配的书籍不显示徽章。
-- `/api/private/weread/status` 是逐条查询，尚未实现 batch endpoint。前端已做内存缓存和并发限制（最大 4 并发，缓存上限 200 条）。
+- 前端优先使用 `POST /api/private/weread/status/batch`；一次请求最多查询 100 个 catalogId。
+- 当前搜索页每页 20 条，因此一页只需要一次 batch 请求。
+- 如果 batch endpoint 不可用（例如旧部署），前端会自动 fallback 到单条 `GET /api/private/weread/status`。
+- 前端仍然保留内存缓存（最多 200 条），避免重复请求。
+
+## 限制
+
+- 已确认匹配数目前仍为 51，所以只有 51 本书可以显示 WeRead badge。
+- 未确认匹配的书不会显示 badge。
+- badge 不展示书名、作者、笔记正文、划线正文或任何 WeRead 私有 ID。
 
 ## 不影响公开搜索
 

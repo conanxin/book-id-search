@@ -119,7 +119,52 @@ describe("wereadPrivate", () => {
     await expect(fetchWereadSummary("my-token")).rejects.toThrow("unauthorized");
   });
 
-  it("status cache works for same catalogId", async () => {
+  it("fetchWereadStatusesForBooks uses batch endpoint and deduplicates", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          results: {
+            "13000000_000000000001": {
+              matched: true,
+              catalogId: "13000000_000000000001",
+              weread: {
+                readingStatus: "finished",
+                progress: 100,
+                noteCount: 1,
+                highlightCount: 2,
+                matchMethod: "isbn",
+                matchConfidence: "high",
+                decisionSource: "auto",
+              },
+            },
+          },
+        })
+      )
+    );
+    const r1 = await fetchWereadStatusesForBooks("tok", [
+      "13000000_000000000001",
+      "13000000_000000000001",
+    ]);
+    const r2 = await fetchWereadStatusesForBooks("tok", ["13000000_000000000001"]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const [url, init] = call;
+    expect(url).toContain("/private/weread/status/batch");
+    expect(init?.method).toBe("POST");
+    expect(init?.headers).toMatchObject({
+      Authorization: "Bearer tok",
+      "Content-Type": "application/json",
+    });
+    const body = JSON.parse(init?.body as string);
+    expect(body.catalogIds).toEqual(["13000000_000000000001"]);
+    expect(r1["13000000_000000000001"]).toBe(r2["13000000_000000000001"]);
+  });
+
+  it("fetchWereadStatusesForBooks falls back to single status when batch returns 404", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: "Not Found" }), { status: 404 })
+    );
     fetchMock.mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -129,10 +174,22 @@ describe("wereadPrivate", () => {
         })
       )
     );
-    const r1 = await fetchWereadStatusesForBooks("tok", ["13000000_000000000001"]);
-    const r2 = await fetchWereadStatusesForBooks("tok", ["13000000_000000000001"]);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(r1["13000000_000000000001"]).toBe(r2["13000000_000000000001"]);
+    const result = await fetchWereadStatusesForBooks("tok", ["13000000_000000000001"]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const batchCall = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const singleCall = fetchMock.mock.calls[1] as unknown as [string, RequestInit];
+    expect(batchCall[0]).toContain("/private/weread/status/batch");
+    expect(singleCall[0]).toContain("/private/weread/status?catalogId=13000000_000000000001");
+    expect(result["13000000_000000000001"].matched).toBe(true);
+  });
+
+  it("batch 401 throws without leaking token", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ error: "Invalid token." }), { status: 403 })
+    );
+    await expect(fetchWereadStatusesForBooks("leaked-token", ["13000000_000000000001"])).rejects.toThrow(
+      "Invalid token."
+    );
   });
 
   it("response type does not contain private fields", async () => {

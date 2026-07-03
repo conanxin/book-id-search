@@ -209,3 +209,17 @@ export function getWereadStatusByCatalogId(data: WereadOverlayData, catalogId: s
 export function getWereadOverlayDataDir(): string {
   return process.env.WEREAD_PRIVATE_DATA_DIR ?? "/app/private-data/weread";
 }
+
+export function getWereadStatusesByCatalogIds(
+  data: WereadOverlayData,
+  catalogIds: string[]
+): Record<string, WereadStatus> {
+  const results: Record<string, WereadStatus> = {};
+  const seen = new Set<string>();
+  for (const catalogId of catalogIds) {
+    if (seen.has(catalogId)) continue;
+    seen.add(catalogId);
+    results[catalogId] = getWereadStatusByCatalogId(data, catalogId);
+  }
+  return results;
+}

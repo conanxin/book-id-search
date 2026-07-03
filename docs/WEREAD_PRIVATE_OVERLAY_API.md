@@ -6,10 +6,11 @@ Private, read-only API endpoints that expose a minimal, redacted view of your We
 
 - `GET /api/private/weread/summary` — aggregate counts only.
 - `GET /api/private/weread/status?catalogId=<catalogId>` — per-book reading status.
+- `POST /api/private/weread/status/batch` — batch reading status for up to 100 catalogIds.
 
 ## Authentication
 
-Both endpoints require a private token. Accepted header styles:
+All endpoints require a private token. Accepted header styles:
 
 - `Authorization: Bearer <token>`
 - `X-Private-Token: <token>`
@@ -50,6 +51,66 @@ Response only includes aggregated counts and matched status metadata (`readingSt
 ## Relationship to public search
 
 This overlay has no effect on `/api/search`, `/api/stats`, `/api/health`, or AI search. It is a separate, authenticated route.
+
+## Batch endpoint
+
+`POST /api/private/weread/status/batch`
+
+### Request
+
+```json
+{
+  "catalogIds": [
+    "13000000_000000000001",
+    "00000000_000000000000"
+  ]
+}
+```
+
+- `catalogIds` must be an array of valid catalogIds.
+- Length must be between 1 and 100 (inclusive).
+- Duplicate catalogIds are allowed in the request but are deduplicated before processing.
+
+### Response
+
+```json
+{
+  "ok": true,
+  "results": {
+    "13000000_000000000001": {
+      "matched": true,
+      "catalogId": "13000000_000000000001",
+      "weread": {
+        "readingStatus": "finished",
+        "progress": 100,
+        "noteCount": 12,
+        "highlightCount": 34,
+        "matchMethod": "isbn",
+        "matchConfidence": "high",
+        "decisionSource": "auto_seed"
+      }
+    },
+    "00000000_000000000000": {
+      "matched": false,
+      "catalogId": "00000000_000000000000"
+    }
+  }
+}
+```
+
+### Error responses
+
+- `401` — missing token.
+- `403` — invalid token.
+- `404` — overlay disabled.
+- `400` — invalid `catalogIds` (not array, empty, >100, or malformed id).
+- `500` — server error reading private data.
+
+Error responses only contain a short `error` string; no token or private data is returned.
+
+## Frontend usage
+
+The frontend client prefers `POST /api/private/weread/status/batch` and falls back to per-catalogId `GET /api/private/weread/status` when the batch endpoint is unavailable (e.g. `404` from an older deployment). Authentication errors (`401`/`403`) are re-thrown and handled by the UI so the user can clear/re-enter the token.
 
 ## How to disable
 

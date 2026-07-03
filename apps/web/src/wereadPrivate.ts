@@ -89,9 +89,15 @@ export function fetchWereadStatus(token: string, catalogId: string): Promise<Wer
 
 const statusCache = new Map<string, Promise<WereadStatus>>();
 const CACHE_LIMIT = 200;
+const BATCH_MAX = 100;
 
-export async function fetchWereadStatusesForBooks(token: string, catalogIds: string[]): Promise<Record<string, WereadStatus>> {
+export async function fetchWereadStatusesForBooks(
+  token: string,
+  catalogIds: string[]
+): Promise<Record<string, WereadStatus>> {
   const uniqueIds = [...new Set(catalogIds)].slice(0, CACHE_LIMIT);
+  if (uniqueIds.length === 0) return {};
+
   const out: Record<string, WereadStatus> = {};
   const toFetch: string[] = [];
 
@@ -108,7 +114,47 @@ export async function fetchWereadStatusesForBooks(token: string, catalogIds: str
     }
   }
 
-  // Limit concurrency to avoid hammering the API
+  if (toFetch.length === 0) return out;
+
+  // Try batch endpoint first for uncached ids
+  const batchIds = toFetch.slice(0, BATCH_MAX);
+  try {
+    const response = await fetch(`${API_BASE}/private/weread/status/batch`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ catalogIds: batchIds }),
+    });
+
+    if (response.status === 401 || response.status === 403) {
+      const data = await response.json().catch(() => null);
+      const message = data?.error ?? "认证失败";
+      throw new Error(message);
+    }
+
+    if (response.ok) {
+      const data = (await response.json()) as {
+        ok: boolean;
+        results?: Record<string, WereadStatus>;
+      };
+      const results = data.results ?? {};
+      for (const [id, value] of Object.entries(results)) {
+        if (statusCache.size >= CACHE_LIMIT) break;
+        statusCache.set(id, Promise.resolve(value));
+        out[id] = value;
+      }
+      return out;
+    }
+  } catch (err) {
+    if (err instanceof Error && /401|403|认证失败|Invalid token|Missing token/i.test(err.message)) {
+      throw err;
+    }
+    // continue to fallback on network/server errors
+  }
+
+  // Fallback: per-catalogId single status
   const concurrency = 4;
   for (let i = 0; i < toFetch.length; i += concurrency) {
     const batch = toFetch.slice(i, i + concurrency);
@@ -116,9 +162,16 @@ export async function fetchWereadStatusesForBooks(token: string, catalogIds: str
       batch.map(async (id) => {
         const promise = fetchWereadStatus(token, id).catch((err: Error) => {
           statusCache.delete(id);
-          return { ok: false, matched: false, catalogId: id, error: err.message } as unknown as WereadStatus;
+          return {
+            ok: false,
+            matched: false,
+            catalogId: id,
+            error: err.message,
+          } as unknown as WereadStatus;
         });
-        statusCache.set(id, promise);
+        if (statusCache.size < CACHE_LIMIT) {
+          statusCache.set(id, promise);
+        }
         try {
           out[id] = await promise;
         } catch {

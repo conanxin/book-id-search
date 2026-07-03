@@ -22,6 +22,7 @@ import {
 import {
   getWereadOverlayDataDir,
   getWereadStatusByCatalogId,
+  getWereadStatusesByCatalogIds,
   getWereadSummary,
   loadWereadOverlay,
 } from "./weread/private-overlay.js";
@@ -561,6 +562,35 @@ app.get("/api/private/weread/status", async (req: Request, res: Response) => {
     res.json(status);
   } catch (error) {
     return sendError(res, 500, "读取 WeRead 状态失败。", error);
+  }
+});
+
+app.post("/api/private/weread/status/batch", async (req: Request, res: Response) => {
+  const auth = checkPrivateAuth(req.headers.authorization, req.headers["x-private-token"] as string | undefined);
+  if (!auth.ok) {
+    return res.status(auth.status).json({ ok: false, error: auth.message });
+  }
+  const body = req.body;
+  if (!body || typeof body !== "object" || !Array.isArray(body.catalogIds)) {
+    return sendError(res, 400, "请求体必须是包含 catalogIds 数组的 JSON object。");
+  }
+  const rawCatalogIds = body.catalogIds as unknown[];
+  if (rawCatalogIds.length === 0 || rawCatalogIds.length > 100) {
+    return sendError(res, 400, "catalogIds 数量必须在 1 到 100 之间。");
+  }
+  const catalogIds: string[] = [];
+  for (const item of rawCatalogIds) {
+    if (typeof item !== "string" || !/^[0-9]+_[0-9]{12}$/.test(item)) {
+      return sendError(res, 400, "catalogId 格式不正确。");
+    }
+    catalogIds.push(item);
+  }
+  try {
+    const data = loadWereadOverlay(getWereadOverlayDataDir());
+    const results = getWereadStatusesByCatalogIds(data, catalogIds);
+    res.json({ ok: true, results });
+  } catch (error) {
+    return sendError(res, 500, "批量读取 WeRead 状态失败。", error);
   }
 });
 
