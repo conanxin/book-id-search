@@ -6,6 +6,7 @@
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "weread:review:auto-accept-isbn": "tsx scripts/weread/auto-accept-match-review.ts --review private-data/weread/derived/latest/weread-match-review.json --summary private-data/weread/derived/latest/weread-auto-accept-isbn-summary.json",
+    "weread:review:auto-accept-title-author": "tsx scripts/weread/auto-accept-title-author-review.ts --review private-data/weread/derived/latest/weread-match-review.json --summary private-data/weread/derived/latest/weread-auto-accept-title-author-summary.json",
     "weread:review:build": "tsx scripts/weread/build-match-review.ts --matches private-data/weread/derived/latest/weread-matches.generated.json --out private-data/weread/derived/latest/weread-match-review.json --summary private-data/weread/derived/latest/weread-match-review-summary.json",
     "weread:review:apply": "tsx scripts/weread/apply-match-review.ts --review private-data/weread/derived/latest/weread-match-review.json --out private-data/weread/derived/latest/weread-matches.confirmed.json --summary private-data/weread/derived/latest/weread-match-confirmation-summary.json",
     "weread:review:summary": "tsx scripts/weread/summarize-match-review.ts --review private-data/weread/derived/latest/weread-match-review.json --confirmed private-data/weread/derived/latest/weread-matches.confirmed.json",
