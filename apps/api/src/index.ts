@@ -28,6 +28,13 @@ import {
   loadWereadOverlay,
 } from "./weread/private-overlay.js";
 import {
+  loadPrivateNotesData,
+  queryPrivateNotes,
+  type WereadNotesTypeFilter,
+  type WereadNotesDaysFilter,
+  type WereadNotesSort,
+} from "./weread/private-notes.js";
+import {
   classifyHit,
   isExactMatchType,
   normalizeQuery,
@@ -611,6 +618,81 @@ app.post("/api/private/weread/status/batch", async (req: Request, res: Response)
     res.json({ ok: true, results });
   } catch (error) {
     return sendError(res, 500, "批量读取 WeRead 状态失败。", error);
+  }
+});
+
+app.get("/api/private/weread/notes", async (req: Request, res: Response) => {
+  const auth = checkPrivateAuth(req.headers.authorization, req.headers["x-private-token"] as string | undefined);
+  if (!auth.ok) {
+    return res.status(auth.status).json({ ok: false, error: auth.message });
+  }
+
+  const VALID_TYPES: WereadNotesTypeFilter[] = ["all", "highlight", "thought", "review"];
+  const VALID_DAYS: WereadNotesDaysFilter[] = ["7", "30", "90", "all"];
+  const VALID_SORTS: WereadNotesSort[] = ["newest", "oldest"];
+
+  const rawType = String(req.query.type ?? "all").toLowerCase();
+  if (!VALID_TYPES.includes(rawType as WereadNotesTypeFilter)) {
+    return sendError(res, 400, "type 必须是 all / highlight / thought / review 之一。");
+  }
+
+  const rawDays = String(req.query.days ?? "all").toLowerCase();
+  if (!VALID_DAYS.includes(rawDays as WereadNotesDaysFilter)) {
+    return sendError(res, 400, "days 必须是 7 / 30 / 90 / all 之一。");
+  }
+
+  const rawSort = String(req.query.sort ?? "newest").toLowerCase();
+  if (!VALID_SORTS.includes(rawSort as WereadNotesSort)) {
+    return sendError(res, 400, "sort 必须是 newest / oldest 之一。");
+  }
+
+  const rawMatched = String(req.query.matchedOnly ?? "false").toLowerCase();
+  if (!["true", "false"].includes(rawMatched)) {
+    return sendError(res, 400, "matchedOnly 必须是 true 或 false。");
+  }
+  const matchedOnly = rawMatched === "true";
+
+  let hasComment: boolean | undefined;
+  if (typeof req.query.hasComment === "string" && req.query.hasComment.length > 0) {
+    const rawHas = req.query.hasComment.toLowerCase();
+    if (!["true", "false"].includes(rawHas)) {
+      return sendError(res, 400, "hasComment 必须是 true 或 false。");
+    }
+    hasComment = rawHas === "true";
+  }
+
+  let limit = 50;
+  if (typeof req.query.limit === "string" && req.query.limit.length > 0) {
+    const parsed = Number(req.query.limit);
+    if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 1 || parsed > 100) {
+      return sendError(res, 400, "limit 必须是 1 到 100 之间的整数。");
+    }
+    limit = parsed;
+  }
+
+  let offset = 0;
+  if (typeof req.query.offset === "string" && req.query.offset.length > 0) {
+    const parsed = Number(req.query.offset);
+    if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 0) {
+      return sendError(res, 400, "offset 必须是大于等于 0 的整数。");
+    }
+    offset = parsed;
+  }
+
+  try {
+    const data = loadPrivateNotesData(getWereadOverlayDataDir());
+    const result = queryPrivateNotes(data, {
+      type: rawType as WereadNotesTypeFilter,
+      days: rawDays as WereadNotesDaysFilter,
+      matchedOnly,
+      hasComment,
+      limit,
+      offset,
+      sort: rawSort as WereadNotesSort,
+    });
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    return sendError(res, 500, "读取私有笔记失败。", error);
   }
 });
 

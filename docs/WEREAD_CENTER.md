@@ -22,6 +22,25 @@ WeRead Center 是 book-id-search 的独立微信读书私有数据入口页面�
 - 日期覆盖：有日期记录数、无日期记录数、日期覆盖率。
 - 简单趋势条：最近 30 天的每日新增柱状图（仅展示日期与数量）。
 
+## 私有笔记库（S27C）
+
+页面新增「私有笔记库」区域，是首个允许展示真实笔记/划线正文的 UI 入口。**仅在浏览器持有 private token 时可见**。
+
+| 能力 | 说明 |
+|------|------|
+| 加载按钮 | 默认不自动加载笔记正文。点击「加载最近笔记」才会向 `/api/private/weread/notes` 发起请求。 |
+| 类型筛选 | 全部 / 划线 / 想法 / 书评。 |
+| 时间窗口 | 全部时间 / 近 7 天 / 近 30 天 / 近 90 天（按 `createdAt`，缺失时回退 `updatedAt`）。 |
+| 匹配筛选 | 全部 / 仅已匹配 book-id-search 书目。 |
+| 排序 | 最新优先 / 最早优先。 |
+| 每页 | 20 / 50（服务端 limit）。 |
+| 加载更多 | 当前页 `hasMore=true` 时可继续翻页。 |
+| 复制单条 | 复制该条 `text` + 可选 `comment`，不含 token / 私有 ID。 |
+| Markdown 导出 | 导出当前已加载条目为 `weread-notes-export-YYYYMMDD.md`，无 token、无 `wereadBookId/noteId/highlightId/chapterTitle/title/author`。 |
+| 隐私提示 | 顶部固定显示：以下内容来自你的微信读书私有笔记，仅当前浏览器 private token 模式可见。不会进入公开搜索或 Meilisearch。 |
+
+清除 token 后，笔记库会立即重置为空，避免任何正文在内存中长期驻留。
+
 ## 隐私边界
 
 | 统计 | 说明 |

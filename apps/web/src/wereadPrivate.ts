@@ -181,6 +181,72 @@ export function fetchWereadTrends(token: string): Promise<WereadTrendsResponse> 
   return privateRequestJson<WereadTrendsResponse>(token, "/private/weread/trends");
 }
 
+// ---------- private notes library (S27C) ----------
+
+export type WereadNoteTypeFilter = "all" | "highlight" | "thought" | "review";
+export type WereadNotesDaysFilter = "7" | "30" | "90" | "all";
+export type WereadNotesSort = "newest" | "oldest";
+
+export interface WereadPrivateNoteItem {
+  type: "highlight" | "thought" | "review" | "unknown";
+  text: string;
+  comment: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  matched: boolean;
+  catalogId: string | null;
+  source: "private_weread";
+}
+
+export interface WereadNotesQuery {
+  type?: WereadNoteTypeFilter;
+  days?: WereadNotesDaysFilter;
+  matchedOnly?: boolean;
+  hasComment?: boolean;
+  limit?: number;
+  offset?: number;
+  sort?: WereadNotesSort;
+}
+
+export interface WereadNotesPageInfo {
+  limit: number;
+  offset: number;
+  total: number;
+  hasMore: boolean;
+}
+
+export interface WereadNotesLibrarySummary {
+  totalAfterFilter: number;
+  highlights: number;
+  thoughts: number;
+  reviews: number;
+  unknown: number;
+  matchedCount: number;
+  unmatchedCount: number;
+}
+
+export interface WereadNotesResponse {
+  ok: boolean;
+  items: WereadPrivateNoteItem[];
+  pageInfo: WereadNotesPageInfo;
+  summary: WereadNotesLibrarySummary;
+  error?: string;
+}
+
+export function fetchWereadNotes(token: string, query: WereadNotesQuery = {}): Promise<WereadNotesResponse> {
+  const params = new URLSearchParams();
+  if (query.type) params.set("type", query.type);
+  if (query.days) params.set("days", query.days);
+  if (typeof query.matchedOnly === "boolean") params.set("matchedOnly", String(query.matchedOnly));
+  if (typeof query.hasComment === "boolean") params.set("hasComment", String(query.hasComment));
+  if (typeof query.limit === "number") params.set("limit", String(query.limit));
+  if (typeof query.offset === "number") params.set("offset", String(query.offset));
+  if (query.sort) params.set("sort", query.sort);
+  const qs = params.toString();
+  const path = qs ? `/private/weread/notes?${qs}` : "/private/weread/notes";
+  return privateRequestJson<WereadNotesResponse>(token, path);
+}
+
 const statusCache = new Map<string, Promise<WereadStatus>>();
 const CACHE_LIMIT = 200;
 const BATCH_MAX = 100;

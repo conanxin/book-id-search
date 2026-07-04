@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, BookOpen, Lock, Loader2, AlertCircle, XCircle, RefreshCw, Shield, EyeOff, BarChart3 } from "lucide-react";
+import { ArrowLeft, BookOpen, Lock, Loader2, AlertCircle, XCircle, RefreshCw, Shield, EyeOff, BarChart3, Library } from "lucide-react";
 import {
   clearWereadToken,
   fetchWereadSummary,
@@ -17,6 +17,7 @@ import {
   getTrendCoverageLabel,
   type WereadTrendView,
 } from "./wereadCenterModel";
+import NotesLibrary from "./NotesLibrary";
 
 function StatCard({
   label,
@@ -328,6 +329,15 @@ export default function WereadCenter() {
                   <AlertCircle size={14} /> {trendsError ?? "趋势数据暂不可用"}
                 </div>
               )}
+            </div>
+          ) : null}
+
+          {storedToken ? (
+            <div className="weread-center-card weread-notes-card">
+              <h2 className="weread-center-card__title">
+                <Library size={16} aria-hidden="true" /> 私有笔记库
+              </h2>
+              <NotesLibrary token={storedToken} />
             </div>
           ) : null}
 

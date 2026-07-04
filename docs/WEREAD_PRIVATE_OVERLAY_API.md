@@ -8,6 +8,7 @@ Private, read-only API endpoints that expose a minimal, redacted view of your We
 - `GET /api/private/weread/status?catalogId=<catalogId>` — per-book reading status.
 - `POST /api/private/weread/status/batch` — batch reading status for up to 100 catalogIds.
 - `GET /api/private/weread/trends` — counts-only notes/highlights trend (S27B).
+- `GET /api/private/weread/notes` — paginated note items with `text` / `comment` (S27C).
 
 ## Authentication
 
@@ -43,11 +44,77 @@ The API response never includes:
 
 - `wereadBookId`
 - Book title or author
-- Note text or highlight comment
 - Cookie, session, or raw WeRead tokens
 - API keys
 
 Response only includes aggregated counts and matched status metadata (`readingStatus`, `progress`, `noteCount`, `highlightCount`, `matchMethod`, `matchConfidence`, `decisionSource`).
+
+## `GET /api/private/weread/notes` (S27C)
+
+Returns paginated note items. **This is the only endpoint that exposes note text** — it is only accessible with a valid private token. There is no public notes endpoint, and the response never appears in Meilisearch or `/api/search`.
+
+### Query parameters
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `type` | `all` \| `highlight` \| `thought` \| `review` | `all` | Note type filter. |
+| `days` | `7` \| `30` \| `90` \| `all` | `all` | Time window based on `createdAt` (fallback `updatedAt`). Items without any date are excluded for non-`all` windows. |
+| `matchedOnly` | `true` \| `false` | `false` | When `true`, only items whose WeRead book id joined to a confirmed catalogId are returned. |
+| `hasComment` | `true` \| `false` | (unset) | Optional. When `true`, keeps only items with non-empty `comment`. |
+| `limit` | 1..100 | 50 | Page size. Hard cap is 100. |
+| `offset` | >= 0 | 0 | Pagination offset. |
+| `sort` | `newest` \| `oldest` | `newest` | Sort by `createdAt`/`updatedAt` timestamp. |
+
+Invalid values return `400` with a Chinese-language error message. Missing/invalid token returns `401`/`403`. Disabled overlay returns `404`.
+
+### Response shape
+
+```json
+{
+  "ok": true,
+  "items": [
+    {
+      "type": "highlight",
+      "text": "...",
+      "comment": null,
+      "createdAt": "2026-07-04T00:00:00.000Z",
+      "updatedAt": null,
+      "matched": true,
+      "catalogId": "13000000_000000000001",
+      "source": "private_weread"
+    }
+  ],
+  "pageInfo": { "limit": 50, "offset": 0, "total": 1, "hasMore": false },
+  "summary": {
+    "totalAfterFilter": 1,
+    "highlights": 1,
+    "thoughts": 0,
+    "reviews": 0,
+    "unknown": 0,
+    "matchedCount": 1,
+    "unmatchedCount": 0
+  }
+}
+```
+
+### Items — what is returned vs. what is NOT
+
+| Field | Returned? | Notes |
+|-------|-----------|-------|
+| `type` | ✅ | `highlight` / `thought` / `review` / `unknown` |
+| `text` | ✅ | The highlight/thought/review body. |
+| `comment` | ✅ (nullable) | The user's own annotation. |
+| `createdAt` | ✅ (nullable) | ISO-8601 string. |
+| `updatedAt` | ✅ (nullable) | ISO-8601 string. |
+| `matched` | ✅ | True iff a confirmed `catalogId` exists. |
+| `catalogId` | ✅ (nullable) | Public book-id-search catalog id. `null` unless `matched === true` (or `matchedOnly=true`). |
+| `source` | ✅ | Always `"private_weread"`. |
+| `wereadBookId` | ❌ | Never returned. |
+| `noteId` / `highlightId` | ❌ | Never returned. |
+| `chapterTitle` | ❌ | Never returned (avoid leaking reading structure). |
+| `title` / `author` | ❌ | Never returned. The matched `catalogId` is the only public-side metadata. |
+
+`summary` aggregates the *filtered* list (before pagination), not the entire snapshot, so it always reflects the active query.
 
 ## Notes counts-only overlay
 

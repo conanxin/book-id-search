@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearWereadStatusCache,
   clearWereadToken,
+  fetchWereadNotes,
   fetchWereadStatusesForBooks,
   fetchWereadStatus,
   fetchWereadSummary,
@@ -234,5 +235,128 @@ describe("wereadPrivate", () => {
     expect(json).not.toContain("comment");
     expect(json).toContain("matched");
     expect(json).toContain("readingStatus");
+  });
+});
+
+describe("fetchWereadNotes", () => {
+  const originalFetch = globalThis.fetch;
+  const fetchMock = vi.fn(async () => new Response("{}"));
+
+  beforeEach(() => {
+    (globalThis as unknown as { sessionStorage: Storage }).sessionStorage.clear();
+    clearWereadStatusCache();
+    clearWereadToken();
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          items: [],
+          pageInfo: { limit: 50, offset: 0, total: 0, hasMore: false },
+          summary: {
+            totalAfterFilter: 0,
+            highlights: 0,
+            thoughts: 0,
+            reviews: 0,
+            unknown: 0,
+            matchedCount: 0,
+            unmatchedCount: 0,
+          },
+        })
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    (globalThis as unknown as { sessionStorage: Storage }).sessionStorage.clear();
+    clearWereadStatusCache();
+    clearWereadToken();
+    globalThis.fetch = originalFetch;
+  });
+
+  it("builds URL with all query params and Authorization header", async () => {
+    await fetchWereadNotes("my-token", {
+      type: "highlight",
+      days: "30",
+      matchedOnly: true,
+      hasComment: false,
+      limit: 25,
+      offset: 10,
+      sort: "oldest",
+    });
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const [url, init] = call;
+    expect(url).toContain("/private/weread/notes");
+    expect(url).toContain("type=highlight");
+    expect(url).toContain("days=30");
+    expect(url).toContain("matchedOnly=true");
+    expect(url).toContain("hasComment=false");
+    expect(url).toContain("limit=25");
+    expect(url).toContain("offset=10");
+    expect(url).toContain("sort=oldest");
+    expect(init?.headers).toMatchObject({ Authorization: "Bearer my-token" });
+  });
+
+  it("returns parsed items from response", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          items: [
+            {
+              type: "highlight",
+              text: "示例划线",
+              comment: null,
+              createdAt: "2026-07-04T00:00:00.000Z",
+              updatedAt: null,
+              matched: true,
+              catalogId: "13000000_000000000001",
+              source: "private_weread",
+            },
+          ],
+          pageInfo: { limit: 50, offset: 0, total: 1, hasMore: false },
+          summary: {
+            totalAfterFilter: 1,
+            highlights: 1,
+            thoughts: 0,
+            reviews: 0,
+            unknown: 0,
+            matchedCount: 1,
+            unmatchedCount: 0,
+          },
+        })
+      )
+    );
+    const res = await fetchWereadNotes("my-token");
+    expect(res.ok).toBe(true);
+    expect(res.items.length).toBe(1);
+    expect(res.items[0].text).toBe("示例划线");
+    expect(res.items[0].matched).toBe(true);
+    expect(res.summary.highlights).toBe(1);
+  });
+
+  it("401 does not leak token in thrown error", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 })
+    );
+    await expect(fetchWereadNotes("secret-token", { limit: 1 })).rejects.toThrow("unauthorized");
+    // Ensure error message does not contain the token
+    try {
+      await fetchWereadNotes("secret-token", { limit: 1 });
+    } catch (e) {
+      expect(String(e)).not.toContain("secret-token");
+    }
+  });
+
+  it("does not write to localStorage", async () => {
+    const localStorageSet = vi.fn();
+    Object.defineProperty(globalThis, "localStorage", {
+      value: { setItem: localStorageSet, getItem: () => null, removeItem: () => undefined, clear: () => undefined, key: () => null, length: 0 },
+      configurable: true,
+    });
+    await fetchWereadNotes("tok");
+    expect(localStorageSet).not.toHaveBeenCalled();
   });
 });

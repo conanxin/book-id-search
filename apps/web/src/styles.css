@@ -2177,3 +2177,312 @@ mark.hl {
     display: none;
   }
 }
+
+/* ---------------------------------------------------------------
+ * S27C WeRead notes library
+ * --------------------------------------------------------------- */
+.weread-notes-card {
+  grid-column: span 3;
+}
+
+.weread-notes-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.weread-note-privacy-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(255, 196, 0, 0.08);
+  border: 1px solid rgba(255, 196, 0, 0.35);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: #ffe9a8;
+}
+
+.weread-notes-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.weread-notes-filter__group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 110px;
+}
+
+.weread-notes-filter__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.weread-notes-filter select {
+  appearance: none;
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: 13px;
+  min-height: 32px;
+}
+
+.weread-notes-filter__actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+  align-items: center;
+}
+
+.weread-notes-filter__actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--color-primary);
+  color: #0b1117;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.weread-notes-filter__actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.weread-notes-filter__secondary {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+.weread-notes-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: center;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: var(--radius-sm);
+}
+
+.weread-notes-summary strong {
+  color: var(--color-primary);
+  margin-right: 4px;
+}
+
+.weread-notes-summary__matched {
+  color: #6ee7b7;
+}
+
+.weread-notes-export {
+  margin-left: auto;
+  background: rgba(64, 158, 255, 0.15);
+  color: #8eb8ff !important;
+  border: 1px solid rgba(64, 158, 255, 0.35);
+  padding: 4px 10px !important;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.weread-notes-export:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.weread-notes-empty {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+  padding: 16px;
+  text-align: center;
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-sm);
+}
+
+.weread-note-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.weread-note-card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.02);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.weread-note-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.weread-note-date {
+  font-variant-numeric: tabular-nums;
+}
+
+.weread-note-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.weread-note-chip--highlight {
+  background: rgba(64, 158, 255, 0.15);
+  color: #8eb8ff;
+}
+
+.weread-note-chip--thought {
+  background: rgba(255, 196, 0, 0.15);
+  color: #ffd874;
+}
+
+.weread-note-chip--review {
+  background: rgba(255, 99, 132, 0.15);
+  color: #ff95a8;
+}
+
+.weread-note-chip--unknown {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.weread-note-chip--matched {
+  background: rgba(110, 231, 183, 0.15);
+  color: #6ee7b7;
+}
+
+.weread-note-chip--unmatched {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.weread-note-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: inherit;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 11px;
+  margin-left: auto;
+}
+
+.weread-note-copy:hover {
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.weread-note-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.92);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.weread-note-comment {
+  border-left: 2px solid rgba(255, 196, 0, 0.4);
+  padding-left: 10px;
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+}
+
+.weread-note-comment__label {
+  font-size: 11px;
+  color: #ffd874;
+  letter-spacing: 0.02em;
+}
+
+.weread-note-comment p {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.weread-notes-loadmore {
+  display: flex;
+  justify-content: center;
+}
+
+.weread-notes-loadmore button {
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  border: 1px solid var(--color-border);
+  padding: 8px 18px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.weread-notes-loadmore button:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+@media (max-width: 900px) {
+  .weread-notes-card {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 720px) {
+  .weread-notes-filter__actions {
+    width: 100%;
+    margin-left: 0;
+  }
+  .weread-notes-filter__group {
+    flex: 1 1 calc(50% - 10px);
+    min-width: 0;
+  }
+  .weread-notes-summary {
+    font-size: 11px;
+  }
+  .weread-notes-export {
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .weread-notes-card {
+    grid-column: span 1;
+  }
+}
