@@ -259,3 +259,78 @@ describe("private-notes", () => {
     }
   });
 });
+
+describe("private-notes field fallback", () => {
+  let tmpDir = "";
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "weread-private-notes-fb-"));
+  });
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function setup(notes: unknown[]) {
+    const fullPath = path.join(tmpDir, "snapshots/latest/weread-notes.snapshot.json");
+    fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+    fs.writeFileSync(fullPath, JSON.stringify(notes, null, 2));
+    const confPath = path.join(tmpDir, "derived/latest/weread-matches.confirmed.json");
+    fs.mkdirSync(path.dirname(confPath), { recursive: true });
+    fs.writeFileSync(confPath, JSON.stringify([], null, 2));
+    return loadPrivateNotesData(tmpDir);
+  }
+
+  it("uses markedText when text is missing", () => {
+    const data = setup([
+      { wereadBookId: "wb1", type: "highlight", markedText: "fallback 内容", comment: null, createdAt: "1700000000" },
+    ]);
+    const r = queryPrivateNotes(data, { type: "all", days: "all", matchedOnly: false, limit: 10, offset: 0, sort: "newest" });
+    expect(r.items[0].text).toBe("fallback 内容");
+  });
+
+  it("uses content when text and markedText are missing", () => {
+    const data = setup([
+      { wereadBookId: "wb1", type: "highlight", content: "content fallback", createdAt: "1700000000" },
+    ]);
+    const r = queryPrivateNotes(data, { type: "all", days: "all", matchedOnly: false, limit: 10, offset: 0, sort: "newest" });
+    expect(r.items[0].text).toBe("content fallback");
+  });
+
+  it("uses comment as the body for thought when text is empty", () => {
+    const data = setup([
+      { wereadBookId: "wb1", type: "thought", text: "", comment: "this is my thought", createdAt: "1700000000" },
+    ]);
+    const r = queryPrivateNotes(data, { type: "thought", days: "all", matchedOnly: false, limit: 10, offset: 0, sort: "newest" });
+    expect(r.items.length).toBe(1);
+    expect(r.items[0].comment).toBe("this is my thought");
+  });
+
+  it("skips records that have neither text nor comment", () => {
+    const data = setup([
+      { wereadBookId: "wb1", type: "highlight", text: "", comment: null, createdAt: "1700000000" },
+    ]);
+    const r = queryPrivateNotes(data, { type: "all", days: "all", matchedOnly: false, limit: 10, offset: 0, sort: "newest" });
+    expect(r.items.length).toBe(0);
+  });
+
+  it("response never exposes forbidden keys even with fallback fields", () => {
+    const data = setup([
+      {
+        wereadBookId: "wb1",
+        noteId: "wb1_5_1003",
+        highlightId: "hid-secret",
+        type: "highlight",
+        text: "ok",
+        chapterTitle: "leak",
+        createdAt: "1700000000",
+      },
+    ]);
+    const r = queryPrivateNotes(data, { type: "all", days: "all", matchedOnly: false, limit: 10, offset: 0, sort: "newest" });
+    const json = JSON.stringify(r);
+    expect(json).not.toMatch(/wereadBookId/);
+    expect(json).not.toMatch(/noteId/);
+    expect(json).not.toMatch(/highlightId/);
+    expect(json).not.toMatch(/chapterTitle/);
+    expect(json).not.toMatch(/title/);
+    expect(json).not.toMatch(/author/);
+  });
+});

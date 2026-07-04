@@ -2179,7 +2179,7 @@ mark.hl {
 }
 
 /* ---------------------------------------------------------------
- * S27C WeRead notes library
+ * S27C WeRead notes library (light theme — matches the rest of the app)
  * --------------------------------------------------------------- */
 .weread-notes-card {
   grid-column: span 3;
@@ -2189,6 +2189,7 @@ mark.hl {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-width: 0;
 }
 
 .weread-note-privacy-warning {
@@ -2196,11 +2197,11 @@ mark.hl {
   align-items: flex-start;
   gap: 8px;
   padding: 10px 12px;
-  background: rgba(255, 196, 0, 0.08);
-  border: 1px solid rgba(255, 196, 0, 0.35);
+  background: #fff7ed;
+  border: 1px solid #fdba74;
   border-radius: var(--radius-sm);
   font-size: 12px;
-  color: #ffe9a8;
+  color: #7c2d12;
 }
 
 .weread-notes-filter {
@@ -2222,18 +2223,21 @@ mark.hl {
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--color-text-muted);
+  font-weight: 500;
 }
 
 .weread-notes-filter select {
   appearance: none;
-  background: rgba(255, 255, 255, 0.06);
-  color: inherit;
+  background: #ffffff;
+  color: var(--color-text);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   padding: 6px 10px;
   font-size: 13px;
   min-height: 32px;
+  width: 100%;
+  cursor: pointer;
 }
 
 .weread-notes-filter__actions {
@@ -2249,7 +2253,7 @@ mark.hl {
   gap: 6px;
   padding: 6px 12px;
   background: var(--color-primary);
-  color: #0b1117;
+  color: #ffffff;
   border: none;
   border-radius: var(--radius-sm);
   font-weight: 600;
@@ -2263,8 +2267,9 @@ mark.hl {
 }
 
 .weread-notes-filter__secondary {
-  background: rgba(255, 255, 255, 0.08) !important;
-  color: rgba(255, 255, 255, 0.85) !important;
+  background: #ffffff !important;
+  color: var(--color-text) !important;
+  border: 1px solid var(--color-border) !important;
 }
 
 .weread-notes-summary {
@@ -2273,9 +2278,10 @@ mark.hl {
   gap: 8px 14px;
   align-items: center;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--color-text);
   padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.03);
+  background: #f6f7f9;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
 }
 
@@ -2285,14 +2291,15 @@ mark.hl {
 }
 
 .weread-notes-summary__matched {
-  color: #6ee7b7;
+  color: #047857;
+  font-weight: 600;
 }
 
 .weread-notes-export {
   margin-left: auto;
-  background: rgba(64, 158, 255, 0.15);
-  color: #8eb8ff !important;
-  border: 1px solid rgba(64, 158, 255, 0.35);
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
+  border: 1px solid #bfdbfe !important;
   padding: 4px 10px !important;
   border-radius: var(--radius-sm);
   display: inline-flex;
@@ -2300,6 +2307,7 @@ mark.hl {
   gap: 6px;
   cursor: pointer;
   font-size: 12px;
+  font-weight: 500;
 }
 
 .weread-notes-export:disabled {
@@ -2309,11 +2317,12 @@ mark.hl {
 
 .weread-notes-empty {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--color-text-muted);
   padding: 16px;
   text-align: center;
-  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border: 1px dashed var(--color-border);
   border-radius: var(--radius-sm);
+  background: #f6f7f9;
 }
 
 .weread-note-list {
@@ -2323,18 +2332,20 @@ mark.hl {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-width: 0;
 }
 
 .weread-note-card {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.02);
+  padding: 14px;
+  background: #ffffff;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   word-break: break-word;
   overflow-wrap: anywhere;
+  min-width: 0;
 }
 
 .weread-note-meta {
@@ -2342,12 +2353,13 @@ mark.hl {
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.65);
+  font-size: 12px;
+  color: var(--color-text-muted);
 }
 
 .weread-note-date {
   font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
 }
 
 .weread-note-chip {
@@ -2358,85 +2370,110 @@ mark.hl {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.02em;
+  border: 1px solid transparent;
 }
 
 .weread-note-chip--highlight {
-  background: rgba(64, 158, 255, 0.15);
-  color: #8eb8ff;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
 }
 
 .weread-note-chip--thought {
-  background: rgba(255, 196, 0, 0.15);
-  color: #ffd874;
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fde68a;
 }
 
 .weread-note-chip--review {
-  background: rgba(255, 99, 132, 0.15);
-  color: #ff95a8;
+  background: #ffe4e6;
+  color: #be123c;
+  border-color: #fecdd3;
 }
 
 .weread-note-chip--unknown {
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.7);
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #cbd5e1;
 }
 
 .weread-note-chip--matched {
-  background: rgba(110, 231, 183, 0.15);
-  color: #6ee7b7;
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
 }
 
 .weread-note-chip--unmatched {
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.6);
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #cbd5e1;
 }
 
 .weread-note-copy {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  color: inherit;
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
   padding: 2px 8px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 11px;
   margin-left: auto;
+  font-weight: 500;
 }
 
 .weread-note-copy:hover {
-  border-color: rgba(255, 255, 255, 0.35);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
 }
 
 .weread-note-text {
-  margin: 0;
+  margin: 4px 0 0;
   font-size: 14px;
-  line-height: 1.55;
-  color: rgba(255, 255, 255, 0.92);
+  line-height: 1.7;
+  color: #0f172a;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   word-break: break-word;
 }
 
+.weread-note-text--empty {
+  color: var(--color-text-muted);
+  font-style: italic;
+  font-size: 13px;
+}
+
 .weread-note-comment {
-  border-left: 2px solid rgba(255, 196, 0, 0.4);
-  padding-left: 10px;
+  border-left: 3px solid #f59e0b;
+  padding: 8px 10px;
   margin-top: 4px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   font-size: 13px;
+  background: #fff7ed;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: #7c2d12;
+  word-break: break-word;
 }
 
 .weread-note-comment__label {
   font-size: 11px;
-  color: #ffd874;
-  letter-spacing: 0.02em;
+  color: #b45309;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  text-transform: uppercase;
 }
 
 .weread-note-comment p {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
+  color: #7c2d12;
 }
 
 .weread-notes-loadmore {
@@ -2445,17 +2482,20 @@ mark.hl {
 }
 
 .weread-notes-loadmore button {
-  background: rgba(255, 255, 255, 0.08);
-  color: inherit;
+  background: #ffffff;
+  color: var(--color-text);
   border: 1px solid var(--color-border);
   padding: 8px 18px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 13px;
+  font-weight: 500;
 }
 
 .weread-notes-loadmore button:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: #eff6ff;
+  border-color: var(--color-primary);
+  color: var(--color-primary);
 }
 
 @media (max-width: 900px) {
@@ -2484,5 +2524,8 @@ mark.hl {
 @media (max-width: 480px) {
   .weread-notes-card {
     grid-column: span 1;
+  }
+  .weread-note-copy {
+    margin-left: 0;
   }
 }

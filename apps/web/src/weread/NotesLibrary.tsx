@@ -18,6 +18,7 @@ import {
   formatNotesSummary,
   formatSortLabel,
   getFilterLabel,
+  getNoteDisplayParts,
   notesQueryKey,
   truncateNotePreview,
 } from "./wereadNotesModel";
@@ -114,9 +115,15 @@ export default function NotesLibrary({ token }: NotesLibraryProps) {
   }
 
   async function handleCopy(item: WereadPrivateNoteItem) {
-    const lines = [item.text];
-    if (item.comment) lines.push(`我的想法：${item.comment}`);
-    const payload = lines.join("\n");
+    const parts = getNoteDisplayParts(item);
+    if (parts.isEmpty) {
+      setError("该记录没有可复制的正文");
+      return;
+    }
+    const lines: string[] = [];
+    if (parts.bodyText) lines.push(parts.bodyText);
+    if (parts.commentText) lines.push(`我的想法：${parts.commentText}`);
+    const payload = lines.join("\n\n");
     try {
       await navigator.clipboard?.writeText(payload);
       setCopyState("copied");
@@ -271,39 +278,54 @@ export default function NotesLibrary({ token }: NotesLibraryProps) {
 
       {state === "ready" && items.length > 0 ? (
         <ul className="weread-note-list">
-          {items.map((item, idx) => (
-            <li key={`${item.createdAt ?? "n"}-${idx}`} className="weread-note-card">
-              <div className="weread-note-meta">
-                <span className={`weread-note-chip weread-note-chip--${item.type}`}>{formatNoteTypeLabel(item.type)}</span>
-                <span className="weread-note-date">{formatNoteDate(item.createdAt ?? item.updatedAt)}</span>
-                {item.matched && item.catalogId ? (
-                  <span className="weread-note-chip weread-note-chip--matched" title="已匹配到 book-id-search 公开目录">
-                    已匹配书目 · {item.catalogId}
-                  </span>
-                ) : (
-                  <span className="weread-note-chip weread-note-chip--unmatched">未匹配书目</span>
-                )}
-                <button
-                  type="button"
-                  className="weread-note-copy"
-                  onClick={() => handleCopy(item)}
-                  title="复制本条正文"
-                >
-                  {copyState === "copied" ? <Check size={12} aria-hidden="true" /> : <Copy size={12} aria-hidden="true" />}
-                  <span>{copyState === "copied" ? "已复制" : "复制"}</span>
-                </button>
-              </div>
-              <p className="weread-note-text" title={item.text.length > 200 ? item.text : undefined}>
-                {truncateNotePreview(item.text, 400)}
-              </p>
-              {item.comment && item.comment.trim().length > 0 ? (
-                <div className="weread-note-comment">
-                  <span className="weread-note-comment__label">我的想法</span>
-                  <p>{item.comment}</p>
+          {items.map((item, idx) => {
+            const parts = getNoteDisplayParts(item);
+            const bodyForTitle = parts.bodyText || parts.commentText || "";
+            const showBody = !parts.isEmpty && parts.bodyText.length > 0;
+            return (
+              <li key={`${item.createdAt ?? "n"}-${idx}`} className="weread-note-card">
+                <div className="weread-note-meta">
+                  <span className={`weread-note-chip weread-note-chip--${item.type}`}>{formatNoteTypeLabel(item.type)}</span>
+                  <span className="weread-note-date">{formatNoteDate(item.createdAt ?? item.updatedAt)}</span>
+                  {item.matched && item.catalogId ? (
+                    <span className="weread-note-chip weread-note-chip--matched" title="已匹配到 book-id-search 公开目录">
+                      已匹配书目 · {item.catalogId}
+                    </span>
+                  ) : (
+                    <span className="weread-note-chip weread-note-chip--unmatched">未匹配书目</span>
+                  )}
+                  <button
+                    type="button"
+                    className="weread-note-copy"
+                    onClick={() => handleCopy(item)}
+                    title="复制本条正文"
+                    disabled={parts.isEmpty}
+                  >
+                    {copyState === "copied" ? <Check size={12} aria-hidden="true" /> : <Copy size={12} aria-hidden="true" />}
+                    <span>{copyState === "copied" ? "已复制" : "复制"}</span>
+                  </button>
                 </div>
-              ) : null}
-            </li>
-          ))}
+                {showBody ? (
+                  <p
+                    className="weread-note-text"
+                    title={bodyForTitle.length > 200 ? bodyForTitle : undefined}
+                  >
+                    {truncateNotePreview(parts.bodyText, 800)}
+                  </p>
+                ) : (
+                  <p className="weread-note-text weread-note-text--empty">
+                    该记录没有可显示的正文。
+                  </p>
+                )}
+                {parts.commentText ? (
+                  <div className="weread-note-comment">
+                    <span className="weread-note-comment__label">我的想法</span>
+                    <p>{parts.commentText}</p>
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       ) : null}
 

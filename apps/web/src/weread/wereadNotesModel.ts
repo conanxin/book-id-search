@@ -62,7 +62,28 @@ export function getFilterLabel(filter: WereadNoteTypeFilter): string {
   }
 }
 
-// ---------- date formatting ----------
+// ---------- note display normalization ----------
+
+export interface WereadNoteDisplayParts {
+  bodyText: string;
+  commentText: string | null;
+  isEmpty: boolean;
+}
+
+/**
+ * Normalize a note for rendering. Trims whitespace, treats comment-only notes
+ * (where text is empty but the user's annotation has content) as displayable,
+ * and reports whether the note is fully empty so the UI can show a fallback.
+ *
+ * NEVER echoes any private IDs (which are already excluded by the API layer).
+ */
+export function getNoteDisplayParts(item: WereadPrivateNoteItem): WereadNoteDisplayParts {
+  const bodyText = typeof item.text === "string" ? item.text.trim() : "";
+  const commentText =
+    typeof item.comment === "string" && item.comment.trim().length > 0 ? item.comment.trim() : null;
+  const isEmpty = bodyText.length === 0 && commentText === null;
+  return { bodyText, commentText, isEmpty };
+}
 
 export function formatNoteDate(iso: string | null | undefined): string {
   if (!iso) return "—";

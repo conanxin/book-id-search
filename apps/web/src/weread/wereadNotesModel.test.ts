@@ -8,6 +8,7 @@ import {
   formatNotesSummary,
   formatSortLabel,
   getFilterLabel,
+  getNoteDisplayParts,
   notesQueryKey,
   truncateNotePreview,
 } from "./wereadNotesModel";
@@ -124,5 +125,51 @@ describe("wereadNotesModel", () => {
     const k2 = notesQueryKey({ ...baseQuery, type: "highlight" });
     expect(k1).not.toBe(k2);
     expect(notesQueryKey(baseQuery)).toBe(k1);
+  });
+});
+
+describe("getNoteDisplayParts", () => {
+  it("returns trimmed body and comment for a normal note", () => {
+    const p = getNoteDisplayParts({
+      ...sampleItem,
+      text: "  正文  ",
+      comment: "  我的想法  ",
+    });
+    expect(p.bodyText).toBe("正文");
+    expect(p.commentText).toBe("我的想法");
+    expect(p.isEmpty).toBe(false);
+  });
+
+  it("treats whitespace-only text as empty and surfaces the comment as fallback", () => {
+    const p = getNoteDisplayParts({
+      ...sampleItem,
+      text: "   \n  ",
+      comment: "只有想法",
+    });
+    expect(p.bodyText).toBe("");
+    expect(p.commentText).toBe("只有想法");
+    expect(p.isEmpty).toBe(false);
+  });
+
+  it("reports isEmpty=true when both text and comment are blank", () => {
+    const p = getNoteDisplayParts({
+      ...sampleItem,
+      text: "",
+      comment: null,
+    });
+    expect(p.isEmpty).toBe(true);
+    expect(p.bodyText).toBe("");
+    expect(p.commentText).toBeNull();
+  });
+
+  it("handles non-string text safely (defensive)", () => {
+    const p = getNoteDisplayParts({
+      ...sampleItem,
+      text: undefined as unknown as string,
+      comment: "fallback",
+    });
+    expect(p.bodyText).toBe("");
+    expect(p.commentText).toBe("fallback");
+    expect(p.isEmpty).toBe(false);
   });
 });

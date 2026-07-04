@@ -148,6 +148,34 @@ function sanitizeText(raw: unknown): string {
   return "";
 }
 
+/**
+ * Pull the body text from a normalized note, trying the canonical field first
+ * and then several legacy / variant field names. Returns "" if none of them
+ * are present. The API contract is that this becomes the public `text` field.
+ */
+function extractNoteText(raw: WereadPrivateNoteRaw): string {
+  const candidates: unknown[] = [
+    raw.text,
+    raw.note,
+    (raw as Record<string, unknown>).markedText,
+    (raw as Record<string, unknown>).content,
+    (raw as Record<string, unknown>).abstract,
+  ];
+  for (const c of candidates) {
+    const sanitized = sanitizeText(c);
+    if (sanitized.length > 0) return sanitized;
+  }
+  return "";
+}
+
+/**
+ * Pull the user comment / annotation from a normalized note, trying several
+ * field names that have appeared across snapshot schema versions.
+ */
+function extractNoteComment(raw: WereadPrivateNoteRaw): unknown {
+  return raw.comment ?? (raw as Record<string, unknown>).thought ?? (raw as Record<string, unknown>).review ?? null;
+}
+
 function sanitizeComment(raw: unknown): string | null {
   if (typeof raw === "string") return raw.length > 0 ? raw : null;
   return null;
@@ -235,10 +263,16 @@ export function queryPrivateNotes(data: PrivateNotesData, query: WereadNotesQuer
     const itemType = sanitizeType(raw.type);
     if (!matchesTypeFilter(normalized.type, itemType)) continue;
 
-    const text = sanitizeText(raw.text ?? raw.note);
-    if (!text) continue; // empty notes are useless
+    const text = extractNoteText(raw);
+    const commentRaw = extractNoteComment(raw);
+    const comment = sanitizeComment(commentRaw);
 
-    const comment = sanitizeComment(raw.comment);
+    // Allow thought/review records to display via their comment if text is empty.
+    if (!text && !(comment && (itemType === "thought" || itemType === "review"))) {
+      // drop empty bodies (UI will show fallback only if there's at least a comment)
+      if (!comment) continue;
+    }
+    if (!text && !comment) continue;
     if (normalized.hasComment === true && !comment) continue;
     if (normalized.hasComment === false && comment) continue;
 
