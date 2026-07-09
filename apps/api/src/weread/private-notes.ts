@@ -1,5 +1,6 @@
 /**
  * S27C: Private WeRead notes loader.
+ * S27D: Added optional full-text search over note text/comment (q).
  *
  * Reads normalized note snapshots from private-data/weread and exposes
  * paginated, filtered note ITEMS for the private token endpoint.
@@ -19,6 +20,17 @@
  * - noteId / highlightId (internal WeRead note ids)
  * - chapterTitle        (internal WeRead chapter heading)
  * - title / author       (private WeRead metadata; matched catalog id is enough)
+ *
+ * Search rules (S27D):
+ * - q is optional, case-insensitive substring search.
+ * - Searches only note.text and note.comment; never wereadBookId / noteId /
+ *   highlightId / chapterTitle / title / author.
+ * - Multi-term: whitespace split, OR semantics (any term matches).
+ * - Max length enforced at route layer (100 chars). When q is provided and
+ *   non-empty (after trim), items are ranked by a local relevance score;
+ *   equal scores fall back to the requested sort.
+ * - searchInfo returns counts only — NEVER the raw q or terms.
+ * - q is never logged or echoed in error messages.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -50,6 +62,8 @@ export type WereadNotesQuery = {
   limit: number;
   offset: number;
   sort: WereadNotesSort;
+  /** S27D: optional full-text query (max length enforced at route layer). */
+  q?: string;
 };
 
 export type WereadNotesPageInfo = {
@@ -69,10 +83,23 @@ export type WereadNotesSummary = {
   unmatchedCount: number;
 };
 
+/**
+ * S27D: search telemetry. Returned only when a search is active. Intentionally
+ * omits the raw `q` and the individual terms so that even the response payload
+ * never echoes the user's search query.
+ */
+export type WereadNotesSearchInfo = {
+  enabled: boolean;
+  queryLength: number;
+  termsCount: number;
+  matchedCount: number;
+};
+
 export type WereadNotesQueryResult = {
   items: WereadPrivateNoteItem[];
   pageInfo: WereadNotesPageInfo;
   summary: WereadNotesSummary;
+  searchInfo?: WereadNotesSearchInfo;
 };
 
 export type WereadPrivateNoteRaw = {
@@ -221,6 +248,48 @@ const DAYS_WINDOW_MS: Record<Exclude<WereadNotesDaysFilter, "all">, number> = {
   "90": 90 * 24 * 60 * 60 * 1000,
 };
 
+// ---------- S27D: full-text search helpers ----------
+
+/**
+ * Split a search string into individual terms (whitespace-separated) and
+ * lowercase each term. Returns an empty array if the input has no usable terms.
+ */
+function splitSearchTerms(q: string): string[] {
+  if (typeof q !== "string") return [];
+  return q
+    .split(/\s+/)
+    .map((t) => t.trim().toLowerCase())
+    .filter((t) => t.length > 0);
+}
+
+/**
+ * Score a single note against the parsed search terms. Higher = more relevant.
+ *
+ * - +40 if the full original (trimmed) q appears in text
+ * - +30 if the full q appears in comment
+ * - +10 per term matched in text (substring, case-insensitive)
+ * - +8  per term matched in comment
+ *
+ * Returns 0 when no term matches. The function never logs or echoes q.
+ */
+function scoreNoteSearch(text: string, comment: string | null, terms: string[], fullQuery: string): number {
+  if (terms.length === 0) return 0;
+  const lowerText = typeof text === "string" ? text.toLowerCase() : "";
+  const lowerComment = typeof comment === "string" ? comment.toLowerCase() : "";
+  const lowerFull = fullQuery.toLowerCase();
+
+  let score = 0;
+  if (lowerFull.length > 0) {
+    if (lowerText.includes(lowerFull)) score += 40;
+    if (lowerComment && lowerComment.includes(lowerFull)) score += 30;
+  }
+  for (const term of terms) {
+    if (lowerText.includes(term)) score += 10;
+    if (lowerComment && lowerComment.includes(term)) score += 8;
+  }
+  return score;
+}
+
 export function normalizeNotesQuery(input: Partial<WereadNotesQuery> | undefined): WereadNotesQuery {
   const rawType = input?.type ?? "all";
   const type: WereadNotesTypeFilter = ["all", "highlight", "thought", "review"].includes(rawType)
@@ -245,7 +314,15 @@ export function normalizeNotesQuery(input: Partial<WereadNotesQuery> | undefined
   const rawSort = input?.sort ?? "newest";
   const sort: WereadNotesSort = rawSort === "oldest" ? "oldest" : "newest";
 
-  return { type, days, matchedOnly, hasComment, limit, offset, sort };
+  // S27D: search query — trimmed, must be a string if provided. The length
+  // cap is enforced by the route layer; here we only ensure it's a sane string.
+  let q: string | undefined;
+  if (typeof input?.q === "string") {
+    const trimmed = input.q.trim();
+    if (trimmed.length > 0) q = trimmed;
+  }
+
+  return { type, days, matchedOnly, hasComment, limit, offset, sort, q };
 }
 
 export function queryPrivateNotes(data: PrivateNotesData, query: WereadNotesQuery): WereadNotesQueryResult {
@@ -303,12 +380,57 @@ export function queryPrivateNotes(data: PrivateNotesData, query: WereadNotesQuer
     filtered.push(item);
   }
 
-  // Sort by createdAt then updatedAt then arrival order
-  filtered.sort((a, b) => {
-    const aMs = dateMs(a.createdAt) || dateMs(a.updatedAt);
-    const bMs = dateMs(b.createdAt) || dateMs(b.updatedAt);
-    return normalized.sort === "newest" ? bMs - aMs : aMs - bMs;
-  });
+  // S27D: apply optional full-text search over text/comment only.
+  // Search is case-insensitive substring, OR across whitespace-split terms.
+  // searchTerms is computed once and never logged or echoed in the response.
+  let searchInfo: WereadNotesSearchInfo | undefined;
+  let searchTerms: string[] = [];
+  let searchFullQ = "";
+  if (normalized.q) {
+    searchFullQ = normalized.q;
+    searchTerms = splitSearchTerms(normalized.q);
+    if (searchTerms.length > 0) {
+      const scored: { item: WereadPrivateNoteItem; score: number }[] = [];
+      for (const item of filtered) {
+        const score = scoreNoteSearch(item.text, item.comment, searchTerms, searchFullQ);
+        if (score > 0) scored.push({ item, score });
+      }
+      // Replace filtered in place — relevance-ranked, then by requested sort.
+      scored.sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        const aMs = dateMs(a.item.createdAt) || dateMs(a.item.updatedAt);
+        const bMs = dateMs(b.item.createdAt) || dateMs(b.item.updatedAt);
+        return normalized.sort === "newest" ? bMs - aMs : aMs - bMs;
+      });
+      filtered.length = 0;
+      for (const s of scored) filtered.push(s.item);
+      searchInfo = {
+        enabled: true,
+        // Length only — never echo the raw q.
+        queryLength: searchFullQ.length,
+        termsCount: searchTerms.length,
+        matchedCount: scored.length,
+      };
+    } else {
+      // After trim/split, no usable terms: behave as if no search was requested.
+      searchInfo = {
+        enabled: true,
+        queryLength: searchFullQ.length,
+        termsCount: 0,
+        matchedCount: filtered.length,
+      };
+    }
+  }
+
+  // Sort by createdAt then updatedAt then arrival order (only when search
+  // did NOT already re-sort by relevance).
+  if (!searchInfo || !normalized.q || searchTerms.length === 0) {
+    filtered.sort((a, b) => {
+      const aMs = dateMs(a.createdAt) || dateMs(a.updatedAt);
+      const bMs = dateMs(b.createdAt) || dateMs(b.updatedAt);
+      return normalized.sort === "newest" ? bMs - aMs : aMs - bMs;
+    });
+  }
 
   // Summary counts based on the full filtered list (before pagination)
   const summary: WereadNotesSummary = {
@@ -344,5 +466,6 @@ export function queryPrivateNotes(data: PrivateNotesData, query: WereadNotesQuer
       hasMore: offset + items.length < total,
     },
     summary,
+    searchInfo,
   };
 }

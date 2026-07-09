@@ -359,4 +359,71 @@ describe("fetchWereadNotes", () => {
     await fetchWereadNotes("tok");
     expect(localStorageSet).not.toHaveBeenCalled();
   });
+
+  // ---- S27D: full-text search client tests ----
+
+  it("sends q param when present and non-empty", async () => {
+    await fetchWereadNotes("my-token", { q: "佛塔" });
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const [url] = call;
+    expect(url).toContain("/private/weread/notes");
+    expect(url).toMatch(/[?&]q=/);
+    expect(url).toContain("q=" + encodeURIComponent("佛塔"));
+  });
+
+  it("trims q before sending", async () => {
+    await fetchWereadNotes("my-token", { q: "  hello  " });
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const [url] = call;
+    expect(url).toContain("q=" + encodeURIComponent("hello"));
+  });
+
+  it("omits q param when empty or whitespace-only", async () => {
+    await fetchWereadNotes("my-token", { q: "" });
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const [url] = call;
+    expect(url).not.toContain("q=");
+    // Second case: all-whitespace
+    fetchMock.mockClear();
+    await fetchWereadNotes("my-token", { q: "   " });
+    const url2 = (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[0];
+    expect(url2).not.toContain("q=");
+  });
+
+  it("401 with q still does not leak token or q", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 })
+    );
+    try {
+      await fetchWereadNotes("secret-token", { q: "private-thing" });
+      throw new Error("should have thrown");
+    } catch (e) {
+      const s = String(e);
+      expect(s).not.toContain("secret-token");
+      expect(s).not.toContain("private-thing");
+    }
+  });
+
+  it("returned object includes searchInfo if present", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          items: [],
+          pageInfo: { limit: 50, offset: 0, total: 0, hasMore: false },
+          summary: {
+            totalAfterFilter: 0, highlights: 0, thoughts: 0, reviews: 0, unknown: 0,
+            matchedCount: 0, unmatchedCount: 0,
+          },
+          searchInfo: { enabled: true, queryLength: 5, termsCount: 1, matchedCount: 0 },
+        })
+      )
+    );
+    const res = await fetchWereadNotes("tok", { q: "hello" });
+    expect(res.searchInfo).toBeDefined();
+    expect(res.searchInfo?.enabled).toBe(true);
+    expect(res.searchInfo?.queryLength).toBe(5);
+    expect(res.searchInfo?.termsCount).toBe(1);
+    expect(res.searchInfo?.matchedCount).toBe(0);
+  });
 });

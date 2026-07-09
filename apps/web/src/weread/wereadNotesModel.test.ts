@@ -5,14 +5,21 @@ import {
   formatDaysLabel,
   formatNoteDate,
   formatNoteTypeLabel,
+  formatNotesSearchInfo,
   formatNotesSummary,
   formatSortLabel,
   getFilterLabel,
   getNoteDisplayParts,
+  getNoteSearchTerms,
+  hasNoteSearchQuery,
+  highlightNoteTextParts,
+  normalizeNoteSearchQuery,
   notesQueryKey,
   truncateNotePreview,
+  WEREAD_NOTE_SEARCH_MAX_LENGTH,
 } from "./wereadNotesModel";
 import type { WereadNotesLibrarySummary, WereadPrivateNoteItem } from "../wereadPrivate";
+
 
 const sampleItem: WereadPrivateNoteItem = {
   type: "highlight",
@@ -90,7 +97,6 @@ describe("wereadNotesModel", () => {
     expect(md).toContain("这是一段划线");
     expect(md).toContain("我的想法");
     expect(md).toContain("已匹配书目 (13000000_000000000001)");
-    // no forbidden keys in the export
     expect(md).not.toMatch(/wereadBookId/);
     expect(md).not.toMatch(/noteId/);
     expect(md).not.toMatch(/highlightId/);
@@ -173,3 +179,82 @@ describe("getNoteDisplayParts", () => {
     expect(p.isEmpty).toBe(false);
   });
 });
+
+// ---------- S27D: full-text search helpers ----------
+
+describe("wereadNotesModel S27D search", () => {
+  it("normalizeNoteSearchQuery trims, collapses, caps, and handles non-strings", () => {
+    expect(normalizeNoteSearchQuery("   ")).toBe("");
+    expect(normalizeNoteSearchQuery("")).toBe("");
+    expect(normalizeNoteSearchQuery(null)).toBe("");
+    expect(normalizeNoteSearchQuery(undefined)).toBe("");
+    expect(normalizeNoteSearchQuery(123 as unknown)).toBe("");
+    expect(normalizeNoteSearchQuery("  hello  ")).toBe("hello");
+    expect(normalizeNoteSearchQuery("a   b\tc\n d")).toBe("a b c d");
+    const long = "x".repeat(150);
+    const out = normalizeNoteSearchQuery(long);
+    expect(out.length).toBe(WEREAD_NOTE_SEARCH_MAX_LENGTH);
+    expect(out).toBe("x".repeat(WEREAD_NOTE_SEARCH_MAX_LENGTH));
+  });
+
+  it("getNoteSearchTerms splits on whitespace and lowercases", () => {
+    expect(getNoteSearchTerms("")).toEqual([]);
+    expect(getNoteSearchTerms("   ")).toEqual([]);
+    expect(getNoteSearchTerms(null)).toEqual([]);
+    expect(getNoteSearchTerms("佛塔 禅修")).toEqual(["佛塔", "禅修"]);
+    expect(getNoteSearchTerms("Hello World")).toEqual(["hello", "world"]);
+    expect(getNoteSearchTerms("  a   b  c  ")).toEqual(["a", "b", "c"]);
+  });
+
+  it("hasNoteSearchQuery reports only non-empty queries", () => {
+    expect(hasNoteSearchQuery("")).toBe(false);
+    expect(hasNoteSearchQuery("   ")).toBe(false);
+    expect(hasNoteSearchQuery(null)).toBe(false);
+    expect(hasNoteSearchQuery(undefined)).toBe(false);
+    expect(hasNoteSearchQuery("x")).toBe(true);
+    expect(hasNoteSearchQuery("  hello  ")).toBe(true);
+  });
+
+  it("highlightNoteTextParts marks Chinese substring matches", () => {
+    const parts = highlightNoteTextParts("这是一段关于建筑学的划线", "建筑");
+    const joined = parts.map((pp) => (pp.matched ? `*${pp.text}*` : pp.text)).join("");
+    expect(joined).toBe("这是一段关于*建筑*学的划线");
+    expect(parts.some((pp) => pp.matched && pp.text === "建筑")).toBe(true);
+    expect(parts.some((pp) => !pp.matched && pp.text === "这是一段关于")).toBe(true);
+  });
+
+  it("highlightNoteTextParts supports multiple terms and merges overlaps", () => {
+    const parts = highlightNoteTextParts("建筑 ARCHITECTURE 建筑", "建筑 architecture");
+    const matched = parts.filter((pp) => pp.matched).map((pp) => pp.text);
+    expect(matched).toEqual(["建筑", "ARCHITECTURE", "建筑"]);
+  });
+
+  it("highlightNoteTextParts returns single unmatched part for empty q", () => {
+    const parts = highlightNoteTextParts("任何文字", "");
+    expect(parts).toEqual([{ text: "任何文字", matched: false }]);
+    expect(highlightNoteTextParts("任何文字", "   ")).toEqual([{ text: "任何文字", matched: false }]);
+    expect(highlightNoteTextParts("任何文字", null)).toEqual([{ text: "任何文字", matched: false }]);
+  });
+
+  it("highlightNoteTextParts returns no matched parts when terms don't appear", () => {
+    const parts = highlightNoteTextParts("abcdef", "xyz");
+    expect(parts).toEqual([{ text: "abcdef", matched: false }]);
+  });
+
+  it("highlightNoteTextParts never produces HTML strings (no dangerouslySetInnerHTML)", () => {
+    const parts = highlightNoteTextParts("<script>alert(1)</script>", "script");
+    expect(parts.some((pp) => pp.matched && pp.text.toLowerCase() === "script")).toBe(true);
+    for (const pp of parts) {
+      expect(typeof pp.text).toBe("string");
+    }
+  });
+
+  it("formatNotesSearchInfo returns counts only, no raw query or terms", () => {
+    const v = formatNotesSearchInfo({ enabled: true, queryLength: 5, termsCount: 2, matchedCount: 7 });
+    expect(v).toEqual({ enabled: true, queryLength: 5, termsCount: 2, matchedCount: 7 });
+    expect(formatNotesSearchInfo(null)).toEqual({ enabled: false, queryLength: 0, termsCount: 0, matchedCount: 0 });
+    expect(formatNotesSearchInfo(undefined)).toEqual({ enabled: false, queryLength: 0, termsCount: 0, matchedCount: 0 });
+    expect(formatNotesSearchInfo({ enabled: false, queryLength: 100, termsCount: 5, matchedCount: 0 }).enabled).toBe(false);
+  });
+});
+

@@ -2272,6 +2272,91 @@ mark.hl {
   border: 1px solid var(--color-border) !important;
 }
 
+/* ---------- S27D: private notes full-text search ---------- */
+
+.weread-notes-search {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+  width: 100%;
+}
+
+.weread-notes-search__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
+.weread-notes-search-input {
+  flex: 1 1 220px;
+  min-width: 0;
+  appearance: none;
+  background: #ffffff;
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: 13px;
+  min-height: 32px;
+}
+
+.weread-notes-search-input:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -1px;
+}
+
+.weread-notes-search-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.weread-notes-search-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--color-primary);
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.weread-notes-search-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.weread-notes-search-clear {
+  background: #ffffff !important;
+  color: var(--color-text) !important;
+  border: 1px solid var(--color-border) !important;
+}
+
+.weread-notes-search-summary {
+  background: #ecfeff;
+  border: 1px solid #67e8f9;
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  color: #155e75;
+  font-weight: 500;
+}
+
+.weread-note-highlight {
+  background: #fef3c7;
+  color: #78350f;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
 .weread-notes-summary {
   display: flex;
   flex-wrap: wrap;

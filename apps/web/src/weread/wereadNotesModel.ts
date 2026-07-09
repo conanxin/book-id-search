@@ -201,3 +201,141 @@ export function notesQueryKey(query: WereadNotesQuery): string {
     query.sort ?? "newest",
   ].join("|");
 }
+
+// ---------- S27D: full-text search helpers ----------
+
+/**
+ * Maximum query length accepted by the API. We cap locally so the UI can
+ * surface a hint before round-tripping a 400.
+ */
+export const WEREAD_NOTE_SEARCH_MAX_LENGTH = 100;
+
+/**
+ * Normalize a raw search query: trim, cap to WEREAD_NOTE_SEARCH_MAX_LENGTH,
+ * collapse internal whitespace. Returns "" for non-string / empty / whitespace-
+ * only inputs — this is the "no search" sentinel everywhere downstream.
+ *
+ * This function NEVER logs or echoes its input.
+ */
+export function normalizeNoteSearchQuery(q: unknown): string {
+  if (typeof q !== "string") return "";
+  const trimmed = q.trim();
+  if (trimmed.length === 0) return "";
+  // collapse runs of whitespace
+  const collapsed = trimmed.replace(/\s+/g, " ");
+  if (collapsed.length > WEREAD_NOTE_SEARCH_MAX_LENGTH) {
+    return collapsed.slice(0, WEREAD_NOTE_SEARCH_MAX_LENGTH);
+  }
+  return collapsed;
+}
+
+/**
+ * Split a normalized search string into individual search terms (lowercased).
+ * Returns [] for an empty input.
+ */
+export function getNoteSearchTerms(q: string | null | undefined): string[] {
+  if (typeof q !== "string") return [];
+  if (q.trim().length === 0) return [];
+  return q
+    .split(/\s+/)
+    .map((t) => t.trim().toLowerCase())
+    .filter((t) => t.length > 0);
+}
+
+/** True iff the query is non-empty (search is active). */
+export function hasNoteSearchQuery(q: string | null | undefined): boolean {
+  return typeof q === "string" && q.trim().length > 0;
+}
+
+/**
+ * One rendered text segment with a flag for whether it matched the search.
+ * Used by NotesLibrary.tsx to render <mark> elements via React fragments —
+ * no dangerouslySetInnerHTML, so XSS is impossible regardless of note text.
+ */
+export interface NoteHighlightPart {
+  text: string;
+  matched: boolean;
+}
+
+/**
+ * Split `text` into substrings, marking each as `matched` if it contains one
+ * of the search terms (case-insensitive). When `q` is empty (or trimmed to
+ * empty) the function returns a single un-matched part with the original
+ * text — by design, not as a fallback.
+ *
+ * The function never uses regex with user-controlled flags, and never builds
+ * HTML strings. The matched-text comparison is plain `String.prototype.includes`.
+ */
+export function highlightNoteTextParts(text: string, q: string | null | undefined): NoteHighlightPart[] {
+  const safeText = typeof text === "string" ? text : "";
+  const terms = getNoteSearchTerms(q);
+  if (terms.length === 0 || safeText.length === 0) {
+    return [{ text: safeText, matched: false }];
+  }
+  // Find every match position across all terms. We do substring matching
+  // (no regex backtracking) and emit alternating matched / unmatched spans.
+  const lower = safeText.toLowerCase();
+  type Marker = { start: number; end: number };
+  const markers: Marker[] = [];
+  for (const term of terms) {
+    if (term.length === 0) continue;
+    let from = 0;
+    while (from <= lower.length - term.length) {
+      const idx = lower.indexOf(term, from);
+      if (idx === -1) break;
+      markers.push({ start: idx, end: idx + term.length });
+      from = idx + term.length;
+    }
+  }
+  if (markers.length === 0) return [{ text: safeText, matched: false }];
+  // Sort + merge overlapping ranges.
+  markers.sort((a, b) => a.start - b.start || a.end - b.end);
+  const merged: Marker[] = [markers[0]];
+  for (let i = 1; i < markers.length; i++) {
+    const prev = merged[merged.length - 1];
+    const cur = markers[i];
+    if (cur.start <= prev.end) {
+      prev.end = Math.max(prev.end, cur.end);
+    } else {
+      merged.push(cur);
+    }
+  }
+  const parts: NoteHighlightPart[] = [];
+  let cursor = 0;
+  for (const m of merged) {
+    if (m.start > cursor) {
+      parts.push({ text: safeText.slice(cursor, m.start), matched: false });
+    }
+    parts.push({ text: safeText.slice(m.start, m.end), matched: true });
+    cursor = m.end;
+  }
+  if (cursor < safeText.length) {
+    parts.push({ text: safeText.slice(cursor), matched: false });
+  }
+  return parts;
+}
+
+/**
+ * Format the server-side searchInfo for the UI. Only counts are exposed —
+ * the raw query is intentionally NEVER shown in the UI summary.
+ */
+export interface NotesSearchInfoView {
+  enabled: boolean;
+  queryLength: number;
+  termsCount: number;
+  matchedCount: number;
+}
+
+export function formatNotesSearchInfo(
+  info: { enabled?: boolean; queryLength?: number; termsCount?: number; matchedCount?: number } | null | undefined
+): NotesSearchInfoView {
+  const safe = (n: number | undefined): number =>
+    typeof n === "number" && Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
+  const enabled = info?.enabled === true;
+  return {
+    enabled,
+    queryLength: safe(info?.queryLength),
+    termsCount: safe(info?.termsCount),
+    matchedCount: safe(info?.matchedCount),
+  };
+}

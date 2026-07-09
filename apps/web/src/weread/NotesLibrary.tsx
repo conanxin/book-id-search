@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Copy, Download, Filter, Library, Loader2, AlertCircle, Check, RefreshCw } from "lucide-react";
+import { Copy, Download, Filter, Library, Loader2, AlertCircle, Check, RefreshCw, Search, X } from "lucide-react";
 import {
   fetchWereadNotes,
   type WereadNoteTypeFilter,
@@ -7,6 +7,7 @@ import {
   type WereadNotesQuery,
   type WereadNotesLibrarySummary,
   type WereadNotesSort,
+  type WereadNotesSearchInfo,
   type WereadPrivateNoteItem,
 } from "../wereadPrivate";
 import {
@@ -15,10 +16,13 @@ import {
   formatDaysLabel,
   formatNoteDate,
   formatNoteTypeLabel,
+  formatNotesSearchInfo,
   formatNotesSummary,
   formatSortLabel,
   getFilterLabel,
   getNoteDisplayParts,
+  highlightNoteTextParts,
+  normalizeNoteSearchQuery,
   notesQueryKey,
   truncateNotePreview,
 } from "./wereadNotesModel";
@@ -41,30 +45,39 @@ export default function NotesLibrary({ token }: NotesLibraryProps) {
   const [filterSort, setFilterSort] = useState<WereadNotesSort>("newest");
   const [filterLimit, setFilterLimit] = useState<number>(20);
 
+  // S27D: raw input vs normalized active query. Raw input preserves what the
+  // user is typing; active query is the trimmed/non-empty form sent to the API.
+  const [noteQueryInput, setNoteQueryInput] = useState<string>("");
+  const [noteQuery, setNoteQuery] = useState<string>("");
+
   const [state, setState] = useState<LoadState>("idle");
   const [error, setError] = useState<string | null>(null);
 
   const [items, setItems] = useState<WereadPrivateNoteItem[]>([]);
   const [pageInfo, setPageInfo] = useState<{ limit: number; offset: number; total: number; hasMore: boolean } | null>(null);
   const [summary, setSummary] = useState<WereadNotesLibrarySummary | null>(null);
+  const [searchInfo, setSearchInfo] = useState<WereadNotesSearchInfo | null>(null);
 
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
   const requestIdRef = useRef(0);
 
   const currentQuery: WereadNotesQuery = useMemo(
-    () => ({ type: filterType, days: filterDays, matchedOnly: filterMatched, sort: filterSort, limit: filterLimit, offset: 0 }),
-    [filterType, filterDays, filterMatched, filterSort, filterLimit]
+    () => ({ type: filterType, days: filterDays, matchedOnly: filterMatched, sort: filterSort, limit: filterLimit, offset: 0, q: noteQuery.length > 0 ? noteQuery : undefined }),
+    [filterType, filterDays, filterMatched, filterSort, filterLimit, noteQuery]
   );
 
   const queryKey = notesQueryKey(currentQuery);
 
   useEffect(() => {
-    // Reset state when token changes
+    // Reset state when token changes (also clears q + items per privacy contract).
     setItems([]);
     setPageInfo(null);
     setSummary(null);
+    setSearchInfo(null);
     setState("idle");
     setError(null);
+    setNoteQuery("");
+    setNoteQueryInput("");
   }, [token]);
 
   async function load(reset: boolean) {
@@ -83,6 +96,7 @@ export default function NotesLibrary({ token }: NotesLibraryProps) {
       setItems((prev) => (reset ? resp.items : [...prev, ...resp.items]));
       setPageInfo(resp.pageInfo);
       setSummary(resp.summary);
+      setSearchInfo(resp.searchInfo ?? null);
       setState("ready");
     } catch (err) {
       if (myId !== requestIdRef.current) return;
@@ -112,6 +126,31 @@ export default function NotesLibrary({ token }: NotesLibraryProps) {
     setFilterMatched(false);
     setFilterSort("newest");
     setFilterLimit(20);
+  }
+
+  // S27D: search handlers — input state stays separate from the active query
+  // so that hitting Enter or the search button commits the normalized form.
+  function handleSearch() {
+    const normalized = normalizeNoteSearchQuery(noteQueryInput);
+    setNoteQuery(normalized);
+    // items reset happens inside load() because we pass offset=0 when reset=true
+    setPageInfo(null);
+    void load(true);
+  }
+
+  function handleClearSearch() {
+    setNoteQueryInput("");
+    setNoteQuery("");
+    setSearchInfo(null);
+    setPageInfo(null);
+    void load(true);
+  }
+
+  function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleSearch();
+    }
   }
 
   async function handleCopy(item: WereadPrivateNoteItem) {
@@ -250,6 +289,49 @@ export default function NotesLibrary({ token }: NotesLibraryProps) {
         </div>
       </div>
 
+      <div className="weread-notes-search">
+        <label className="weread-notes-search__label" htmlFor="weread-notes-search-input">
+          <Search size={12} aria-hidden="true" />
+          搜索
+        </label>
+        <input
+          id="weread-notes-search-input"
+          type="search"
+          className="weread-notes-search-input"
+          placeholder="搜索我的划线、想法、书评"
+          maxLength={100}
+          value={noteQueryInput}
+          onChange={(e) => setNoteQueryInput(e.target.value)}
+          onKeyDown={handleSearchKeyDown}
+          aria-label="搜索笔记"
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <div className="weread-notes-search-actions">
+          <button
+            type="button"
+            onClick={handleSearch}
+            disabled={state === "loading" || noteQueryInput.trim().length === 0}
+            title="按搜索词重新加载"
+          >
+            <Search size={14} aria-hidden="true" />
+            搜索
+          </button>
+          {noteQuery.length > 0 || noteQueryInput.length > 0 ? (
+            <button
+              type="button"
+              onClick={handleClearSearch}
+              className="weread-notes-search-clear"
+              disabled={state === "loading"}
+              title="清除搜索，回到普通筛选模式"
+            >
+              <X size={14} aria-hidden="true" />
+              清除搜索
+            </button>
+          ) : null}
+        </div>
+      </div>
+
       {state === "error" && error ? (
         <div className="weread-private-error">
           <AlertCircle size={14} /> {error}
@@ -259,6 +341,11 @@ export default function NotesLibrary({ token }: NotesLibraryProps) {
       {state === "ready" && summary ? (
         <div className="weread-notes-summary" aria-live="polite">
           <span>当前筛选 <strong>{summaryView.total}</strong> 条</span>
+          {searchInfo && searchInfo.enabled && noteQuery.length > 0 ? (
+            <span className="weread-notes-search-summary" data-testid="weread-search-summary">
+              当前搜索命中 <strong>{searchInfo.matchedCount}</strong> 条
+            </span>
+          ) : null}
           <span>划线 {summaryView.highlights}</span>
           <span>想法 {summaryView.thoughts}</span>
           <span>书评 {summaryView.reviews}</span>
@@ -310,7 +397,19 @@ export default function NotesLibrary({ token }: NotesLibraryProps) {
                     className="weread-note-text"
                     title={bodyForTitle.length > 200 ? bodyForTitle : undefined}
                   >
-                    {truncateNotePreview(parts.bodyText, 800)}
+                    {highlightNoteTextParts(truncateNotePreview(parts.bodyText, 800), noteQuery).map((part, i) =>
+                      part.matched ? (
+                        <mark
+                          key={`t-${i}`}
+                          className="weread-note-highlight"
+                          data-testid="weread-note-highlight"
+                        >
+                          {part.text}
+                        </mark>
+                      ) : (
+                        <span key={`t-${i}`}>{part.text}</span>
+                      )
+                    )}
                   </p>
                 ) : (
                   <p className="weread-note-text weread-note-text--empty">
@@ -320,7 +419,21 @@ export default function NotesLibrary({ token }: NotesLibraryProps) {
                 {parts.commentText ? (
                   <div className="weread-note-comment">
                     <span className="weread-note-comment__label">我的想法</span>
-                    <p>{parts.commentText}</p>
+                    <p>
+                      {highlightNoteTextParts(parts.commentText, noteQuery).map((part, i) =>
+                        part.matched ? (
+                          <mark
+                            key={`c-${i}`}
+                            className="weread-note-highlight"
+                            data-testid="weread-note-highlight"
+                          >
+                            {part.text}
+                          </mark>
+                        ) : (
+                          <span key={`c-${i}`}>{part.text}</span>
+                        )
+                      )}
+                    </p>
                   </div>
                 ) : null}
               </li>

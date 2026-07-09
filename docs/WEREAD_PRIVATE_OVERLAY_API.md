@@ -8,7 +8,7 @@ Private, read-only API endpoints that expose a minimal, redacted view of your We
 - `GET /api/private/weread/status?catalogId=<catalogId>` — per-book reading status.
 - `POST /api/private/weread/status/batch` — batch reading status for up to 100 catalogIds.
 - `GET /api/private/weread/trends` — counts-only notes/highlights trend (S27B).
-- `GET /api/private/weread/notes` — paginated note items with `text` / `comment` (S27C).
+- `GET /api/private/weread/notes` — paginated note items with `text` / `comment` (S27C). S27D adds optional `?q=` full-text search over `text` / `comment` only.
 
 ## Authentication
 
@@ -49,7 +49,7 @@ The API response never includes:
 
 Response only includes aggregated counts and matched status metadata (`readingStatus`, `progress`, `noteCount`, `highlightCount`, `matchMethod`, `matchConfidence`, `decisionSource`).
 
-## `GET /api/private/weread/notes` (S27C)
+## `GET /api/private/weread/notes` (S27C, S27D)
 
 Returns paginated note items. **This is the only endpoint that exposes note text** — it is only accessible with a valid private token. There is no public notes endpoint, and the response never appears in Meilisearch or `/api/search`.
 
@@ -64,6 +64,7 @@ Returns paginated note items. **This is the only endpoint that exposes note text
 | `limit` | 1..100 | 50 | Page size. Hard cap is 100. |
 | `offset` | >= 0 | 0 | Pagination offset. |
 | `sort` | `newest` \| `oldest` | `newest` | Sort by `createdAt`/`updatedAt` timestamp. |
+| `q` | string (S27D) | (unset) | Optional full-text query. Max length **100** characters (longer values return `400`). Searches only `note.text` and `note.comment`. Empty / whitespace-only `q` is ignored and behaves identically to no `q` parameter. Case-insensitive substring matching; multi-word queries split on whitespace and use OR semantics (any term matches). |
 
 Invalid values return `400` with a Chinese-language error message. Missing/invalid token returns `401`/`403`. Disabled overlay returns `404`.
 
@@ -93,9 +94,28 @@ Invalid values return `400` with a Chinese-language error message. Missing/inval
     "unknown": 0,
     "matchedCount": 1,
     "unmatchedCount": 0
+  },
+  "searchInfo": {
+    "enabled": true,
+    "queryLength": 0,
+    "termsCount": 0,
+    "matchedCount": 1
   }
 }
 ```
+
+### `searchInfo` (S27D)
+
+Returned only when the request carries a `q` parameter (including the case where `q` is present but trims to empty — `enabled: true, termsCount: 0` then means "search was requested but no terms to match"). When `q` is omitted, `searchInfo` is also omitted.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `enabled` | boolean | `true` when a `q` was present on the request, `false` otherwise. |
+| `queryLength` | number | Character length of the **trimmed** `q`. The raw `q` and individual terms are never echoed. |
+| `termsCount` | number | Number of whitespace-split terms in `q` after trimming. |
+| `matchedCount` | number | Number of items that satisfied the search filter (i.e. `items.length` would be `matchedCount` minus any subsequent pagination offset). |
+
+`searchInfo` is the only place the server communicates that a search happened. It contains **no `q` field, no `terms` array, no snippets, no match offsets** — only counts. Reports, logs, and downstream caches that ingest this response therefore never see the raw query.
 
 ### Items — what is returned vs. what is NOT
 
@@ -115,6 +135,21 @@ Invalid values return `400` with a Chinese-language error message. Missing/inval
 | `title` / `author` | ❌ | Never returned. The matched `catalogId` is the only public-side metadata. |
 
 `summary` aggregates the *filtered* list (before pagination), not the entire snapshot, so it always reflects the active query.
+
+## Search privacy boundary (S27D)
+
+Full-text search over `note.text` and `note.comment` is exposed **only** through the private token endpoint documented above. To make the privacy contract auditable, the implementation explicitly observes the following constraints:
+
+- `q` is never returned to the client. `searchInfo` carries `queryLength` (count only), never the raw string.
+- `q` is never logged. `queryPrivateNotes` makes no `console.log`/`console.warn`/`console.error` calls with `q` or note text — the function is covered by a unit test that asserts this.
+- Error responses for `q` never echo the value. The `400 q 不能超过 100 个字符。` message is generic Chinese with no user input embedded.
+- `q` does **not** enter `/api/search`. The public search endpoint is unmodified and continues to read only the `books` Meilisearch index.
+- `q` is **not** written to Meilisearch. There is no write path from `queryPrivateNotes` to Meilisearch — the function is read-only against `private-data/weread/snapshots/latest/weread-notes.snapshot.json`.
+- `q` is not persisted in any new file. There is no client-side cache of note bodies; the response is held only in component state for the lifetime of the React tree.
+- The Markdown export of the current page contains note text + matched state but **no `q` field**. The export filename is `weread-notes-export-YYYYMMDD.md`, identical to pre-search exports.
+- Reports / logs must not include raw `q` or note text. The report in `reports/WEREAD_NOTES_SEARCH_REPORT.md` records only counts and HTTP status codes.
+
+The forbidden-IDs contract (`wereadBookId` / `noteId` / `highlightId` / `chapterTitle` / `title` / `author`) continues to apply with `q` set — there is a dedicated unit test asserting the serialised response contains none of these keys.
 
 ## Notes counts-only overlay
 

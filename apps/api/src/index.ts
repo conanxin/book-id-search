@@ -679,6 +679,18 @@ app.get("/api/private/weread/notes", async (req: Request, res: Response) => {
     offset = parsed;
   }
 
+  // S27D: optional search query. Trim, then enforce a strict length cap of
+  // 100 characters. The raw query is NEVER echoed in error messages or in the
+  // success response — only length/term-count telemetry appears in searchInfo.
+  let q: string | undefined;
+  if (typeof req.query.q === "string" && req.query.q.length > 0) {
+    const trimmed = req.query.q.trim();
+    if (trimmed.length > 100) {
+      return sendError(res, 400, "q 不能超过 100 个字符。");
+    }
+    if (trimmed.length > 0) q = trimmed;
+  }
+
   try {
     const data = loadPrivateNotesData(getWereadOverlayDataDir());
     const result = queryPrivateNotes(data, {
@@ -689,6 +701,7 @@ app.get("/api/private/weread/notes", async (req: Request, res: Response) => {
       limit,
       offset,
       sort: rawSort as WereadNotesSort,
+      q,
     });
     res.json({ ok: true, ...result });
   } catch (error) {

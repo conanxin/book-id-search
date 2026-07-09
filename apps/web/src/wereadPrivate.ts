@@ -206,6 +206,8 @@ export interface WereadNotesQuery {
   limit?: number;
   offset?: number;
   sort?: WereadNotesSort;
+  /** S27D: optional full-text query over note text/comment only. */
+  q?: string;
 }
 
 export interface WereadNotesPageInfo {
@@ -225,11 +227,23 @@ export interface WereadNotesLibrarySummary {
   unmatchedCount: number;
 }
 
+/**
+ * S27D: server-side search telemetry. Never contains the raw query or
+ * the per-term list — only length/term-count/matched-count plus a flag.
+ */
+export interface WereadNotesSearchInfo {
+  enabled: boolean;
+  queryLength: number;
+  termsCount: number;
+  matchedCount: number;
+}
+
 export interface WereadNotesResponse {
   ok: boolean;
   items: WereadPrivateNoteItem[];
   pageInfo: WereadNotesPageInfo;
   summary: WereadNotesLibrarySummary;
+  searchInfo?: WereadNotesSearchInfo;
   error?: string;
 }
 
@@ -242,6 +256,13 @@ export function fetchWereadNotes(token: string, query: WereadNotesQuery = {}): P
   if (typeof query.limit === "number") params.set("limit", String(query.limit));
   if (typeof query.offset === "number") params.set("offset", String(query.offset));
   if (query.sort) params.set("sort", query.sort);
+  // S27D: trim q and only attach when non-empty. The query is sent over the
+  // wire exactly once — there is no client-side cache of note bodies, and we
+  // never log q or include it in error messages.
+  if (typeof query.q === "string") {
+    const trimmed = query.q.trim();
+    if (trimmed.length > 0) params.set("q", trimmed);
+  }
   const qs = params.toString();
   const path = qs ? `/private/weread/notes?${qs}` : "/private/weread/notes";
   return privateRequestJson<WereadNotesResponse>(token, path);

@@ -41,6 +41,30 @@ WeRead Center 是 book-id-search 的独立微信读书私有数据入口页面�
 
 清除 token 后，笔记库会立即重置为空，避免任何正文在内存中长期驻留。
 
+## 私有笔记库全文搜索（S27D）
+
+在原有筛选区下方新增一个独立的搜索区：
+
+| 能力 | 说明 |
+|------|------|
+| 搜索框 placeholder | "搜索我的划线、想法、书评" |
+| 触发 | 点击「搜索」按钮 / 输入框内按 Enter 触发。 |
+| 清除搜索 | 仅清除 q，回到普通筛选模式（不清空已加载条目之外的 type/days/matchedOnly/sort 等筛选）。 |
+| 高亮 | 命中片段使用 React 渲染 `<mark class="weread-note-highlight">`，不依赖 `dangerouslySetInnerHTML`，因此无论笔记正文内容是什么都不会产生 XSS。 |
+| 筛选组合 | 搜索 q 与 type / days / matchedOnly / sort / limit 同时生效，加载更多也保留 q。 |
+| 命中数显示 | 摘要条显示「当前搜索命中 N 条」，仅显示 matchedCount，不显示原始 q（q 只在搜索框内可见）。 |
+| token 清除 | 清除 token 时同步清空 q、items、summary、searchInfo。 |
+
+**搜索词隐私**：搜索词可能是私人主题。实现严格遵守以下约束：
+
+- 搜索只走 `/api/private/weread/notes?q=...`，**不调用 `/api/search`**，不影响公开搜索排序。
+- 搜索词 **不写入 Meilisearch**。
+- 搜索词 **不写入任何日志文件**（服务端 `console.log/warn/error` 不会包含 q 或正文）。
+- 响应里只通过 `searchInfo.{enabled,queryLength,termsCount,matchedCount}` 暴露元数据，**绝不回显原始 q 或 terms 数组**。
+- 错误响应使用通用中文文案（`q 不能超过 100 个字符。`），**不回显 q**。
+- 服务端 `queryPrivateNotes` 函数对 q 不做任何持久化、缓存或回写。
+- Markdown 导出当前页结果时 **不包含 q**。
+
 ## 隐私边界
 
 | 统计 | 说明 |
