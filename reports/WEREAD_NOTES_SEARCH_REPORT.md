@@ -2,15 +2,16 @@
 
 **Status:** WARN
 **Date:** 2026-07-09
-**Scope:** S27D — private WeRead notes full-text search
+**Scope:** S27D — private WeRead notes full-text search; S27D-LOG-PRIVACY — disable access log for `/api/private/*`
 
 ## STATUS
 
-**WARN** — All API / regression / privacy / safety checks PASS. Browser smoke could
-not be completed (Playwright connection to the live `/weread` page timed out at
-the network layer). Per the S27D-FINALIZE policy, this commits + pushes but
-**does not tag**. Tag `v0.9.3-weread-notes-search` is reserved for a release
-where browser smoke is manually confirmed.
+**WARN** — All API / regression / privacy / safety / log-privacy checks PASS.
+Browser smoke could not be completed (Playwright connection to the live
+`/weread` page timed out at the network layer). Per the S27D-FINALIZE
+policy, this commits + pushes but **does not tag**. Tag
+`v0.9.3-weread-notes-search` is reserved for a release where browser smoke
+is manually confirmed.
 
 ## SCOPE
 
@@ -178,6 +179,47 @@ The full test count grew from 504 → 532 because of the new
   `<input maxLength>` to 100, but the cap is round-trippable.
 - No full-text index means there is no fuzzy / typo-tolerant matching, no
   synonym expansion, no language detection.
+
+## LOG_PRIVACY_RESULT (S27D-LOG-PRIVACY)
+
+- **Root cause:** the only place `q` (or any other URL query parameter for
+  private endpoints) was being recorded was nginx's default access log. The
+  upstream `nginx.conf` defines `log_format main '$remote_addr - $remote_user
+  [$time_local] "$request" ...'` with a global `access_log /var/log/nginx/access.log
+  main;`. Inside the web container `/var/log/nginx/access.log` is symlinked to
+  `/dev/stdout`, which is what `docker compose logs web` reads. As a result,
+  every private search request like `GET /api/private/weread/notes?q=<user
+  query>&type=...&...` produced a log line containing the full URL — including
+  the raw `q`. App code (api container) and `queryPrivateNotes` never log `q`
+  or note text, but the web container's access log did.
+- **What was NOT a problem:** the api container logs do not contain `q`, the
+  request body, or the response body. Bearer tokens are never written to the
+  access log line either (the log line is the request line and headers via
+  `$http_x_forwarded_for` / `$http_user_agent` / `$http_referer`; the
+  `Authorization` header is not part of the default `$request` field). No note
+  text or `wereadBookId` ever appeared in the access log.
+- **Fix:** a more specific `location /api/private/ { access_log off; ... }`
+  block was added to `apps/web/nginx.conf` BEFORE the generic `location /api/`
+  block. The block uses the same `proxy_pass http://api:3001/api/private/`
+  upstream (the trailing `/api/private/` in `proxy_pass` is required so nginx
+  does not strip the path and forward `/weread/notes` to the api), the same
+  forwarded headers, and `access_log off` so the access log line is suppressed
+  entirely for that location. nginx longest-prefix-match means
+  `/api/private/*` requests are routed by the new block, while `/api/search`,
+  `/api/stats`, `/api/health`, and the SPA's static asset routes continue to be
+  logged by the global access log.
+- **Post-fix log scan:** after rebuilding the web container, an authorized
+  search request to `https://books.conanxin.com/api/private/weread/notes?q=<test>`
+  was issued. `docker compose logs --tail=120 web` after the request did NOT
+  contain a single line referencing `/api/private/weread/notes`, `q=`, or the
+  URL-encoded `q` value. The only `q=` match in the new logs is from the
+  public `/api/search?q=...` route, which is intentional — that logging
+  behavior is unchanged.
+- **Scope of the change:** one file (`apps/web/nginx.conf`), one new
+  `location` block (~12 lines including comments). No application code, no
+  API code, no tests, no documentation, no dependencies, no Caddy change, no
+  Meilisearch change. Only the `web` container was rebuilt and redeployed;
+  `api` and `meilisearch` were untouched (uptime preserved).
 
 ## NEXT_STEP
 
