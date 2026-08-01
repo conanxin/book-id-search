@@ -25,6 +25,7 @@ import WereadPrivatePanel from "./WereadPrivatePanel";
 import WereadBadge from "./WereadBadge";
 import { fetchWereadStatusesForBooks, fetchWereadStatus, getWereadToken, isWereadEnabled, type WereadStatus } from "./wereadPrivate";
 import WereadCenter from "./weread/WereadCenter";
+import SiteFooter from "./components/SiteFooter";
 
 // ---------------------------------------------------------------------------
 // Storage: recent search history (last 5 unique queries)
@@ -1115,6 +1116,8 @@ export default function App() {
         <Route path="/weread" element={<WereadCenter />} />
         <Route path="/books/:id" element={<DetailPage />} />
       </Routes>
+      {/* POST-ICP-COMPLIANCE — single global site footer shared by every route. */}
+      <SiteFooter />
       <Toast />
     </>
   );

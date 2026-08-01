@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, BookOpen, Lock, Loader2, AlertCircle, XCircle, RefreshCw, Shield, EyeOff, BarChart3, Library } from "lucide-react";
+import { BookOpen, Lock, Loader2, AlertCircle, XCircle, RefreshCw, Shield, EyeOff, BarChart3, Library } from "lucide-react";
 import {
   clearWereadToken,
   fetchWereadSummary,
@@ -344,15 +344,7 @@ export default function WereadCenter() {
         </>
       ) : null}
 
-      <footer className="weread-center-footer" data-testid="weread-center-footer">
-        <a href="/" className="weread-center-link">
-          <ArrowLeft size={14} />
-          返回搜索
-        </a>
-        <span className="weread-center-footer__hint">
-          去搜索页搜索书籍，已确认匹配的书会显示微信读书 badge。badge 只显示 counts-only 统计。
-        </span>
-      </footer>
+      {/* Global SiteFooter is rendered by App.tsx for every route. */}
     </main>
   );
 }

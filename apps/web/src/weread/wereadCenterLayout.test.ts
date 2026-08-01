@@ -51,12 +51,16 @@ describe("WereadCenter layout (S27D-UI-POLISH)", () => {
     expect(wereadCenterSrc).toContain('data-testid="weread-notes-card"');
     expect(wereadCenterSrc).toContain('data-testid="weread-side-rail"');
     expect(wereadCenterSrc).toContain('data-testid="weread-privacy-card"');
-    expect(wereadCenterSrc).toContain('data-testid="weread-center-footer"');
+    // POST-ICP-COMPLIANCE: weread-center-footer testid was removed; the
+    // global SiteFooter now renders the single shared 返回搜索 link. The
+    // /weread page no longer carries a per-page footer block.
   });
 
-  it("renders exactly one 返回搜索 link", () => {
+  it("does not render its own 返回搜索 — the global SiteFooter owns it", () => {
+    // The page-level footer was retired in POST-ICP-COMPLIANCE so there is
+    // exactly one 返回搜索 in the entire app (provided by SiteFooter).
     const matches = wereadCenterSrc.match(/返回搜索/g) ?? [];
-    expect(matches.length).toBe(1);
+    expect(matches.length).toBe(0);
   });
 
   it("KPI section uses six metric cards with the required labels", () => {

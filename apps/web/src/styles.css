@@ -2813,3 +2813,94 @@ mark.hl {
     margin-left: 0;
   }
 }
+
+/* -----------------------------------------------------------------------
+ * POST-ICP-COMPLIANCE — single global site footer.
+ * Light theme; never fixed/sticky; never obscures content; wraps on mobile.
+ * ----------------------------------------------------------------------- */
+.site-footer {
+  margin-top: 32px;
+  padding: 16px 0;
+  border-top: 1px solid var(--color-border-soft);
+  background: transparent;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.site-footer__inner {
+  max-width: 1220px;
+  width: calc(100% - 32px);
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.site-footer__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-primary);
+  text-decoration: none;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.site-footer__back:hover,
+.site-footer__back:focus-visible {
+  background: var(--color-bg-soft);
+  text-decoration: none;
+  outline: 2px solid var(--color-primary);
+  outline-offset: -1px;
+}
+
+.site-footer__records {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+}
+
+.site-footer__record {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  font-size: 12px;
+}
+
+.site-footer__record:hover,
+.site-footer__record:focus-visible {
+  color: var(--color-primary);
+  text-decoration: underline;
+  outline: none;
+}
+
+.site-footer__record:focus-visible {
+  text-decoration: underline;
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.site-footer__copyright {
+  font-size: 12px;
+  color: var(--color-text-faint);
+}
+
+@media (max-width: 720px) {
+  .site-footer__inner {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 10px;
+  }
+  .site-footer__back,
+  .site-footer__records {
+    justify-content: center;
+  }
+}
