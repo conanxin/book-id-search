@@ -260,6 +260,72 @@ describe("private-notes", () => {
   });
 });
 
+describe("private-notes S27F catalogId filter", () => {
+  let tmpDir = "";
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "weread-private-notes-cat-"));
+  });
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("catalogId filter restricts to only that matched book's notes", () => {
+    const data = fixtureData(tmpDir);
+    const target = "13000000_000000000001";
+    const r = queryPrivateNotes(data, { type: "all", days: "all", matchedOnly: false, limit: 100, offset: 0, sort: "newest", catalogId: target });
+    expect(r.items.length).toBeGreaterThan(0);
+    for (const it of r.items) {
+      expect(it.catalogId).toBe(target);
+      expect(it.matched).toBe(true);
+    }
+  });
+
+  it("catalogId filter excludes notes from other matched books", () => {
+    const data = fixtureData(tmpDir);
+    const all = queryPrivateNotes(data, { type: "all", days: "all", matchedOnly: false, limit: 100, offset: 0, sort: "newest" });
+    const filtered = queryPrivateNotes(data, { type: "all", days: "all", matchedOnly: false, limit: 100, offset: 0, sort: "newest", catalogId: "13000000_000000000001" });
+    expect(filtered.items.length).toBeGreaterThan(0);
+    expect(filtered.items.length).toBeLessThan(all.items.length);
+  });
+
+  it("catalogId for an unmatched book returns empty", () => {
+    const data = fixtureData(tmpDir);
+    const r = queryPrivateNotes(data, { type: "all", days: "all", matchedOnly: false, limit: 100, offset: 0, sort: "newest", catalogId: "13000000_999999999999" });
+    expect(r.items.length).toBe(0);
+    expect(r.summary.totalAfterFilter).toBe(0);
+  });
+
+  it("normalizeNotesQuery rejects malformed catalogId silently", () => {
+    const n = normalizeNotesQuery({ type: "all", days: "all", matchedOnly: false, limit: 1, offset: 0, sort: "newest", catalogId: "not-a-catalog-id" });
+    expect(n.catalogId).toBeUndefined();
+  });
+
+  it("normalizeNotesQuery trims surrounding whitespace from catalogId", () => {
+    const n = normalizeNotesQuery({ type: "all", days: "all", matchedOnly: false, limit: 1, offset: 0, sort: "newest", catalogId: "  13000000_000000000001  " });
+    expect(n.catalogId).toBe("13000000_000000000001");
+  });
+
+  it("response with catalogId excludes wereadBookId / noteId / highlightId / chapterTitle", () => {
+    const data = fixtureData(tmpDir);
+    const r = queryPrivateNotes(data, { type: "all", days: "all", matchedOnly: false, limit: 100, offset: 0, sort: "newest", catalogId: "13000000_000000000001" });
+    const serialised = JSON.stringify(r);
+    for (const k of FORBIDDEN_KEYS) {
+      expect(serialised.includes(`"${k}"`)).toBe(false);
+    }
+    expect(serialised.includes("wb1_5_1003-2852")).toBe(false);
+  });
+
+  it("catalogId + q still returns filtered results without echoing q", () => {
+    const data = fixtureData(tmpDir);
+    const r = queryPrivateNotes(data, { type: "all", days: "all", matchedOnly: false, limit: 100, offset: 0, sort: "newest", q: "wb1 note text", catalogId: "13000000_000000000001" });
+    for (const it of r.items) {
+      expect(it.catalogId).toBe("13000000_000000000001");
+    }
+    const serialised = JSON.stringify(r);
+    expect(serialised.includes("wb1 note text")).toBe(false);
+  });
+});
+
 describe("private-notes field fallback", () => {
   let tmpDir = "";
   beforeEach(() => {

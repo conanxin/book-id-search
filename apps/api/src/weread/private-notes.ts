@@ -64,6 +64,14 @@ export type WereadNotesQuery = {
   sort: WereadNotesSort;
   /** S27D: optional full-text query (max length enforced at route layer). */
   q?: string;
+  /**
+   * S27F: optional public catalog id filter. When provided, only notes that
+   * have been matched (via the weRead overlay) to this exact catalogId are
+   * returned. Must be a non-empty string matching the public catalogId
+   * format (`/^[0-9]+_[0-9]{12}$/`). Length-capped at 128 chars at the
+   * route layer. Never logged or echoed in error messages.
+   */
+  catalogId?: string;
 };
 
 export type WereadNotesPageInfo = {
@@ -322,7 +330,16 @@ export function normalizeNotesQuery(input: Partial<WereadNotesQuery> | undefined
     if (trimmed.length > 0) q = trimmed;
   }
 
-  return { type, days, matchedOnly, hasComment, limit, offset, sort, q };
+  // S27F: catalogId — public catalog id (e.g. "13000000_000008232537").
+  // Length cap is enforced at the route layer; here we only ensure it's a
+  // sane non-empty string matching the public catalogId format.
+  let catalogId: string | undefined;
+  if (typeof input?.catalogId === "string") {
+    const trimmed = input.catalogId.trim();
+    if (/^[0-9]+_[0-9]{12}$/.test(trimmed)) catalogId = trimmed;
+  }
+
+  return { type, days, matchedOnly, hasComment, limit, offset, sort, q, catalogId };
 }
 
 export function queryPrivateNotes(data: PrivateNotesData, query: WereadNotesQuery): WereadNotesQueryResult {
@@ -366,6 +383,11 @@ export function queryPrivateNotes(data: PrivateNotesData, query: WereadNotesQuer
     const catalogId = data.wereadBookIdToCatalogId.get(wereadBookId) ?? null;
     const matched = catalogId !== null;
     if (normalized.matchedOnly && !matched) continue;
+
+    // S27F: when catalogId filter is set, the note must be matched to that
+    // exact catalogId. This implicitly implies `matched === true`, so
+    // unmatched notes are excluded.
+    if (normalized.catalogId && catalogId !== normalized.catalogId) continue;
 
     const item: WereadPrivateNoteItem = {
       type: itemType,

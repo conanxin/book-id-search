@@ -554,3 +554,222 @@ describe("fetchWereadAiSummary (S27E)", () => {
     expect(body.items[0].type).toBe("unknown");
   });
 });
+
+// ---------------------------------------------------------------------------
+// S27F — catalogId filter + fetchAllWereadBookNotes
+// ---------------------------------------------------------------------------
+
+describe("wereadPrivate S27F catalogId + per-book pagination", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+  const TOKEN = "token-for-s27f";
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function makeNote(i: number, catalogId: string) {
+    return {
+      type: "highlight",
+      text: `s27f-${i}-body`,
+      comment: i % 2 === 0 ? `s27f-${i}-thought` : null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: null,
+      matched: true,
+      catalogId,
+      source: "private_weread" as const,
+    };
+  }
+
+  it("fetchWereadNotes forwards a valid catalogId query param", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          items: [],
+          pageInfo: { limit: 50, offset: 0, total: 0, hasMore: false },
+          summary: { totalAfterFilter: 0, highlights: 0, thoughts: 0, reviews: 0, unknown: 0, matchedCount: 0, unmatchedCount: 0 },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    );
+    await fetchWereadNotes(TOKEN, { catalogId: "13000000_000000000001" });
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(call[0]).toContain("catalogId=13000000_000000000001");
+  });
+
+  it("fetchWereadNotes does NOT forward a malformed catalogId", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          items: [],
+          pageInfo: { limit: 50, offset: 0, total: 0, hasMore: false },
+          summary: { totalAfterFilter: 0, highlights: 0, thoughts: 0, reviews: 0, unknown: 0, matchedCount: 0, unmatchedCount: 0 },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    );
+    await fetchWereadNotes(TOKEN, { catalogId: "garbage" });
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(call[0]).not.toContain("catalogId=");
+  });
+
+  it("fetchWereadNotes trims whitespace before sending catalogId", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          items: [],
+          pageInfo: { limit: 50, offset: 0, total: 0, hasMore: false },
+          summary: { totalAfterFilter: 0, highlights: 0, thoughts: 0, reviews: 0, unknown: 0, matchedCount: 0, unmatchedCount: 0 },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    );
+    await fetchWereadNotes(TOKEN, { catalogId: "  13000000_000000000001  " });
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(call[0]).toContain("catalogId=13000000_000000000001");
+  });
+
+  it("fetchAllWereadBookNotes aggregates two pages then stops at hasMore=false", async () => {
+    const CATALOG = "13000000_000000000001";
+    const page1 = Array.from({ length: 3 }, (_, i) => makeNote(i + 1, CATALOG));
+    const page2 = Array.from({ length: 2 }, (_, i) => makeNote(i + 4, CATALOG));
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            items: page1,
+            pageInfo: { limit: 3, offset: 0, total: 5, hasMore: true },
+            summary: { totalAfterFilter: 5, highlights: 3, thoughts: 0, reviews: 0, unknown: 0, matchedCount: 5, unmatchedCount: 0 },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            items: page2,
+            pageInfo: { limit: 3, offset: 3, total: 5, hasMore: false },
+            summary: { totalAfterFilter: 5, highlights: 5, thoughts: 0, reviews: 0, unknown: 0, matchedCount: 5, unmatchedCount: 0 },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+    const result = await (
+      await import("./wereadPrivate")
+    ).fetchAllWereadBookNotes(TOKEN, CATALOG, { pageSize: 3 });
+    expect(result.items).toHaveLength(5);
+    expect(result.truncated).toBe(false);
+    expect(result.total).toBe(5);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // both pages carry catalogId
+    for (const call of fetchMock.mock.calls) {
+      expect((call as unknown as [string, RequestInit])[0]).toContain(`catalogId=${CATALOG}`);
+    }
+  });
+
+  it("fetchAllWereadBookNotes stops on empty page (defensive infinite-loop guard)", async () => {
+    const CATALOG = "13000000_000000000002";
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          items: [],
+          pageInfo: { limit: 50, offset: 0, total: 0, hasMore: true },
+          summary: { totalAfterFilter: 0, highlights: 0, thoughts: 0, reviews: 0, unknown: 0, matchedCount: 0, unmatchedCount: 0 },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    );
+    const result = await (
+      await import("./wereadPrivate")
+    ).fetchAllWereadBookNotes(TOKEN, CATALOG, { pageSize: 50 });
+    expect(result.items).toHaveLength(0);
+    expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(2);
+  });
+
+  it("fetchAllWereadBookNotes caps at MAX_PAGES (20) even with hasMore=true", async () => {
+    const CATALOG = "13000000_000000000003";
+    const page = Array.from({ length: 10 }, (_, i) => makeNote(i + 1, CATALOG));
+    fetchMock.mockImplementation(
+      () =>
+        new Response(
+          JSON.stringify({
+            ok: true,
+            items: page,
+            pageInfo: { limit: 10, offset: 0, total: 9999, hasMore: true },
+            summary: { totalAfterFilter: 9999, highlights: 10, thoughts: 0, reviews: 0, unknown: 0, matchedCount: 9999, unmatchedCount: 0 },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+    );
+    const result = await (
+      await import("./wereadPrivate")
+    ).fetchAllWereadBookNotes(TOKEN, CATALOG, { pageSize: 10, maxItems: 5000 });
+    expect(fetchMock.mock.calls.length).toBe(20);
+    expect(result.truncated).toBe(true);
+  });
+
+  it("fetchAllWereadBookNotes marks truncated when maxItems reached", async () => {
+    const CATALOG = "13000000_000000000004";
+    const page = Array.from({ length: 4 }, (_, i) => makeNote(i + 1, CATALOG));
+    fetchMock.mockImplementation(
+      () =>
+        new Response(
+          JSON.stringify({
+            ok: true,
+            items: page,
+            pageInfo: { limit: 4, offset: 0, total: 9999, hasMore: true },
+            summary: { totalAfterFilter: 9999, highlights: 4, thoughts: 0, reviews: 0, unknown: 0, matchedCount: 9999, unmatchedCount: 0 },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+    );
+    const result = await (
+      await import("./wereadPrivate")
+    ).fetchAllWereadBookNotes(TOKEN, CATALOG, { pageSize: 4, maxItems: 6 });
+    expect(result.items).toHaveLength(6);
+    expect(result.truncated).toBe(true);
+  });
+
+  it("fetchAllWereadBookNotes rejects malformed catalogId", async () => {
+    await expect(
+      (await import("./wereadPrivate")).fetchAllWereadBookNotes(TOKEN, "garbage-id")
+    ).rejects.toThrow();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("fetchAllWereadBookNotes aborts on pre-aborted signal", async () => {
+    const ctl = new AbortController();
+    ctl.abort();
+    await expect(
+      (await import("./wereadPrivate")).fetchAllWereadBookNotes(TOKEN, "13000000_000000000005", { signal: ctl.signal })
+    ).rejects.toThrow();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("401 error message does not include token", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ ok: false, error: "认证失败" }), { status: 401, headers: { "Content-Type": "application/json" } })
+    );
+    await expect(
+      (await import("./wereadPrivate")).fetchAllWereadBookNotes(TOKEN, "13000000_000000000006")
+    ).rejects.toThrow(/认证失败/);
+    const err = await (await import("./wereadPrivate")).fetchAllWereadBookNotes(
+      TOKEN,
+      "13000000_000000000007"
+    ).catch((e: Error) => e);
+    // Confirm error class doesn't include token
+    if (err instanceof Error) {
+      expect(err.message.includes(TOKEN)).toBe(false);
+    }
+  });
+});

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Copy, Download, Filter, Library, Loader2, AlertCircle, Check, RefreshCw, Search, X } from "lucide-react";
 import NotesAiSummary from "./NotesAiSummary";
+import BookNotesExportButton from "./BookNotesExportButton";
 import {
   fetchWereadNotes,
   type WereadNoteTypeFilter,
@@ -458,6 +459,14 @@ export default function NotesLibrary({ token }: NotesLibraryProps) {
                       )}
                     </p>
                   </div>
+                ) : null}
+                {/* S27F: per-book Markdown export — only on matched cards. */}
+                {item.matched && item.catalogId ? (
+                  <BookNotesExportButton
+                    token={token}
+                    catalogId={item.catalogId}
+                    label="导出本书全部笔记"
+                  />
                 ) : null}
               </li>
             );

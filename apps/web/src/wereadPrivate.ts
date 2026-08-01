@@ -208,6 +208,13 @@ export interface WereadNotesQuery {
   sort?: WereadNotesSort;
   /** S27D: optional full-text query over note text/comment only. */
   q?: string;
+  /**
+   * S27F: optional public catalog id filter. When provided, only notes
+   * matched to that catalogId are returned. Must be a non-empty string
+   * matching the public catalogId format. Never logged or echoed in
+   * error messages; only the trimmed value (if non-empty) is sent.
+   */
+  catalogId?: string;
 }
 
 export interface WereadNotesPageInfo {
@@ -263,9 +270,126 @@ export function fetchWereadNotes(token: string, query: WereadNotesQuery = {}): P
     const trimmed = query.q.trim();
     if (trimmed.length > 0) params.set("q", trimmed);
   }
+  // S27F: catalogId — trimmed, only sent when it matches the public
+  // catalogId format. Never logged; never echoed in error messages.
+  if (typeof query.catalogId === "string") {
+    const trimmed = query.catalogId.trim();
+    if (/^[0-9]+_[0-9]{12}$/.test(trimmed)) params.set("catalogId", trimmed);
+  }
   const qs = params.toString();
   const path = qs ? `/private/weread/notes?${qs}` : "/private/weread/notes";
   return privateRequestJson<WereadNotesResponse>(token, path);
+}
+
+// ---------- S27F per-book pagination helper ----------
+
+export const WEREAD_BOOK_PAGINATION = {
+  DEFAULT_PAGE_SIZE: 100,
+  MAX_PAGE_SIZE: 100,
+  DEFAULT_MAX_ITEMS: 2000,
+  MAX_MAX_ITEMS: 2000,
+  MAX_PAGES: 20,
+} as const;
+
+export interface FetchAllWereadBookNotesOptions {
+  maxItems?: number;
+  pageSize?: number;
+  signal?: AbortSignal;
+}
+
+/**
+ * S27F: getWereadBookPagination — return the default pagination envelope
+ * for fetchAllWereadBookNotes. This lets call sites spread the defaults
+ * alongside their own overrides without re-importing the constants.
+ */
+export function getWereadBookPagination(): { maxItems: number; pageSize: number } {
+  return {
+    maxItems: WEREAD_BOOK_PAGINATION.DEFAULT_MAX_ITEMS,
+    pageSize: WEREAD_BOOK_PAGINATION.DEFAULT_PAGE_SIZE,
+  };
+}
+
+export interface FetchAllWereadBookNotesOptions {
+  maxItems?: number;
+  pageSize?: number;
+  signal?: AbortSignal;
+}
+
+export interface FetchAllWereadBookNotesResult {
+  items: WereadPrivateNoteItem[];
+  total: number;
+  truncated: boolean;
+}
+
+/**
+ * S27F: paginated aggregation of every private note attached to a single
+ * public catalog id.
+ *
+ * Rules:
+ *  - pageSize clamped to [1, MAX_PAGE_SIZE]; default DEFAULT_PAGE_SIZE.
+ *  - maxItems clamped to [1, MAX_MAX_ITEMS]; default DEFAULT_MAX_ITEMS.
+ *  - iterates from offset=0 until either hasMore=false, the page is empty,
+ *    maxItems is reached, or MAX_PAGES pages have been fetched.
+ *  - every page passes catalogId so the server can filter directly.
+ *  - identical notes (same text/comment) are NOT deduplicated — the server
+ *    already redacts private IDs, and legitimate duplicate highlights are
+ *    common.
+ *  - the `signal` aborts between page fetches too.
+ *  - nothing is logged and the returned array is a fresh defensive copy.
+ */
+export async function fetchAllWereadBookNotes(
+  token: string,
+  catalogId: string,
+  options: FetchAllWereadBookNotesOptions = {}
+): Promise<FetchAllWereadBookNotesResult> {
+  const trimmedCatalogId = typeof catalogId === "string" ? catalogId.trim() : "";
+  if (!/^[0-9]+_[0-9]{12}$/.test(trimmedCatalogId)) {
+    throw new Error("catalogId 格式不正确。");
+  }
+  const rawPageSize = typeof options.pageSize === "number" ? options.pageSize : WEREAD_BOOK_PAGINATION.DEFAULT_PAGE_SIZE;
+  const pageSize = Math.min(WEREAD_BOOK_PAGINATION.MAX_PAGE_SIZE, Math.max(1, Math.floor(rawPageSize)));
+  const rawMax = typeof options.maxItems === "number" ? options.maxItems : WEREAD_BOOK_PAGINATION.DEFAULT_MAX_ITEMS;
+  const maxItems = Math.min(WEREAD_BOOK_PAGINATION.MAX_MAX_ITEMS, Math.max(1, Math.floor(rawMax)));
+
+  const items: WereadPrivateNoteItem[] = [];
+  let total = 0;
+  let truncated = false;
+  let lastOffset = -1;
+  for (let page = 0; page < WEREAD_BOOK_PAGINATION.MAX_PAGES; page++) {
+    if (options.signal?.aborted) {
+      throw new DOMException("Aborted", "AbortError");
+    }
+    const offset = page * pageSize;
+    if (offset === lastOffset) break;
+    lastOffset = offset;
+    const resp = await fetchWereadNotes(token, {
+      type: "all",
+      days: "all",
+      matchedOnly: true,
+      sort: "newest",
+      catalogId: trimmedCatalogId,
+      limit: pageSize,
+      offset,
+    });
+    if (!resp || resp.ok !== true) throw new Error("私有 API 返回异常");
+    if (page === 0) total = typeof resp.pageInfo.total === "number" ? resp.pageInfo.total : 0;
+    const batch = Array.isArray(resp.items) ? resp.items : [];
+    for (const item of batch) {
+      if (items.length >= maxItems) {
+        truncated = true;
+        break;
+      }
+      items.push(item);
+    }
+    if (truncated) break;
+    if (!resp.pageInfo.hasMore) break;
+    if (batch.length === 0) break;
+  }
+  if (items.length >= maxItems && total > items.length) truncated = true;
+  // If we exited the loop because MAX_PAGES was hit but the server still
+  // reports more records available, mark truncated.
+  if (items.length < maxItems && total > items.length) truncated = true;
+  return { items, total, truncated };
 }
 
 const statusCache = new Map<string, Promise<WereadStatus>>();

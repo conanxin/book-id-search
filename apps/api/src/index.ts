@@ -692,6 +692,20 @@ app.get("/api/private/weread/notes", async (req: Request, res: Response) => {
     if (trimmed.length > 0) q = trimmed;
   }
 
+  // S27F: optional public catalogId filter. Trim, enforce ≤128 chars, and
+  // require the standard catalog id format. Never echoed in error messages.
+  let catalogId: string | undefined;
+  if (typeof req.query.catalogId === "string" && req.query.catalogId.length > 0) {
+    const trimmed = req.query.catalogId.trim();
+    if (trimmed.length === 0 || trimmed.length > 128) {
+      return sendError(res, 400, "catalogId 格式不正确。");
+    }
+    if (!/^[0-9]+_[0-9]{12}$/.test(trimmed)) {
+      return sendError(res, 400, "catalogId 格式不正确。");
+    }
+    catalogId = trimmed;
+  }
+
   try {
     const data = loadPrivateNotesData(getWereadOverlayDataDir());
     const result = queryPrivateNotes(data, {
@@ -703,6 +717,7 @@ app.get("/api/private/weread/notes", async (req: Request, res: Response) => {
       offset,
       sort: rawSort as WereadNotesSort,
       q,
+      catalogId,
     });
     res.json({ ok: true, ...result });
   } catch (error) {

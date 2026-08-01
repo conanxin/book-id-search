@@ -3115,3 +3115,88 @@ mark.hl {
     justify-content: center;
   }
 }
+
+/* S27F — per-book private WeRead Markdown export */
+.weread-book-export {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.weread-book-export__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  border-radius: 6px;
+  border: 1px solid var(--book-id-border, #d0d7de);
+  background: var(--book-id-bg, #f6f8fa);
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.weread-book-export__button:hover:not(:disabled) {
+  background: var(--book-id-bg-hover, #eaeef2);
+  border-color: var(--book-id-border-hover, #afb8c1);
+}
+.weread-book-export__button:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+.weread-book-export__button .spin {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.weread-book-export__status,
+.weread-book-export__error {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  margin: 0;
+  flex: 1 1 100%;
+  color: inherit;
+}
+.weread-book-export__error {
+  color: var(--book-id-danger, #b42318);
+}
+.weread-book-export__status code {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 11px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--book-id-code-bg, #f0f2f5);
+  word-break: break-all;
+}
+.weread-book-export__close {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  border-radius: 4px;
+  border: 1px solid var(--book-id-border, #d0d7de);
+  background: transparent;
+  cursor: pointer;
+  margin-left: 8px;
+}
+.weread-book-export__close:hover {
+  background: var(--book-id-bg-hover, #eaeef2);
+}
+@media (max-width: 720px) {
+  .weread-book-export {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .weread-book-export__button {
+    width: 100%;
+    justify-content: center;
+  }
+  .weread-book-export__status code {
+    word-break: break-all;
+  }
+}
