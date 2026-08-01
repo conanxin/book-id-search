@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearWereadStatusCache,
   clearWereadToken,
+  fetchWereadAiSummary,
   fetchWereadNotes,
   fetchWereadStatusesForBooks,
   fetchWereadStatus,
@@ -425,5 +426,131 @@ describe("fetchWereadNotes", () => {
     expect(res.searchInfo?.queryLength).toBe(5);
     expect(res.searchInfo?.termsCount).toBe(1);
     expect(res.searchInfo?.matchedCount).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S27E — fetchWereadAiSummary (own fetchMock scope)
+// ---------------------------------------------------------------------------
+
+describe("fetchWereadAiSummary (S27E)", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+  const TOKEN = "token-for-ai-summary";
+
+  beforeEach(() => {
+    fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          ok: true,
+          summary: {
+            overview: "合成概览文本。",
+            themes: [{ title: "主题一", summary: "主题摘要。", evidenceCount: 1 }],
+            keyPoints: ["观点 A"],
+            reviewQuestions: [],
+            readingDirections: [],
+          },
+          meta: { itemsUsed: 1, totalCharacters: 5, persisted: false, provider: "minimax" },
+        })
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("sends POST with Content-Type: application/json and Authorization header", async () => {
+    await fetchWereadAiSummary(TOKEN, [
+      { type: "highlight", text: "合成测试材料：隐私边界。" },
+    ]);
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const [url, init] = call;
+    expect(init?.method).toBe("POST");
+    expect(url).toContain("/private/weread/notes/summarize");
+    expect(init?.headers).toMatchObject({
+      Authorization: "Bearer token-for-ai-summary",
+      "Content-Type": "application/json",
+    });
+  });
+
+  it("only sends { type, text, comment } — no q / catalogId / matched / IDs / dates / title / author", async () => {
+    await fetchWereadAiSummary(TOKEN, [
+      {
+        type: "highlight",
+        text: "合成测试材料：边界检查。",
+        comment: null,
+        // The client must drop these even if a caller mistakenly attaches them.
+        q: "secret-query",
+        catalogId: "123_000000000001",
+        wereadBookId: "secret-book",
+        noteId: "secret-note",
+        matched: true,
+        title: "secret-title",
+        author: "secret-author",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      } as unknown as Parameters<typeof fetchWereadAiSummary>[1][number],
+    ]);
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(call[1].body as string);
+    expect(Object.keys(body)).toEqual(["items"]);
+    const item = body.items[0];
+    expect(Object.keys(item).sort()).toEqual(["comment", "text", "type"]);
+    const serialized = JSON.stringify(body);
+    expect(serialized).not.toContain("secret-query");
+    expect(serialized).not.toContain("secret-title");
+    expect(serialized).not.toContain("secret-author");
+    expect(serialized).not.toContain("secret-book");
+    expect(serialized).not.toContain("secret-note");
+    expect(serialized).not.toContain("123_000000000001");
+    expect(serialized).not.toContain("matched");
+    expect(serialized).not.toContain("createdAt");
+  });
+
+  it("401 does not leak the token in the thrown error message", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 })
+    );
+    await expect(
+      fetchWereadAiSummary("leaked-token", [{ type: "highlight", text: "合成测试：鉴权失败。" }])
+    ).rejects.toThrow("unauthorized");
+    try {
+      await fetchWereadAiSummary("leaked-token", [{ type: "highlight", text: "合成测试：鉴权失败。" }]);
+    } catch (e) {
+      expect(String(e)).not.toContain("leaked-token");
+    }
+  });
+
+  it("429 / 502 / 503 / 504 surface as plain Error messages without token leakage", async () => {
+    for (const status of [429, 502, 503, 504] as const) {
+      fetchMock.mockReset();
+      fetchMock.mockResolvedValue(
+        new Response(JSON.stringify({ error: `provider-failure-${status}` }), { status })
+      );
+      await expect(
+        fetchWereadAiSummary(TOKEN, [{ type: "highlight", text: "合成测试：限流。" }])
+      ).rejects.toThrow(`provider-failure-${status}`);
+    }
+  });
+
+  it("drops items where text AND comment are both empty after the rebuild", async () => {
+    await fetchWereadAiSummary(TOKEN, [
+      { type: "highlight", text: "保留的合成笔记。", comment: null },
+      { type: "thought", text: "", comment: "" },
+      { type: "review", text: "", comment: null },
+    ]);
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(call[1].body as string);
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0].text).toBe("保留的合成笔记。");
+  });
+
+  it("normalizes an invalid type to 'unknown'", async () => {
+    await fetchWereadAiSummary(TOKEN, [
+      { type: "garbage" as unknown as "highlight", text: "类型归一化。", comment: null },
+    ]);
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(call[1].body as string);
+    expect(body.items[0].type).toBe("unknown");
   });
 });

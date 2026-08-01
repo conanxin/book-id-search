@@ -27,6 +27,7 @@ import {
   getWereadSummary,
   loadWereadOverlay,
 } from "./weread/private-overlay.js";
+import { summarizePrivateNotes } from "./weread/private-ai-summary.js";
 import {
   loadPrivateNotesData,
   queryPrivateNotes,
@@ -708,6 +709,48 @@ app.get("/api/private/weread/notes", async (req: Request, res: Response) => {
     return sendError(res, 500, "读取私有笔记失败。", error);
   }
 });
+
+/**
+ * S27E: Private WeRead AI notes summarisation.
+ *
+ *   POST /api/private/weread/notes/summarize
+ *     body: { items: Array<{ type, text, comment? }> }
+ *     returns: WereadAiSummaryResponseBody on success.
+ *
+ * Privacy contract:
+ *   - Only note text / comment (already exposed by the private notes
+ *     endpoint) is sent to the AI provider. The provider payload is
+ *     rebuilt from sanitized input — request-body extras (q, IDs, token,
+ *     title, author, catalogId, etc.) never reach the provider.
+ *   - The response contains only validated summary fields; raw input,
+ *     prompt text, and provider response are never echoed back.
+ *   - Logs MUST NOT include note text, prompt, or provider response.
+ *   - private token auth is identical to other /api/private/weread/* endpoints.
+ */
+app.post(
+  "/api/private/weread/notes/summarize",
+  async (req: Request, res: Response) => {
+    const auth = checkPrivateAuth(
+      req.headers.authorization,
+      req.headers["x-private-token"] as string | undefined
+    );
+    if (!auth.ok) {
+      return res.status(auth.status).json({ ok: false, error: auth.message });
+    }
+    try {
+      const result = await summarizePrivateNotes(req.body?.items);
+      if (!result.ok) {
+        return res.status(result.status).json({ ok: false, error: result.message });
+      }
+      res.json(result.body);
+    } catch {
+      // Defensive: summarizePrivateNotes already swallows provider errors;
+      // any unexpected throw here is reported as a generic 502 with no
+      // detail leakage.
+      res.status(502).json({ ok: false, error: "AI 服务暂时不可用，请稍后再试。" });
+    }
+  }
+);
 
 app.get("/api/books/:id/related", async (req, res) => {
   try {

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Copy, Download, Filter, Library, Loader2, AlertCircle, Check, RefreshCw, Search, X } from "lucide-react";
+import NotesAiSummary from "./NotesAiSummary";
 import {
   fetchWereadNotes,
   type WereadNoteTypeFilter,
@@ -471,6 +472,12 @@ export default function NotesLibrary({ token }: NotesLibraryProps) {
           </button>
         </div>
       ) : null}
+
+      {/* S27E: Private WeRead AI notes summarisation.
+          The panel only renders when at least one note has been loaded.
+          NotesAiSummary itself owns the privacy notice, the manual trigger,
+          the abort/clear behaviour, and the responsive layout. */}
+      {items.length > 0 ? <NotesAiSummary token={token} items={items} /> : null}
     </div>
   );
 }

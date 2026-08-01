@@ -407,3 +407,99 @@ export const WEREAD_FORBIDDEN_WORDS = [
 export function hasForbiddenWereadText(value: string): boolean {
   return WEREAD_FORBIDDEN_WORDS.some((word) => value.includes(word));
 }
+
+/* -----------------------------------------------------------------------
+ * S27E — Private WeRead AI notes summarisation.
+ *
+ * Only the items currently loaded in the browser are sent. The payload is
+ * sanitized again on the server (apps/api/src/weread/private-ai-summary.ts)
+ * but the client rebuilds the request body from a fixed schema so that
+ * `q`, `catalogId`, `matched`, IDs, dates, and any other private data
+ * cannot leak via the request.
+ * ----------------------------------------------------------------------- */
+
+export type WereadAiSummaryNoteType = "highlight" | "thought" | "review" | "unknown";
+
+export type WereadAiSummaryInputItem = {
+  type: WereadAiSummaryNoteType;
+  text: string;
+  comment?: string | null;
+};
+
+export type WereadAiSummaryTheme = {
+  title: string;
+  summary: string;
+  evidenceCount: number;
+};
+
+export type WereadAiSummaryResult = {
+  overview: string;
+  themes: WereadAiSummaryTheme[];
+  keyPoints: string[];
+  reviewQuestions: string[];
+  readingDirections: string[];
+};
+
+export type WereadAiSummaryMeta = {
+  itemsUsed: number;
+  totalCharacters: number;
+  persisted: false;
+  provider: "minimax";
+};
+
+export type WereadAiSummaryResponse = {
+  ok: true;
+  summary: WereadAiSummaryResult;
+  meta: WereadAiSummaryMeta;
+};
+
+export type WereadAiSummaryErrorStatus =
+  | 400
+  | 401
+  | 403
+  | 404
+  | 413
+  | 429
+  | 502
+  | 503
+  | 504;
+
+/**
+ * POST /api/private/weread/notes/summarize
+ *
+ * `signal` lets callers abort an in-flight request when the token changes
+ * or the user leaves /weread, so a stale response can never write into
+ * the page after the user has moved on.
+ */
+export function fetchWereadAiSummary(
+  token: string,
+  items: WereadAiSummaryInputItem[],
+  signal?: AbortSignal
+): Promise<WereadAiSummaryResponse> {
+  // Defensive rebuild: ignore anything except type/text/comment, and make
+  // sure both fields are strings before they leave the browser.
+  const safeItems: WereadAiSummaryInputItem[] = [];
+  for (const it of items) {
+    if (!it || typeof it !== "object") continue;
+    const type: WereadAiSummaryNoteType =
+      it.type === "highlight" ||
+      it.type === "thought" ||
+      it.type === "review"
+        ? it.type
+        : "unknown";
+    const text = typeof it.text === "string" ? it.text : "";
+    const comment = typeof it.comment === "string" ? it.comment : null;
+    if (!text && !comment) continue;
+    safeItems.push({ type, text, comment });
+  }
+  return privateRequestJson<WereadAiSummaryResponse>(
+    token,
+    "/private/weread/notes/summarize",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items: safeItems }),
+      signal,
+    }
+  );
+}

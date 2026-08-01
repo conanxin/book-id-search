@@ -2904,3 +2904,214 @@ mark.hl {
     justify-content: center;
   }
 }
+
+/* -----------------------------------------------------------------------
+ * S27E — Private WeRead AI notes summarisation panel.
+ * Light theme; no fixed/sticky; non-blocking; never overlaps SiteFooter.
+ * ----------------------------------------------------------------------- */
+.weread-ai-summary {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg-card);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.weread-ai-summary__header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.weread-ai-summary__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.weread-ai-summary__notice {
+  margin: 0;
+  font-size: 12px;
+  color: #1d4ed8;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 6px;
+  line-height: 1.5;
+}
+
+.weread-ai-summary__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.weread-ai-summary__primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: var(--color-primary);
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.weread-ai-summary__primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.weread-ai-summary__secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #ffffff;
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.weread-ai-summary__secondary--inline {
+  margin-left: auto;
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+.weread-ai-summary__meta {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.weread-ai-summary__loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  padding: 6px 0;
+}
+
+.weread-ai-summary__error {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid #fdba74;
+  background: #fff7ed;
+  color: #7c2d12;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.weread-ai-summary__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-top: 1px dashed var(--color-border-soft);
+  padding-top: 12px;
+}
+
+.weread-ai-summary__section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.weread-ai-summary__section-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.weread-ai-summary__text {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.weread-ai-summary__themes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.weread-ai-summary__theme-card {
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-soft);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.weread-ai-summary__theme-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.weread-ai-summary__theme-evidence {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.weread-ai-summary__list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--color-text);
+  line-height: 1.6;
+}
+
+.weread-ai-summary__list li {
+  margin-bottom: 4px;
+}
+
+.weread-ai-summary__disclaimer {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-text-faint);
+  font-style: italic;
+}
+
+@media (max-width: 720px) {
+  .weread-ai-summary__themes {
+    grid-template-columns: 1fr;
+  }
+  .weread-ai-summary__actions button {
+    flex: 1 1 calc(50% - 8px);
+    justify-content: center;
+  }
+}
