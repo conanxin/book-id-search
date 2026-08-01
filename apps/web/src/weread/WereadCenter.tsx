@@ -87,22 +87,25 @@ function TrendContent({ trends }: { trends: WereadTrends }) {
         <span className="weread-trend-meta__pill">{activityLabels[activity]}</span>
         <span>日期覆盖率 {getTrendCoverageLabel(view)}</span>
       </div>
-      <div className="weread-trend-grid">
-        {cards.map((card) => (
-          <StatCard key={card.label} label={card.label} value={card.value} />
-        ))}
+      <div className="weread-trend-block">
+        <span className="weread-trend-block__label">时间窗口</span>
+        <div className="weread-trend-grid weread-trend-grid--2col">
+          {cards.map((card) => (
+            <StatCard key={card.label} label={card.label} value={card.value} />
+          ))}
+        </div>
       </div>
-      <div className="weread-trend-card">
-        <h3 className="weread-trend-card__title">类型分布（全部时间）</h3>
-        <div className="weread-trend-grid">
+      <div className="weread-trend-block">
+        <span className="weread-trend-block__label">类型分布（全部时间）</span>
+        <div className="weread-trend-grid weread-trend-grid--2col">
           <StatCard label="划线" value={view.highlightsTotal} />
           <StatCard label="想法" value={view.thoughtsTotal} />
           <StatCard label="书评" value={view.reviewsTotal} />
           <StatCard label="未知类型" value={view.unknownTotal} />
         </div>
       </div>
-      <div className="weread-trend-card">
-        <h3 className="weread-trend-card__title">最近 30 天每日新增</h3>
+      <div className="weread-trend-block weread-trend-block--chart">
+        <span className="weread-trend-block__label">最近 30 天每日新增</span>
         <TrendBars daily={view.daily30} />
       </div>
       <p className="weread-center-card__note">
@@ -112,6 +115,16 @@ function TrendContent({ trends }: { trends: WereadTrends }) {
     </>
   );
 }
+
+// S27D-UI-POLISH: KPI cards — 6 main metrics in a single grid.
+const KPI_LABELS = {
+  books: "书架",
+  notes: "笔记",
+  matchedBooks: "已匹配书目",
+  matchedWithNotes: "有笔记的匹配书",
+  matchedWithHighlights: "有划线的匹配书",
+  matchedNoteRecords: "已匹配笔记记录",
+} as const;
 
 export default function WereadCenter() {
   const [token, setToken] = useState("");
@@ -202,17 +215,17 @@ export default function WereadCenter() {
   const view = summary ? formatWereadCenterSummary(summary) : null;
 
   return (
-    <main className="page weread-center-page">
-      <div className="weread-center-hero">
+    <main className="page weread-center-page" data-testid="weread-center-page">
+      <header className="weread-center-hero">
         <BookOpen size={32} />
         <h1>微信读书中心</h1>
         <p className="weread-center-hero__subtitle">
           这是你的私有阅读数据入口。输入 private token 后显示微信读书统计。
         </p>
-      </div>
+      </header>
 
       {!storedToken ? (
-        <section className="weread-center-panel">
+        <section className="weread-center-panel" data-testid="weread-token-form">
           <div className="weread-private-form">
             <Lock size={16} />
             <span className="weread-private-label">私有 token</span>
@@ -233,7 +246,7 @@ export default function WereadCenter() {
           </p>
         </section>
       ) : (
-        <section className="weread-center-panel">
+        <section className="weread-center-panel weread-token-status" data-testid="weread-token-status">
           <div className="weread-private-status">
             <div className="weread-private-status__left">
               <Lock size={16} />
@@ -261,107 +274,85 @@ export default function WereadCenter() {
       )}
 
       {view && status !== "disabled" ? (
-        <div className="weread-center-grid">
-          <div className="weread-center-card">
-            <h2 className="weread-center-card__title">总览</h2>
-            <div className="weread-center-card__stats">
-              <StatCard label="书架" value={view.booksCount} />
-              <StatCard label="笔记" value={view.notesCount} />
-              <StatCard label="已确认匹配" value={view.confirmedMatchesCount} />
+        <>
+          <section className="weread-kpi-section" aria-label="总览指标">
+            <h2 className="weread-section-title">总览</h2>
+            <div className="weread-kpi-grid" data-testid="weread-kpi-grid">
+              <StatCard label={KPI_LABELS.books} value={view.booksCount} />
+              <StatCard label={KPI_LABELS.notes} value={view.notesCount} />
+              <StatCard label={KPI_LABELS.matchedBooks} value={view.confirmedMatchesCount} />
+              <StatCard label={KPI_LABELS.matchedWithNotes} value={view.confirmedWithNotesCount} />
+              <StatCard label={KPI_LABELS.matchedWithHighlights} value={view.confirmedWithHighlightsCount} />
+              <StatCard label={KPI_LABELS.matchedNoteRecords} value={view.totalConfirmedNoteRecords} />
             </div>
-          </div>
-
-          <div className="weread-center-card">
-            <h2 className="weread-center-card__title">匹配</h2>
-            <div className="weread-center-card__stats">
-              <StatCard label="已匹配到书目" value={view.confirmedMatchesCount} />
-              <StatCard label="有笔记的已匹配书" value={view.confirmedWithNotesCount} />
-              <StatCard label="有划线的已匹配书" value={view.confirmedWithHighlightsCount} />
-            </div>
-          </div>
-
-          <div className="weread-center-card">
-            <h2 className="weread-center-card__title">笔记统计</h2>
-            <div className="weread-center-card__stats">
-              <StatCard label="已匹配书目的笔记记录" value={view.totalConfirmedNoteRecords} />
-              <StatCard
-                label="匹配率"
-                value={view.matchRatePercent}
-                suffix="%"
-                hint="已确认匹配数 / 书架总数"
-              />
-              <StatCard
-                label="每本匹配书平均笔记记录"
-                value={view.notesPerConfirmedMatch}
-                hint="笔记记录 / 已匹配书"
-              />
-            </div>
-            <p className="weread-center-card__note">
-              <EyeOff size={14} aria-hidden="true" />
+            <p className="weread-kpi-meta">
+              <EyeOff size={12} aria-hidden="true" />
+              匹配率 {view.matchRatePercent}% · 每本匹配书平均笔记记录 {view.notesPerConfirmedMatch}
+              <span className="weread-kpi-meta__sep">·</span>
               只显示数量，不显示笔记或划线的原文。
             </p>
-          </div>
+          </section>
 
-          <div className="weread-center-card weread-privacy-card">
-            <h2 className="weread-center-card__title">隐私边界</h2>
-            <ul className="weread-privacy-card__list">
-              <PrivacyItem text="不返回 wereadBookId" />
-              <PrivacyItem text="不返回 noteId / highlightId" />
-              <PrivacyItem text="不返回笔记正文" />
-              <PrivacyItem text="不返回划线正文" />
-              <PrivacyItem text="不进入 Meilisearch" />
-            </ul>
-          </div>
-
-          {trends || trendsStatus === "loading" || trendsStatus === "error" ? (
-            <div className="weread-center-card weread-trend-section">
-              <h2 className="weread-center-card__title">
-                <BarChart3 size={16} aria-hidden="true" /> 阅读趋势
-              </h2>
-              {trends ? (
-                <TrendContent trends={trends} />
-              ) : trendsStatus === "loading" ? (
-                <div className="weread-trend-meta">
-                  <Loader2 size={14} className="spin" /> 趋势数据加载中…
-                </div>
-              ) : (
-                <div className="weread-trend-error">
-                  <AlertCircle size={14} /> {trendsError ?? "趋势数据暂不可用"}
-                </div>
-              )}
-            </div>
-          ) : null}
-
-          {storedToken ? (
-            <div className="weread-center-card weread-notes-card">
+          <div className="weread-center-grid" data-testid="weread-center-grid">
+            <section className="weread-center-card weread-notes-card" data-testid="weread-notes-card">
               <h2 className="weread-center-card__title">
                 <Library size={16} aria-hidden="true" /> 私有笔记库
               </h2>
-              <NotesLibrary token={storedToken} />
-            </div>
-          ) : null}
+              {storedToken ? <NotesLibrary token={storedToken} /> : null}
+            </section>
 
-          <div className="weread-center-card">
-            <h2 className="weread-center-card__title">使用说明</h2>
-            <ul className="weread-center-card__list">
-              <li>去搜索页搜索书籍。</li>
-              <li>已确认匹配的书会显示微信读书 badge。</li>
-              <li>badge 只显示 counts-only 统计。</li>
-            </ul>
-            <a href="/" className="weread-center-button">
-              <ArrowLeft size={14} />
-              返回搜索
-            </a>
+            <aside className="weread-side-rail" data-testid="weread-side-rail">
+              {trends || trendsStatus === "loading" || trendsStatus === "error" ? (
+                <section className="weread-center-card weread-trend-section">
+                  <h2 className="weread-center-card__title">
+                    <BarChart3 size={16} aria-hidden="true" /> 阅读趋势
+                  </h2>
+                  {trends ? (
+                    <TrendContent trends={trends} />
+                  ) : trendsStatus === "loading" ? (
+                    <div className="weread-trend-meta">
+                      <Loader2 size={14} className="spin" /> 趋势数据加载中…
+                    </div>
+                  ) : (
+                    <div className="weread-trend-error">
+                      <AlertCircle size={14} /> {trendsError ?? "趋势数据暂不可用"}
+                    </div>
+                  )}
+                </section>
+              ) : null}
+
+              <section className="weread-privacy-card" data-testid="weread-privacy-card">
+                <h2 className="weread-center-card__title">
+                  <Shield size={16} aria-hidden="true" /> 隐私边界
+                </h2>
+                <p className="weread-privacy-card__summary">
+                  私有内容仅在当前 private token 会话中可见。
+                </p>
+                <details className="weread-privacy-card__details">
+                  <summary>展开隐私说明</summary>
+                  <ul className="weread-privacy-card__list">
+                    <PrivacyItem text="不返回 wereadBookId" />
+                    <PrivacyItem text="不返回 noteId / highlightId" />
+                    <PrivacyItem text="不返回笔记正文" />
+                    <PrivacyItem text="不返回划线正文" />
+                    <PrivacyItem text="不进入 Meilisearch" />
+                  </ul>
+                </details>
+              </section>
+            </aside>
           </div>
-        </div>
+        </>
       ) : null}
 
-      <div className="weread-center-footer">
+      <footer className="weread-center-footer" data-testid="weread-center-footer">
         <a href="/" className="weread-center-link">
           <ArrowLeft size={14} />
           返回搜索
         </a>
-      </div>
+        <span className="weread-center-footer__hint">
+          去搜索页搜索书籍，已确认匹配的书会显示微信读书 badge。badge 只显示 counts-only 统计。
+        </span>
+      </footer>
     </main>
   );
 }

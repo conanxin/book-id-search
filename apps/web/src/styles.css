@@ -1124,8 +1124,13 @@ mark.hl {
 /* ---------------------------------------------------------------
  * WeRead Center page
  * --------------------------------------------------------------- */
+/* -----------------------------------------------------------------------
+ * S27D-UI-POLISH: container is wider and uses align-items:start so cards
+ * no longer force each other to equal heights.
+ * ----------------------------------------------------------------------- */
 .weread-center-page {
-  max-width: 920px;
+  max-width: 1220px;
+  width: calc(100% - 32px);
   margin: 0 auto;
   padding: 24px 16px 48px;
 }
@@ -1136,7 +1141,7 @@ mark.hl {
   align-items: center;
   gap: 8px;
   text-align: center;
-  padding: 32px 16px 24px;
+  padding: 32px 16px 20px;
   color: var(--color-primary);
 }
 
@@ -1200,10 +1205,13 @@ mark.hl {
   margin-top: 12px;
 }
 
+/* S27D-UI-POLISH: 8/4 main grid with align-items: start — no more forced
+ * equal-height between privacy/trend cards. */
 .weread-center-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
 }
 
 .weread-center-card {
@@ -1215,6 +1223,9 @@ mark.hl {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  /* explicit reset: prevent children from forcing equal height */
+  height: auto;
+  align-self: start;
 }
 
 .weread-center-card__title {
@@ -1222,12 +1233,57 @@ mark.hl {
   font-size: 16px;
   font-weight: 600;
   color: var(--color-text);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .weread-center-card__stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+}
+
+/* Side rail stacks trend + privacy. Each card keeps its own height. */
+.weread-side-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+.weread-section-title {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* KPI grid: 6 columns desktop, 3 tablet, 2 mobile. */
+.weread-kpi-section {
+  margin-bottom: 24px;
+}
+
+.weread-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.weread-kpi-meta {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.weread-kpi-meta__sep {
+  color: var(--color-text-faint);
 }
 
 .weread-stat-card {
@@ -1266,15 +1322,60 @@ mark.hl {
   color: var(--color-text-faint);
 }
 
+/* S27D-UI-POLISH: privacy card is a compact collapsible, no longer a wide grid cell. */
 .weread-privacy-card {
-  grid-column: span 2;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.weread-privacy-card__summary {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.weread-privacy-card__details {
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.weread-privacy-card__details summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--color-primary);
+  user-select: none;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.weread-privacy-card__details summary::-webkit-details-marker {
+  display: none;
+}
+
+.weread-privacy-card__details summary::before {
+  content: "▸";
+  display: inline-block;
+  transition: transform 0.15s;
+}
+
+.weread-privacy-card__details[open] summary::before {
+  transform: rotate(90deg);
 }
 
 .weread-privacy-card__list,
 .weread-center-card__list {
   list-style: none;
   padding: 0;
-  margin: 0;
+  margin: 8px 0 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1327,10 +1428,50 @@ mark.hl {
   cursor: not-allowed;
 }
 
+/* S27D-UI-POLISH: single global footer, no fixed positioning. */
 .weread-center-footer {
-  margin-top: 24px;
+  margin-top: 28px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border-soft);
   display: flex;
-  justify-content: center;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.weread-center-footer__hint {
+  flex: 1 1 auto;
+  text-align: right;
+}
+
+@media (max-width: 720px) {
+  .weread-center-footer__hint {
+    text-align: left;
+  }
+}
+
+/* S27D-UI-POLISH: responsive breakpoints.
+ *  Desktop ≥1025: KPI 6, main 8/4
+ *  Tablet  721-1024: KPI 3, main single column or 7/5
+ *  Mobile ≤720: KPI 2, main single column
+ */
+@media (max-width: 1100px) {
+  .weread-kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .weread-center-grid {
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  }
+  .weread-notes-card,
+  .weread-center-card {
+    grid-column: auto !important;
+  }
 }
 
 @media (max-width: 720px) {
@@ -1343,8 +1484,12 @@ mark.hl {
   .weread-center-card__stats {
     grid-template-columns: 1fr;
   }
+  .weread-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .weread-center-page {
-    padding: 16px 12px 32px;
+    padding: 16px 10px 32px;
+    width: calc(100% - 20px);
   }
 }
 
@@ -2067,12 +2212,6 @@ mark.hl {
 /* ---------------------------------------------------------------
  * S27B WeRead Center trend
  * --------------------------------------------------------------- */
-.weread-trend-section .weread-center-card__title {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
 .weread-trend-meta {
   display: flex;
   flex-wrap: wrap;
@@ -2080,7 +2219,7 @@ mark.hl {
   align-items: center;
   margin-bottom: 12px;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--color-text-muted);
 }
 
 .weread-trend-meta__pill {
@@ -2088,8 +2227,8 @@ mark.hl {
   align-items: center;
   padding: 2px 8px;
   border-radius: 999px;
-  background: rgba(64, 158, 255, 0.15);
-  color: #8eb8ff;
+  background: rgba(64, 158, 255, 0.12);
+  color: #1d4ed8;
   font-size: 11px;
   font-weight: 600;
 }
@@ -2099,6 +2238,37 @@ mark.hl {
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 10px;
   margin-bottom: 14px;
+}
+
+/* S27D-UI-POLISH: trend blocks — two-column grid as required. */
+.weread-trend-grid--2col {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.weread-trend-block {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--color-border-soft);
+}
+
+.weread-trend-block:first-child {
+  border-top: 0;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+.weread-trend-block__label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.weread-trend-block--chart {
+  /* let bars span full row */
 }
 
 .weread-trend-card {
@@ -2111,7 +2281,7 @@ mark.hl {
   margin: 0 0 8px;
   font-size: 13px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--color-text-muted);
 }
 
 .weread-trend-bars {
@@ -2122,7 +2292,7 @@ mark.hl {
   gap: 2px;
   height: 80px;
   padding: 6px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--color-border-soft);
 }
 
 .weread-trend-bar {
@@ -2147,7 +2317,7 @@ mark.hl {
   position: absolute;
   bottom: -16px;
   font-size: 9px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--color-text-faint);
   white-space: nowrap;
   transform: rotate(-45deg);
   transform-origin: left bottom;
@@ -2155,7 +2325,7 @@ mark.hl {
 
 .weread-trend-bars__empty {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--color-text-muted);
   padding: 12px 0;
   text-align: center;
 }
@@ -2164,13 +2334,14 @@ mark.hl {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #f7a26a;
+  color: #b45309;
   font-size: 13px;
   padding: 6px 0;
 }
 
 @media (max-width: 480px) {
-  .weread-trend-grid {
+  .weread-trend-grid,
+  .weread-trend-grid--2col {
     grid-template-columns: 1fr;
   }
   .weread-trend-bar__label {
@@ -2179,10 +2350,13 @@ mark.hl {
 }
 
 /* ---------------------------------------------------------------
- * S27C WeRead notes library (light theme — matches the rest of the app)
+ * S27D-UI-POLISH: notes library — search on row 1 (primary), filters on
+ * row 2, actions on row 3. No inline alignment to neighbour cards.
  * --------------------------------------------------------------- */
 .weread-notes-card {
-  grid-column: span 3;
+  align-self: start;
+  height: auto;
+  min-width: 0;
 }
 
 .weread-notes-section {
@@ -2204,7 +2378,36 @@ mark.hl {
   color: #7c2d12;
 }
 
-.weread-notes-filter {
+/* Row 1 — search (visual primary) */
+.weread-notes-search-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+}
+
+.weread-notes-search__primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: var(--color-primary);
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.weread-notes-search__primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Row 2 — filters */
+.weread-notes-filter-row {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
@@ -2216,6 +2419,8 @@ mark.hl {
   flex-direction: column;
   gap: 4px;
   min-width: 110px;
+  flex: 1 1 110px;
+  max-width: 220px;
 }
 
 .weread-notes-filter__label {
@@ -2227,6 +2432,7 @@ mark.hl {
   font-weight: 500;
 }
 
+.weread-notes-filter-row select,
 .weread-notes-filter select {
   appearance: none;
   background: #ffffff;
@@ -2240,18 +2446,19 @@ mark.hl {
   cursor: pointer;
 }
 
-.weread-notes-filter__actions {
+/* Row 3 — actions */
+.weread-notes-actions-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  margin-left: auto;
   align-items: center;
 }
 
-.weread-notes-filter__actions button {
+.weread-notes-actions-row button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
+  padding: 6px 14px;
   background: var(--color-primary);
   color: #ffffff;
   border: none;
@@ -2261,27 +2468,27 @@ mark.hl {
   font-size: 13px;
 }
 
-.weread-notes-filter__actions button:disabled {
+.weread-notes-actions-row button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 
-.weread-notes-filter__secondary {
+.weread-notes-actions-row__export {
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
+  border: 1px solid #bfdbfe !important;
+}
+
+.weread-notes-actions-row__secondary {
   background: #ffffff !important;
   color: var(--color-text) !important;
   border: 1px solid var(--color-border) !important;
 }
 
-/* ---------- S27D: private notes full-text search ---------- */
-
-.weread-notes-search {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  margin-top: 10px;
-  width: 100%;
-}
+/* ---------- S27D: private notes full-text search (kept label/input/clear
+ *   classes from the original S27D; the wrapper div was replaced by
+ *   .weread-notes-search-row above and the dedicated search button now lives
+ *   inside .weread-notes-search__primary). */
 
 .weread-notes-search__label {
   display: inline-flex;
@@ -2308,31 +2515,6 @@ mark.hl {
 .weread-notes-search-input:focus {
   outline: 2px solid var(--color-primary);
   outline-offset: -1px;
-}
-
-.weread-notes-search-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.weread-notes-search-actions button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: var(--color-primary);
-  color: #ffffff;
-  border: none;
-  border-radius: var(--radius-sm);
-  font-weight: 600;
-  cursor: pointer;
-  font-size: 13px;
-}
-
-.weread-notes-search-actions button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
 }
 
 .weread-notes-search-clear {
@@ -2408,6 +2590,16 @@ mark.hl {
   border: 1px dashed var(--color-border);
   border-radius: var(--radius-sm);
   background: #f6f7f9;
+}
+
+.weread-notes-empty--idle {
+  padding: 28px 16px;
+  font-size: 14px;
+  color: var(--color-text);
+  background: #fafbff;
+  border-color: var(--color-primary);
+  border-style: solid;
+  border-width: 1px;
 }
 
 .weread-note-list {
@@ -2584,19 +2776,29 @@ mark.hl {
 }
 
 @media (max-width: 900px) {
-  .weread-notes-card {
-    grid-column: span 2;
-  }
+  /* notes library sits in the main column on tablet, side rail stacks below */
 }
 
 @media (max-width: 720px) {
-  .weread-notes-filter__actions {
-    width: 100%;
-    margin-left: 0;
+  .weread-notes-filter-row {
+    gap: 8px;
   }
   .weread-notes-filter__group {
-    flex: 1 1 calc(50% - 10px);
+    flex: 1 1 calc(50% - 8px);
     min-width: 0;
+    max-width: none;
+  }
+  .weread-notes-search-row {
+    gap: 6px;
+  }
+  .weread-notes-search-row .weread-notes-search__primary,
+  .weread-notes-search-row .weread-notes-search-clear {
+    flex: 1 1 calc(50% - 6px);
+    justify-content: center;
+  }
+  .weread-notes-actions-row button {
+    flex: 1 1 calc(50% - 8px);
+    justify-content: center;
   }
   .weread-notes-summary {
     font-size: 11px;
@@ -2607,9 +2809,6 @@ mark.hl {
 }
 
 @media (max-width: 480px) {
-  .weread-notes-card {
-    grid-column: span 1;
-  }
   .weread-note-copy {
     margin-left: 0;
   }

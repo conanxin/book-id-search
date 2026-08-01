@@ -191,6 +191,7 @@ export default function NotesLibrary({ token }: NotesLibraryProps) {
   }
 
   const summaryView = formatNotesSummary(summary);
+  const isEmptyIdle = state === "idle" && items.length === 0;
 
   return (
     <div className="weread-notes-section" data-query-key={queryKey}>
@@ -201,7 +202,52 @@ export default function NotesLibrary({ token }: NotesLibraryProps) {
         </span>
       </div>
 
-      <div className="weread-notes-filter">
+      {/* Row 1: search — visual primary action */}
+      <div className="weread-notes-search-row" data-testid="weread-notes-search-row">
+        <label className="weread-notes-search__label" htmlFor="weread-notes-search-input">
+          <Search size={12} aria-hidden="true" />
+          搜索
+        </label>
+        <input
+          id="weread-notes-search-input"
+          type="search"
+          className="weread-notes-search-input"
+          placeholder="搜索我的划线、想法、书评"
+          maxLength={100}
+          value={noteQueryInput}
+          onChange={(e) => setNoteQueryInput(e.target.value)}
+          onKeyDown={handleSearchKeyDown}
+          aria-label="搜索笔记"
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <button
+          type="button"
+          onClick={handleSearch}
+          className="weread-notes-search__primary"
+          disabled={state === "loading" || noteQueryInput.trim().length === 0}
+          title="按搜索词重新加载"
+          data-testid="weread-notes-search-button"
+        >
+          <Search size={14} aria-hidden="true" />
+          搜索
+        </button>
+        {(noteQuery.length > 0 || noteQueryInput.length > 0) ? (
+          <button
+            type="button"
+            onClick={handleClearSearch}
+            className="weread-notes-search-clear"
+            disabled={state === "loading"}
+            title="清除搜索，回到普通筛选模式"
+          >
+            <X size={14} aria-hidden="true" />
+            清除搜索
+          </button>
+        ) : null}
+      </div>
+
+      {/* Row 2: filters */}
+      <div className="weread-notes-filter-row">
         <div className="weread-notes-filter__group">
           <label className="weread-notes-filter__label">
             <Filter size={12} aria-hidden="true" /> 类型
@@ -271,70 +317,50 @@ export default function NotesLibrary({ token }: NotesLibraryProps) {
             ))}
           </select>
         </div>
-        <div className="weread-notes-filter__actions">
-          {state === "ready" || state === "error" ? (
-            <button type="button" onClick={handleLoad} title="按当前筛选重新加载">
-              <RefreshCw size={14} aria-hidden="true" />
-              应用筛选
-            </button>
-          ) : (
-            <button type="button" onClick={handleLoad} disabled={state === "loading"} title="加载最近一批笔记">
-              <Library size={14} aria-hidden="true" />
-              {state === "loading" ? "加载中…" : "加载最近笔记"}
-            </button>
-          )}
-          <button type="button" onClick={handleClearFilters} className="weread-notes-filter__secondary">
-            清空筛选
-          </button>
-        </div>
       </div>
 
-      <div className="weread-notes-search">
-        <label className="weread-notes-search__label" htmlFor="weread-notes-search-input">
-          <Search size={12} aria-hidden="true" />
-          搜索
-        </label>
-        <input
-          id="weread-notes-search-input"
-          type="search"
-          className="weread-notes-search-input"
-          placeholder="搜索我的划线、想法、书评"
-          maxLength={100}
-          value={noteQueryInput}
-          onChange={(e) => setNoteQueryInput(e.target.value)}
-          onKeyDown={handleSearchKeyDown}
-          aria-label="搜索笔记"
-          autoComplete="off"
-          spellCheck={false}
-        />
-        <div className="weread-notes-search-actions">
-          <button
-            type="button"
-            onClick={handleSearch}
-            disabled={state === "loading" || noteQueryInput.trim().length === 0}
-            title="按搜索词重新加载"
-          >
-            <Search size={14} aria-hidden="true" />
-            搜索
+      {/* Row 3: actions */}
+      <div className="weread-notes-actions-row">
+        {state === "ready" || state === "error" ? (
+          <button type="button" onClick={handleLoad} title="按当前筛选重新加载">
+            <RefreshCw size={14} aria-hidden="true" />
+            加载笔记
           </button>
-          {noteQuery.length > 0 || noteQueryInput.length > 0 ? (
-            <button
-              type="button"
-              onClick={handleClearSearch}
-              className="weread-notes-search-clear"
-              disabled={state === "loading"}
-              title="清除搜索，回到普通筛选模式"
-            >
-              <X size={14} aria-hidden="true" />
-              清除搜索
-            </button>
-          ) : null}
-        </div>
+        ) : (
+          <button type="button" onClick={handleLoad} disabled={state === "loading"} title="加载最近一批笔记">
+            <Library size={14} aria-hidden="true" />
+            {state === "loading" ? "加载中…" : "加载笔记"}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={handleExport}
+          className="weread-notes-actions-row__export"
+          disabled={items.length === 0}
+          title="导出当前结果 Markdown"
+        >
+          <Download size={14} aria-hidden="true" />
+          导出 Markdown
+        </button>
+        <button
+          type="button"
+          onClick={handleClearFilters}
+          className="weread-notes-actions-row__secondary"
+          title="重置筛选器（不影响搜索词）"
+        >
+          清空筛选
+        </button>
       </div>
 
       {state === "error" && error ? (
         <div className="weread-private-error">
           <AlertCircle size={14} /> {error}
+        </div>
+      ) : null}
+
+      {isEmptyIdle ? (
+        <div className="weread-notes-empty weread-notes-empty--idle" data-testid="weread-notes-empty-idle">
+          输入搜索词，或点击加载笔记开始浏览。
         </div>
       ) : null}
 
@@ -352,14 +378,10 @@ export default function NotesLibrary({ token }: NotesLibraryProps) {
           <span>未匹配 {summaryView.unknown}</span>
           <span className="weread-notes-summary__matched">已匹配 {summaryView.matched}</span>
           <span>未匹配 {summaryView.unmatched}</span>
-          <button type="button" onClick={handleExport} className="weread-notes-export" disabled={items.length === 0}>
-            <Download size={14} aria-hidden="true" />
-            导出当前结果 Markdown
-          </button>
         </div>
       ) : null}
 
-      {state === "ready" && items.length === 0 ? (
+      {state === "ready" && items.length === 0 && !isEmptyIdle ? (
         <div className="weread-notes-empty">当前筛选下没有可显示的笔记。</div>
       ) : null}
 
