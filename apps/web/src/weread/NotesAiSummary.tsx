@@ -15,6 +15,7 @@ import {
   hasAiSummaryContent,
   validateAiSummaryEligibility,
 } from "./wereadAiSummaryModel";
+import RelatedBooksDiscovery from "./RelatedBooksDiscovery";
 
 interface NotesAiSummaryProps {
   token: string;
@@ -313,6 +314,16 @@ export default function NotesAiSummary({ token, items }: NotesAiSummaryProps) {
           <p className="weread-ai-summary__disclaimer">
             AI 输出可能有遗漏，请人工复核。
           </p>
+
+          {/* S27G: once a valid AI summary is ready, surface the
+              "discover related books by topic" panel. The panel itself
+              gates the request on a validated summary + at least one
+              loaded note, so rendering it here is safe. */}
+          <RelatedBooksDiscovery
+            token={token}
+            summary={state.summary}
+            notes={items}
+          />
         </div>
       ) : null}
     </section>

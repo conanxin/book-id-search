@@ -94,6 +94,26 @@ WeRead Center 是 book-id-search 的独立微信读书私有数据入口页面�
 - 不写入 Meilisearch 索引。
 - 默认公开访问者看不到任何私人数据。
 
+## 根据主题发现相关书（S27G）
+
+AI 摘要成功显示后，会在同一区域下方出现一个虚框入口「根据当前主题发现相关书」：
+
+| 能力 | 说明 |
+|------|------|
+| 触发 | 用户主动点击「发现相关书」，不自动请求。 |
+| 种子来源 | 仅取 AI 摘要中的 `themes[].title`；不足 2 个时追加 `readingDirections[]`；不使用 `overview`、`keyPoints`、`reviewQuestions`、笔记正文、搜索词 `q`。 |
+| 排除项 | 当前已加载的、已匹配 book-id-search 书目的 `catalogId` 自动排除，避免推荐正在读的书。 |
+| 请求 | `POST /api/private/weread/related-books`（私有 token）。 |
+| 路由 | **不进入公开 `/api/search`，不写入 Meilisearch，不调用 MiniMax，不写任何日志**。 |
+| 响应 | 仅公开目录元数据（`catalogId` / `title` / `author` / `publisher` / `publishYear` / `isbn` / `matchedSeedIds`），不含 seed.text 或私有 ID。 |
+| 操作 | 「重新发现」重新发请求；「清除结果」清空当前结果。 |
+| 错误处理 | `401` / `403`（鉴权失败）、`413`（请求体过大）、`429`（限流或并发）、`502`（上游暂不可用）等通用中文反馈；错误响应不回显 seed 文本或 token。 |
+| 初始化 | summary、token、已加载笔记列表任意一项变化都会清空旧结果，避免显示过期的推荐。 |
+| 取消 | token 改变或组件卸载时 `AbortController` 取消未完成的请求。 |
+| 隐私提示 | 顶部固定显示：仅将 AI 摘要中的主题词发送到本站私有检索接口；不会再次发送笔记正文给 MiniMax，也不会进入公开搜索日志。 |
+
+详见 `docs/WEREAD_RELATED_BOOKS.md`。
+
 ## 与主搜索的关系
 
 - WeRead Center 是独立页面，只读取私有 overlay API。

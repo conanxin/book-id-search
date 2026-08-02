@@ -3116,6 +3116,195 @@ mark.hl {
   }
 }
 
+/* S27G — discover related public books by note theme */
+.weread-related-books {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px dashed var(--book-id-border, #d0d7de);
+  border-radius: 8px;
+  background: var(--book-id-bg-subtle, #f6f8fa);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.weread-related-books__header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.weread-related-books__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text, #1f2328);
+}
+
+.weread-related-books__notice {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-text-muted, #57606a);
+  line-height: 1.5;
+}
+
+.weread-related-books__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.weread-related-books__primary {
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--book-id-border, #d0d7de);
+  background: var(--book-id-bg, #ffffff);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text, #1f2328);
+}
+
+.weread-related-books__primary:hover:not(:disabled) {
+  background: var(--book-id-bg-hover, #eaeef2);
+}
+
+.weread-related-books__primary:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.weread-related-books__secondary {
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--book-id-border, #d0d7de);
+  background: transparent;
+  color: var(--color-text-muted, #57606a);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.weread-related-books__secondary:hover:not(:disabled) {
+  background: var(--book-id-bg-hover, #eaeef2);
+}
+
+.weread-related-books__secondary:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.weread-related-books__secondary--inline {
+  padding: 2px 6px;
+  font-size: 11px;
+  margin-left: 8px;
+}
+
+.weread-related-books__primary .spin,
+.weread-related-books__secondary .spin {
+  animation: spin 1s linear infinite;
+}
+
+.weread-related-books__status {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-text-muted, #57606a);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.weread-related-books__error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-danger, #cf222e);
+}
+
+.weread-related-books__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.weread-related-book-card {
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--book-id-border, #d0d7de);
+  background: var(--book-id-bg, #ffffff);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.weread-related-book-card__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text, #1f2328);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.weread-related-book-card__meta {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-text-muted, #57606a);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.weread-related-book-card__reason {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-text-muted, #57606a);
+  font-style: italic;
+  word-break: break-word;
+}
+
+.weread-related-book-card__link {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--color-link, #0969da);
+  text-decoration: none;
+  align-self: flex-start;
+}
+
+.weread-related-book-card__link:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 1024px) {
+  .weread-related-books__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .weread-related-books__grid {
+    grid-template-columns: 1fr;
+  }
+  .weread-related-books__actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .weread-related-books__primary,
+  .weread-related-books__secondary {
+    justify-content: center;
+    width: 100%;
+  }
+}
+
 /* S27F — per-book private WeRead Markdown export */
 .weread-book-export {
   display: flex;

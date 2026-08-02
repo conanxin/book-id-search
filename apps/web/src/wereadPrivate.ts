@@ -627,3 +627,159 @@ export function fetchWereadAiSummary(
     }
   );
 }
+
+/* -----------------------------------------------------------------------
+ * S27G — Discover related public books from sanitised AI-summary themes.
+ *
+ * Only short theme labels (≤80 chars per seed, ≤320 total, ≤6 seeds)
+ * leave the browser. Raw note text, AI summary body, search terms (`q`),
+ * token, wereadBookId/noteId/highlightId/chapterTitle, private titles,
+ * and authors are NEVER included in the request body.
+ *
+ * The endpoint is `POST /api/private/weread/related-books` and returns a
+ * list of public catalog metadata with the local seed ids that matched.
+ * Requests are NOT cached to local/session storage and never logged.
+ * ----------------------------------------------------------------------- */
+
+export interface WereadRelatedBookSeed {
+  id: string;
+  text: string;
+}
+
+export interface WereadRelatedBookItem {
+  catalogId: string;
+  title: string;
+  author?: string | null;
+  publisher?: string | null;
+  publishYear?: string | number | null;
+  isbn?: string | null;
+  matchedSeedIds: string[];
+}
+
+export interface WereadRelatedBooksMeta {
+  seedsUsed: number;
+  candidatesConsidered: number;
+  returned: number;
+  excluded: number;
+  persisted: false;
+  source: "meilisearch";
+}
+
+export interface WereadRelatedBooksResponse {
+  ok: true;
+  items: WereadRelatedBookItem[];
+  meta: WereadRelatedBooksMeta;
+}
+
+export const WEREAD_RELATED_BOOKS_CLIENT_LIMITS = {
+  MAX_SEEDS: 6,
+  MAX_SEED_CHARS: 80,
+  MAX_TOTAL_CHARS: 320,
+  MIN_LIMIT: 1,
+  MAX_LIMIT: 24,
+  DEFAULT_LIMIT: 12,
+  MAX_EXCLUDE_IDS: 100,
+  SEED_ID_RE: /^[A-Za-z0-9_-]{1,32}$/,
+  CATALOG_ID_RE: /^[0-9]+_[0-9]{12}$/,
+} as const;
+
+const RELATED_BOOKS_CONTROL_CHAR_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
+
+function sanitizeRelatedBookSeed(raw: unknown, totalCharsRef: { count: number }): WereadRelatedBookSeed | null {
+  if (!raw || typeof raw !== "object") return null;
+  const body = raw as Record<string, unknown>;
+  const id = typeof body.id === "string" ? body.id : "";
+  if (!WEREAD_RELATED_BOOKS_CLIENT_LIMITS.SEED_ID_RE.test(id)) return null;
+  const rawText = typeof body.text === "string" ? body.text : "";
+  if (rawText.length > WEREAD_RELATED_BOOKS_CLIENT_LIMITS.MAX_SEED_CHARS) {
+    return null;
+  }
+  const cleaned = rawText.replace(RELATED_BOOKS_CONTROL_CHAR_RE, "").trim();
+  if (cleaned.length === 0) return null;
+  const collapsed = cleaned.replace(/\s+/g, " ");
+  if (collapsed.length === 0) return null;
+  if (collapsed.length > WEREAD_RELATED_BOOKS_CLIENT_LIMITS.MAX_SEED_CHARS) return null;
+  if (totalCharsRef.count + collapsed.length > WEREAD_RELATED_BOOKS_CLIENT_LIMITS.MAX_TOTAL_CHARS) {
+    return null;
+  }
+  totalCharsRef.count += collapsed.length;
+  return { id, text: collapsed };
+}
+
+function sanitizeRelatedBookExclusions(
+  raw: ReadonlyArray<unknown>
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const id of raw) {
+    if (typeof id !== "string") continue;
+    const trimmed = id.trim();
+    if (!WEREAD_RELATED_BOOKS_CLIENT_LIMITS.CATALOG_ID_RE.test(trimmed)) continue;
+    if (seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    out.push(trimmed);
+    if (out.length >= WEREAD_RELATED_BOOKS_CLIENT_LIMITS.MAX_EXCLUDE_IDS) break;
+  }
+  return out;
+}
+
+/**
+ * POST /api/private/weread/related-books
+ *
+ * The body is reconstructed from a strict `{seeds, excludeCatalogIds, limit}`
+ * schema; everything else (overview, keyPoints, questions, raw note text,
+ * token, q, private IDs) is dropped before the request is issued.
+ *
+ * Errors thrown by this function NEVER include the token or the seed text
+ * — only the Chinese-language status / error message returned by the
+ * server, or a synthetic fetch failure message.
+ */
+export function fetchWereadRelatedBooks(
+  token: string,
+  seeds: ReadonlyArray<unknown>,
+  excludeCatalogIds: ReadonlyArray<unknown> = [],
+  signal?: AbortSignal
+): Promise<WereadRelatedBooksResponse> {
+  // 1. Strictly rebuild the seeds list. Order is preserved.
+  const totalCharsRef = { count: 0 };
+  const safeSeeds: WereadRelatedBookSeed[] = [];
+  const seenTexts = new Set<string>();
+  for (const raw of seeds) {
+    const cleaned = sanitizeRelatedBookSeed(raw, totalCharsRef);
+    if (!cleaned) continue;
+    if (seenTexts.has(cleaned.text)) continue;
+    seenTexts.add(cleaned.text);
+    safeSeeds.push(cleaned);
+    if (safeSeeds.length >= WEREAD_RELATED_BOOKS_CLIENT_LIMITS.MAX_SEEDS) break;
+  }
+  if (safeSeeds.length === 0) {
+    return Promise.reject(new Error("至少需要 1 个有效主题。"));
+  }
+
+  // 2. Build exclusions from the caller's supplied list.
+  const safeExcludes = sanitizeRelatedBookExclusions(excludeCatalogIds);
+
+  // 3. Issue the request with a strict JSON body. Limit is bounded by the
+  //    server contract (1-24, default 12) so any client-provided value is
+  //    clamped before leaving the browser.
+  const rawLimit = WEREAD_RELATED_BOOKS_CLIENT_LIMITS.DEFAULT_LIMIT;
+  const limit = Math.min(
+    WEREAD_RELATED_BOOKS_CLIENT_LIMITS.MAX_LIMIT,
+    Math.max(WEREAD_RELATED_BOOKS_CLIENT_LIMITS.MIN_LIMIT, Math.floor(rawLimit))
+  );
+
+  return privateRequestJson<WereadRelatedBooksResponse>(
+    token,
+    "/private/weread/related-books",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        seeds: safeSeeds,
+        excludeCatalogIds: safeExcludes,
+        limit,
+      }),
+      signal,
+    }
+  );
+}

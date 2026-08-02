@@ -773,3 +773,192 @@ describe("wereadPrivate S27F catalogId + per-book pagination", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// S27G — fetchWereadRelatedBooks
+// ---------------------------------------------------------------------------
+describe("fetchWereadRelatedBooks (S27G)", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+  const TOKEN = "token-for-s27g";
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          items: [],
+          meta: {
+            seedsUsed: 1,
+            candidatesConsidered: 0,
+            returned: 0,
+            excluded: 0,
+            persisted: false,
+            source: "meilisearch",
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("POST + Content-Type / auth header / payload shape", async () => {
+    await (
+      await import("./wereadPrivate")
+    ).fetchWereadRelatedBooks(TOKEN, [
+      { id: "theme-0", text: "合成主题" },
+    ]);
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const [url, init] = call;
+    expect(init?.method).toBe("POST");
+    expect(url).toContain("/private/weread/related-books");
+    expect(init?.headers).toMatchObject({
+      Authorization: "Bearer token-for-s27g",
+      "Content-Type": "application/json",
+    });
+    const body = JSON.parse(init.body as string);
+    expect(Object.keys(body).sort()).toEqual(["excludeCatalogIds", "limit", "seeds"]);
+  });
+
+  it("does not send overview / keyPoints / notes / q / token / private IDs", async () => {
+    await (
+      await import("./wereadPrivate")
+    ).fetchWereadRelatedBooks(
+      TOKEN,
+      [
+        {
+          id: "theme-0",
+          text: "合成主题",
+          // These fields must NEVER appear in the JSON body.
+          overview: "LEAK_OVERVIEW",
+          keyPoints: ["LEAK_KEYPOINT"],
+          question: "LEAK_QUESTION",
+          noteText: "LEAK_NOTE_TEXT",
+          q: "LEAK_Q",
+          token: "LEAK_TOKEN",
+          wereadBookId: "LEAK_WBID",
+          noteId: "LEAK_NID",
+          chapterTitle: "LEAK_CHAPTER",
+        } as unknown as import("./wereadPrivate").WereadRelatedBookSeed,
+      ],
+      ["13000000_000000000001"]
+    );
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const init = call[1];
+    const body = JSON.parse(init.body as string);
+    expect(Object.keys(body.seeds[0]).sort()).toEqual(["id", "text"]);
+    const serialized = JSON.stringify(body);
+    expect(serialized).not.toContain("LEAK_OVERVIEW");
+    expect(serialized).not.toContain("LEAK_KEYPOINT");
+    expect(serialized).not.toContain("LEAK_NOTE_TEXT");
+    expect(serialized).not.toContain("LEAK_Q");
+    expect(serialized).not.toContain("LEAK_TOKEN");
+    expect(serialized).not.toContain("LEAK_WBID");
+    expect(serialized).not.toContain("LEAK_NID");
+    expect(serialized).not.toContain("LEAK_CHAPTER");
+  });
+
+  it("supports AbortSignal — passes the signal to fetch", async () => {
+    const ctl = new AbortController();
+    await (
+      await import("./wereadPrivate")
+    ).fetchWereadRelatedBooks(
+      TOKEN,
+      [{ id: "theme-0", text: "合成主题" }],
+      [],
+      ctl.signal
+    );
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(call[1].signal).toBe(ctl.signal);
+  });
+
+  it("returns meta in the response", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          items: [{ catalogId: "13000000_000000000001", title: "x", matchedSeedIds: ["theme-0"] }],
+          meta: { seedsUsed: 1, candidatesConsidered: 1, returned: 1, excluded: 0, persisted: false, source: "meilisearch" },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    );
+    const out = await (
+      await import("./wereadPrivate")
+    ).fetchWereadRelatedBooks(TOKEN, [{ id: "theme-0", text: "合成主题" }]);
+    expect(out.meta.persisted).toBe(false);
+    expect(out.meta.source).toBe("meilisearch");
+  });
+
+  it("error responses surface generic messages without token / seed text leak", async () => {
+    for (const status of [401, 403, 429, 500] as const) {
+      fetchMock.mockReset();
+      fetchMock.mockResolvedValue(
+        new Response(JSON.stringify({ error: `generic-${status}` }), { status })
+      );
+      try {
+        await (
+          await import("./wereadPrivate")
+        ).fetchWereadRelatedBooks(TOKEN, [
+          { id: "theme-0", text: "合成主题-LEAK" },
+        ]);
+        throw new Error("expected-reject");
+      } catch (e) {
+        if (e instanceof Error && e.message === "expected-reject") {
+          throw new Error("did not throw");
+        }
+        const msg = (e as Error).message;
+        expect(msg).toContain(`generic-${status}`);
+        expect(msg).not.toContain("token-for-s27g");
+        expect(msg).not.toContain("合成主题-LEAK");
+      }
+    }
+  });
+
+  it("excludes malformed catalog ids from excludeCatalogIds", async () => {
+    await (
+      await import("./wereadPrivate")
+    ).fetchWereadRelatedBooks(
+      TOKEN,
+      [{ id: "theme-0", text: "合成主题" }],
+      ["bad", 1, null, "13000000_000000000099", "13000000_000000000099"]
+    );
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(call[1].body as string);
+    expect(body.excludeCatalogIds).toEqual(["13000000_000000000099"]);
+  });
+
+  it("dedupes duplicate seeds by text and caps to 6", async () => {
+    await (
+      await import("./wereadPrivate")
+    ).fetchWereadRelatedBooks(TOKEN, [
+      { id: "a", text: "重复主题" },
+      { id: "b", text: "  重复主题  " },
+      { id: "c", text: "另一主题" },
+      { id: "d", text: "X1" },
+      { id: "e", text: "X2" },
+      { id: "f", text: "X3" },
+      { id: "g", text: "X4" },
+      { id: "h", text: "X5" },
+    ]);
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(call[1].body as string);
+    // The dedupe map collapses the first two into one.
+    // Then plus 3 unique themes = 4 seeds. The rest are dropped by cap (6).
+    expect(body.seeds.length).toBeLessThanOrEqual(6);
+    expect(body.seeds[0].id).toBe("a");
+  });
+
+  it("rejects when seeds array is empty after sanitization", async () => {
+    await expect(
+      (
+        await import("./wereadPrivate")
+      ).fetchWereadRelatedBooks(TOKEN, [], [], undefined)
+    ).rejects.toThrow();
+  });
+});

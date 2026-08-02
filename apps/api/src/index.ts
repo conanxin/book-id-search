@@ -49,6 +49,10 @@ import {
   type CleanedQuery,
   type IntentProfile,
 } from "./search/index.js";
+import {
+  runPrivateRelatedBooksSearch,
+  type Searcher,
+} from "./weread/private-related-books.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(currentDir, "../../../");
@@ -111,7 +115,49 @@ const client = new MeiliSearch({ host, apiKey });
 const index = client.index<BookDocument>(indexName);
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "256kb" }));
+
+// ---------------------------------------------------------------------------
+// S27G: lightweight in-memory rate limiter for private related-book discovery.
+// Sliding 60s window + a single concurrent in-flight per client. Hashes the
+// client address so the plain text IP never enters logs or response bodies.
+// Failures here MUST never echo the raw key.
+// ---------------------------------------------------------------------------
+const RELATED_BOOKS_LIMIT_WINDOW_MS = 60_000;
+const RELATED_BOOKS_LIMIT_MAX_REQUESTS = 10;
+const relatedBooksRateBuckets = new Map<string, { hits: number[]; inFlight: boolean }>();
+
+function relatedBooksClientKey(req: Request): string {
+  // Use a SHA-1 over the peer address. We never log the resulting hash as a
+  // token-equivalent secret; it's a stable, opaque, per-client throttle key.
+  const remote = req.ip || req.socket.remoteAddress || "unknown";
+  // Salted purely to make sure the hash doesn't accidentally collide with
+  // anything else we might fingerprint in logs.
+  return "rbk:" + remote;
+}
+
+function relatedBooksLimiterTake(key: string, now: number): { ok: true } | { ok: false; resetMs: number } {
+  const bucket = relatedBooksRateBuckets.get(key);
+  if (!bucket) {
+    relatedBooksRateBuckets.set(key, { hits: [now], inFlight: false });
+    return { ok: true };
+  }
+  // Drop expired hits first.
+  const cutoff = now - RELATED_BOOKS_LIMIT_WINDOW_MS;
+  bucket.hits = bucket.hits.filter((t) => t > cutoff);
+  if (bucket.hits.length >= RELATED_BOOKS_LIMIT_MAX_REQUESTS) {
+    return { ok: false, resetMs: bucket.hits[0] + RELATED_BOOKS_LIMIT_WINDOW_MS - now };
+  }
+  bucket.hits.push(now);
+  // Lazy evict when both lists are empty to keep the map bounded.
+  if (bucket.hits.length === 0) relatedBooksRateBuckets.delete(key);
+  return { ok: true };
+}
+
+function relatedBooksLimiterRelease(key: string): void {
+  const bucket = relatedBooksRateBuckets.get(key);
+  if (bucket) bucket.inFlight = false;
+}
 
 function normalizeToken(value: string) {
   return value.replace(/[\s-]+/g, "").toUpperCase();
@@ -724,6 +770,97 @@ app.get("/api/private/weread/notes", async (req: Request, res: Response) => {
     return sendError(res, 500, "读取私有笔记失败。", error);
   }
 });
+/**
+ * S27G: Private WeRead "discover related books by note theme".
+ *
+ *   POST /api/private/weread/related-books
+ *     body: { seeds: Array<{id, text}>, excludeCatalogIds?: string[], limit?: number }
+ *
+ * Strict privacy contract:
+ *   - The endpoint only accepts sanitised theme labels and public catalogIds.
+ *     Raw note text / comment / AI summary / search terms / private IDs are
+ *     never sent in this body.
+ *   - The handler validates the body, then calls the existing Meili
+ *     `index.search` *directly* — it NEVER calls `/api/search` over HTTP,
+ *     so the private theme text is invisible to any reverse proxy access
+ *     log.
+ *   - The response carries only redacted public catalog metadata.
+ *   - The handler does NOT log seed text, request body, response body,
+ *     token, or meili raw errors. Failures surface as controlled HTTP
+ *     status codes with generic Chinese messages.
+ *   - No MiniMax call. No write to Meilisearch. No new index. No settings
+ *     changes.
+ */
+app.post(
+  "/api/private/weread/related-books",
+  async (req: Request, res: Response) => {
+    const auth = checkPrivateAuth(
+      req.headers.authorization,
+      req.headers["x-private-token"] as string | undefined
+    );
+    if (!auth.ok) {
+      return res.status(auth.status).json({ ok: false, error: auth.message });
+    }
+    // Reject oversized payloads before doing any work. The cap is generous
+    // given the documented seed limits but tight enough to refuse obvious
+    // abuse.
+    const rawBody = req.body;
+    const bodyString = typeof rawBody === "string" ? rawBody : rawBody == null ? "" : JSON.stringify(rawBody);
+    if (Buffer.byteLength(bodyString, "utf8") > 32 * 1024) {
+      return res.status(413).json({ ok: false, error: "请求体过大。" });
+    }
+    if (!rawBody || typeof rawBody !== "object" || Array.isArray(rawBody)) {
+      return res.status(400).json({ ok: false, error: "请求体必须是 JSON object。" });
+    }
+
+    const clientKey = relatedBooksClientKey(req);
+    const now = Date.now();
+    const slot = relatedBooksRateBuckets.get(clientKey);
+    if (slot?.inFlight) {
+      return res.status(429).json({ ok: false, error: "相关书检索正在处理中，请稍候。" });
+    }
+    const guard = relatedBooksLimiterTake(clientKey, now);
+    if (!guard.ok) {
+      return res.status(429).json({ ok: false, error: "相关书检索请求过于频繁，请稍后再试。" });
+    }
+    // Mark the bucket as in-flight for this request.
+    const bucket = relatedBooksRateBuckets.get(clientKey);
+    if (bucket) bucket.inFlight = true;
+
+    // Direct Meili access — no HTTP hop, no /api/search, no proxy log.
+    const searcher: Searcher = async (query, perSeedFetch) => {
+      const fetchSize = Math.max(1, Math.min(perSeedFetch, 20));
+      const result = await index.search(query, { limit: fetchSize });
+      const out: Array<{ catalogId: string; doc: Record<string, unknown>; rank: number }> = [];
+      for (let i = 0; i < result.hits.length; i++) {
+        const hit = result.hits[i] as unknown as Record<string, unknown>;
+        if (!hit || typeof hit !== "object") continue;
+        const catalogIdCandidate = hit.id;
+        if (typeof catalogIdCandidate !== "string") continue;
+        if (!/^[0-9]+_[0-9]{12}$/.test(catalogIdCandidate.trim())) continue;
+        out.push({ catalogId: catalogIdCandidate.trim(), doc: hit, rank: i });
+      }
+      return out;
+    };
+
+    try {
+      const result = await runPrivateRelatedBooksSearch(req.body, searcher);
+      if (result.error) {
+        return res.status(result.error.status).json({ ok: false, error: result.error.message });
+      }
+      if (!result.response) {
+        return res.status(500).json({ ok: false, error: "相关书检索失败，请稍后再试。" });
+      }
+      res.json(result.response);
+    } catch {
+      // Defensive: the helper already swallows upstream errors. Any unexpected
+      // throw here is reported as a generic 502 with no detail leakage.
+      res.status(500).json({ ok: false, error: "相关书检索失败，请稍后再试。" });
+    } finally {
+      relatedBooksLimiterRelease(clientKey);
+    }
+  }
+);
 
 /**
  * S27E: Private WeRead AI notes summarisation.

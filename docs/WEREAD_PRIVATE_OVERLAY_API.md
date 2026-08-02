@@ -253,6 +253,103 @@ This overlay has no effect on `/api/search`, `/api/stats`, `/api/health`, or AI 
 
 Error responses only contain a short `error` string; no token or private data is returned.
 
+## `POST /api/private/weread/related-books` (S27G)
+
+根据当前 AI 摘要中的主题词，检索 book-id-search 公开书目。这条端点暴露的最小可见字段：公开 `catalogId` / `title` / `author` / `publisher` / `publishYear` / `isbn`，以及命中的本地 `seed.id`。
+
+### Request
+
+```json
+{
+  "seeds": [
+    { "id": "theme-0", "text": "决策" },
+    { "id": "direction-0", "text": "反馈循环" }
+  ],
+  "excludeCatalogIds": ["13000000_000000000001"],
+  "limit": 12
+}
+```
+
+请求体上限 32 KiB。
+
+### Constraints
+
+| Field | Limit |
+|-------|-------|
+| `seeds` | 1–6 条，数组 |
+| `seeds[].id` | `^[A-Za-z0-9_-]{1,32}$` |
+| `seeds[].text` | 去除控制字符、合并空白后 1–80 字符 |
+| `seeds` 总字符数 | ≤ 320 |
+| `excludeCatalogIds` | 可选，0–100 条，每条 `^[0-9]+_[0-9]{12}$`（公开目录格式） |
+| `limit` | 整数，1–24，默认 12 |
+
+重复的 `text` 会去重，保留第一条 `id`。
+
+### Response
+
+```json
+{
+  "ok": true,
+  "items": [
+    {
+      "catalogId": "13000000_000000000002",
+      "title": "公开书名",
+      "author": "公开作者",
+      "publisher": "公开出版社",
+      "publishYear": 2024,
+      "isbn": "9787000000002",
+      "matchedSeedIds": ["theme-0"]
+    }
+  ],
+  "meta": {
+    "seedsUsed": 2,
+    "candidatesConsidered": 16,
+    "returned": 6,
+    "excluded": 4,
+    "persisted": false,
+    "source": "meilisearch"
+  }
+}
+```
+
+### Error responses
+
+- `400` —— 种子越界 / `excludeCatalogIds` 格式不合法。
+- `401` —— 缺少 token。
+- `403` —— token 不匹配。
+- `404` —— 私有 overlay 未启用。
+- `413` —— 请求体超过 32 KiB。
+- `429` —— 触发限流（每客户端每分钟 ≤ 10 次）或存在并发请求。
+- `500` —— 内部异常。
+- `502` —— Meilisearch 上游暂不可用。
+
+错误响应只返回 `{ ok: false, error: "..." }`，**永远不会回显 seed 文本、token 或上游原始错误信息**。
+
+### 隐私边界
+
+| 不发送 / 不持久化的内容 |
+|------------------------|
+| 原始笔记 `text` / `comment` |
+| `summary.overview` / `keyPoints` / `reviewQuestions` 全文 |
+| `q`（笔记搜索词） |
+| 微信读书 `wereadBookId` / `noteId` / `highlightId` / `chapterTitle` |
+| 微信读书 `title` / `author`（只有 book-id-search 公开书目元数据会出现） |
+| 原查询词 / Meili 原分 / `_rankingScore` / `_rankingScoreDetails` |
+| 完整 Meili 文档（只映射公开字段） |
+| 任何对 MiniMax 的调用 |
+| 任何对 Meilisearch 的写入、settings 修改、index 新增 |
+| `localStorage` / `sessionStorage` / IndexedDB |
+
+### 实现要点
+
+- 服务端直接复用现有 `MeiliSearch` client 上的 `books` index `search()`，**不**调用本站公开 `/api/search`。
+- 候选与排名采用 Reciprocal Rank Fusion（`score += 1 / (60 + rank)`），最终按 `(score, 命中 seed 数, 最佳 rank, catalogId)` 排序。
+- 去除：`excludeCatalogIds`、空 `catalogId`、标题为空且无 fallback 元数据、同一 `catalogId` 仅保留一份。
+- 限流：每客户端滑动 60 秒 ≤ 10 次；同一客户端仅允许一个并发未完成请求。
+- 鉴权失败 (401/403/404) 与其他 `/api/private/weread/*` 路由一致。
+
+详见 `docs/WEREAD_RELATED_BOOKS.md`。
+
 ## `GET /api/private/weread/trends`
 
 返回 7/30/90 天窗口和全部时间窗口的笔记/划线统计，仅统计数量，不返回任何正文、章节标题或微信读书内部 ID。

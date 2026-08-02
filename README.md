@@ -365,4 +365,21 @@ Caddy 是公网唯一入口。3001/5173/7700 全部绑定 `127.0.0.1`。
 - 输入 private token 后显示 counts-only 统计。
 - 不显示笔记/划线正文，不暴露微信读书内部 ID。
 - 不影响主搜索，不写入 Meilisearch。
-- 详见 [docs/WEREAD_CENTER.md](docs/WEREAD_CENTER.md)。
+
+### S27E · 私有 AI 整理
+
+- AI 整理当前已加载笔记。
+- 详见 [docs/WEREAD_AI_SUMMARY.md](docs/WEREAD_AI_SUMMARY.md) 和 [reports/WEREAD_AI_SUMMARY_REPORT.md](reports/WEREAD_AI_SUMMARY_REPORT.md)。
+
+### S27F · 按书导出 Markdown
+
+- 将当前已加载的笔记导出为 Markdown（不上传、不包含私密 ID）。
+- 详见 [reports/WEREAD_BOOK_EXPORT_REPORT.md](reports/WEREAD_BOOK_EXPORT_REPORT.md)。
+
+### S27G · 根据当前主题发现相关书
+
+- 仅取 AI 摘要里的主题词作为种子，私有 token 接口直接复用 Meilisearch 公开索引。
+- 不调用 MiniMax，不经过 `/api/search`，不写日志、不持久化结果。
+- 详见 [docs/WEREAD_RELATED_BOOKS.md](docs/WEREAD_RELATED_BOOKS.md) 和 [reports/WEREAD_RELATED_BOOKS_REPORT.md](reports/WEREAD_RELATED_BOOKS_REPORT.md)。
+
+更全面的说明见 [docs/WEREAD_CENTER.md](docs/WEREAD_CENTER.md) / [docs/WEREAD_PRIVATE_OVERLAY_API.md](docs/WEREAD_PRIVATE_OVERLAY_API.md)。
