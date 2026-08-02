@@ -76,6 +76,29 @@ WeRead Center 是 book-id-search 的独立微信读书私有数据入口页面�
 | 有划线的已匹配书 | 已匹配且有划线记录的书数 |
 | 已匹配书目的笔记记录 | 已匹配书对应的笔记/划线/想法/书评记录总数 |
 
+## 个人阅读地图（S27H）
+
+成功加载 summary 后，顶部的「笔记与 AI / 个人阅读地图」标签切换会多出第二个选项。默认仍显示「笔记与 AI」；切换到「个人阅读地图」后才会请求 `GET /api/private/weread/reading-map`，**首次激活前不会触发请求**。
+
+| 能力 | 说明 |
+|------|------|
+| 阅读历史概览 | 首条 / 最近笔记日期、活跃月份、当前 / 最长连续月份、已匹配笔记记录数。 |
+| 月度阅读时间轴 | 6 / 12 / 24 / 36 月可切换。每条柱状图含总笔记数 + 划线 / 想法 / 书评 / 已匹配拆分，附带无障碍文本列表。 |
+| 阅读星图 | 仅在已选 topBooks 内绘制的同期阅读关系网络。节点大小 ∝ 笔记数，连线粗细 ∝ 共同活跃月份。点击节点进入 `/books/:catalogId`。 |
+| 高互动书目列表 | 仅公共目录元数据（title / author / 笔记数 / 活跃月数 / 首末笔记日期）。 |
+| 同期阅读关系 | 至多 24 条「共同活跃 N 个月」配对，仅显示文字标题，不暴露内部权重。 |
+| 顶部隐私声明 | 固定显示：「阅读地图仅使用笔记日期、类型和已确认的公共书目匹配关系生成，不读取或展示笔记正文，也不会调用外部 AI。」 |
+| 取消与重置 | token 清除时自动 abort 进行中的请求并清空所有数据；6/12/24/36 月和 6/12/18 本切换会重新请求。 |
+
+数据流：
+
+1. 浏览器调用 `GET /api/private/weread/reading-map?months={6|12|24|36}&topBooks={6|12|18}`，附 `Authorization: Bearer <token>`。
+2. 服务端仅读取本地 private snapshot，通过 `loadWereadOverlay` 拿到 `notesByBook` 与 `confirmedByCatalogId`。
+3. 服务端调用 `index.getDocument(catalogId)` 在 Meilisearch `books` 索引直接获取公开 `title / author / publisher / year`，失败 fallback 为 `书目 ${catalogId}`。
+4. 响应只携带 `overview / timeline / books / links / meta.persisted = false`，**不返回 `wereadBookId` / `noteId` / `highlightId` / `chapterTitle` / 微信读书原始 title / author / 任何笔记正文**。
+
+详见 `docs/WEREAD_READING_MAP.md`。
+
 ## 不显示的内容
 
 - 笔记正文

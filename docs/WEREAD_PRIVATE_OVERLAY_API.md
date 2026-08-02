@@ -9,6 +9,7 @@ Private, read-only API endpoints that expose a minimal, redacted view of your We
 - `POST /api/private/weread/status/batch` — batch reading status for up to 100 catalogIds.
 - `GET /api/private/weread/trends` — counts-only notes/highlights trend (S27B).
 - `GET /api/private/weread/notes` — paginated note items with `text` / `comment` (S27C). S27D adds optional `?q=` full-text search over `text` / `comment` only.
+- `GET /api/private/weread/reading-map` — personal reading-map aggregates: monthly timeline, top books, contemporaneous-reading links (S27H). Strict privacy contract — no note text / comment / private IDs ever returned.
 
 ## Authentication
 

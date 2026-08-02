@@ -382,4 +382,11 @@ Caddy 是公网唯一入口。3001/5173/7700 全部绑定 `127.0.0.1`。
 - 不调用 MiniMax，不经过 `/api/search`，不写日志、不持久化结果。
 - 详见 [docs/WEREAD_RELATED_BOOKS.md](docs/WEREAD_RELATED_BOOKS.md) 和 [reports/WEREAD_RELATED_BOOKS_REPORT.md](reports/WEREAD_RELATED_BOOKS_REPORT.md)。
 
+### S27H · 个人阅读地图
+
+- `GET /api/private/weread/reading-map?months={6|12|24|36}&topBooks={6|12|18}` 返回月度笔记时间轴、高互动书目、同期阅读关系网络。
+- 仅使用笔记日期、类型和已确认的公共书目匹配关系；不读取 / 不返回笔记正文，不返回微信读书原始 title/author。
+- 页面顶部的「笔记与 AI / 个人阅读地图」标签切换：默认仍为「笔记与 AI」，切换到地图后才请求数据。
+- 详见 [docs/WEREAD_READING_MAP.md](docs/WEREAD_READING_MAP.md) 和 [reports/WEREAD_READING_MAP_REPORT.md](reports/WEREAD_READING_MAP_REPORT.md)。
+
 更全面的说明见 [docs/WEREAD_CENTER.md](docs/WEREAD_CENTER.md) / [docs/WEREAD_PRIVATE_OVERLAY_API.md](docs/WEREAD_PRIVATE_OVERLAY_API.md)。

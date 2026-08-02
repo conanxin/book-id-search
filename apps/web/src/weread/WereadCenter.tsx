@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BookOpen, Lock, Loader2, AlertCircle, XCircle, RefreshCw, Shield, EyeOff, BarChart3, Library } from "lucide-react";
+import { BookOpen, Lock, Loader2, AlertCircle, XCircle, RefreshCw, Shield, EyeOff, BarChart3, Library, Map } from "lucide-react";
 import {
   clearWereadToken,
   fetchWereadSummary,
@@ -18,6 +18,9 @@ import {
   type WereadTrendView,
 } from "./wereadCenterModel";
 import NotesLibrary from "./NotesLibrary";
+import ReadingMapDashboard from "./ReadingMapDashboard";
+
+type WorkspaceTab = "notes" | "map";
 
 function StatCard({
   label,
@@ -135,6 +138,8 @@ export default function WereadCenter() {
   const [trendsError, setTrendsError] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "error" | "disabled">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>("notes");
+  const [mapActivated, setMapActivated] = useState(false);
 
   useEffect(() => {
     const t = getWereadToken();
@@ -205,6 +210,13 @@ export default function WereadCenter() {
     setStatus("idle");
     setError(null);
     setToken("");
+    setActiveTab("notes");
+    setMapActivated(false);
+  }
+
+  function handleTabChange(next: WorkspaceTab) {
+    setActiveTab(next);
+    if (next === "map") setMapActivated(true);
   }
 
   function handleRetry() {
@@ -293,6 +305,41 @@ export default function WereadCenter() {
             </p>
           </section>
 
+          <div className="weread-workspace-tabs" role="tablist" aria-label="微信读书中心工作区">
+            <button
+              type="button"
+              role="tab"
+              id="weread-tab-notes"
+              aria-selected={activeTab === "notes"}
+              aria-controls="weread-panel-notes"
+              className={`weread-workspace-tab ${activeTab === "notes" ? "weread-workspace-tab--active" : ""}`}
+              onClick={() => handleTabChange("notes")}
+              data-testid="weread-tab-notes"
+            >
+              <Library size={14} aria-hidden="true" /> 笔记与 AI
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="weread-tab-map"
+              aria-selected={activeTab === "map"}
+              aria-controls="weread-panel-map"
+              className={`weread-workspace-tab ${activeTab === "map" ? "weread-workspace-tab--active" : ""}`}
+              onClick={() => handleTabChange("map")}
+              data-testid="weread-tab-map"
+            >
+              <Map size={14} aria-hidden="true" /> 个人阅读地图
+            </button>
+          </div>
+
+          <div
+            id="weread-panel-notes"
+            role="tabpanel"
+            aria-labelledby="weread-tab-notes"
+            hidden={activeTab !== "notes"}
+            className="weread-workspace-panel"
+            data-testid="weread-panel-notes"
+          >
           <div className="weread-center-grid" data-testid="weread-center-grid">
             <section className="weread-center-card weread-notes-card" data-testid="weread-notes-card">
               <h2 className="weread-center-card__title">
@@ -340,6 +387,18 @@ export default function WereadCenter() {
                 </details>
               </section>
             </aside>
+          </div>
+          </div>
+
+          <div
+            id="weread-panel-map"
+            role="tabpanel"
+            aria-labelledby="weread-tab-map"
+            hidden={activeTab !== "map"}
+            className="weread-workspace-panel"
+            data-testid="weread-panel-map"
+          >
+            {storedToken && mapActivated ? <ReadingMapDashboard token={storedToken} /> : null}
           </div>
         </>
       ) : null}

@@ -281,6 +281,148 @@ export function fetchWereadNotes(token: string, query: WereadNotesQuery = {}): P
   return privateRequestJson<WereadNotesResponse>(token, path);
 }
 
+/* -----------------------------------------------------------------------
+ * S27H — Private WeRead "personal reading map".
+ *
+ * Only aggregated counts (timeline, top books, contemporaneous-reading
+ * links, streak counters) leave the server. The endpoint never returns
+ * note text / comment / wereadBookId / noteId / highlightId /
+ * chapterTitle / raw WeRead title / author.
+ *
+ * The browser request is a plain `GET` with an `Authorization: Bearer …`
+ * header — no body, no `q`, no raw notes. Nothing is cached to
+ * localStorage / sessionStorage and the response is never logged.
+ * ----------------------------------------------------------------------- */
+
+export interface WereadReadingMapOverview {
+  booksCount: number;
+  notesCount: number;
+  matchedCatalogsCount: number;
+  matchedNoteRecordsCount: number;
+  firstNoteAt: string | null;
+  lastNoteAt: string | null;
+  activeMonths: number;
+  currentStreakMonths: number;
+  longestStreakMonths: number;
+}
+
+export interface WereadReadingMapMonth {
+  month: string;
+  total: number;
+  highlights: number;
+  thoughts: number;
+  reviews: number;
+  unknown: number;
+  matched: number;
+}
+
+export interface WereadReadingMapBook {
+  catalogId: string;
+  title: string;
+  author?: string | null;
+  publisher?: string | null;
+  publishYear?: string | number | null;
+  noteCount: number;
+  highlights: number;
+  thoughts: number;
+  reviews: number;
+  unknown: number;
+  activeMonths: number;
+  firstNoteAt?: string | null;
+  lastNoteAt?: string | null;
+}
+
+export interface WereadReadingMapLink {
+  sourceCatalogId: string;
+  targetCatalogId: string;
+  sharedMonths: number;
+  weight: number;
+}
+
+export interface WereadReadingMapMeta {
+  monthsRequested: number;
+  monthsReturned: number;
+  topBooksRequested: number;
+  topBooksReturned: number;
+  linksReturned: number;
+  persisted: false;
+  source: "private_snapshot+public_catalog";
+}
+
+export interface WereadReadingMapResponse {
+  ok: true;
+  overview: WereadReadingMapOverview;
+  timeline: WereadReadingMapMonth[];
+  books: WereadReadingMapBook[];
+  links: WereadReadingMapLink[];
+  meta: WereadReadingMapMeta;
+}
+
+export interface WereadReadingMapErrorResponse {
+  ok?: false;
+  error?: string;
+}
+
+export const WEREAD_READING_MAP_CLIENT_LIMITS = {
+  MIN_MONTHS: 6,
+  MAX_MONTHS: 36,
+  ALLOWED_MONTHS: [6, 12, 24, 36] as const,
+  DEFAULT_MONTHS: 24,
+  MIN_TOP_BOOKS: 6,
+  MAX_TOP_BOOKS: 18,
+  DEFAULT_TOP_BOOKS: 12,
+} as const;
+
+export type WereadReadingMapMonthsOption =
+  (typeof WEREAD_READING_MAP_CLIENT_LIMITS.ALLOWED_MONTHS)[number];
+
+export interface FetchWereadReadingMapOptions {
+  months?: WereadReadingMapMonthsOption;
+  topBooks?: number;
+  signal?: AbortSignal;
+}
+
+/**
+ * GET /api/private/weread/reading-map
+ *
+ * The browser request carries no body and no identifiers besides the
+ * `Authorization: Bearer …` header. Months and topBooks are validated
+ * client-side before being attached so that a typo can never silently
+ * broaden the request — any out-of-range value is silently clamped to
+ * the documented default and no error is raised (the server is the
+ * authoritative validator; this is purely UX polish).
+ */
+export function fetchWereadReadingMap(
+  token: string,
+  options: FetchWereadReadingMapOptions = {}
+): Promise<WereadReadingMapResponse> {
+  const params = new URLSearchParams();
+  let months: WereadReadingMapMonthsOption = WEREAD_READING_MAP_CLIENT_LIMITS.DEFAULT_MONTHS;
+  if (
+    typeof options.months === "number" &&
+    (WEREAD_READING_MAP_CLIENT_LIMITS.ALLOWED_MONTHS as ReadonlyArray<number>).includes(options.months)
+  ) {
+    months = options.months as WereadReadingMapMonthsOption;
+  }
+  params.set("months", String(months));
+  let topBooks: number = WEREAD_READING_MAP_CLIENT_LIMITS.DEFAULT_TOP_BOOKS;
+  if (typeof options.topBooks === "number" && Number.isInteger(options.topBooks)) {
+    topBooks = Math.min(
+      WEREAD_READING_MAP_CLIENT_LIMITS.MAX_TOP_BOOKS,
+      Math.max(WEREAD_READING_MAP_CLIENT_LIMITS.MIN_TOP_BOOKS, options.topBooks)
+    );
+  }
+  params.set("topBooks", String(topBooks));
+  const qs = params.toString();
+  const path = qs
+    ? `/private/weread/reading-map?${qs}`
+    : "/private/weread/reading-map";
+  return privateRequestJson<WereadReadingMapResponse>(token, path, {
+    method: "GET",
+    signal: options.signal,
+  });
+}
+
 // ---------- S27F per-book pagination helper ----------
 
 export const WEREAD_BOOK_PAGINATION = {

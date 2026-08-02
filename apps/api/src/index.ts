@@ -53,6 +53,10 @@ import {
   runPrivateRelatedBooksSearch,
   type Searcher,
 } from "./weread/private-related-books.js";
+import {
+  runPrivateReadingMap,
+  type PublicBookMetadata,
+} from "./weread/private-reading-map.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(currentDir, "../../../");
@@ -116,6 +120,37 @@ const index = client.index<BookDocument>(indexName);
 
 app.use(cors());
 app.use(express.json({ limit: "256kb" }));
+
+// ---------------------------------------------------------------------------
+// S27H: lightweight in-memory rate limiter for the private reading-map
+// endpoint. 20 GETs per 60s sliding window, no concurrency lock (GET is
+// idempotent). Same per-IP hash strategy as the related-books limiter so
+// plain text IPs never enter logs or response bodies.
+// ---------------------------------------------------------------------------
+const READING_MAP_LIMIT_WINDOW_MS = 60_000;
+const READING_MAP_LIMIT_MAX_REQUESTS = 20;
+const readingMapRateBuckets = new Map<string, { hits: number[] }>();
+
+function readingMapClientKey(req: Request): string {
+  const remote = req.ip || req.socket.remoteAddress || "unknown";
+  return "rmp:" + remote;
+}
+
+function readingMapLimiterTake(key: string, now: number): { ok: true } | { ok: false; resetMs: number } {
+  const bucket = readingMapRateBuckets.get(key);
+  if (!bucket) {
+    readingMapRateBuckets.set(key, { hits: [now] });
+    return { ok: true };
+  }
+  const cutoff = now - READING_MAP_LIMIT_WINDOW_MS;
+  bucket.hits = bucket.hits.filter((t) => t > cutoff);
+  if (bucket.hits.length >= READING_MAP_LIMIT_MAX_REQUESTS) {
+    return { ok: false, resetMs: bucket.hits[0] + READING_MAP_LIMIT_WINDOW_MS - now };
+  }
+  bucket.hits.push(now);
+  if (bucket.hits.length === 0) readingMapRateBuckets.delete(key);
+  return { ok: true };
+}
 
 // ---------------------------------------------------------------------------
 // S27G: lightweight in-memory rate limiter for private related-book discovery.
@@ -770,6 +805,128 @@ app.get("/api/private/weread/notes", async (req: Request, res: Response) => {
     return sendError(res, 500, "读取私有笔记失败。", error);
   }
 });
+/**
+ * S27H: Private WeRead "personal reading map".
+ *
+ *   GET /api/private/weread/reading-map?months=24&topBooks=12
+ *
+ * Strict privacy contract:
+ *   - The handler only reads the local private snapshot through
+ *     `loadWereadOverlay`; note text / comment / wereadBookId /
+ *     noteId / highlightId / chapterTitle / raw WeRead title / author
+ *     never leave the helper layer.
+ *   - Public metadata (title / author / publisher / year) is fetched
+ *     from the existing Meilisearch `books` index via `index.getDocument`
+ *     — the handler does NOT call `/api/search` over HTTP.
+ *   - The handler does NOT log seed text, request body, response body,
+ *     token, or Meili raw errors.
+ *   - No MiniMax call. No write to Meilisearch. No persistence of any
+ *     kind.
+ *   - Auth mirrors every other /api/private/weread/* endpoint.
+ */
+app.get(
+  "/api/private/weread/reading-map",
+  async (req: Request, res: Response) => {
+    const auth = checkPrivateAuth(
+      req.headers.authorization,
+      req.headers["x-private-token"] as string | undefined
+    );
+    if (!auth.ok) {
+      return res.status(auth.status).json({ ok: false, error: auth.message });
+    }
+
+    const clientKey = readingMapClientKey(req);
+    const now = Date.now();
+    const guard = readingMapLimiterTake(clientKey, now);
+    if (!guard.ok) {
+      return res.status(429).json({ ok: false, error: "阅读地图请求过于频繁，请稍后再试。" });
+    }
+
+    // Build the query envelope directly from `req.query` so the helper's
+    // validator owns all the constraint logic. No additional parsing
+    // happens here — bad values surface as 400 from `runPrivateReadingMap`.
+    const query: Record<string, unknown> = {};
+    if (typeof req.query.months === "string" && req.query.months.length > 0) {
+      const parsed = Number(req.query.months);
+      if (Number.isFinite(parsed)) query.months = parsed;
+    }
+    if (typeof req.query.topBooks === "string" && req.query.topBooks.length > 0) {
+      const parsed = Number(req.query.topBooks);
+      if (Number.isFinite(parsed)) query.topBooks = parsed;
+    }
+
+    try {
+      const overlay = loadWereadOverlay(getWereadOverlayDataDir());
+      const notes: Array<{
+        wereadBookId: string;
+        catalogId: string;
+        type: unknown;
+        createdAt: unknown;
+        updatedAt: unknown;
+      }> = [];
+      for (const [wereadBookId, list] of overlay.notesByBook.entries()) {
+        for (const n of list) {
+          notes.push({
+            wereadBookId,
+            catalogId: "",
+            type: (n as { type?: unknown })?.type,
+            createdAt: (n as { createdAt?: unknown })?.createdAt,
+            updatedAt: (n as { updatedAt?: unknown })?.updatedAt,
+          });
+        }
+      }
+      const confirmedMatches: Array<{ wereadBookId: string; catalogId: string }> = [];
+      for (const m of overlay.confirmedByCatalogId.values()) {
+        confirmedMatches.push({ wereadBookId: m.wereadBookId, catalogId: m.catalogId });
+      }
+      const fetchMetadata = {
+        fetchByCatalogId: async (catalogId: string): Promise<PublicBookMetadata | null> => {
+          try {
+            const doc = (await index.getDocument(catalogId)) as unknown as Record<string, unknown>;
+            if (!doc || typeof doc !== "object") return null;
+            const title = typeof doc.title === "string" ? doc.title.trim() : "";
+            if (title.length === 0) return null;
+            return {
+              catalogId,
+              title,
+              author: typeof doc.author === "string" && doc.author.trim().length > 0 ? doc.author.trim() : null,
+              publisher: typeof doc.publisher === "string" && doc.publisher.trim().length > 0 ? doc.publisher.trim() : null,
+              publishYear:
+                typeof doc.year === "number" && Number.isFinite(doc.year)
+                  ? doc.year
+                  : typeof doc.year === "string" && doc.year.trim().length > 0
+                  ? doc.year.trim()
+                  : null,
+            };
+          } catch {
+            // Unknown catalogId (404) or transient upstream failure — the
+            // helper falls back to a deterministic `书目 ${catalogId}`
+            // title. Never echo the upstream error message here.
+            return null;
+          }
+        },
+      };
+
+      const result = await runPrivateReadingMap({
+        query,
+        notes,
+        confirmedMatches,
+        booksCount: overlay.books.size,
+        fetchMetadata,
+      });
+      if (result.error) {
+        return res.status(result.error.status).json({ ok: false, error: result.error.message });
+      }
+      if (!result.response) {
+        return res.status(500).json({ ok: false, error: "阅读地图生成失败，请稍后再试。" });
+      }
+      return res.json(result.response);
+    } catch (err) {
+      return sendError(res, 500, "阅读地图生成失败，请稍后再试。", err);
+    }
+  }
+);
+
 /**
  * S27G: Private WeRead "discover related books by note theme".
  *

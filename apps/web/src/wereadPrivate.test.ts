@@ -962,3 +962,208 @@ describe("fetchWereadRelatedBooks (S27G)", () => {
     ).rejects.toThrow();
   });
 });
+
+// S27H — fetchWereadReadingMap
+describe("fetchWereadReadingMap (S27H)", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+  const TOKEN = "token-for-s27h";
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          overview: {
+            booksCount: 0,
+            notesCount: 0,
+            matchedCatalogsCount: 0,
+            matchedNoteRecordsCount: 0,
+            firstNoteAt: null,
+            lastNoteAt: null,
+            activeMonths: 0,
+            currentStreakMonths: 0,
+            longestStreakMonths: 0,
+          },
+          timeline: [],
+          books: [],
+          links: [],
+          meta: {
+            monthsRequested: 24,
+            monthsReturned: 24,
+            topBooksRequested: 12,
+            topBooksReturned: 0,
+            linksReturned: 0,
+            persisted: false,
+            source: "private_snapshot+public_catalog",
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("uses default months=24 and topBooks=12 when no options provided", async () => {
+    await (
+      await import("./wereadPrivate")
+    ).fetchWereadReadingMap(TOKEN);
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(call[0]).toContain("/private/weread/reading-map");
+    expect(call[0]).toContain("months=24");
+    expect(call[0]).toContain("topBooks=12");
+    expect((call[1].method ?? "GET").toUpperCase()).toBe("GET");
+  });
+
+  it("attaches months and topBooks options", async () => {
+    await (
+      await import("./wereadPrivate")
+    ).fetchWereadReadingMap(TOKEN, { months: 12, topBooks: 18 });
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(call[0]).toContain("months=12");
+    expect(call[0]).toContain("topBooks=18");
+  });
+
+  it("sends the Bearer Authorization header", async () => {
+    await (
+      await import("./wereadPrivate")
+    ).fetchWereadReadingMap(TOKEN);
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const headers = call[1].headers as Record<string, string>;
+    expect(headers.Authorization).toBe(`Bearer ${TOKEN}`);
+  });
+
+  it("forwards the AbortSignal to fetch", async () => {
+    const controller = new AbortController();
+    await (
+      await import("./wereadPrivate")
+    ).fetchWereadReadingMap(TOKEN, { signal: controller.signal });
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(call[1].signal).toBe(controller.signal);
+  });
+
+  it("returns a friendly error for 401/403/500 responses", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: "Invalid token." }), { status: 403 })
+    );
+    await expect(
+      (await import("./wereadPrivate")).fetchWereadReadingMap(TOKEN)
+    ).rejects.toThrow(/token|认证/i);
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: "阅读地图生成失败。" }), { status: 500 })
+    );
+    await expect(
+      (await import("./wereadPrivate")).fetchWereadReadingMap(TOKEN)
+    ).rejects.toThrow(/阅读地图/);
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: "Missing token." }), { status: 401 })
+    );
+    await expect(
+      (await import("./wereadPrivate")).fetchWereadReadingMap(TOKEN)
+    ).rejects.toThrow(/token|认证/i);
+  });
+
+  it("returns the parsed response shape on success", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          overview: {
+            booksCount: 5,
+            notesCount: 10,
+            matchedCatalogsCount: 5,
+            matchedNoteRecordsCount: 8,
+            firstNoteAt: "2026-01-01T00:00:00.000Z",
+            lastNoteAt: "2026-07-01T00:00:00.000Z",
+            activeMonths: 7,
+            currentStreakMonths: 7,
+            longestStreakMonths: 7,
+          },
+          timeline: [
+            {
+              month: "2026-07",
+              total: 1,
+              highlights: 1,
+              thoughts: 0,
+              reviews: 0,
+              unknown: 0,
+              matched: 1,
+            },
+          ],
+          books: [],
+          links: [],
+          meta: {
+            monthsRequested: 24,
+            monthsReturned: 24,
+            topBooksRequested: 12,
+            topBooksReturned: 0,
+            linksReturned: 0,
+            persisted: false,
+            source: "private_snapshot+public_catalog",
+          },
+        }),
+        { status: 200 }
+      )
+    );
+    const resp = await (
+      await import("./wereadPrivate")
+    ).fetchWereadReadingMap(TOKEN, { months: 6 });
+    expect(resp.ok).toBe(true);
+    expect(resp.overview.activeMonths).toBe(7);
+    expect(resp.meta.persisted).toBe(false);
+    expect(resp.meta.source).toBe("private_snapshot+public_catalog");
+  });
+
+  it("never logs or echoes the token / catalogIds / response body", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          overview: {
+            booksCount: 0,
+            notesCount: 0,
+            matchedCatalogsCount: 0,
+            matchedNoteRecordsCount: 0,
+            firstNoteAt: null,
+            lastNoteAt: null,
+            activeMonths: 0,
+            currentStreakMonths: 0,
+            longestStreakMonths: 0,
+          },
+          timeline: [],
+          books: [],
+          links: [],
+          meta: {
+            monthsRequested: 24,
+            monthsReturned: 24,
+            topBooksRequested: 12,
+            topBooksReturned: 0,
+            linksReturned: 0,
+            persisted: false,
+            source: "private_snapshot+public_catalog",
+          },
+        }),
+        { status: 200 }
+      )
+    );
+    const resp = await (
+      await import("./wereadPrivate")
+    ).fetchWereadReadingMap(TOKEN);
+    expect(logSpy).not.toHaveBeenCalled();
+    expect(warnSpy).not.toHaveBeenCalled();
+    expect(errSpy).not.toHaveBeenCalled();
+    expect(resp).toBeDefined();
+    logSpy.mockRestore();
+    warnSpy.mockRestore();
+    errSpy.mockRestore();
+  });
+});
