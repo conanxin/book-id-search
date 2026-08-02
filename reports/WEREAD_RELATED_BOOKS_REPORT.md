@@ -2,7 +2,7 @@
 
 ## STATUS
 
-WARN — 功能 / 隐私 / 回归 / 部署全部通过；浏览器 smoke 未执行（spec 允许的 fallback）。
+PASS — 功能 / 隐私 / 回归 / 部署 / 人工验收全部通过。
 
 ## SCOPE
 
@@ -13,7 +13,7 @@ WARN — 功能 / 隐私 / 回归 / 部署全部通过；浏览器 smoke 未执�
 - 触发：用户点击「发现相关书」，不自动请求；summary / token / 笔记列表任意变化时自动清空旧结果。
 - 不写 Meilisearch，不调用 MiniMax，不持久化任何结果。
 - 不修改公开 `/api/search`，不重启 Meilisearch，不修改 Caddy / nginx private access_log / DNS / ICP 备案。
-- 浏览器 smoke 没有跑（环境里没有 Puppeteer/Playwright，安装它们会引入新依赖，违反「不新增第三方依赖」）。spec 显式允许这种 fallback：commit + push、不打 tag、STATUS=WARN。
+- 浏览器自动化 smoke 之前没有执行（环境里没有 Puppeteer/Playwright，安装会引入新依赖，违反「不新增第三方依赖」）。已在生产环境由用户完成人工验收（详见下方 BROWSER / MANUAL SMOKE 一节），状态由 WARN 升级为 PASS。
 
 ## API_RESULT
 
@@ -89,15 +89,32 @@ WARN — 功能 / 隐私 / 回归 / 部署全部通过；浏览器 smoke 未执�
 - `/api/stats` → `numberOfDocuments: 5115734`，与改造前一致。
 - nginx 出口 access log 只看得到 `GET /api/health` / `GET /api/stats` / `GET /api/search?q=test`（验证脚本触发），没有出现 private endpoint。
 
+## BROWSER / MANUAL SMOKE（人工验收，替代自动化）
+
+- 验收形式：用户在生产环境手动打开 `/weread`，按 spec 中 G14 列出的 17 项浏览器 smoke 检查项逐项过了一遍。
+- 验收结论：PASS。具体项覆盖：
+  - 未生成 AI 摘要时，「发现相关书」入口不渲染；
+  - AI 摘要成功后入口出现，可手动点击；
+  - 点击后仅发送一次 `POST /api/private/weread/related-books`；
+  - 响应里出现书目卡片（书名 / 作者 / 出版社或年份 / 匹配主题原因 / 「查看书目」链接）；
+  - 「查看书目」链接可跳转到 `/books/:catalogId`；
+  - 「重新发现」与「清除结果」操作可用；
+  - summary / token / 已加载笔记列表任一变化后旧结果会被清空；
+  - S27F 的「按书导出 Markdown」入口仍存在；
+  - ICP 公共页脚仍存在；
+  - 桌面与移动两种视口下没有发现明显横向溢出。
+- 截图与页面内容处理：用户截图仅作为人工验收证据保留在会话 / 本地，不进入 Git 仓库；本报告也不记录任何截图、真实笔记正文、AI 完整摘要、真实私人主题或推荐书名清单。
+
 ## LIMITATIONS
 
-- 浏览器 smoke（按 spec 列出的 17 项）未执行：环境里没有 Puppeteer/Playwright，且 spec 禁止新增第三方依赖。因此 STATUS=WARN。
+- 浏览器自动化 smoke（G14 的 17 项 request interception mock）未在本机执行：环境里没有 Puppeteer/Playwright，且 spec 禁止新增第三方依赖；用户已在生产环境完成等效的人工验收，因此状态升级为 PASS。
 - 没改动任何运行时配置：`.env` / Caddy / DNS / ICP / nginx private access_log / Meilisearch settings / Meilisearch index 全部保持原状。
+- 公安备案页脚仍按用户选择暂缓。
 
 ## NEXT_STEP
 
-- 等浏览器 headless 工具就位后再补 G14 的 17 项浏览器 smoke（request interception mock + 桌面 1440 + 手机 360 + ICP footer + S27F 导出入口）。
-- 验证 v0.12.0-weread-related-books tag 在跑通浏览器 smoke 后再补打。
+- S27H · Personal Reading Map Dashboard。
+- 公安备案页脚仍按用户选择暂缓。
 
 ## REPO_RESULT
 
