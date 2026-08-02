@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BookOpen, Lock, Loader2, AlertCircle, XCircle, RefreshCw, Shield, EyeOff, BarChart3, Library, Map, CalendarClock } from "lucide-react";
+import { BookOpen, Lock, Loader2, AlertCircle, XCircle, RefreshCw, Shield, EyeOff, BarChart3, Library, Map, CalendarClock, Calendar } from "lucide-react";
 import {
   clearWereadToken,
   fetchWereadSummary,
@@ -20,13 +20,14 @@ import {
 import NotesLibrary from "./NotesLibrary";
 import ReadingMapDashboard from "./ReadingMapDashboard";
 import ReviewCalendarDashboard from "./ReviewCalendarDashboard";
+import AnnualReviewDashboard from "./AnnualReviewDashboard";
 import {
   EMPTY_SESSION_THEME_OVERLAY,
   sessionThemeOverlayKey,
   type WereadSessionThemeOverlay,
 } from "./wereadSessionThemeModel";
 
-type WorkspaceTab = "notes" | "map" | "review";
+type WorkspaceTab = "notes" | "map" | "review" | "annual";
 
 function StatCard({
   label,
@@ -147,6 +148,7 @@ export default function WereadCenter() {
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("notes");
   const [mapActivated, setMapActivated] = useState(false);
   const [reviewActivated, setReviewActivated] = useState(false);
+  const [annualActivated, setAnnualActivated] = useState(false);
 
   // S27H-2: lifted session-theme overlay. NotesLibrary emits changes
   // whenever its AI summary state or loaded items change; ReadingMap
@@ -235,6 +237,7 @@ export default function WereadCenter() {
     setActiveTab("notes");
     setMapActivated(false);
     setReviewActivated(false);
+    setAnnualActivated(false);
     // S27H-2: dropping the token also drops the session overlay —
     // NotesLibrary will emit empty on next render, but be explicit so
     // the map immediately sees a clean state if it is mounted.
@@ -246,6 +249,7 @@ export default function WereadCenter() {
     setActiveTab(next);
     if (next === "map") setMapActivated(true);
     if (next === "review") setReviewActivated(true);
+    if (next === "annual") setAnnualActivated(true);
   }
 
   function handleRetry() {
@@ -371,6 +375,18 @@ export default function WereadCenter() {
             >
               <CalendarClock size={14} aria-hidden="true" /> 复习日历
             </button>
+            <button
+              type="button"
+              role="tab"
+              id="weread-tab-annual"
+              aria-selected={activeTab === "annual"}
+              aria-controls="weread-panel-annual"
+              className={`weread-workspace-tab ${activeTab === "annual" ? "weread-workspace-tab--active" : ""}`}
+              onClick={() => handleTabChange("annual")}
+              data-testid="weread-tab-annual"
+            >
+              <Calendar size={14} aria-hidden="true" /> 年度回顾
+            </button>
           </div>
 
           <div
@@ -465,6 +481,22 @@ export default function WereadCenter() {
                 token={storedToken}
                 active={activeTab === "review"}
                 sessionThemeOverlay={sessionThemeOverlay}
+              />
+            ) : null}
+          </div>
+
+          <div
+            id="weread-panel-annual"
+            role="tabpanel"
+            aria-labelledby="weread-tab-annual"
+            hidden={activeTab !== "annual"}
+            className="weread-workspace-panel"
+            data-testid="weread-panel-annual"
+          >
+            {storedToken && annualActivated ? (
+              <AnnualReviewDashboard
+                token={storedToken}
+                active={activeTab === "annual"}
               />
             ) : null}
           </div>

@@ -925,3 +925,131 @@ export function fetchWereadRelatedBooks(
     }
   );
 }
+
+/* -----------------------------------------------------------------------
+ * S27J — Private WeRead "annual reading review".
+ *
+ * Endpoint:
+ *   GET /api/private/weread/annual-review?year=<YYYY>&topBooks=<6|12|18>
+ *
+ * Only year / count / type / month / public catalog metadata leave the
+ * server. The browser request is a plain `GET` with an
+ * `Authorization: Bearer …` header — no body, no note ids, no
+ * `/api/search` call. Nothing is cached to localStorage /
+ * sessionStorage and the response is never logged.
+ * ----------------------------------------------------------------------- */
+
+export interface WereadAnnualReviewOverview {
+  year: number;
+  totalRecords: number;
+  datedRecords: number;
+  matchedRecords: number;
+  matchedBooks: number;
+  activeMonths: number;
+  longestStreakMonths: number;
+  firstNoteAt: string | null;
+  lastNoteAt: string | null;
+  peakMonth: string | null;
+  peakMonthRecords: number;
+  averageRecordsPerActiveMonth: number;
+}
+
+export interface WereadAnnualReviewMonth {
+  month: string;
+  total: number;
+  highlights: number;
+  thoughts: number;
+  reviews: number;
+  unknown: number;
+  matched: number;
+  bookCount: number;
+}
+
+export type WereadAnnualReviewQuarterKey = "Q1" | "Q2" | "Q3" | "Q4";
+
+export interface WereadAnnualReviewQuarter {
+  quarter: WereadAnnualReviewQuarterKey;
+  total: number;
+  activeMonths: number;
+  matchedRecords: number;
+  bookCount: number;
+}
+
+export interface WereadAnnualReviewBook {
+  catalogId: string;
+  title: string;
+  author?: string | null;
+  publisher?: string | null;
+  publishYear?: string | number | null;
+  noteCount: number;
+  highlights: number;
+  thoughts: number;
+  reviews: number;
+  unknown: number;
+  activeMonths: number;
+  firstNoteAt: string | null;
+  lastNoteAt: string | null;
+}
+
+export interface WereadAnnualReviewMeta {
+  topBooksRequested: number;
+  topBooksReturned: number;
+  persisted: false;
+  source: "private_snapshot+public_catalog";
+}
+
+export interface WereadAnnualReviewResponse {
+  ok: true;
+  selectedYear: number;
+  availableYears: number[];
+  overview: WereadAnnualReviewOverview;
+  months: WereadAnnualReviewMonth[];
+  quarters: WereadAnnualReviewQuarter[];
+  topBooks: WereadAnnualReviewBook[];
+  meta: WereadAnnualReviewMeta;
+}
+
+export const WEREAD_ANNUAL_REVIEW_CLIENT_LIMITS = {
+  MIN_YEAR: 2000,
+  ALLOWED_TOP_BOOKS: [6, 12, 18] as const,
+  DEFAULT_TOP_BOOKS: 12,
+} as const;
+
+export type WereadAnnualReviewTopBooksOption =
+  (typeof WEREAD_ANNUAL_REVIEW_CLIENT_LIMITS.ALLOWED_TOP_BOOKS)[number];
+
+export interface FetchWereadAnnualReviewOptions {
+  year?: number;
+  topBooks?: WereadAnnualReviewTopBooksOption;
+  signal?: AbortSignal;
+}
+
+export function fetchWereadAnnualReview(
+  token: string,
+  options: FetchWereadAnnualReviewOptions = {}
+): Promise<WereadAnnualReviewResponse> {
+  const params = new URLSearchParams();
+  if (
+    typeof options.year === "number" &&
+    Number.isInteger(options.year) &&
+    options.year >= WEREAD_ANNUAL_REVIEW_CLIENT_LIMITS.MIN_YEAR
+  ) {
+    params.set("year", String(options.year));
+  }
+  let topBooks: WereadAnnualReviewTopBooksOption = WEREAD_ANNUAL_REVIEW_CLIENT_LIMITS.DEFAULT_TOP_BOOKS;
+  if (
+    typeof options.topBooks === "number" &&
+    (WEREAD_ANNUAL_REVIEW_CLIENT_LIMITS.ALLOWED_TOP_BOOKS as ReadonlyArray<number>).includes(options.topBooks)
+  ) {
+    topBooks = options.topBooks;
+  }
+  params.set("topBooks", String(topBooks));
+  const qs = params.toString();
+  const path = qs
+    ? `/private/weread/annual-review?${qs}`
+    : "/private/weread/annual-review";
+  return privateRequestJson<WereadAnnualReviewResponse>(token, path, {
+    method: "GET",
+    signal: options.signal,
+  });
+}

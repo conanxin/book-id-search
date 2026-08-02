@@ -1167,3 +1167,195 @@ describe("fetchWereadReadingMap (S27H)", () => {
     errSpy.mockRestore();
   });
 });
+
+// S27J — fetchWereadAnnualReview
+describe("fetchWereadAnnualReview (S27J)", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+  const TOKEN = "token-for-s27j";
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          selectedYear: 2025,
+          availableYears: [2025, 2024],
+          overview: {
+            year: 2025,
+            totalRecords: 0,
+            datedRecords: 0,
+            matchedRecords: 0,
+            matchedBooks: 0,
+            activeMonths: 0,
+            longestStreakMonths: 0,
+            firstNoteAt: null,
+            lastNoteAt: null,
+            peakMonth: null,
+            peakMonthRecords: 0,
+            averageRecordsPerActiveMonth: 0,
+          },
+          months: Array.from({ length: 12 }, (_, i) => ({
+            month: `2025-${String(i + 1).padStart(2, "0")}`,
+            total: 0,
+            highlights: 0,
+            thoughts: 0,
+            reviews: 0,
+            unknown: 0,
+            matched: 0,
+            bookCount: 0,
+          })),
+          quarters: ["Q1", "Q2", "Q3", "Q4"].map((q) => ({
+            quarter: q,
+            total: 0,
+            activeMonths: 0,
+            matchedRecords: 0,
+            bookCount: 0,
+          })),
+          topBooks: [],
+          meta: {
+            topBooksRequested: 12,
+            topBooksReturned: 0,
+            persisted: false,
+            source: "private_snapshot+public_catalog",
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("uses default topBooks=12 when no options provided", async () => {
+    await (await import("./wereadPrivate")).fetchWereadAnnualReview(TOKEN);
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(call[0]).toContain("/private/weread/annual-review");
+    expect(call[0]).toContain("topBooks=12");
+    expect(call[0]).not.toContain("year=");
+    expect((call[1].method ?? "GET").toUpperCase()).toBe("GET");
+  });
+
+  it("attaches year and topBooks options", async () => {
+    await (await import("./wereadPrivate")).fetchWereadAnnualReview(TOKEN, {
+      year: 2025,
+      topBooks: 18,
+    });
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(call[0]).toContain("year=2025");
+    expect(call[0]).toContain("topBooks=18");
+  });
+
+  it("clamps invalid topBooks to the default", async () => {
+    await (await import("./wereadPrivate")).fetchWereadAnnualReview(TOKEN, {
+      topBooks: 10 as unknown as 6,
+    });
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(call[0]).toContain("topBooks=12");
+  });
+
+  it("sends the Bearer Authorization header", async () => {
+    await (await import("./wereadPrivate")).fetchWereadAnnualReview(TOKEN);
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const headers = call[1].headers as Record<string, string>;
+    expect(headers.Authorization).toBe(`Bearer ${TOKEN}`);
+  });
+
+  it("forwards the AbortSignal to fetch", async () => {
+    const controller = new AbortController();
+    await (await import("./wereadPrivate")).fetchWereadAnnualReview(TOKEN, {
+      signal: controller.signal,
+    });
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(call[1].signal).toBe(controller.signal);
+  });
+
+  it("returns a friendly error for 400/401/403/500 responses", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: "year 必须是四位整数。" }), { status: 400 })
+    );
+    await expect(
+      (await import("./wereadPrivate")).fetchWereadAnnualReview(TOKEN)
+    ).rejects.toThrow(/year|整数/i);
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: "Missing token." }), { status: 401 })
+    );
+    await expect(
+      (await import("./wereadPrivate")).fetchWereadAnnualReview(TOKEN)
+    ).rejects.toThrow(/token|认证/i);
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: "Invalid token." }), { status: 403 })
+    );
+    await expect(
+      (await import("./wereadPrivate")).fetchWereadAnnualReview(TOKEN)
+    ).rejects.toThrow(/token|认证/i);
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: "年度回顾生成失败。" }), { status: 500 })
+    );
+    await expect(
+      (await import("./wereadPrivate")).fetchWereadAnnualReview(TOKEN)
+    ).rejects.toThrow(/年度回顾/);
+  });
+
+  it("returns the parsed response shape on success", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          selectedYear: 2025,
+          availableYears: [2025, 2024],
+          overview: {
+            year: 2025,
+            totalRecords: 12,
+            datedRecords: 12,
+            matchedRecords: 9,
+            matchedBooks: 3,
+            activeMonths: 7,
+            longestStreakMonths: 7,
+            firstNoteAt: "2025-01-05T00:00:00.000Z",
+            lastNoteAt: "2025-07-01T00:00:00.000Z",
+            peakMonth: "2025-03",
+            peakMonthRecords: 3,
+            averageRecordsPerActiveMonth: 1.714,
+          },
+          months: [],
+          quarters: [],
+          topBooks: [],
+          meta: {
+            topBooksRequested: 12,
+            topBooksReturned: 0,
+            persisted: false,
+            source: "private_snapshot+public_catalog",
+          },
+        }),
+        { status: 200 }
+      )
+    );
+    const resp = await (await import("./wereadPrivate")).fetchWereadAnnualReview(TOKEN, {
+      year: 2025,
+    });
+    expect(resp.ok).toBe(true);
+    expect(resp.selectedYear).toBe(2025);
+    expect(resp.meta.persisted).toBe(false);
+    expect(resp.meta.source).toBe("private_snapshot+public_catalog");
+  });
+
+  it("never logs or echoes the token / response body", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    await (await import("./wereadPrivate")).fetchWereadAnnualReview(TOKEN);
+    expect(logSpy).not.toHaveBeenCalled();
+    expect(warnSpy).not.toHaveBeenCalled();
+    expect(errSpy).not.toHaveBeenCalled();
+    logSpy.mockRestore();
+    warnSpy.mockRestore();
+    errSpy.mockRestore();
+  });
+});

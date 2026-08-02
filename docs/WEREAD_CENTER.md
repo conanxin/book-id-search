@@ -156,6 +156,12 @@ AI 摘要成功显示后，会在同一区域下方出现一个虚框入口「�
 
 `WereadCenter` 自 S27I 起提供第三个工作区「复习日历」，与「笔记与 AI」「个人阅读地图」并列。它复用 `fetchWereadReadingMap` 与 `WereadSessionThemeOverlay` 派生确定性复习建议。详见 `docs/WEREAD_REVIEW_CALENDAR.md`。该工作区不在服务端持久化、不调用 AI、不修改任何既有端点。
 
+S27I-2 新增「导出日历文件 (.ics)」按钮，纯浏览器生成。详见 `docs/WEREAD_REVIEW_CALENDAR_ICS.md`：
+- 三种导出范围：全部任务 / 仅书目任务 / 仅当前会话主题。
+- 全天事件（`VALUE=DATE`），不输出 VTIMEZONE。
+- 文件名 `weread-review-calendar-<horizon>-<range>-YYYYMMDD.ics`，仅 ASCII。
+- 不新增任何 API、不调用 Google / Apple / Outlook、不写入 localStorage / sessionStorage / IndexedDB / 服务器。
+
 ### 复习日历 ICS 导出（S27I-2）
 
 S27I-2 新增「导出日历文件 (.ics)」按钮，纯浏览器生成。详见 `docs/WEREAD_REVIEW_CALENDAR_ICS.md`：
@@ -163,3 +169,17 @@ S27I-2 新增「导出日历文件 (.ics)」按钮，纯浏览器生成。详见
 - 全天事件（`VALUE=DATE`），不输出 VTIMEZONE。
 - 文件名 `weread-review-calendar-<horizon>-<range>-YYYYMMDD.ics`，仅 ASCII。
 - 不新增任何 API、不调用 Google / Apple / Outlook、不写入 localStorage / sessionStorage / IndexedDB / 服务器。
+
+## 年度回顾（S27J）
+
+`WereadCenter` 自 S27J 起提供第四个工作区「年度回顾」，与「笔记与 AI」「个人阅读地图」「复习日历」并列。它通过新增的 `GET /api/private/weread/annual-review?year=<YYYY>&topBooks=<6|12|18>` 端点，按选中年份聚合概览、12 个月时间轴、类型分布、Q1–Q4 季度卡、年度高互动书目与年度记录卡。详见 `docs/WEREAD_ANNUAL_REVIEW.md`。
+
+关键约束：
+
+- 只统计有 `createdAt` / `updatedAt` 且日期落在 `selectedYear` 的笔记。
+- 年度 top books 仅按 `selectedYear` 聚合：跨年记录自动排除。
+- `month.bookCount` / `quarter.bookCount` 仅反映 confirmed matched public catalogId。
+- 公共元数据通过 Meilisearch `index.getDocument` 直读；端点不调用 `/api/search`。
+- 不调用 MiniMax、不写入 Meilisearch、不持久化、不提供公开分享链接。
+- 月度活跃度分类（高活跃 / 稳定 / 轻量 / 无记录）只基于数量，UI 顶部固定免责声明。
+- 年度记录卡只展示数量 / 月份 / 类型 / 书目 / 峰值月份等描述性统计，不做心理推断。

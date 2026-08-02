@@ -4642,3 +4642,523 @@ mark.hl {
     gap: 10px;
   }
 }
+
+/* ========================================================================
+ * S27J — WeRead Annual Review Dashboard styles
+ * ====================================================================== */
+
+.weread-annual-review {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--weread-border, #e2e6ef);
+  border-radius: 14px;
+  background: var(--weread-surface, #fbfcfe);
+  color: var(--weread-text, #1c2330);
+  margin: 12px 0;
+}
+
+.weread-annual-review--empty,
+.weread-annual-review--error {
+  text-align: center;
+  padding: 24px 18px;
+}
+
+.weread-annual-review__empty-hint {
+  margin: 0;
+  font-size: 14px;
+  color: #4a5366;
+}
+
+.weread-annual-review__loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #4a5366;
+  font-size: 14px;
+}
+
+.weread-annual-review__header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.weread-annual-review__header h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  margin: 0;
+}
+
+.weread-annual-review__year-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #4a5366;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #eef2fb;
+}
+
+.weread-annual-review__notice {
+  margin: 0;
+  font-size: 12px;
+  color: #4a5366;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  line-height: 1.5;
+}
+
+.weread-annual-review__notice--error {
+  color: #a0271c;
+}
+
+.weread-annual-review__retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #fff;
+  border: 1px solid var(--weread-border, #d6dbe5);
+  padding: 4px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.weread-annual-review__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--weread-border, #e2e6ef);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.weread-annual-review__control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.weread-annual-review__control-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #4a5366;
+}
+
+.weread-annual-review__control select {
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--weread-border, #d6dbe5);
+  background: #fff;
+  font-size: 13px;
+}
+
+.weread-annual-review__control input[type="radio"] {
+  margin-right: 4px;
+}
+
+.weread-annual-review__overview {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.weread-annual-review__overview-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--weread-border, #e2e6ef);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.weread-annual-review__overview-label {
+  font-size: 12px;
+  color: #4a5366;
+}
+
+.weread-annual-review__overview-value {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.weread-annual-review__overview-hint {
+  font-size: 11px;
+  color: #6b7384;
+}
+
+.weread-annual-review__section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  margin: 4px 0 0 0;
+  color: #1c2330;
+}
+
+.weread-annual-review__timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.weread-annual-review__timeline-svg {
+  width: 100%;
+  height: auto;
+  background: #fff;
+  border-radius: 10px;
+  border: 1px solid var(--weread-border, #e2e6ef);
+}
+
+.weread-annual-review__bar-segment--highlights {
+  fill: #3b82f6;
+}
+.weread-annual-review__bar-segment--thoughts {
+  fill: #14b8a6;
+}
+.weread-annual-review__bar-segment--reviews {
+  fill: #f59e0b;
+}
+.weread-annual-review__bar-segment--unknown {
+  fill: #94a3b8;
+}
+
+.weread-annual-review__bar-label {
+  font-size: 10px;
+  fill: #4a5366;
+}
+
+.weread-annual-review__a11y-hint {
+  margin: 4px 0 0 0;
+  font-size: 11px;
+  color: #6b7384;
+}
+
+.weread-annual-review__timeline-list {
+  list-style: decimal inside;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--weread-border, #e2e6ef);
+  border-radius: 10px;
+  background: #fff;
+  font-size: 12px;
+  line-height: 1.7;
+  display: none;
+}
+
+.weread-annual-review__types {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.weread-annual-review__type-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.weread-annual-review__type-row {
+  display: grid;
+  grid-template-columns: 80px 60px 60px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  background: #fff;
+  border: 1px solid var(--weread-border, #e2e6ef);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.weread-annual-review__type-bar {
+  background: #eef2fb;
+  border-radius: 6px;
+  height: 8px;
+  position: relative;
+  overflow: hidden;
+}
+
+.weread-annual-review__type-bar-fill {
+  background: #3b82f6;
+  display: block;
+  height: 100%;
+  border-radius: 6px;
+}
+
+.weread-annual-review__quarters {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.weread-annual-review__disclaimer {
+  margin: 0;
+  font-size: 12px;
+  color: #4a5366;
+}
+
+.weread-annual-review__quarter-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.weread-annual-review__quarter {
+  border: 1px solid var(--weread-border, #e2e6ef);
+  border-radius: 10px;
+  padding: 12px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.weread-annual-review__quarter-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.weread-annual-review__quarter-header h4 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.weread-annual-review__quarter-share {
+  font-size: 12px;
+  color: #4a5366;
+}
+
+.weread-annual-review__quarter-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 10px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.weread-annual-review__quarter-meta dt {
+  color: #6b7384;
+}
+
+.weread-annual-review__quarter-meta dd {
+  margin: 0;
+  font-weight: 500;
+}
+
+.weread-annual-review__quarter-months {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.weread-annual-review__quarter-month {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #eef2fb;
+  color: #1c2330;
+}
+
+.weread-annual-review__quarter-month--high {
+  background: #d1fae5;
+  color: #065f46;
+}
+.weread-annual-review__quarter-month--light {
+  background: #fef3c7;
+  color: #92400e;
+}
+.weread-annual-review__quarter-month--steady {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+.weread-annual-review__quarter-month--none {
+  background: #f3f4f6;
+  color: #6b7384;
+}
+
+.weread-annual-review__books {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.weread-annual-review__book-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.weread-annual-review__book-card {
+  border: 1px solid var(--weread-border, #e2e6ef);
+  border-radius: 10px;
+  padding: 12px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.weread-annual-review__book-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1c2330;
+  text-decoration: none;
+}
+
+.weread-annual-review__book-title:hover {
+  text-decoration: underline;
+}
+
+.weread-annual-review__book-author {
+  font-size: 12px;
+  color: #4a5366;
+}
+
+.weread-annual-review__book-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.weread-annual-review__book-meta-row {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 4px;
+  margin: 0;
+}
+
+.weread-annual-review__book-meta-row dt {
+  color: #6b7384;
+}
+
+.weread-annual-review__book-meta-row dd {
+  margin: 0;
+  color: #1c2330;
+}
+
+.weread-annual-review__book-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 12px;
+  text-decoration: none;
+  color: #2563eb;
+}
+
+.weread-annual-review__book-cta:hover {
+  text-decoration: underline;
+}
+
+.weread-annual-review__records {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.weread-annual-review__record-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.weread-annual-review__record-card {
+  border: 1px solid var(--weread-border, #e2e6ef);
+  border-radius: 10px;
+  padding: 12px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.weread-annual-review__record-label {
+  font-size: 12px;
+  color: #4a5366;
+}
+
+.weread-annual-review__record-value {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1c2330;
+  line-height: 1.5;
+}
+
+.weread-annual-review__record-disclaimer {
+  margin: 0;
+  font-size: 11px;
+  color: #6b7384;
+}
+
+.weread-annual-review__empty {
+  margin: 0;
+  font-size: 13px;
+  color: #4a5366;
+}
+
+/* Responsive — tablet */
+@media (max-width: 1100px) {
+  .weread-annual-review__overview {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .weread-annual-review__quarter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .weread-annual-review__book-grid,
+  .weread-annual-review__record-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Responsive — mobile */
+@media (max-width: 720px) {
+  .weread-annual-review {
+    padding: 12px;
+  }
+  .weread-annual-review__overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .weread-annual-review__quarter-grid {
+    grid-template-columns: 1fr;
+  }
+  .weread-annual-review__book-grid,
+  .weread-annual-review__record-grid {
+    grid-template-columns: 1fr;
+  }
+  .weread-annual-review__timeline-svg {
+    max-width: 100%;
+  }
+  .weread-annual-review__controls {
+    flex-direction: column;
+    gap: 8px;
+  }
+}

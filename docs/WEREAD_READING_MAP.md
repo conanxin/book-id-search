@@ -145,3 +145,14 @@ Rate limit: **20 GETs per 60 seconds per client IP** (sha-hashed before being us
 ## 复习日历（S27I）复用
 
 `reading-map` 端点的响应同时被「复习日历」工作区复用，用于派生确定性复习建议。详见 `docs/WEREAD_REVIEW_CALENDAR.md`。该复用不引入任何新的 API、不调用 AI、不改变返回结构。
+
+## 年度回顾（S27J）复用
+
+`reading-map` 端点不直接服务于 S27J；S27J 通过独立的 `GET /api/private/weread/annual-review` 端点返回按年份聚合的统计结果。两者共享：
+
+- `private-reading-map.ts` 中的 `resolveNoteTimestampSeconds` / `normalizeNoteType` / `monthKeyFromSeconds` / `PrivateNoteAggregate` / `PublicMetadataFetcher` 等基础 helper。
+- 同一份 Meilisearch `books` 索引读取公共元数据（`index.getDocument`）。
+- 同一份私有 overlay (`loadWereadOverlay`) 与 `weread-matches.confirmed.json` 映射。
+- 同样的「不读取笔记正文、不返回微信读书原始 title/author、不调用 `/api/search`、不写 Meilisearch」隐私边界。
+
+年度回顾只服务单年聚合，月度时间轴、季度统计、年度 top books 都是 year-bounded。详见 `docs/WEREAD_ANNUAL_REVIEW.md`。
