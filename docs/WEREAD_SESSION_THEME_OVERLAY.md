@@ -136,3 +136,10 @@ NotesAiSummary        --(onSummaryChange)-->   NotesLibrary
 | `apps/web/src/styles.css` | `.weread-session-theme*` + session/dimmed 样式 |
 | `scripts/s27h2-browser-smoke.cjs` | 浏览器烟雾测试 |
 | `reports/WEREAD_SESSION_THEME_OVERLAY_REPORT.md` | 验收报告 |
+## 复习日历（S27I）使用
+
+`WereadSessionThemeOverlay` 的 `themes` 与 `catalogIds` 同样作为「复习日历」工作区的输入：
+- `themes` → 派生会话主题复习任务（最多 6 项）；
+- `catalogIds` → 给对应书目增加 +20 优先级加成。
+
+`reviewCalendarDashboard` 不会读取 `overview` / `keyPoints` / `reviewQuestions` / 主题 summary 正文。详见 `docs/WEREAD_REVIEW_CALENDAR.md`。

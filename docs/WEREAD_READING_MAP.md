@@ -142,3 +142,6 @@ same months within your chosen window".
 | 500 / 502 | Unexpected aggregation / metadata failure. |
 
 Rate limit: **20 GETs per 60 seconds per client IP** (sha-hashed before being used as the bucket key — the plain text IP never enters logs).
+## 复习日历（S27I）复用
+
+`reading-map` 端点的响应同时被「复习日历」工作区复用，用于派生确定性复习建议。详见 `docs/WEREAD_REVIEW_CALENDAR.md`。该复用不引入任何新的 API、不调用 AI、不改变返回结构。

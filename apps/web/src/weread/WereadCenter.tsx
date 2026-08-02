@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BookOpen, Lock, Loader2, AlertCircle, XCircle, RefreshCw, Shield, EyeOff, BarChart3, Library, Map } from "lucide-react";
+import { BookOpen, Lock, Loader2, AlertCircle, XCircle, RefreshCw, Shield, EyeOff, BarChart3, Library, Map, CalendarClock } from "lucide-react";
 import {
   clearWereadToken,
   fetchWereadSummary,
@@ -19,13 +19,14 @@ import {
 } from "./wereadCenterModel";
 import NotesLibrary from "./NotesLibrary";
 import ReadingMapDashboard from "./ReadingMapDashboard";
+import ReviewCalendarDashboard from "./ReviewCalendarDashboard";
 import {
   EMPTY_SESSION_THEME_OVERLAY,
   sessionThemeOverlayKey,
   type WereadSessionThemeOverlay,
 } from "./wereadSessionThemeModel";
 
-type WorkspaceTab = "notes" | "map";
+type WorkspaceTab = "notes" | "map" | "review";
 
 function StatCard({
   label,
@@ -145,6 +146,7 @@ export default function WereadCenter() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("notes");
   const [mapActivated, setMapActivated] = useState(false);
+  const [reviewActivated, setReviewActivated] = useState(false);
 
   // S27H-2: lifted session-theme overlay. NotesLibrary emits changes
   // whenever its AI summary state or loaded items change; ReadingMap
@@ -232,6 +234,7 @@ export default function WereadCenter() {
     setToken("");
     setActiveTab("notes");
     setMapActivated(false);
+    setReviewActivated(false);
     // S27H-2: dropping the token also drops the session overlay —
     // NotesLibrary will emit empty on next render, but be explicit so
     // the map immediately sees a clean state if it is mounted.
@@ -242,6 +245,7 @@ export default function WereadCenter() {
   function handleTabChange(next: WorkspaceTab) {
     setActiveTab(next);
     if (next === "map") setMapActivated(true);
+    if (next === "review") setReviewActivated(true);
   }
 
   function handleRetry() {
@@ -355,6 +359,18 @@ export default function WereadCenter() {
             >
               <Map size={14} aria-hidden="true" /> 个人阅读地图
             </button>
+            <button
+              type="button"
+              role="tab"
+              id="weread-tab-review"
+              aria-selected={activeTab === "review"}
+              aria-controls="weread-panel-review"
+              className={`weread-workspace-tab ${activeTab === "review" ? "weread-workspace-tab--active" : ""}`}
+              onClick={() => handleTabChange("review")}
+              data-testid="weread-tab-review"
+            >
+              <CalendarClock size={14} aria-hidden="true" /> 复习日历
+            </button>
           </div>
 
           <div
@@ -431,6 +447,23 @@ export default function WereadCenter() {
             {storedToken && mapActivated ? (
               <ReadingMapDashboard
                 token={storedToken}
+                sessionThemeOverlay={sessionThemeOverlay}
+              />
+            ) : null}
+          </div>
+
+          <div
+            id="weread-panel-review"
+            role="tabpanel"
+            aria-labelledby="weread-tab-review"
+            hidden={activeTab !== "review"}
+            className="weread-workspace-panel"
+            data-testid="weread-panel-review"
+          >
+            {storedToken && reviewActivated ? (
+              <ReviewCalendarDashboard
+                token={storedToken}
+                active={activeTab === "review"}
                 sessionThemeOverlay={sessionThemeOverlay}
               />
             ) : null}

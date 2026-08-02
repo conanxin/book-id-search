@@ -151,3 +151,7 @@ AI 摘要成功显示后，会在同一区域下方出现一个虚框入口「�
 
 - 点击“清除 token”按钮。
 - 或关闭浏览器会话。
+
+## 复习日历（S27I）
+
+`WereadCenter` 自 S27I 起提供第三个工作区「复习日历」，与「笔记与 AI」「个人阅读地图」并列。它复用 `fetchWereadReadingMap` 与 `WereadSessionThemeOverlay` 派生确定性复习建议。详见 `docs/WEREAD_REVIEW_CALENDAR.md`。该工作区不在服务端持久化、不调用 AI、不修改任何既有端点。
