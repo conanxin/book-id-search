@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BookOpen, Lock, Loader2, AlertCircle, XCircle, RefreshCw, Shield, EyeOff, BarChart3, Library, Map } from "lucide-react";
 import {
   clearWereadToken,
@@ -19,6 +19,11 @@ import {
 } from "./wereadCenterModel";
 import NotesLibrary from "./NotesLibrary";
 import ReadingMapDashboard from "./ReadingMapDashboard";
+import {
+  EMPTY_SESSION_THEME_OVERLAY,
+  sessionThemeOverlayKey,
+  type WereadSessionThemeOverlay,
+} from "./wereadSessionThemeModel";
 
 type WorkspaceTab = "notes" | "map";
 
@@ -141,6 +146,21 @@ export default function WereadCenter() {
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("notes");
   const [mapActivated, setMapActivated] = useState(false);
 
+  // S27H-2: lifted session-theme overlay. NotesLibrary emits changes
+  // whenever its AI summary state or loaded items change; ReadingMap
+  // reads the same overlay to draw the focus ring without ever
+  // receiving note text, comment, overview, key points, or private IDs.
+  const [sessionThemeOverlay, setSessionThemeOverlay] = useState<WereadSessionThemeOverlay>(
+    EMPTY_SESSION_THEME_OVERLAY
+  );
+  const lastSessionOverlayKeyRef = useRef<string>(sessionThemeOverlayKey(EMPTY_SESSION_THEME_OVERLAY));
+  const handleSessionOverlayChange = useCallback((overlay: WereadSessionThemeOverlay) => {
+    const key = sessionThemeOverlayKey(overlay);
+    if (key === lastSessionOverlayKeyRef.current) return;
+    lastSessionOverlayKeyRef.current = key;
+    setSessionThemeOverlay(overlay);
+  }, []);
+
   useEffect(() => {
     const t = getWereadToken();
     if (t) {
@@ -212,6 +232,11 @@ export default function WereadCenter() {
     setToken("");
     setActiveTab("notes");
     setMapActivated(false);
+    // S27H-2: dropping the token also drops the session overlay —
+    // NotesLibrary will emit empty on next render, but be explicit so
+    // the map immediately sees a clean state if it is mounted.
+    lastSessionOverlayKeyRef.current = sessionThemeOverlayKey(EMPTY_SESSION_THEME_OVERLAY);
+    setSessionThemeOverlay(EMPTY_SESSION_THEME_OVERLAY);
   }
 
   function handleTabChange(next: WorkspaceTab) {
@@ -345,7 +370,12 @@ export default function WereadCenter() {
               <h2 className="weread-center-card__title">
                 <Library size={16} aria-hidden="true" /> 私有笔记库
               </h2>
-              {storedToken ? <NotesLibrary token={storedToken} /> : null}
+              {storedToken ? (
+                <NotesLibrary
+                  token={storedToken}
+                  onSessionOverlayChange={handleSessionOverlayChange}
+                />
+              ) : null}
             </section>
 
             <aside className="weread-side-rail" data-testid="weread-side-rail">
@@ -398,7 +428,12 @@ export default function WereadCenter() {
             className="weread-workspace-panel"
             data-testid="weread-panel-map"
           >
-            {storedToken && mapActivated ? <ReadingMapDashboard token={storedToken} /> : null}
+            {storedToken && mapActivated ? (
+              <ReadingMapDashboard
+                token={storedToken}
+                sessionThemeOverlay={sessionThemeOverlay}
+              />
+            ) : null}
           </div>
         </>
       ) : null}

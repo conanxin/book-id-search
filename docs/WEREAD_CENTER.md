@@ -99,6 +99,10 @@ WeRead Center 是 book-id-search 的独立微信读书私有数据入口页面�
 
 详见 `docs/WEREAD_READING_MAP.md`。
 
+## 当前会话主题层（S27H-2）
+
+S27H-2 在「个人阅读地图」顶部追加了独立的「当前会话主题层」区块，仅复用当前浏览器会话中已经生成的 AI 摘要（主题标题 + 延伸阅读方向）与当前已加载的 matched 书目 catalogId。完整边界、UI 状态、状态共享管线见 [`docs/WEREAD_SESSION_THEME_OVERLAY.md`](./WEREAD_SESSION_THEME_OVERLAY.md)。
+
 ## 不显示的内容
 
 - 笔记正文

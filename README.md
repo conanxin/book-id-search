@@ -356,7 +356,7 @@ Caddy 是公网唯一入口。3001/5173/7700 全部绑定 `127.0.0.1`。
 
 最终公网复核报告：[reports/FINAL_PUBLIC_ACCESS_VERIFICATION.md](reports/FINAL_PUBLIC_ACCESS_VERIFICATION.md)。
 
-当前稳定 tag：`v0.12.0-weread-related-books`。
+当前稳定 tag：`v0.13.0-weread-reading-map`。
 
 ## WeRead Center
 
@@ -388,5 +388,13 @@ Caddy 是公网唯一入口。3001/5173/7700 全部绑定 `127.0.0.1`。
 - 仅使用笔记日期、类型和已确认的公共书目匹配关系；不读取 / 不返回笔记正文，不返回微信读书原始 title/author。
 - 页面顶部的「笔记与 AI / 个人阅读地图」标签切换：默认仍为「笔记与 AI」，切换到地图后才请求数据。
 - 详见 [docs/WEREAD_READING_MAP.md](docs/WEREAD_READING_MAP.md) 和 [reports/WEREAD_READING_MAP_REPORT.md](reports/WEREAD_READING_MAP_REPORT.md)。
+
+### S27H-2 · 当前会话主题层
+
+- 在「个人阅读地图」顶部叠加从 AI 摘要主题 + 当前已加载 matched catalogId 派生的焦点层。
+- 完整复用 S27E 已经生成的 AI 摘要；不会再次调用 MiniMax / related-books endpoint。
+- 不传入笔记正文 / 评论 / summary overview / keyPoints / questions / token / 私有 ID。
+- 不写 `localStorage` / `sessionStorage`；token 清除后主题层立即清空。
+- 详见 [docs/WEREAD_SESSION_THEME_OVERLAY.md](docs/WEREAD_SESSION_THEME_OVERLAY.md) 和 [reports/WEREAD_SESSION_THEME_OVERLAY_REPORT.md](reports/WEREAD_SESSION_THEME_OVERLAY_REPORT.md)。
 
 更全面的说明见 [docs/WEREAD_CENTER.md](docs/WEREAD_CENTER.md) / [docs/WEREAD_PRIVATE_OVERLAY_API.md](docs/WEREAD_PRIVATE_OVERLAY_API.md)。

@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Copy, Download, Filter, Library, Loader2, AlertCircle, Check, RefreshCw, Search, X } from "lucide-react";
 import NotesAiSummary from "./NotesAiSummary";
 import BookNotesExportButton from "./BookNotesExportButton";
 import {
   fetchWereadNotes,
+  type WereadAiSummaryResult,
   type WereadNoteTypeFilter,
   type WereadNotesDaysFilter,
   type WereadNotesQuery,
@@ -28,6 +29,12 @@ import {
   notesQueryKey,
   truncateNotePreview,
 } from "./wereadNotesModel";
+import {
+  EMPTY_SESSION_THEME_OVERLAY,
+  buildSessionThemeOverlay,
+  sessionThemeOverlayKey,
+  type WereadSessionThemeOverlay,
+} from "./wereadSessionThemeModel";
 
 const TYPE_OPTIONS: WereadNoteTypeFilter[] = ["all", "highlight", "thought", "review"];
 const DAYS_OPTIONS: WereadNotesDaysFilter[] = ["all", "7", "30", "90"];
@@ -38,9 +45,21 @@ type LoadState = "idle" | "loading" | "ready" | "error";
 
 interface NotesLibraryProps {
   token: string;
+  /**
+   * S27H-2: notify the parent whenever the session-theme overlay derived
+   * from the currently loaded notes + the most recent AI summary
+   * changes. The parent (`WereadCenter`) keeps a single overlay state
+   * that is shared with the reading-map dashboard.
+   *
+   * The overlay only carries: theme titles (≤6), reading-direction
+   * titles (≤6), public catalogIds (≤100), and `notesUsed`. No note
+   * text / comment / overview / key point / question / token / private
+   * ID ever crosses this boundary.
+   */
+  onSessionOverlayChange?: (overlay: WereadSessionThemeOverlay) => void;
 }
 
-export default function NotesLibrary({ token }: NotesLibraryProps) {
+export default function NotesLibrary({ token, onSessionOverlayChange }: NotesLibraryProps) {
   const [filterType, setFilterType] = useState<WereadNoteTypeFilter>("all");
   const [filterDays, setFilterDays] = useState<WereadNotesDaysFilter>("all");
   const [filterMatched, setFilterMatched] = useState<boolean>(false);
@@ -62,6 +81,49 @@ export default function NotesLibrary({ token }: NotesLibraryProps) {
 
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
   const requestIdRef = useRef(0);
+
+  // S27H-2: session-theme overlay state. The latest AI summary result
+  // (themes + reading directions) plus the currently loaded items
+  // (matched catalogIds) are all we need to build the overlay. We
+  // never lift the raw items array up to WereadCenter or into the
+  // reading-map dashboard.
+  const [aiSummary, setAiSummary] = useState<{
+    summary: WereadAiSummaryResult;
+    itemsUsed: number;
+  } | null>(null);
+  const lastOverlayKeyRef = useRef<string>(sessionThemeOverlayKey(EMPTY_SESSION_THEME_OVERLAY));
+
+  const overlay: WereadSessionThemeOverlay = useMemo(
+    () =>
+      buildSessionThemeOverlay({
+        summary: aiSummary?.summary ?? null,
+        items,
+        notesUsed: aiSummary?.itemsUsed,
+      }),
+    [aiSummary, items]
+  );
+
+  // Notify the parent only when the overlay's structural key actually
+  // changes — avoids a setState loop when items ref churn but content
+  // is observationally identical.
+  useEffect(() => {
+    if (!onSessionOverlayChange) return;
+    const key = sessionThemeOverlayKey(overlay);
+    if (key === lastOverlayKeyRef.current) return;
+    lastOverlayKeyRef.current = key;
+    onSessionOverlayChange(overlay);
+  }, [overlay, onSessionOverlayChange]);
+
+  const handleSummaryChange = useCallback(
+    (next: { summary: WereadAiSummaryResult | null; itemsUsed: number | null }) => {
+      if (!next.summary || next.itemsUsed === null) {
+        setAiSummary(null);
+        return;
+      }
+      setAiSummary({ summary: next.summary, itemsUsed: next.itemsUsed });
+    },
+    []
+  );
 
   const currentQuery: WereadNotesQuery = useMemo(
     () => ({ type: filterType, days: filterDays, matchedOnly: filterMatched, sort: filterSort, limit: filterLimit, offset: 0, q: noteQuery.length > 0 ? noteQuery : undefined }),
@@ -486,7 +548,9 @@ export default function NotesLibrary({ token }: NotesLibraryProps) {
           The panel only renders when at least one note has been loaded.
           NotesAiSummary itself owns the privacy notice, the manual trigger,
           the abort/clear behaviour, and the responsive layout. */}
-      {items.length > 0 ? <NotesAiSummary token={token} items={items} /> : null}
+      {items.length > 0 ? (
+        <NotesAiSummary token={token} items={items} onSummaryChange={handleSummaryChange} />
+      ) : null}
     </div>
   );
 }

@@ -2,6 +2,13 @@
 
 ## Overview
 
+S27H-2 adds a "session theme overlay" on top of the dashboard. The
+overlay re-uses the AI summary already produced in the "notes & AI"
+workspace — it never re-calls MiniMax and never touches note text. See
+[`WEREAD_SESSION_THEME_OVERLAY.md`](./WEREAD_SESSION_THEME_OVERLAY.md)
+for the privacy boundary, the UI states, and the state-sharing
+pipeline.
+
 `/weread` adds a second workspace tab — "个人阅读地图" — next to the
 existing "笔记与 AI" tab. The new tab visualises the user's reading
 history purely from aggregate counts and dates. **No note text, no

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, BookOpen, EyeOff, Loader2, Map, RefreshCw, Shield, Sparkles } from "lucide-react";
+import { AlertCircle, BookOpen, EyeOff, Loader2, Map, RefreshCw, Shield, Sparkles, Eye } from "lucide-react";
 import {
   fetchWereadReadingMap,
   type WereadReadingMapResponse,
@@ -9,6 +9,9 @@ import {
   RADIUS_LIMITS,
   TIMELINE_PADDING,
   TIMELINE_VIEWBOX_HEIGHT,
+  annotateSessionEdges,
+  annotateSessionNodes,
+  applySessionFocus,
   buildReadingMapEdgeLayout,
   buildReadingMapNodeLayout,
   buildTimelineBarModel,
@@ -23,6 +26,11 @@ import {
   type TimelineBar,
   type TimelineBarModel,
 } from "./wereadReadingMapModel";
+import {
+  EMPTY_SESSION_THEME_OVERLAY,
+  formatSessionOverlaySummary,
+  type WereadSessionThemeOverlay,
+} from "./wereadSessionThemeModel";
 
 const PRIVACY_NOTICE =
   "阅读地图仅使用笔记日期、类型和已确认的公共书目匹配关系生成，不读取或展示笔记正文，也不会调用外部 AI。";
@@ -143,10 +151,12 @@ function NetworkGraph({
   nodes,
   edges,
   empty,
+  focusMode,
 }: {
   nodes: NodeLayout[];
   edges: EdgeLayout[];
   empty: boolean;
+  focusMode: "full" | "session";
 }) {
   if (empty) {
     return (
@@ -173,6 +183,13 @@ function NetworkGraph({
           sharedMonths: edge.sharedMonths,
           weight: edge.weight,
         });
+        const edgeClass = [
+          "weread-reading-map__network-edge",
+          edge.isSessionRelated ? "weread-reading-map__link--session" : "",
+          edge.isDimmed ? "weread-reading-map__link--dimmed" : "",
+        ]
+          .filter(Boolean)
+          .join(" ");
         return (
           <g key={`${edge.sourceCatalogId}-${edge.targetCatalogId}`}>
             <line
@@ -181,7 +198,7 @@ function NetworkGraph({
               x2={edge.x2}
               y2={edge.y2}
               strokeWidth={strokeWidth}
-              className="weread-reading-map__network-edge"
+              className={edgeClass}
             />
             <text
               x={edge.midX}
@@ -197,6 +214,13 @@ function NetworkGraph({
       {nodes.map((node) => {
         const title = truncateReadingMapTitle(node.title, 12);
         const href = `/books/${node.catalogId}`;
+        const nodeClass = [
+          "weread-reading-map__network-node",
+          node.isSession ? "weread-reading-map__node--session" : "",
+          node.isDimmed ? "weread-reading-map__node--dimmed" : "",
+        ]
+          .filter(Boolean)
+          .join(" ");
         return (
           <g key={node.catalogId}>
             <a href={href} aria-label={`查看 ${title || node.catalogId}`}>
@@ -204,7 +228,7 @@ function NetworkGraph({
                 cx={node.x}
                 cy={node.y}
                 r={node.radius}
-                className="weread-reading-map__network-node"
+                className={nodeClass}
               >
                 <title>{`${title || node.catalogId}${node.author ? " · " + node.author : ""}（${node.noteCount} 条笔记 / ${node.activeMonths} 个月）`}</title>
               </circle>
@@ -224,9 +248,15 @@ function NetworkGraph({
   );
 }
 
-function BookCard({ book }: { book: import("../wereadPrivate").WereadReadingMapBook }) {
+function BookCard({ book, isSession }: { book: import("../wereadPrivate").WereadReadingMapBook; isSession: boolean }) {
+  const cardClass = [
+    "weread-reading-map__book-card",
+    isSession ? "weread-reading-map__node--session" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
   return (
-    <a className="weread-reading-map__book-card" href={`/books/${book.catalogId}`}>
+    <a className={cardClass} href={`/books/${book.catalogId}`}>
       <span className="weread-reading-map__book-card-title">{truncateReadingMapTitle(book.title, 32) || `书目 ${book.catalogId}`}</span>
       <span className="weread-reading-map__book-card-meta">
         {book.author ? book.author : "—"}
@@ -242,18 +272,134 @@ function BookCard({ book }: { book: import("../wereadPrivate").WereadReadingMapB
   );
 }
 
+function SessionThemeOverlay({
+  overlay,
+  focusMode,
+  onToggleFocus,
+  onClearFocus,
+}: {
+  overlay: WereadSessionThemeOverlay;
+  focusMode: "full" | "session";
+  onToggleFocus: () => void;
+  onClearFocus: () => void;
+}) {
+  if (!overlay) return null;
+
+  // State 1: no AI summary yet — show the hint, no chips, no toggle.
+  if (!overlay.enabled) {
+    return (
+      <section
+        className="weread-session-theme weread-session-theme--empty"
+        data-testid="weread-session-theme-empty"
+        aria-label="当前会话主题层"
+      >
+        <header className="weread-session-theme__header">
+          <h3 className="weread-session-theme__title">
+            <Sparkles size={14} aria-hidden="true" /> 当前会话主题层
+          </h3>
+          <p className="weread-session-theme__summary">
+            在『笔记与 AI』中生成摘要后，可在这里聚焦当前会话。
+          </p>
+        </header>
+      </section>
+    );
+  }
+
+  const hasCatalogIds = overlay.catalogIds.length > 0;
+
+  return (
+    <section
+      className="weread-session-theme"
+      data-testid="weread-session-theme"
+      aria-label="当前会话主题层"
+    >
+      <header className="weread-session-theme__header">
+        <h3 className="weread-session-theme__title">
+          <Sparkles size={14} aria-hidden="true" /> 当前会话主题层
+        </h3>
+        <p className="weread-session-theme__summary" data-testid="weread-session-theme-summary">
+          {formatSessionOverlaySummary(overlay)}
+        </p>
+        <p className="weread-session-theme__notice">
+          主题层只来自当前浏览器会话中已经生成的 AI 摘要，不会再次调用 MiniMax，也不会保存到服务器。
+        </p>
+      </header>
+
+      {overlay.themes.length > 0 ? (
+        <ul className="weread-session-theme__chips" data-testid="weread-session-theme-chips">
+          {overlay.themes.map((t) => (
+            <li
+              key={t.id}
+              className={`weread-session-theme__chip weread-session-theme__chip--${t.source}`}
+              data-testid="weread-session-theme-chip"
+              data-theme-source={t.source}
+            >
+              <span className="weread-session-theme__chip-label">{t.label}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {!hasCatalogIds ? (
+        <p
+          className="weread-session-theme__hint"
+          data-testid="weread-session-theme-empty-books"
+        >
+          当前已加载笔记没有可映射到阅读地图的公共书目。
+        </p>
+      ) : (
+        <div className="weread-session-theme__actions" data-testid="weread-session-theme-actions">
+          <button
+            type="button"
+            className={`weread-session-theme__primary ${focusMode === "session" ? "weread-session-theme__primary--active" : ""}`}
+            onClick={onToggleFocus}
+            aria-pressed={focusMode === "session"}
+            data-testid="weread-session-theme-focus-toggle"
+          >
+            <Eye size={14} aria-hidden="true" />
+            {focusMode === "session" ? "退出聚焦当前会话" : "聚焦当前会话"}
+          </button>
+          {focusMode === "session" ? (
+            <button
+              type="button"
+              className="weread-session-theme__secondary"
+              onClick={onClearFocus}
+              data-testid="weread-session-theme-clear-focus"
+            >
+              清除聚焦
+            </button>
+          ) : null}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export interface ReadingMapDashboardProps {
   token: string;
   /** Called when the user clears the token so the parent can also clear its state. */
   onAbort?: () => void;
+  /**
+   * S27H-2: a safe, lifted session-theme overlay derived from the notes
+   * workspace. Carries only theme titles / directions / public catalogIds
+   * / notesUsed. The dashboard uses it to draw the focus ring without
+   * ever seeing note text, comment, overview, key points, token, or
+   * private IDs.
+   */
+  sessionThemeOverlay?: WereadSessionThemeOverlay;
 }
 
-export default function ReadingMapDashboard({ token, onAbort }: ReadingMapDashboardProps) {
+export default function ReadingMapDashboard({
+  token,
+  onAbort,
+  sessionThemeOverlay,
+}: ReadingMapDashboardProps) {
   const [months, setMonths] = useState<6 | 12 | 24 | 36>(24);
   const [topBooks, setTopBooks] = useState<6 | 12 | 18>(12);
   const [response, setResponse] = useState<WereadReadingMapResponse | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "ok" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [focusMode, setFocusMode] = useState<"full" | "session">("full");
   const abortRef = useRef<AbortController | null>(null);
 
   const load = (m: 6 | 12 | 24 | 36, t: 6 | 12 | 18) => {
@@ -298,6 +444,7 @@ export default function ReadingMapDashboard({ token, onAbort }: ReadingMapDashbo
       setResponse(null);
       setStatus("idle");
       setError(null);
+      setFocusMode("full");
       onAbort?.();
     }
   }, [token, onAbort]);
@@ -312,17 +459,29 @@ export default function ReadingMapDashboard({ token, onAbort }: ReadingMapDashbo
     [response, months]
   );
 
-  const nodes = useMemo(
+  const rawNodes = useMemo(
     () => buildReadingMapNodeLayout({ books: response?.books ?? [] }),
     [response]
   );
 
-  const edges = useMemo(
-    () => buildReadingMapEdgeLayout({ links: response?.links ?? [], nodes }),
-    [response, nodes]
+  const rawEdges = useMemo(
+    () => buildReadingMapEdgeLayout({ links: response?.links ?? [], nodes: rawNodes }),
+    [response, rawNodes]
   );
 
-  const emptyNetwork = nodes.length === 0;
+  const overlay: WereadSessionThemeOverlay = sessionThemeOverlay ?? EMPTY_SESSION_THEME_OVERLAY;
+  const nodes = useMemo(
+    () => applySessionFocus(annotateSessionNodes(rawNodes, overlay), focusMode, overlay),
+    [rawNodes, overlay, focusMode]
+  );
+  const edges = useMemo(
+    () => applySessionFocus(annotateSessionEdges(rawEdges, overlay), focusMode, overlay),
+    [rawEdges, overlay, focusMode]
+  );
+
+  const sessionBookIds = useMemo(() => new Set(overlay.catalogIds), [overlay.catalogIds]);
+
+  const emptyNetwork = rawNodes.length === 0;
 
   return (
     <section className="weread-reading-map" data-testid="weread-reading-map" aria-label="个人阅读地图">
@@ -387,6 +546,15 @@ export default function ReadingMapDashboard({ token, onAbort }: ReadingMapDashbo
         <Shield size={14} aria-hidden="true" />
         <span>{PRIVACY_NOTICE}</span>
       </div>
+
+      <SessionThemeOverlay
+        overlay={overlay}
+        focusMode={focusMode}
+        onToggleFocus={() =>
+          setFocusMode((prev) => (prev === "session" ? "full" : "session"))
+        }
+        onClearFocus={() => setFocusMode("full")}
+      />
 
       {status === "error" ? (
         <div className="weread-reading-map__error" role="alert">
@@ -461,7 +629,7 @@ export default function ReadingMapDashboard({ token, onAbort }: ReadingMapDashbo
                   节点大小 ∝ 笔记数；连线 = 同期活跃月份
                 </span>
               </header>
-              <NetworkGraph nodes={nodes} edges={edges} empty={emptyNetwork} />
+              <NetworkGraph nodes={nodes} edges={edges} empty={emptyNetwork} focusMode={focusMode} />
               <p className="weread-reading-map__network-legend">
                 节点半径区间 {RADIUS_LIMITS.MIN}–{RADIUS_LIMITS.MAX}px · 点击节点进入书目页
               </p>
@@ -481,7 +649,11 @@ export default function ReadingMapDashboard({ token, onAbort }: ReadingMapDashbo
               ) : (
                 <div className="weread-reading-map__book-grid-list">
                   {response.books.map((book) => (
-                    <BookCard key={book.catalogId} book={book} />
+                    <BookCard
+                      key={book.catalogId}
+                      book={book}
+                      isSession={sessionBookIds.has(book.catalogId)}
+                    />
                   ))}
                 </div>
               )}
@@ -492,18 +664,27 @@ export default function ReadingMapDashboard({ token, onAbort }: ReadingMapDashbo
             <header className="weread-reading-map__links-header">
               <h3>同期阅读关系</h3>
               <span className="weread-reading-map__links-meta">
-                {response.links.length} 条
+                {focusMode === "session" ? `${edges.length} / ${response.links.length} 条` : `${response.links.length} 条`}
               </span>
             </header>
             {response.links.length === 0 ? (
               <div className="weread-reading-map__empty">当前选择范围内暂无同期活跃的书目关系。</div>
+            ) : edges.length === 0 ? (
+              <div className="weread-reading-map__empty">当前会话书目之间暂无同期活跃关系。</div>
             ) : (
               <ul className="weread-reading-map__links-list">
-                {response.links.map((link) => {
+                {edges.map((link) => {
+                  const linkRow = response.links.find(
+                    (l) => l.sourceCatalogId === link.sourceCatalogId && l.targetCatalogId === link.targetCatalogId
+                  );
+                  if (!linkRow) return null;
                   const source = response.books.find((b) => b.catalogId === link.sourceCatalogId);
                   const target = response.books.find((b) => b.catalogId === link.targetCatalogId);
                   return (
-                    <li key={`${link.sourceCatalogId}-${link.targetCatalogId}`}>
+                    <li
+                      key={`${link.sourceCatalogId}-${link.targetCatalogId}`}
+                      className={link.isDimmed ? "weread-reading-map__link--dimmed" : link.isSessionRelated ? "weread-reading-map__link--session" : undefined}
+                    >
                       <span className="weread-reading-map__links-pair">
                         <a href={`/books/${link.sourceCatalogId}`}>
                           {truncateReadingMapTitle(source?.title ?? link.sourceCatalogId, 22)}
@@ -514,7 +695,7 @@ export default function ReadingMapDashboard({ token, onAbort }: ReadingMapDashbo
                         </a>
                       </span>
                       <span className="weread-reading-map__links-strength">
-                        {getReadingMapLinkLabel(link)}
+                        {getReadingMapLinkLabel(linkRow)}
                       </span>
                     </li>
                   );

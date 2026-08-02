@@ -21,6 +21,7 @@ import type {
   WereadReadingMapOverview,
   WereadReadingMapResponse,
 } from "../wereadPrivate";
+import type { WereadSessionThemeOverlay } from "./wereadSessionThemeModel";
 
 // ---------- formatters ----------
 
@@ -204,6 +205,10 @@ export interface NodeLayout {
   ringIndex: number;
   /** Slot index within the ring (0-based). */
   ringSlot: number;
+  /** S27H-2: true when this node's catalogId is in the session overlay. */
+  isSession: boolean;
+  /** S27H-2: true when the focus toggle is on and this node is *not* session. */
+  isDimmed: boolean;
 }
 
 export interface EdgeLayout {
@@ -219,6 +224,10 @@ export interface EdgeLayout {
   midY: number;
   /** Length of the edge in the same coordinate space. */
   length: number;
+  /** S27H-2: true when at least one endpoint is in the session overlay. */
+  isSessionRelated: boolean;
+  /** S27H-2: true when the focus toggle is on and this edge is not session-related. */
+  isDimmed: boolean;
 }
 
 export interface NetworkLayout {
@@ -301,6 +310,8 @@ export function getReadingMapNodeLayout(args: {
       radius: getReadingMapNodeRadius(book.noteCount, maxNoteCount),
       ringIndex,
       ringSlot,
+      isSession: false,
+      isDimmed: false,
     });
   }
   return nodes;
@@ -310,6 +321,68 @@ export function buildReadingMapNodeLayout(args: {
   books: ReadonlyArray<WereadReadingMapBook>;
 }): NodeLayout[] {
   return getReadingMapNodeLayout(args);
+}
+
+/**
+ * S27H-2 — Decorate a set of node layouts with session-overlay flags.
+ *
+ * Pure: never mutates input nodes. When the overlay is disabled, every
+ * `isSession` stays false and `isDimmed` stays false, so the rest of
+ * the SVG layer doesn't need to special-case the disabled state.
+ */
+export function annotateSessionNodes(
+  nodes: ReadonlyArray<NodeLayout>,
+  overlay: WereadSessionThemeOverlay
+): NodeLayout[] {
+  if (!overlay.enabled || overlay.catalogIds.length === 0) {
+    return nodes.map((n) => ({ ...n, isSession: false, isDimmed: false }));
+  }
+  const set = new Set(overlay.catalogIds);
+  return nodes.map((n) => ({
+    ...n,
+    isSession: set.has(n.catalogId),
+    isDimmed: false,
+  }));
+}
+
+/**
+ * S27H-2 — Decorate a set of edge layouts with session-overlay flags.
+ * Pure: never mutates input edges.
+ */
+export function annotateSessionEdges(
+  edges: ReadonlyArray<EdgeLayout>,
+  overlay: WereadSessionThemeOverlay
+): EdgeLayout[] {
+  if (!overlay.enabled || overlay.catalogIds.length === 0) {
+    return edges.map((e) => ({ ...e, isSessionRelated: false, isDimmed: false }));
+  }
+  const set = new Set(overlay.catalogIds);
+  return edges.map((e) => ({
+    ...e,
+    isSessionRelated: set.has(e.sourceCatalogId) || set.has(e.targetCatalogId),
+    isDimmed: false,
+  }));
+}
+
+/**
+ * S27H-2 — Apply the focus toggle. In "full" mode, nothing is dimmed.
+ * In "session" mode, non-session nodes/edges get `isDimmed: true`.
+ */
+export function applySessionFocus<
+  T extends { isDimmed: boolean; isSession?: boolean; isSessionRelated?: boolean },
+>(
+  items: ReadonlyArray<T>,
+  mode: "full" | "session",
+  overlay: WereadSessionThemeOverlay
+): T[] {
+  if (mode === "full" || !overlay.enabled || overlay.catalogIds.length === 0) {
+    return items.map((it) => ({ ...it, isDimmed: false }));
+  }
+  return items.map((it) => {
+    const isInSession =
+      "isSession" in it ? it.isSession === true : "isSessionRelated" in it ? it.isSessionRelated === true : false;
+    return { ...it, isDimmed: !isInSession };
+  });
 }
 
 export function buildReadingMapEdgeLayout(args: {
@@ -338,6 +411,8 @@ export function buildReadingMapEdgeLayout(args: {
       midX: (a.x + b.x) / 2,
       midY: (a.y + b.y) / 2,
       length,
+      isSessionRelated: false,
+      isDimmed: false,
     });
   }
   return edges;

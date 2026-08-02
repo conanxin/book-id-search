@@ -18,9 +18,8 @@ import {
   hasReadingMapData,
   truncateReadingMapTitle,
 } from "./wereadReadingMapModel";
+import type { WereadReadingMapBook, WereadReadingMapLink } from "../wereadPrivate";
 import type {
-  WereadReadingMapBook,
-  WereadReadingMapLink,
   WereadReadingMapMonth,
   WereadReadingMapOverview,
   WereadReadingMapResponse,
@@ -358,5 +357,154 @@ describe("getReadingMapNodeLayout exposes same algorithm", () => {
   it("matches buildReadingMapNodeLayout output", () => {
     const books = makeBooks(5);
     expect(getReadingMapNodeLayout({ books })).toEqual(buildReadingMapNodeLayout({ books }));
+  });
+});
+/* S27H-2 — additional structural / behaviour tests for the session
+ * theme overlay. These intentionally live at the bottom of the file
+ * so the original assertions above remain untouched. */
+
+import {
+  annotateSessionEdges,
+  annotateSessionNodes,
+  applySessionFocus,
+} from "./wereadReadingMapModel";
+import {
+  EMPTY_SESSION_THEME_OVERLAY,
+  buildSessionThemeOverlay,
+  type WereadSessionThemeOverlay,
+} from "./wereadSessionThemeModel";
+
+function makeBook(catalogId: string, noteCount = 5): WereadReadingMapBook {
+  return {
+    catalogId,
+    title: `书目 ${catalogId}`,
+    author: "测试作者",
+    publisher: null,
+    publishYear: 2024,
+    noteCount,
+    highlights: noteCount,
+    thoughts: 0,
+    reviews: 0,
+    unknown: 0,
+    activeMonths: 3,
+    firstNoteAt: "2025-01-01T00:00:00.000Z",
+    lastNoteAt: "2026-01-01T00:00:00.000Z",
+  };
+}
+
+function makeLink(source: string, target: string): WereadReadingMapLink {
+  return { sourceCatalogId: source, targetCatalogId: target, sharedMonths: 3, weight: 4 };
+}
+
+describe("S27H-2 reading-map annotation helpers", () => {
+  it("annotateSessionNodes marks in-overlay catalogIds", () => {
+    const overlay: WereadSessionThemeOverlay = {
+      enabled: true,
+      themes: [],
+      catalogIds: ["100_111111111111"],
+      notesUsed: 1,
+    };
+    const nodes = buildReadingMapNodeLayout({
+      books: [makeBook("100_111111111111"), makeBook("200_222222222222")],
+    });
+    const annotated = annotateSessionNodes(nodes, overlay);
+    const a = annotated.find((n) => n.catalogId === "100_111111111111");
+    const b = annotated.find((n) => n.catalogId === "200_222222222222");
+    expect(a?.isSession).toBe(true);
+    expect(b?.isSession).toBe(false);
+  });
+
+  it("annotateSessionNodes treats disabled overlay as no-op", () => {
+    const nodes = buildReadingMapNodeLayout({
+      books: [makeBook("100_111111111111")],
+    });
+    const annotated = annotateSessionNodes(nodes, EMPTY_SESSION_THEME_OVERLAY);
+    expect(annotated[0].isSession).toBe(false);
+    expect(annotated[0].isDimmed).toBe(false);
+  });
+
+  it("annotateSessionEdges marks edges touching a session node", () => {
+    const overlay: WereadSessionThemeOverlay = {
+      enabled: true,
+      themes: [],
+      catalogIds: ["100_111111111111"],
+      notesUsed: 1,
+    };
+    const nodes = buildReadingMapNodeLayout({
+      books: [makeBook("100_111111111111"), makeBook("200_222222222222"), makeBook("300_333333333333")],
+    });
+    const edges = buildReadingMapEdgeLayout({
+      links: [
+        makeLink("100_111111111111", "200_222222222222"),
+        makeLink("200_222222222222", "300_333333333333"),
+      ],
+      nodes,
+    });
+    const annotated = annotateSessionEdges(edges, overlay);
+    expect(annotated[0].isSessionRelated).toBe(true);
+    expect(annotated[1].isSessionRelated).toBe(false);
+  });
+
+  it("applySessionFocus dims non-session nodes in session mode", () => {
+    const overlay: WereadSessionThemeOverlay = {
+      enabled: true,
+      themes: [],
+      catalogIds: ["100_111111111111"],
+      notesUsed: 1,
+    };
+    const nodes = buildReadingMapNodeLayout({
+      books: [makeBook("100_111111111111"), makeBook("200_222222222222")],
+    });
+    const annotated = annotateSessionNodes(nodes, overlay);
+    const focused = applySessionFocus(annotated, "session", overlay);
+    expect(focused.find((n) => n.catalogId === "100_111111111111")?.isDimmed).toBe(false);
+    expect(focused.find((n) => n.catalogId === "200_222222222222")?.isDimmed).toBe(true);
+  });
+
+  it("applySessionFocus leaves everything visible in full mode", () => {
+    const overlay: WereadSessionThemeOverlay = {
+      enabled: true,
+      themes: [],
+      catalogIds: ["100_111111111111"],
+      notesUsed: 1,
+    };
+    const nodes = buildReadingMapNodeLayout({
+      books: [makeBook("100_111111111111"), makeBook("200_222222222222")],
+    });
+    const annotated = annotateSessionNodes(nodes, overlay);
+    const focused = applySessionFocus(annotated, "full", overlay);
+    expect(focused.every((n) => n.isDimmed === false)).toBe(true);
+  });
+
+  it("buildSessionThemeOverlay.enabled is false when summary is null", () => {
+    const overlay = buildSessionThemeOverlay({
+      summary: null,
+      items: [],
+    });
+    expect(overlay.enabled).toBe(false);
+    expect(overlay.themes).toEqual([]);
+    expect(overlay.catalogIds).toEqual([]);
+  });
+
+  it("buildSessionThemeOverlay preserves matched catalogIds without leaking text", () => {
+    const overlay = buildSessionThemeOverlay({
+      summary: null,
+      items: [
+        {
+          type: "highlight",
+          text: "私密正文不应泄露",
+          comment: null,
+          createdAt: null,
+          updatedAt: null,
+          matched: true,
+          catalogId: "555_666666666666",
+          source: "private_weread",
+        },
+      ],
+    });
+    expect(overlay.enabled).toBe(false);
+    expect(overlay.catalogIds).toEqual(["555_666666666666"]);
+    const json = JSON.stringify(overlay);
+    expect(json.includes("私密正文不应泄露")).toBe(false);
   });
 });

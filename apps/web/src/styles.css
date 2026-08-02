@@ -3883,3 +3883,172 @@ mark.hl {
     align-items: flex-start;
   }
 }
+
+/* S27H-2 — Session theme overlay for the reading-map dashboard. */
+
+.weread-session-theme {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px dashed var(--book-id-border, #e2e8f0);
+  border-radius: 10px;
+  background: var(--book-id-soft-bg, #f8fafc);
+}
+
+.weread-session-theme--empty {
+  background: transparent;
+  border-style: dashed;
+}
+
+.weread-session-theme__header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.weread-session-theme__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--book-id-text, #1e293b);
+}
+
+.weread-session-theme__summary {
+  margin: 0;
+  font-size: 12px;
+  color: var(--book-id-text, #1e293b);
+}
+
+.weread-session-theme__notice {
+  margin: 0;
+  font-size: 11px;
+  color: var(--book-id-muted, #64748b);
+}
+
+.weread-session-theme__chips {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.weread-session-theme__chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1.3;
+  background: #e0f2fe;
+  color: #075985;
+  border: 1px solid #bae6fd;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.weread-session-theme__chip--direction {
+  background: #ede9fe;
+  color: #5b21b6;
+  border-color: #ddd6fe;
+}
+
+.weread-session-theme__chip-label {
+  white-space: normal;
+}
+
+.weread-session-theme__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.weread-session-theme__primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid #2563eb;
+  background: #2563eb;
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.weread-session-theme__primary:hover {
+  background: #1d4ed8;
+}
+
+.weread-session-theme__primary--active {
+  background: #1e3a8a;
+  border-color: #1e3a8a;
+}
+
+.weread-session-theme__secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--book-id-border, #cbd5e1);
+  background: transparent;
+  color: var(--book-id-text, #1e293b);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.weread-session-theme__hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--book-id-muted, #64748b);
+}
+
+/* Session / dimmed variants for nodes, links, and book cards. */
+
+.weread-reading-map__node--session {
+  /* Books that are part of the current session overlay. Halo via stroke
+     is added at the SVG layer; this class also drives the book-card
+     border and the network node emphasis. */
+  filter: drop-shadow(0 0 4px rgba(37, 99, 235, 0.45));
+}
+
+.weread-reading-map__book-card.weread-reading-map__node--session {
+  border-color: #2563eb;
+  border-style: solid;
+  background: #eff6ff;
+}
+
+.weread-reading-map__node--dimmed {
+  opacity: 0.32;
+}
+
+.weread-reading-map__link--session {
+  stroke: #2563eb;
+  stroke-opacity: 0.85;
+}
+
+.weread-reading-map__network-node.weread-reading-map__node--session {
+  stroke: #1d4ed8;
+  stroke-width: 3;
+}
+
+.weread-reading-map__link--dimmed {
+  opacity: 0.18;
+}
+
+/* Mobile-only safety: chips wrap, no horizontal overflow. */
+@media (max-width: 720px) {
+  .weread-session-theme {
+    padding: 10px 12px;
+  }
+  .weread-session-theme__chip {
+    font-size: 11px;
+    padding: 2px 8px;
+  }
+}

@@ -20,12 +20,25 @@ import RelatedBooksDiscovery from "./RelatedBooksDiscovery";
 interface NotesAiSummaryProps {
   token: string;
   items: WereadPrivateNoteItem[];
+  /**
+   * S27H-2: fired whenever the AI summary state changes. Reports the
+   * current summary + the number of notes that were sent to MiniMax
+   * (`meta.itemsUsed`), or `null` when the panel goes back to idle
+   * (token change, items change, user cleared, error). The parent uses
+   * this to derive a small, safe session-theme overlay for the reading
+   * map. Note text, comment, overview, key points, and review questions
+   * are NEVER included in this callback.
+   */
+  onSummaryChange?: (state: {
+    summary: WereadAiSummaryResult | null;
+    itemsUsed: number | null;
+  }) => void;
 }
 
 type State =
   | { kind: "idle" }
   | { kind: "loading" }
-  | { kind: "ready"; summary: WereadAiSummaryResult; metaText: string }
+  | { kind: "ready"; summary: WereadAiSummaryResult; metaText: string; itemsUsed: number }
   | { kind: "error"; message: string };
 
 /**
@@ -52,7 +65,7 @@ type State =
  *    dangerouslySetInnerHTML), so HTML tags inside the response text are
  *    displayed literally and never executed.
  */
-export default function NotesAiSummary({ token, items }: NotesAiSummaryProps) {
+export default function NotesAiSummary({ token, items, onSummaryChange }: NotesAiSummaryProps) {
   const [state, setState] = useState<State>({ kind: "idle" });
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
   const requestIdRef = useRef(0);
@@ -69,6 +82,22 @@ export default function NotesAiSummary({ token, items }: NotesAiSummaryProps) {
     AI_SUMMARY_CLIENT_LIMITS.MAX_INPUT_ITEMS
   );
   const truncated = itemsCount > AI_SUMMARY_CLIENT_LIMITS.MAX_INPUT_ITEMS;
+
+  // S27H-2: surface the current AI summary state to the parent so it
+  // can derive a session-theme overlay. We use a stable key so the
+  // parent only re-renders when the summary actually changes.
+  const lastReportedKeyRef = useRef<string>("");
+  useEffect(() => {
+    if (!onSummaryChange) return;
+    const payload =
+      state.kind === "ready"
+        ? { summary: state.summary, itemsUsed: state.itemsUsed }
+        : { summary: null, itemsUsed: null };
+    const key = `${payload.summary ? "1" : "0"}|${payload.itemsUsed ?? 0}`;
+    if (key === lastReportedKeyRef.current) return;
+    lastReportedKeyRef.current = key;
+    onSummaryChange(payload);
+  }, [state, onSummaryChange]);
 
   // Clear stale summaries whenever the loaded notes / token / etc. changes.
   useEffect(() => {
@@ -117,6 +146,7 @@ export default function NotesAiSummary({ token, items }: NotesAiSummaryProps) {
         kind: "ready",
         summary: resp.summary,
         metaText: formatAiSummaryMeta(resp.meta),
+        itemsUsed: resp.meta.itemsUsed,
       });
     } catch (err) {
       if (myId !== requestIdRef.current) return;
@@ -135,7 +165,7 @@ export default function NotesAiSummary({ token, items }: NotesAiSummaryProps) {
   const handleCopy = useCallback(async () => {
     if (state.kind !== "ready") return;
     const md = buildAiSummaryMarkdown(state.summary, {
-      itemsUsed: itemsUsedInCall,
+      itemsUsed: state.itemsUsed,
       totalCharacters: state.summary.overview.length, // approximation only
       persisted: false,
       provider: "minimax",
