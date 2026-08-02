@@ -110,11 +110,11 @@
 3. 当前会话主题不绑定单本书；主题复习任务不代表主题来自具体书目。
 4. 复习日历不持久化：刷新后会根据最新数据重新生成。
 5. 缺少 `lastNoteAt` 的书目不会生成复习日期，只在「缺少可用的最后阅读日期」区域展示。
-6. 第一版不提供 ICS / Google Calendar / 完成状态持久化等扩展能力。
+6. ICS / Google Calendar 导出能力由 S27I-2 提供（详见 [WEREAD_REVIEW_CALENDAR_ICS.md](./WEREAD_REVIEW_CALENDAR_ICS.md)）。
 
 ## 13. 后续规划（**本轮不实现**）
 
-- S27I-2：浏览器本地 ICS 导出（前端 Blob 下载，零服务器写入）。
+- S27I-2：浏览器本地 ICS 导出 ✅ 已实现（详见 [WEREAD_REVIEW_CALENDAR_ICS.md](./WEREAD_REVIEW_CALENDAR_ICS.md)）。
 - S27I-3：用户主动创建 Google Calendar 事件（用户授权 + 一次性跳转，零自动化）。
 - S27I-4：本地完成状态（仅 `sessionStorage`，不写入服务端）。
 - S27J：年度阅读回顾（基于阅读地图的全年聚合）。

@@ -334,3 +334,107 @@ describe("ReviewCalendarDashboard — structural contract", () => {
     expect(dashboard).toMatch(/REVIEW_RECOMMEND_OPTIONS/);
   });
 });
+
+/**
+ * S27I-2 — Browser-local ICS export wiring. Structural assertions
+ * only; the pure model is exercised in wereadReviewCalendarIcs.test.ts.
+ */
+describe("ReviewCalendarDashboard — S27I-2 ICS export", () => {
+  const ics = readFileSync(
+    resolve(__dirname, "./wereadReviewCalendarIcs.ts"),
+    "utf8"
+  );
+
+  it("renders the export range selector with three options", () => {
+    expect(dashboard).toMatch(/weread-review-calendar__export/);
+    expect(dashboard).toMatch(/weread-review-calendar__export-controls/);
+    expect(dashboard).toMatch(/weread-review-calendar__export-notice/);
+    expect(dashboard).toMatch(/weread-review-calendar__export-status/);
+    expect(dashboard).toMatch(/weread-review-export-range-\$\{opt\.value\}/);
+    expect(dashboard).toMatch(/全部任务/);
+    expect(dashboard).toMatch(/仅书目任务/);
+    expect(dashboard).toMatch(/仅当前会话主题/);
+  });
+
+  it("renders the export button labelled 导出日历文件 (.ics)", () => {
+    expect(dashboard).toMatch(/导出日历文件 \(.ics\)/);
+    expect(dashboard).toMatch(/weread-review-calendar-export-button/);
+  });
+
+  it("disables the export button when there are no tasks", () => {
+    expect(dashboard).toMatch(/disabled=\{exportableCount === 0\}/);
+  });
+
+  it("does not issue any new fetch when exporting", () => {
+    expect(dashboard).not.toMatch(/fetch\(/);
+  });
+
+  it("uses the browser-local download API only", () => {
+    expect(dashboard).toMatch(/triggerIcsDownload/);
+    expect(dashboard).toMatch(/buildReviewCalendarIcs/);
+  });
+
+  it("never writes to localStorage / sessionStorage / IndexedDB", () => {
+    // Strip the privacy-contract comment so we don't false-positive
+    // on the comment that documents the prohibition.
+    const stripComments = (src: string) =>
+      src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+    const dash = stripComments(dashboard);
+    expect(dash).not.toMatch(/localStorage\.(setItem|getItem|removeItem|clear)/);
+    expect(dash).not.toMatch(/sessionStorage\.(setItem|getItem|removeItem|clear)/);
+    expect(dash).not.toMatch(/IndexedDB/);
+  });
+
+  // Strip privacy-contract comments so the comment that documents
+  // the *prohibition* is not flagged as a violation.
+  it("never references Google / Apple / Outlook APIs for the export", () => {
+    const stripComments = (src: string) =>
+      src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+    expect(stripComments(dashboard)).not.toMatch(/google\.com\/calendar|apple\.com\/cal|outlook\.live\.com|graph\.microsoft/);
+    expect(stripComments(dashboard)).not.toMatch(/window\.open/);
+  });
+
+  it("never uses dangerouslySetInnerHTML", () => {
+    expect(dashboard).not.toMatch(/dangerouslySetInnerHTML/);
+  });
+
+  it("never auto-opens Google Calendar / Apple Calendar / Outlook", () => {
+    expect(dashboard).not.toMatch(/google\.com\/calendar|apple\.com\/cal|outlook\.live\.com|graph\.microsoft/);
+    expect(dashboard).not.toMatch(/window\.open/);
+  });
+
+  it("ICS model uses CRLF + all-day VALUE=DATE", () => {
+    expect(ics).toMatch(/DTSTART;VALUE=DATE/);
+    expect(ics).toMatch(/DTEND;VALUE=DATE/);
+    expect(ics).toMatch(/\\r\\n/);
+  });
+
+  it("ICS UID never embeds the raw catalogId", () => {
+    // The model uses fnv1a32 over `kind|id|dtstart` — the catalogId
+    // only enters as the `id` prefix (`book:NN_...`), which is then
+    // hashed. So no literal `${task.catalogId}` should appear in
+    // the UID construction.
+    expect(ics).toMatch(/fnv1a32/);
+    const stripComments = (src: string) =>
+      src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+    expect(stripComments(ics)).not.toMatch(/\$\{task\.catalogId\}/);
+    expect(stripComments(ics)).not.toMatch(/\.catalogId`/);
+  });
+
+  it("ICS filename never embeds titles / themes / catalogIds", () => {
+    expect(ics).toMatch(/buildReviewCalendarIcsFilename/);
+    expect(ics).toMatch(/weread-review-calendar/);
+    // The filename function must not reference any task field.
+    // Extract just the body of `buildReviewCalendarIcsFilename` and
+    // assert it only consumes range / horizonDays / now.
+    const match = ics.match(/export function buildReviewCalendarIcsFilename[\s\S]*?^\}/m);
+    expect(match).not.toBeNull();
+    if (match) {
+      const body = match[0];
+      expect(body).not.toMatch(/task\./);
+      expect(body).not.toMatch(/\.title/);
+      expect(body).not.toMatch(/\.label/);
+      expect(body).not.toMatch(/catalogId/);
+    }
+  });
+});

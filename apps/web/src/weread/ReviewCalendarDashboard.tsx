@@ -1,9 +1,10 @@
 /**
- * S27I — ReviewCalendarDashboard
+ * S27I / S27I-2 — ReviewCalendarDashboard
  *
- * Pure front-end review calendar for the private WeRead centre.
+ * Pure front-end review calendar for the private WeRead centre,
+ * with an optional browser-local ICS export (S27I-2).
  *
- * Privacy contract (mirrors S27H / S27H-2):
+ * Privacy contract (mirrors S27H / S27H-2 / S27I-2):
  *   - Reads only the public fields returned by `/api/private/weread/
  *     reading-map` (catalogId, title, author, noteCount, activeMonths,
  *     lastNoteAt, etc.).
@@ -12,10 +13,14 @@
  *   - Never calls fetchWereadAiSummary or fetchWereadRelatedBooks.
  *   - Never persists state to localStorage / sessionStorage / IndexedDB
  *     / server / external calendar.
+ *   - S27I-2: ICS export is built entirely in the browser. No fetch
+ *     is issued when the user clicks the export button. The
+ *     generated Blob is offered to the browser via a transient
+ *     `URL.createObjectURL` and revoked on the next tick.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, CalendarClock, ChevronRight, Loader2, MapPin, RefreshCw, Sparkles } from "lucide-react";
+import { AlertCircle, CalendarClock, ChevronRight, Download, Loader2, MapPin, RefreshCw, Sparkles } from "lucide-react";
 import {
   fetchWereadReadingMap,
   type WereadReadingMapResponse,
@@ -44,6 +49,11 @@ import {
   formatReviewReason,
   hasReviewCalendarData,
 } from "./wereadReviewCalendarModel";
+import {
+  type IcsExportRange,
+  buildReviewCalendarIcs,
+  triggerIcsDownload,
+} from "./wereadReviewCalendarIcs";
 
 const NOW_INJECTION = () => new Date();
 
@@ -59,6 +69,9 @@ interface DashboardState {
   error: string | null;
   horizon: ReviewHorizonDays;
   recommend: ReviewRecommendCount;
+  exportRange: IcsExportRange;
+  exportStatus: "idle" | "ready" | "error";
+  exportMessage: string;
 }
 
 const INITIAL_STATE: DashboardState = {
@@ -67,6 +80,9 @@ const INITIAL_STATE: DashboardState = {
   error: null,
   horizon: REVIEW_DEFAULT_HORIZON,
   recommend: REVIEW_DEFAULT_RECOMMEND,
+  exportRange: "all",
+  exportStatus: "idle",
+  exportMessage: "",
 };
 
 const PRIORITY_LABEL: Record<ReadingReviewPriority, string> = {
@@ -80,6 +96,22 @@ const PRIORITY_RANK: Record<ReadingReviewPriority, number> = {
   medium: 1,
   low: 2,
 };
+
+const EXPORT_RANGE_OPTIONS: ReadonlyArray<{ value: IcsExportRange; label: string }> = [
+  { value: "all", label: "全部任务" },
+  { value: "book", label: "仅书目任务" },
+  { value: "theme", label: "仅当前会话主题" },
+];
+
+function countExportableTasks(
+  calendar: ReadingReviewCalendar | null,
+  range: IcsExportRange
+): number {
+  if (!calendar || !calendar.tasks) return 0;
+  if (range === "book") return calendar.tasks.filter((t) => t.kind === "book").length;
+  if (range === "theme") return calendar.tasks.filter((t) => t.kind === "theme").length;
+  return calendar.tasks.length;
+}
 
 function formatShortDate(iso: string): string {
   return iso.slice(5);
@@ -117,7 +149,14 @@ export default function ReviewCalendarDashboard({
       return;
     }
     lastRequestTokenRef.current = "";
-    setState((prev) => ({ ...prev, response: null, status: "idle", error: null }));
+    setState((prev) => ({
+      ...prev,
+      response: null,
+      status: "idle",
+      error: null,
+      exportStatus: "idle",
+      exportMessage: "",
+    }));
   }, [token]);
 
   // Load once per token, only after the tab is activated.
@@ -163,8 +202,27 @@ export default function ReviewCalendarDashboard({
     });
   }, [state.response, state.horizon, state.recommend, overlay]);
 
+  // Track the latest calendar so the export handler always sees the
+  // current horizon / recommend / theme settings.
+  const calendarRef = useRef<ReadingReviewCalendar | null>(null);
+  useEffect(() => {
+    calendarRef.current = calendar;
+  }, [calendar]);
+
+  // Clear stale export status when the user changes horizon,
+  // recommend count, or theme overlay — the previous count would
+  // otherwise refer to a stale event set.
+  useEffect(() => {
+    setState((prev) =>
+      prev.exportStatus === "idle"
+        ? prev
+        : { ...prev, exportStatus: "idle", exportMessage: "" }
+    );
+  }, [state.horizon, state.recommend, overlay]);
+
   const today = useMemo(() => new Date(), []);
   const summary = calendar ? formatReviewCalendarSummary(calendar) : "";
+  const exportableCount = countExportableTasks(calendar, state.exportRange);
 
   const handleRetry = useCallback(() => {
     if (!token) return;
@@ -187,6 +245,45 @@ export default function ReviewCalendarDashboard({
         setState((prev) => ({ ...prev, status: "error", error: msg, response: null }));
       });
   }, [token]);
+
+  const handleExportRangeChange = useCallback((next: IcsExportRange) => {
+    setState((prev) => ({
+      ...prev,
+      exportRange: next,
+      exportStatus: "idle",
+      exportMessage: "",
+    }));
+  }, []);
+
+  const handleExportClick = useCallback(() => {
+    const cal = calendarRef.current;
+    if (!cal) return;
+    if (!cal.tasks || cal.tasks.length === 0) return;
+    try {
+      const built = buildReviewCalendarIcs({
+        calendar: cal,
+        range: state.exportRange,
+        now: NOW_INJECTION(),
+      });
+      const result = triggerIcsDownload({
+        content: built.content,
+        filename: built.filename,
+      });
+      setState((prev) => ({
+        ...prev,
+        exportStatus: "ready",
+        exportMessage: `已生成 ${built.events.length} 个日历事件。`,
+      }));
+      void result; // result is for telemetry; not used in UI
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "未能生成日历文件，请稍后重试。";
+      setState((prev) => ({
+        ...prev,
+        exportStatus: "error",
+        exportMessage: msg,
+      }));
+    }
+  }, [state.exportRange]);
 
   // ------------------------------------------------------------------
   // Render: not yet activated → empty
@@ -315,6 +412,70 @@ export default function ReviewCalendarDashboard({
             </label>
           ))}
         </fieldset>
+      </div>
+
+      <div
+        className="weread-review-calendar__export"
+        data-testid="weread-review-calendar-export"
+      >
+        <div
+          className="weread-review-calendar__export-controls"
+          data-testid="weread-review-calendar-export-controls"
+        >
+          <fieldset className="weread-review-calendar__control weread-review-calendar__control--export">
+            <legend>导出范围</legend>
+            {EXPORT_RANGE_OPTIONS.map((opt) => (
+              <label key={opt.value}>
+                <input
+                  type="radio"
+                  name="weread-review-export-range"
+                  value={opt.value}
+                  checked={state.exportRange === opt.value}
+                  onChange={() => handleExportRangeChange(opt.value)}
+                  data-testid={`weread-review-export-range-${opt.value}`}
+                />
+                <span>{opt.label}</span>
+              </label>
+            ))}
+          </fieldset>
+          <button
+            type="button"
+            className="weread-review-calendar__export-button"
+            onClick={handleExportClick}
+            disabled={exportableCount === 0}
+            data-testid="weread-review-calendar-export-button"
+            aria-label="导出日历文件 .ics"
+            title="在浏览器内生成 ICS 日历文件"
+          >
+            <Download size={14} aria-hidden="true" />
+            导出日历文件 (.ics)
+          </button>
+        </div>
+        <p
+          className="weread-review-calendar__export-notice"
+          data-testid="weread-review-calendar-export-notice"
+        >
+          将导出 {exportableCount} 个全天日历事件。
+          ICS 文件只在当前浏览器中生成，不会上传到服务器。导入 Google、Apple 或 Outlook 日历后，事件内容将由相应日历服务保存。
+        </p>
+        {state.exportStatus === "ready" ? (
+          <p
+            className="weread-review-calendar__export-status"
+            data-testid="weread-review-calendar-export-status"
+            role="status"
+          >
+            {state.exportMessage}
+          </p>
+        ) : null}
+        {state.exportStatus === "error" ? (
+          <p
+            className="weread-review-calendar__export-status weread-review-calendar__export-status--error"
+            data-testid="weread-review-calendar-export-status-error"
+            role="alert"
+          >
+            {state.exportMessage}
+          </p>
+        ) : null}
       </div>
 
       {cal ? (

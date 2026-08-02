@@ -155,3 +155,11 @@ AI 摘要成功显示后，会在同一区域下方出现一个虚框入口「�
 ## 复习日历（S27I）
 
 `WereadCenter` 自 S27I 起提供第三个工作区「复习日历」，与「笔记与 AI」「个人阅读地图」并列。它复用 `fetchWereadReadingMap` 与 `WereadSessionThemeOverlay` 派生确定性复习建议。详见 `docs/WEREAD_REVIEW_CALENDAR.md`。该工作区不在服务端持久化、不调用 AI、不修改任何既有端点。
+
+### 复习日历 ICS 导出（S27I-2）
+
+S27I-2 新增「导出日历文件 (.ics)」按钮，纯浏览器生成。详见 `docs/WEREAD_REVIEW_CALENDAR_ICS.md`：
+- 三种导出范围：全部任务 / 仅书目任务 / 仅当前会话主题。
+- 全天事件（`VALUE=DATE`），不输出 VTIMEZONE。
+- 文件名 `weread-review-calendar-<horizon>-<range>-YYYYMMDD.ics`，仅 ASCII。
+- 不新增任何 API、不调用 Google / Apple / Outlook、不写入 localStorage / sessionStorage / IndexedDB / 服务器。

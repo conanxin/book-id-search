@@ -356,7 +356,7 @@ Caddy 是公网唯一入口。3001/5173/7700 全部绑定 `127.0.0.1`。
 
 最终公网复核报告：[reports/FINAL_PUBLIC_ACCESS_VERIFICATION.md](reports/FINAL_PUBLIC_ACCESS_VERIFICATION.md)。
 
-当前稳定 tag：`v0.14.0-weread-review-calendar`。
+当前稳定 tag：`v0.14.1-weread-review-calendar-ics`。
 
 ## WeRead Center
 
@@ -398,3 +398,16 @@ Caddy 是公网唯一入口。3001/5173/7700 全部绑定 `127.0.0.1`。
 - 详见 [docs/WEREAD_SESSION_THEME_OVERLAY.md](docs/WEREAD_SESSION_THEME_OVERLAY.md) 和 [reports/WEREAD_SESSION_THEME_OVERLAY_REPORT.md](reports/WEREAD_SESSION_THEME_OVERLAY_REPORT.md)。
 
 更全面的说明见 [docs/WEREAD_CENTER.md](docs/WEREAD_CENTER.md) / [docs/WEREAD_PRIVATE_OVERLAY_API.md](docs/WEREAD_PRIVATE_OVERLAY_API.md)。
+
+### S27I · 复习日历
+- `GET /api/private/weread/reading-map` 派生确定性复习建议（书目任务 + 当前会话主题）。
+- 14 / 28 / 42 天展望窗口，6 / 12 / 18 推荐书目数。
+- 不接入任何外部日历，不保存完成状态，不调用 AI。
+- 详见 [docs/WEREAD_REVIEW_CALENDAR.md](docs/WEREAD_REVIEW_CALENDAR.md)。
+
+### S27I-2 · 浏览器本地 ICS 导出
+- 「导出日历文件 (.ics)」按钮，纯浏览器生成。
+- 三种导出范围：全部任务 / 仅书目任务 / 仅当前会话主题。
+- 全天事件 (`VALUE=DATE`)，文件名 `weread-review-calendar-<horizon>-<range>-YYYYMMDD.ics`。
+- 不新增任何 API、不调用 Google / Apple / Outlook、不写入 localStorage / sessionStorage / IndexedDB / 服务器。
+- 详见 [docs/WEREAD_REVIEW_CALENDAR_ICS.md](docs/WEREAD_REVIEW_CALENDAR_ICS.md)。
