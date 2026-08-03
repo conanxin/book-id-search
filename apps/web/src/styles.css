@@ -5224,3 +5224,513 @@ mark.hl {
 .weread-annual-review__export-status--error {
   color: #b94a48;
 }
+
+/* ----- S27K — year-over-year comparison ----- */
+
+.weread-year-comparison {
+  margin: 16px 0 0;
+  padding: 16px;
+  border: 1px solid #d8dce4;
+  border-radius: 8px;
+  background: #fbfcfe;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.weread-year-comparison--loading,
+.weread-year-comparison--error {
+  font-size: 13px;
+  color: #4a5366;
+}
+
+.weread-year-comparison__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.weread-year-comparison__header h3 {
+  margin: 0;
+  font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.weread-year-comparison__header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.weread-year-comparison__swap,
+.weread-year-comparison__close {
+  border: 1px solid #cdd2de;
+  background: #fff;
+  color: #2b3343;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.weread-year-comparison__notice,
+.weread-year-comparison__disclaimer,
+.weread-year-comparison__summary-disclaimer {
+  margin: 0;
+  font-size: 12px;
+  color: #4a5366;
+  line-height: 1.55;
+}
+
+.weread-year-comparison__controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.weread-year-comparison__controls fieldset {
+  border: none;
+  padding: 0;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.weread-year-comparison__controls legend {
+  font-size: 12px;
+  color: #4a5366;
+  padding: 0;
+  margin: 0 6px 0 0;
+}
+
+.weread-year-comparison__controls label {
+  font-size: 12px;
+  color: #2b3343;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.weread-year-comparison__range-notice {
+  margin: 0;
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.weread-year-comparison__selectors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.weread-year-comparison__selectors label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #2b3343;
+}
+
+.weread-year-comparison__selectors select {
+  font-size: 12px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid #cdd2de;
+  background: #fff;
+}
+
+.weread-year-comparison__toggle {
+  border: 1px solid #2b6cb0;
+  background: #2b6cb0;
+  color: #fff;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.weread-year-comparison__toggle:disabled {
+  border-color: #cdd2de;
+  background: #f4f5f8;
+  color: #9aa1ad;
+  cursor: not-allowed;
+}
+
+.weread-year-comparison__controls-hint {
+  margin: 0;
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.weread-year-comparison__error {
+  background: #fdf2f2;
+  border: 1px solid #f3c4c1;
+  border-radius: 6px;
+  padding: 10px 12px;
+  color: #b94a48;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.weread-year-comparison__retry {
+  border: 1px solid #b94a48;
+  background: #fff;
+  color: #b94a48;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.weread-year-comparison__empty {
+  margin: 0;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.weread-year-comparison__section-title {
+  margin: 0;
+  font-size: 13px;
+  color: #2b3343;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.weread-year-comparison__metrics,
+.weread-year-comparison__timeline,
+.weread-year-comparison__quarters,
+.weread-year-comparison__books,
+.weread-year-comparison__summaries {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.weread-year-comparison__metric-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.weread-year-comparison__metric {
+  border: 1px solid #d8dce4;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.weread-year-comparison__metric h5 {
+  margin: 0;
+  font-size: 12px;
+  color: #4a5366;
+}
+
+.weread-year-comparison__metric-values {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0;
+}
+
+.weread-year-comparison__metric-values div {
+  display: flex;
+  flex-direction: column;
+}
+
+.weread-year-comparison__metric-values dt {
+  font-size: 10px;
+  color: #6b7280;
+}
+
+.weread-year-comparison__metric-values dd {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #2b3343;
+}
+
+.weread-year-comparison__metric-delta {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.weread-year-comparison__delta-value {
+  font-weight: 600;
+  color: #2b3343;
+}
+
+.weread-year-comparison__delta-pct {
+  color: #4a5366;
+}
+
+/* Neutral tone — do NOT colour increase/decrease green/red on purpose */
+.weread-year-comparison__metric--neutral-up {
+  border-left: 3px solid #2b6cb0;
+}
+.weread-year-comparison__metric--neutral-down {
+  border-left: 3px solid #6b7280;
+}
+.weread-year-comparison__metric--neutral-flat {
+  border-left: 3px solid #cdd2de;
+}
+
+.weread-year-comparison__legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: #4a5366;
+}
+
+.weread-year-comparison__legend-item--base::before {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  background: #4a5366;
+  margin-right: 4px;
+  border-radius: 2px;
+}
+
+.weread-year-comparison__legend-item--target::before {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  background: #2b6cb0;
+  margin-right: 4px;
+  border-radius: 2px;
+}
+
+.weread-year-comparison__timeline-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.weread-year-comparison__bar--base {
+  fill: #4a5366;
+}
+.weread-year-comparison__bar--target {
+  fill: #2b6cb0;
+}
+
+.weread-year-comparison__a11y-hint {
+  margin: 0;
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.weread-year-comparison__timeline-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: #4a5366;
+  line-height: 1.55;
+}
+
+.weread-year-comparison__quarter-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.weread-year-comparison__quarter {
+  border: 1px solid #d8dce4;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.weread-year-comparison__quarter h5 {
+  margin: 0;
+  font-size: 13px;
+  color: #2b3343;
+}
+
+.weread-year-comparison__quarter dl {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: #4a5366;
+}
+
+.weread-year-comparison__quarter dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.weread-year-comparison__quarter dt {
+  margin: 0;
+}
+
+.weread-year-comparison__quarter dd {
+  margin: 0;
+  color: #2b3343;
+  font-weight: 600;
+}
+
+.weread-year-comparison__book-groups {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.weread-year-comparison__book-group {
+  border: 1px solid #d8dce4;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.weread-year-comparison__book-group-title {
+  margin: 0;
+  font-size: 13px;
+  color: #2b3343;
+}
+
+.weread-year-comparison__book-card-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.weread-year-comparison__book-card {
+  border: 1px solid #e1e5ed;
+  border-radius: 6px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  background: #fbfcfe;
+}
+
+.weread-year-comparison__book-title {
+  font-weight: 600;
+  color: #2b6cb0;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.weread-year-comparison__book-author {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.weread-year-comparison__book-meta {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.weread-year-comparison__book-meta div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.weread-year-comparison__book-meta dt {
+  margin: 0;
+  color: #6b7280;
+}
+
+.weread-year-comparison__book-meta dd {
+  margin: 0;
+  color: #2b3343;
+  font-weight: 600;
+}
+
+.weread-year-comparison__book-cta {
+  font-size: 11px;
+  color: #2b6cb0;
+  text-decoration: none;
+  align-self: flex-start;
+}
+
+.weread-year-comparison__book-group-empty {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.weread-year-comparison__summaries ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: #2b3343;
+}
+
+.weread-year-comparison__bars {
+  display: block;
+}
+
+/* ----- responsive ----- */
+
+@media (max-width: 1200px) {
+  .weread-year-comparison__metric-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .weread-year-comparison__quarter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .weread-year-comparison__book-groups {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .weread-year-comparison__metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .weread-year-comparison__quarter-grid {
+    grid-template-columns: 1fr;
+  }
+  .weread-year-comparison__book-groups {
+    grid-template-columns: 1fr;
+  }
+  .weread-year-comparison__selectors {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

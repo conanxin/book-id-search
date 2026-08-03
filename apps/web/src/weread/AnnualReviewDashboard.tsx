@@ -1,5 +1,5 @@
 /**
- * S27J / S27J-2 — AnnualReviewDashboard
+ * S27J / S27J-2 / S27K — AnnualReviewDashboard
  *
  * Pure front-end dashboard for the private WeRead "annual reading
  * review" workspace. Mirrors the privacy contract of the S27H / S27I
@@ -8,6 +8,13 @@
  * S27J-2 adds a browser-local Markdown export button. The Markdown
  * file is built entirely from the response the dashboard already
  * holds (no extra fetch, no AI call, no storage).
+ *
+ * S27K adds an opt-in year-over-year comparison view. The comparison
+ * is built from two cached `WereadAnnualReviewResponse` payloads
+ * (the same shape the dashboard already loads). When the toggle is
+ * closed, no second request is fired. When opened, the dashboard
+ * loads the base year (or reuses the cache), then renders the
+ * `YearComparisonPanel`.
  *
  * Privacy contract:
  *   - Reads only the public fields returned by
@@ -18,11 +25,16 @@
  *     AI summary, or session theme overlay.
  *   - Never calls fetchWereadAiSummary or fetchWereadRelatedBooks.
  *   - Never persists to localStorage / sessionStorage / IndexedDB /
- *     server. Token clearing drops the in-memory response immediately.
+ *     server. Token clearing drops the in-memory response and
+ *     comparison cache immediately.
  *   - 12-month timeline is rendered as a hand-built SVG bar chart —
  *     no third-party chart library.
  *   - S27J-2: Markdown export consumes the response already held in
  *     `state.response`. No new API request, no AI call, no storage.
+ *   - S27K: Year comparison is computed from the cached responses.
+ *     No new endpoint, no AI call, no storage. The comparison cache
+ *     lives in component memory only and is dropped on token
+ *     change / unmount.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -42,6 +54,7 @@ import {
   type WereadAnnualReviewResponse,
   type WereadAnnualReviewTopBooksOption,
 } from "../wereadPrivate";
+import YearComparisonPanel from "./YearComparisonPanel";
 import {
   ANNUAL_ACTIVITY_LABELS,
   buildAnnualOverviewView,
@@ -78,6 +91,15 @@ interface DashboardState {
   exportMessage: string;
 }
 
+interface ComparisonState {
+  enabled: boolean;
+  baseYear: number | null;
+  targetYear: number | null;
+  baseResponse: WereadAnnualReviewResponse | null;
+  baseStatus: "idle" | "loading" | "ok" | "error";
+  baseError: string | null;
+}
+
 const INITIAL_STATE: DashboardState = {
   response: null,
   status: "idle",
@@ -88,22 +110,49 @@ const INITIAL_STATE: DashboardState = {
   exportMessage: "",
 };
 
+const INITIAL_COMPARISON: ComparisonState = {
+  enabled: false,
+  baseYear: null,
+  targetYear: null,
+  baseResponse: null,
+  baseStatus: "idle",
+  baseError: null,
+};
+
 const NOW_INJECTION = () => new Date();
+
+function compareKey(year: number, topBooks: WereadAnnualReviewTopBooksOption): string {
+  return `${year}:${topBooks}`;
+}
 
 export default function AnnualReviewDashboard({ token, active }: AnnualReviewDashboardProps) {
   const [state, setState] = useState<DashboardState>(INITIAL_STATE);
+  const [comparison, setComparison] = useState<ComparisonState>(INITIAL_COMPARISON);
   const abortRef = useRef<AbortController | null>(null);
+  const compareAbortRef = useRef<AbortController | null>(null);
   const lastRequestTokenRef = useRef<string>("");
+  // S27K — in-memory cache of annual-review responses keyed by
+  // `${year}:${topBooks}`. Lives only for the dashboard's lifetime.
+  const compareCacheRef = useRef<Map<string, WereadAnnualReviewResponse>>(new Map());
+  // S27K — guards against issuing two concurrent requests for the
+  // same compare key.
+  const compareInflightRef = useRef<Set<string>>(new Set());
 
   // Reset on token change.
   useEffect(() => {
     if (!token) {
       abortRef.current?.abort();
+      compareAbortRef.current?.abort();
       lastRequestTokenRef.current = "";
+      compareCacheRef.current.clear();
+      compareInflightRef.current.clear();
       setState(INITIAL_STATE);
+      setComparison(INITIAL_COMPARISON);
       return;
     }
     lastRequestTokenRef.current = "";
+    compareCacheRef.current.clear();
+    compareInflightRef.current.clear();
     setState((prev) => ({
       ...prev,
       response: null,
@@ -113,6 +162,7 @@ export default function AnnualReviewDashboard({ token, active }: AnnualReviewDas
       exportStatus: "idle",
       exportMessage: "",
     }));
+    setComparison(INITIAL_COMPARISON);
   }, [token]);
 
   // Issue the initial fetch once the tab is activated.
@@ -149,6 +199,7 @@ export default function AnnualReviewDashboard({ token, active }: AnnualReviewDas
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
+      compareAbortRef.current?.abort();
     };
   }, []);
 
@@ -213,6 +264,254 @@ export default function AnnualReviewDashboard({ token, active }: AnnualReviewDas
     setState((prev) => ({ ...prev, status: "loading", error: null }));
     requestAnnualReview(state.selectedYear, state.topBooks);
   }, [token, state.selectedYear, state.topBooks, requestAnnualReview]);
+
+  // S27K — write the freshly-loaded response into the compare cache
+  // so the comparison view can re-use it without re-fetching.
+  useEffect(() => {
+    if (!state.response) return;
+    if (state.selectedYear === null) return;
+    const key = compareKey(state.selectedYear, state.topBooks);
+    compareCacheRef.current.set(key, state.response);
+  }, [state.response, state.selectedYear, state.topBooks]);
+
+  // S27K — fetch (or reuse) the base year response for comparison.
+  const loadCompareYear = useCallback(
+    (year: number, topBooks: WereadAnnualReviewTopBooksOption) => {
+      if (!token) return;
+      const key = compareKey(year, topBooks);
+      const cached = compareCacheRef.current.get(key);
+      if (cached) {
+        setComparison((prev) => ({
+          ...prev,
+          baseYear: year,
+          baseResponse: cached,
+          baseStatus: "ok",
+          baseError: null,
+        }));
+        return;
+      }
+      if (compareInflightRef.current.has(key)) {
+        // A concurrent request is already on its way; do not duplicate.
+        return;
+      }
+      compareInflightRef.current.add(key);
+      compareAbortRef.current?.abort();
+      const controller = new AbortController();
+      compareAbortRef.current = controller;
+      setComparison((prev) => ({
+        ...prev,
+        baseYear: year,
+        baseStatus: "loading",
+        baseError: null,
+      }));
+      fetchWereadAnnualReview(token, {
+        year,
+        topBooks,
+        signal: controller.signal,
+      })
+        .then((resp) => {
+          compareInflightRef.current.delete(key);
+          if (controller.signal.aborted) return;
+          compareCacheRef.current.set(key, resp);
+          setComparison((prev) => ({
+            ...prev,
+            baseResponse: resp,
+            baseStatus: "ok",
+            baseError: null,
+          }));
+        })
+        .catch((err: unknown) => {
+          compareInflightRef.current.delete(key);
+          if (controller.signal.aborted) return;
+          const msg = err instanceof Error ? err.message : "对比年度加载失败";
+          setComparison((prev) => ({
+            ...prev,
+            baseStatus: "error",
+            baseError: msg,
+          }));
+        });
+    },
+    [token]
+  );
+
+  // S27K — derive the default base year from `availableYears`.
+  const deriveDefaultBaseYear = useCallback(
+    (targetYear: number): number | null => {
+      const available = state.response?.availableYears ?? [];
+      const candidates = available.filter((y) => y !== targetYear);
+      if (candidates.length === 0) return null;
+      const older = candidates.filter((y) => y < targetYear);
+      const pool = older.length > 0 ? older : candidates;
+      let best = pool[0];
+      for (const y of pool) {
+        if (y > (best ?? 0)) best = y;
+      }
+      return best ?? null;
+    },
+    [state.response]
+  );
+
+  const handleToggleComparison = useCallback(() => {
+    if (!state.response || state.selectedYear === null) return;
+    setComparison((prev) => {
+      const nextEnabled = !prev.enabled;
+      if (!nextEnabled) {
+        compareAbortRef.current?.abort();
+        return { ...INITIAL_COMPARISON };
+      }
+      const targetYear = state.selectedYear;
+      if (targetYear === null) {
+        return { ...INITIAL_COMPARISON, enabled: true };
+      }
+      const baseYear =
+        prev.baseYear && prev.baseYear !== targetYear
+          ? prev.baseYear
+          : deriveDefaultBaseYear(targetYear);
+      return {
+        ...prev,
+        enabled: true,
+        targetYear,
+        baseYear: baseYear ?? null,
+        baseStatus: baseYear === null ? "idle" : prev.baseStatus,
+        baseResponse: baseYear === null ? null : prev.baseResponse,
+        baseError: baseYear === null ? null : prev.baseError,
+      };
+    });
+  }, [state.response, state.selectedYear, deriveDefaultBaseYear]);
+
+  // When the toggle is enabled and the base year changes, fetch it.
+  useEffect(() => {
+    if (!comparison.enabled) return;
+    if (comparison.baseYear === null) return;
+    if (comparison.baseResponse && comparison.baseResponse.selectedYear === comparison.baseYear) return;
+    loadCompareYear(comparison.baseYear, state.topBooks);
+  }, [
+    comparison.enabled,
+    comparison.baseYear,
+    comparison.baseResponse,
+    loadCompareYear,
+    state.topBooks,
+  ]);
+
+  // Sync the target year whenever the main dashboard's selected year
+  // changes — but only if the user has not pinned a different year
+  // AND the target year still matches the previous main year. If the
+  // user has already swapped (so target differs from main), leave
+  // the swapped values alone.
+  useEffect(() => {
+    if (!comparison.enabled) return;
+    if (state.selectedYear === null) return;
+    if (comparison.targetYear === state.selectedYear) return;
+    // If targetYear differs from the previous main year, the user
+    // (or swap) intentionally set a different target. Do not overwrite.
+    const previousMain = mainYearRef.current;
+    if (comparison.targetYear !== previousMain && comparison.targetYear !== state.selectedYear) {
+      return;
+    }
+    setComparison((prev) => ({
+      ...prev,
+      targetYear: state.selectedYear,
+      // Re-derive the base year when the main year changes.
+      baseYear:
+        prev.baseYear && prev.baseYear !== state.selectedYear
+          ? prev.baseYear
+          : state.selectedYear !== null
+            ? deriveDefaultBaseYear(state.selectedYear)
+            : null,
+    }));
+  }, [comparison.enabled, comparison.targetYear, state.selectedYear, deriveDefaultBaseYear]);
+
+  const handleCompareBaseYearChange = useCallback(
+    (next: number) => {
+      if (next === comparison.baseYear) return;
+      if (comparison.targetYear !== null && next === comparison.targetYear) {
+        // Disallow picking the same year as the target.
+        return;
+      }
+      setComparison((prev) => ({
+        ...prev,
+        baseYear: next,
+        baseResponse: null,
+        baseStatus: "loading",
+        baseError: null,
+      }));
+      loadCompareYear(next, state.topBooks);
+    },
+    [comparison.baseYear, comparison.targetYear, loadCompareYear, state.topBooks]
+  );
+
+  const handleCompareTargetYearChange = useCallback(
+    (next: number) => {
+      if (next === comparison.targetYear) return;
+      if (comparison.baseYear !== null && next === comparison.baseYear) {
+        return;
+      }
+      setComparison((prev) => ({
+        ...prev,
+        targetYear: next,
+      }));
+    },
+    [comparison.baseYear, comparison.targetYear]
+  );
+
+  // S27K — keep a ref to the comparison state so handlers can read
+  // the latest base/target year without having stale closure values.
+  const comparisonRef = useRef<ComparisonState>(INITIAL_COMPARISON);
+  useEffect(() => {
+    comparisonRef.current = comparison;
+  }, [comparison]);
+
+  // S27K — track the previous main year so we can distinguish between
+  // "main year changed by user" (sync target) and "user swapped
+  // target away from main" (leave target alone).
+  const mainYearRef = useRef<number | null>(null);
+  useEffect(() => {
+    mainYearRef.current = state.selectedYear;
+  }, [state.selectedYear]);
+
+  const handleCompareSwap = useCallback(() => {
+    const prev = comparisonRef.current;
+    if (prev.baseYear === null || prev.targetYear === null) return;
+    const newTarget = prev.baseYear;
+    const newBase = prev.targetYear;
+    setComparison({
+      ...prev,
+      targetYear: newTarget,
+      baseYear: newBase,
+      baseResponse: null,
+      baseStatus: "loading",
+      baseError: null,
+    });
+    loadCompareYear(newBase, state.topBooks);
+  }, [loadCompareYear, state.topBooks]);
+
+  const handleCompareClose = useCallback(() => {
+    compareAbortRef.current?.abort();
+    setComparison(INITIAL_COMPARISON);
+  }, []);
+
+  const handleCompareRetry = useCallback(() => {
+    if (comparison.baseYear === null) return;
+    loadCompareYear(comparison.baseYear, state.topBooks);
+  }, [comparison.baseYear, loadCompareYear, state.topBooks]);
+
+  const handleCompareTopBooksChange = useCallback(
+    (next: WereadAnnualReviewTopBooksOption) => {
+      // Force both years to use the same topBooks range. Update
+      // the dashboard's topBooks (which re-fetches the main year)
+      // and invalidate the cached base response for the old range.
+      if (next === state.topBooks) return;
+      compareCacheRef.current.clear();
+      setComparison((prev) => ({
+        ...prev,
+        baseResponse: null,
+        baseStatus: prev.baseYear === null ? "idle" : "loading",
+        baseError: null,
+      }));
+      requestAnnualReview(state.selectedYear, next);
+    },
+    [state.topBooks, state.selectedYear, requestAnnualReview]
+  );
 
   // Track the latest response so the export handler always operates
   // on the most recent data, even if the user clicks before the
@@ -322,19 +621,30 @@ export default function AnnualReviewDashboard({ token, active }: AnnualReviewDas
   }
 
   return (
-    <AnnualReviewContent
-      response={response}
-      selectedYear={state.selectedYear}
-      topBooks={state.topBooks}
-      errorMessage={state.error}
-      loading={state.status === "loading"}
-      exportStatus={state.exportStatus}
-      exportMessage={state.exportMessage}
-      onYearChange={handleYearChange}
-      onTopBooksChange={handleTopBooksChange}
-      onRetry={handleRetry}
-      onExportClick={handleExportClick}
-    />
+    <>
+      <AnnualReviewContent
+        response={response}
+        selectedYear={state.selectedYear}
+        topBooks={state.topBooks}
+        errorMessage={state.error}
+        loading={state.status === "loading"}
+        exportStatus={state.exportStatus}
+        exportMessage={state.exportMessage}
+        onYearChange={handleYearChange}
+        onTopBooksChange={handleTopBooksChange}
+        onRetry={handleRetry}
+        onExportClick={handleExportClick}
+        comparison={comparison}
+        availableYearsForComparison={response.availableYears}
+        onToggleComparison={handleToggleComparison}
+        onCloseComparison={handleCompareClose}
+        onSwapComparison={handleCompareSwap}
+        onRetryComparison={handleCompareRetry}
+        onChangeBaseYear={handleCompareBaseYearChange}
+        onChangeTargetYear={handleCompareTargetYearChange}
+        onChangeComparisonTopBooks={handleCompareTopBooksChange}
+      />
+    </>
   );
 }
 
@@ -352,6 +662,15 @@ interface AnnualReviewContentProps {
   onTopBooksChange: (next: WereadAnnualReviewTopBooksOption) => void;
   onRetry: () => void;
   onExportClick: () => void;
+  comparison: ComparisonState;
+  availableYearsForComparison: number[];
+  onToggleComparison: () => void;
+  onCloseComparison: () => void;
+  onSwapComparison: () => void;
+  onRetryComparison: () => void;
+  onChangeBaseYear: (next: number) => void;
+  onChangeTargetYear: (next: number) => void;
+  onChangeComparisonTopBooks: (next: WereadAnnualReviewTopBooksOption) => void;
 }
 
 function AnnualReviewContent({
@@ -366,6 +685,15 @@ function AnnualReviewContent({
   onTopBooksChange,
   onRetry,
   onExportClick,
+  comparison,
+  availableYearsForComparison,
+  onToggleComparison,
+  onCloseComparison,
+  onSwapComparison,
+  onRetryComparison,
+  onChangeBaseYear,
+  onChangeTargetYear,
+  onChangeComparisonTopBooks,
 }: AnnualReviewContentProps) {
   const average = response.overview.averageRecordsPerActiveMonth;
   const timeline = useMemo(
@@ -400,6 +728,7 @@ function AnnualReviewContent({
   const isEmptyYear = !hasAnnualReviewData(response);
 
   return (
+    <>
     <section
       className="weread-annual-review"
       data-testid="weread-annual-review"
@@ -685,7 +1014,48 @@ function AnnualReviewContent({
       {/* Used to satisfy TS unused-import warning for NOW_INJECTION. */}
       <span hidden>{NOW_INJECTION().toISOString()}</span>
     </section>
-  );
+
+    <ComparisonControls
+      enabled={comparison.enabled}
+      comparison={comparison}
+      availableYears={availableYearsForComparison}
+      targetYear={comparison.targetYear ?? selectedYear ?? response.selectedYear}
+      topBooks={topBooks}
+      onToggle={onToggleComparison}
+      onChangeBaseYear={onChangeBaseYear}
+      onChangeTargetYear={onChangeTargetYear}
+      onSwap={onSwapComparison}
+      onClose={onCloseComparison}
+    />
+
+    {comparison.enabled && comparison.baseResponse && comparison.targetYear !== null && comparison.baseYear !== null ? (
+      <YearComparisonPanel
+        base={comparison.baseResponse}
+        target={response}
+        topBooksRange={topBooks}
+        errorMessage={comparison.baseStatus === "error" ? comparison.baseError : null}
+        onRetry={onRetryComparison}
+        onSwap={onSwapComparison}
+        onClose={onCloseComparison}
+        onTopBooksRangeChange={onChangeComparisonTopBooks}
+      />
+    ) : null}
+
+    {comparison.enabled && comparison.baseStatus === "loading" ? (
+      <div className="weread-year-comparison weread-year-comparison--loading" data-testid="weread-year-comparison-loading" aria-label="年度对比加载中">
+        <p>正在加载基准年度…</p>
+      </div>
+    ) : null}
+
+    {comparison.enabled && comparison.baseStatus === "error" && !comparison.baseResponse ? (
+      <div className="weread-year-comparison weread-year-comparison--error" data-testid="weread-year-comparison-error-base" role="alert">
+        <p>基准年度加载失败：{comparison.baseError ?? "未知错误"}</p>
+        <button type="button" className="weread-year-comparison__retry" onClick={onRetryComparison} data-testid="weread-year-comparison-retry-base">
+          重试基准年度
+        </button>
+      </div>
+    ) : null}
+  </>);
 }
 
 // ---------- subcomponents ----------
@@ -828,5 +1198,92 @@ function TimelineChart({
         );
       })}
     </svg>
+  );
+}
+// ---------- S27K comparison controls ----------
+
+interface ComparisonControlsProps {
+  enabled: boolean;
+  comparison: ComparisonState;
+  availableYears: number[];
+  targetYear: number;
+  topBooks: WereadAnnualReviewTopBooksOption;
+  onToggle: () => void;
+  onChangeBaseYear: (next: number) => void;
+  onChangeTargetYear: (next: number) => void;
+  onSwap: () => void;
+  onClose: () => void;
+}
+
+function ComparisonControls({
+  enabled,
+  comparison,
+  availableYears,
+  targetYear,
+  onToggle,
+  onChangeBaseYear,
+  onChangeTargetYear,
+}: ComparisonControlsProps) {
+  const years = availableYears.length > 0 ? availableYears : [targetYear];
+  const comparableCount = years.length;
+  const disabled = comparableCount < 2;
+  const currentBase = comparison.baseYear;
+  const baseYearOptions = years.filter((y) => y !== targetYear);
+  const baseOptions = baseYearOptions.length > 0 ? baseYearOptions : years;
+  const targetOptions = years.filter((y) => y !== currentBase);
+  return (
+    <div className="weread-year-comparison__controls" data-testid="weread-year-comparison-controls-root">
+      <button
+        type="button"
+        className="weread-year-comparison__toggle"
+        onClick={onToggle}
+        disabled={disabled && !enabled}
+        data-testid="weread-year-comparison-toggle"
+        aria-pressed={enabled}
+      >
+        {enabled ? "关闭年度对比" : "开启年度对比"}
+      </button>
+      {disabled && !enabled ? (
+        <p className="weread-year-comparison__controls-hint" data-testid="weread-year-comparison-controls-hint">
+          至少需要两个有记录的年份才能进行年度对比。
+        </p>
+      ) : null}
+      {enabled ? (
+        <div className="weread-year-comparison__selectors" data-testid="weread-year-comparison-selectors">
+          <label>
+            <span>基准年份</span>
+            <select
+              value={comparison.baseYear ?? ""}
+              onChange={(e) => onChangeBaseYear(Number(e.target.value))}
+              data-testid="weread-year-comparison-base-year"
+              aria-label="选择对比基准年份"
+              disabled={baseOptions.length === 0}
+            >
+              {baseOptions.map((y) => (
+                <option key={y} value={y}>
+                  {formatAnnualReviewYear(y)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>目标年份</span>
+            <select
+              value={targetYear}
+              onChange={(e) => onChangeTargetYear(Number(e.target.value))}
+              data-testid="weread-year-comparison-target-year"
+              aria-label="选择对比目标年份"
+              disabled={targetOptions.length === 0}
+            >
+              {targetOptions.map((y) => (
+                <option key={y} value={y}>
+                  {formatAnnualReviewYear(y)}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      ) : null}
+    </div>
   );
 }

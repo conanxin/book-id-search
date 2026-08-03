@@ -235,3 +235,14 @@ UI 上明确显示：「以下为基于记录数量的描述性分类，不代�
 
 - 不读取真实私有数据。
 - 验证四个 workspace tab、默认笔记工作区、未激活前 0 请求、首次激活 1 请求、切换保留数据、年份切换重新请求、topBooks 切换重新请求、6 张概览卡、12 个月时间轴、Q1–Q4 卡片、月度活跃度分类、top books 卡片、book URL `/books/<catalogId>`、记录卡、空年份状态、ICP footer、desktop / mobile 无横向滚动、DOM 无 note text/comment/private IDs、保留 S27I ICS 导出与 S27H 阅读地图入口。
+## 9. S27K — 年度对比
+
+「年度回顾」工作区新增「开启年度对比」入口（仅当 `availableYears.length >= 2` 时启用）：
+
+- 复用两份 `GET /api/private/weread/annual-review` 响应（基准年 + 目标年），不新增 endpoint，不调用 MiniMax。
+- 浏览器内缓存生效期间（dashboard 生命周期内）切回对比不重复请求。
+- 输出核心指标同比 / 12 个月双柱 / Q1–Q4 对比 / 顶部书目连续/进入/未上榜 / 描述性摘要。
+- 描述性摘要只描述数量 / 排名 / 月份变化；不做心理 / 质量 / 兴趣推断。
+- 不持久化（无 localStorage / sessionStorage / IndexedDB / server 写入）。
+
+详见 [docs/WEREAD_YEAR_COMPARISON.md](WEREAD_YEAR_COMPARISON.md)。

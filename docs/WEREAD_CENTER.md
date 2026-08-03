@@ -193,3 +193,15 @@ S27J-2 新增「导出年度回顾 Markdown」按钮，纯浏览器生成。详�
 - 文档结构：标题 + 4 条 meta + 隐私引用块 + 年度概览 + 12 个月时间轴 + 季度回顾 + 年度高互动书目 + 年度记录 + 说明。
 - 空年度保留完整 12 行零值表 + 四张零值季度卡 + 说明区，不伪造任何字段。
 - 不重新调用 annual-review API、不调用 AI、不写 localStorage / sessionStorage / IndexedDB / 服务器。
+
+### 年度对比（S27K）
+
+S27K 在「年度回顾」工作区新增「开启年度对比」入口。详见 `docs/WEREAD_YEAR_COMPARISON.md`：
+
+- 复用两份 `GET /api/private/weread/annual-review` 响应（基准年 + 目标年），不新增 endpoint。
+- 仅当 `availableYears.length >= 2` 时入口可用，否则 disabled。
+- 浏览器内缓存（dashboard 生命周期内）防止重复请求。
+- 输出：六张核心指标同比卡 / 12 个月双柱 / Q1–Q4 对比 / 顶部书目连续 / 进入 / 未上榜 / 描述性摘要。
+- 描述性摘要只描述数量 / 排名 / 月份变化；不做心理 / 质量 / 兴趣推断。
+- 不调用 MiniMax、不调用 related-books、不写 localStorage / sessionStorage / IndexedDB / 服务器。
+- 切换 token / 卸载组件 / 关闭对比时立即清空所有对比状态与缓存。
