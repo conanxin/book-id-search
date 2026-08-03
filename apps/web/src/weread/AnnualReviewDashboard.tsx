@@ -1,9 +1,13 @@
 /**
- * S27J — AnnualReviewDashboard
+ * S27J / S27J-2 — AnnualReviewDashboard
  *
  * Pure front-end dashboard for the private WeRead "annual reading
  * review" workspace. Mirrors the privacy contract of the S27H / S27I
  * dashboards.
+ *
+ * S27J-2 adds a browser-local Markdown export button. The Markdown
+ * file is built entirely from the response the dashboard already
+ * holds (no extra fetch, no AI call, no storage).
  *
  * Privacy contract:
  *   - Reads only the public fields returned by
@@ -17,6 +21,8 @@
  *     server. Token clearing drops the in-memory response immediately.
  *   - 12-month timeline is rendered as a hand-built SVG bar chart —
  *     no third-party chart library.
+ *   - S27J-2: Markdown export consumes the response already held in
+ *     `state.response`. No new API request, no AI call, no storage.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -25,6 +31,7 @@ import {
   BarChart3,
   Calendar,
   ChevronRight,
+  Download,
   EyeOff,
   Loader2,
   RefreshCw,
@@ -49,6 +56,10 @@ import {
   hasAnnualReviewData,
   truncateAnnualBookTitle,
 } from "./wereadAnnualReviewModel";
+import {
+  buildAnnualReviewMarkdown,
+  triggerAnnualReviewMarkdownDownload,
+} from "./wereadAnnualReviewMarkdown";
 
 const TOP_BOOKS_OPTIONS: ReadonlyArray<WereadAnnualReviewTopBooksOption> = [6, 12, 18];
 
@@ -63,6 +74,8 @@ interface DashboardState {
   error: string | null;
   selectedYear: number | null;
   topBooks: WereadAnnualReviewTopBooksOption;
+  exportStatus: "idle" | "ready" | "error";
+  exportMessage: string;
 }
 
 const INITIAL_STATE: DashboardState = {
@@ -71,6 +84,8 @@ const INITIAL_STATE: DashboardState = {
   error: null,
   selectedYear: null,
   topBooks: 12,
+  exportStatus: "idle",
+  exportMessage: "",
 };
 
 const NOW_INJECTION = () => new Date();
@@ -95,6 +110,8 @@ export default function AnnualReviewDashboard({ token, active }: AnnualReviewDas
       status: "idle",
       error: null,
       selectedYear: null,
+      exportStatus: "idle",
+      exportMessage: "",
     }));
   }, [token]);
 
@@ -142,7 +159,14 @@ export default function AnnualReviewDashboard({ token, active }: AnnualReviewDas
       const controller = new AbortController();
       abortRef.current = controller;
       lastRequestTokenRef.current = token;
-      setState((prev) => ({ ...prev, status: "loading", error: null, selectedYear: year }));
+      setState((prev) => ({
+        ...prev,
+        status: "loading",
+        error: null,
+        selectedYear: year,
+        exportStatus: "idle",
+        exportMessage: "",
+      }));
       fetchWereadAnnualReview(token, {
         year: year ?? undefined,
         topBooks,
@@ -189,6 +213,41 @@ export default function AnnualReviewDashboard({ token, active }: AnnualReviewDas
     setState((prev) => ({ ...prev, status: "loading", error: null }));
     requestAnnualReview(state.selectedYear, state.topBooks);
   }, [token, state.selectedYear, state.topBooks, requestAnnualReview]);
+
+  // Track the latest response so the export handler always operates
+  // on the most recent data, even if the user clicks before the
+  // pending state update lands.
+  const responseRef = useRef<WereadAnnualReviewResponse | null>(null);
+  useEffect(() => {
+    responseRef.current = state.response;
+  }, [state.response]);
+
+  const handleExportClick = useCallback(() => {
+    const resp = responseRef.current;
+    if (!resp) return;
+    try {
+      const built = buildAnnualReviewMarkdown({
+        review: resp,
+        exportedAt: new Date(),
+      });
+      triggerAnnualReviewMarkdownDownload({
+        content: built.content,
+        filename: built.filename,
+      });
+      setState((prev) => ({
+        ...prev,
+        exportStatus: "ready",
+        exportMessage: `已生成 ${resp.selectedYear} 年年度回顾 Markdown。`,
+      }));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "未能生成 Markdown，请稍后重试。";
+      setState((prev) => ({
+        ...prev,
+        exportStatus: "error",
+        exportMessage: msg,
+      }));
+    }
+  }, []);
 
   // Render: not yet activated
   if (!active) {
@@ -268,9 +327,13 @@ export default function AnnualReviewDashboard({ token, active }: AnnualReviewDas
       selectedYear={state.selectedYear}
       topBooks={state.topBooks}
       errorMessage={state.error}
+      loading={state.status === "loading"}
+      exportStatus={state.exportStatus}
+      exportMessage={state.exportMessage}
       onYearChange={handleYearChange}
       onTopBooksChange={handleTopBooksChange}
       onRetry={handleRetry}
+      onExportClick={handleExportClick}
     />
   );
 }
@@ -282,9 +345,13 @@ interface AnnualReviewContentProps {
   selectedYear: number | null;
   topBooks: WereadAnnualReviewTopBooksOption;
   errorMessage: string | null;
+  loading: boolean;
+  exportStatus: "idle" | "ready" | "error";
+  exportMessage: string;
   onYearChange: (next: number) => void;
   onTopBooksChange: (next: WereadAnnualReviewTopBooksOption) => void;
   onRetry: () => void;
+  onExportClick: () => void;
 }
 
 function AnnualReviewContent({
@@ -292,9 +359,13 @@ function AnnualReviewContent({
   selectedYear,
   topBooks,
   errorMessage,
+  loading,
+  exportStatus,
+  exportMessage,
   onYearChange,
   onTopBooksChange,
   onRetry,
+  onExportClick,
 }: AnnualReviewContentProps) {
   const average = response.overview.averageRecordsPerActiveMonth;
   const timeline = useMemo(
@@ -382,6 +453,54 @@ function AnnualReviewContent({
             </label>
           ))}
         </fieldset>
+      </div>
+
+      {/* S27J-2 — Browser-local Markdown export */}
+      <div
+        className="weread-annual-review__export"
+        data-testid="weread-annual-review-export"
+      >
+        <div
+          className="weread-annual-review__export-actions"
+          data-testid="weread-annual-review-export-actions"
+        >
+          <button
+            type="button"
+            className="weread-annual-review__export-button"
+            onClick={onExportClick}
+            disabled={loading}
+            data-testid="weread-annual-review-export-button"
+            aria-label="导出年度回顾 Markdown"
+            title="在浏览器内生成 Markdown 文件"
+          >
+            <Download size={14} aria-hidden="true" />
+            导出年度回顾 Markdown
+          </button>
+        </div>
+        <p
+          className="weread-annual-review__export-notice"
+          data-testid="weread-annual-review-export-notice"
+        >
+          年度回顾文件只在当前浏览器中生成，不会上传或保存到服务器。文件中包含公共书目信息和个人阅读统计，请自行妥善保管。
+        </p>
+        {exportStatus === "ready" ? (
+          <p
+            className="weread-annual-review__export-status"
+            data-testid="weread-annual-review-export-status"
+            role="status"
+          >
+            {exportMessage}
+          </p>
+        ) : null}
+        {exportStatus === "error" ? (
+          <p
+            className="weread-annual-review__export-status weread-annual-review__export-status--error"
+            data-testid="weread-annual-review-export-status-error"
+            role="alert"
+          >
+            {exportMessage}
+          </p>
+        ) : null}
       </div>
 
       {errorMessage ? (

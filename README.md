@@ -356,7 +356,7 @@ Caddy 是公网唯一入口。3001/5173/7700 全部绑定 `127.0.0.1`。
 
 最终公网复核报告：[reports/FINAL_PUBLIC_ACCESS_VERIFICATION.md](reports/FINAL_PUBLIC_ACCESS_VERIFICATION.md)。
 
-当前稳定 tag：`v0.15.0-weread-annual-review`。
+当前稳定 tag：`v0.15.1-weread-annual-review-markdown`。
 
 ## WeRead Center
 
@@ -414,10 +414,18 @@ Caddy 是公网唯一入口。3001/5173/7700 全部绑定 `127.0.0.1`。
 
 ### S27J · 年度回顾
 - 新增第四个工作区「年度回顾」，与「笔记与 AI」「个人阅读地图」「复习日历」并列。
-- `GET /api/private/weread/annual-review?year=<YYYY>&topBooks=<6|12|18>` 返回按选中年份聚合的概览、12 个月时间轴、Q1–Q4 季度卡、年度高互动书目与年度记录卡。
+- `GET /api/private/weread/annual-review?year=<YYYY>&topBooks=<6|12|18}` 返回按选中年份聚合的概览、12 个月时间轴、Q1–Q4 季度卡、年度高互动书目与年度记录卡。
 - 年度 top books 仅按 `selectedYear` 精确聚合，跨年记录自动排除；月份、季度同样只统计选中年。
 - 公共书目元数据只来自现有 Meilisearch `books` 索引 (`index.getDocument`)，不走 `/api/search`。
 - 不读取笔记正文、不调用 MiniMax、不持久化、不提供公开分享链接；`meta.persisted` 恒为 `false`。
 - 月度活跃度分类（高活跃 / 稳定 / 轻量 / 无记录）只基于数量，UI 顶部固定免责声明。
 - 年度记录卡只展示数量 / 月份 / 类型 / 书目 / 峰值月份等描述性统计，不做心理推断。
 - 详见 [docs/WEREAD_ANNUAL_REVIEW.md](docs/WEREAD_ANNUAL_REVIEW.md)。
+
+### S27J-2 · 浏览器本地 Markdown 导出
+- 「年度回顾」工作区新增「导出年度回顾 Markdown」按钮，纯浏览器生成。
+- 文件名 `weread-annual-review-<year>-YYYYMMDD.md`（ASCII，长度 ≤ 80）。
+- MIME `text/markdown;charset=utf-8`；含年度标题、meta 列表、隐私引用块、年度概览、12 个月时间轴、Q1–Q4、年度高互动书目、年度记录、说明区。
+- 空年度保留完整 12 行零值表与四张零值季度卡，不伪造任何字段。
+- 不重新调用 annual-review API、不调用 AI、不写 `localStorage` / `sessionStorage` / IndexedDB / 服务器。
+- 详见 [docs/WEREAD_ANNUAL_REVIEW_MARKDOWN.md](docs/WEREAD_ANNUAL_REVIEW_MARKDOWN.md)。

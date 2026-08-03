@@ -68,6 +68,12 @@ reports/*.pid
 reports/import-checkpoint.json
 reports/import-checkpoint-*.json
 
+# Local screenshots produced by browser smoke harnesses.
+reports/screenshots/
+
+# Local progress / scratch notes from sub-agent runs.
+progress/
+
 # OS/editor artifacts.
 .DS_Store
 Thumbs.db

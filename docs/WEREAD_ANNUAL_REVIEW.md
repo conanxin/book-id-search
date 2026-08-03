@@ -200,8 +200,23 @@ UI 上明确显示：「以下为基于记录数量的描述性分类，不代�
 - **只有 confirmed 匹配的书目进入 top books**：未匹配笔记仍计入 `total` 和类型，但不出现在 `topBooks[]` 中。
 - **未匹配笔记仍计入 type 分布与季度 `total`**：保留完整统计量，但 `bookCount` 只反映已匹配书目。
 - **月度活跃度只是数量描述**：不做主题分析、不做心理推断。
-- **暂不支持年度 Markdown / PDF 导出**：当前版本只在浏览器中展示，不生成下载文件。
+- **暂不支持 PDF / AI 总结导出**：当前版本仅在浏览器中展示 + 浏览器本地 Markdown 导出。
 - **不提供跨任意日期范围的对比**：仅按完整自然年聚合，不支持 2025-03 → 2026-02 这类任意区间。
+
+## 6.1 浏览器本地 Markdown 导出 (S27J-2)
+
+「年度回顾」工作区新增「导出年度回顾 Markdown」按钮。文件只使用当前已加载的 `WereadAnnualReviewResponse`，在浏览器内生成并下载；不重新调用 API、不调用 AI、不写入 `localStorage` / `sessionStorage` / IndexedDB / 服务器。
+
+详细规范见 [docs/WEREAD_ANNUAL_REVIEW_MARKDOWN.md](WEREAD_ANNUAL_REVIEW_MARKDOWN.md)。
+
+要点：
+
+- 文件名 `weread-annual-review-<year>-YYYYMMDD.md`（纯 ASCII，长度 ≤ 80）。
+- MIME `text/markdown;charset=utf-8`。
+- 文档结构：标题 + 4 条 meta + 隐私引用块 + 年度概览 + 12 个月时间轴 + 季度回顾 + 年度高互动书目 + 年度记录 + 说明。
+- 转义：`escapeMarkdownInline` / `escapeMarkdownTableCell` / `escapeMarkdownBlockText`；控制字符剔除 / 替换为空白。
+- 空年度保留完整 12 行零值表、四张零值季度卡、说明区，不伪造任何字段。
+- 不输出笔记正文 / 评论 / 微信读书原始 ID / token / AI 摘要 / 心理推断文案。
 
 ## 7. 测试覆盖
 

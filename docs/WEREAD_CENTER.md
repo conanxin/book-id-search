@@ -183,3 +183,13 @@ S27I-2 新增「导出日历文件 (.ics)」按钮，纯浏览器生成。详见
 - 不调用 MiniMax、不写入 Meilisearch、不持久化、不提供公开分享链接。
 - 月度活跃度分类（高活跃 / 稳定 / 轻量 / 无记录）只基于数量，UI 顶部固定免责声明。
 - 年度记录卡只展示数量 / 月份 / 类型 / 书目 / 峰值月份等描述性统计，不做心理推断。
+
+### 年度回顾 Markdown 导出（S27J-2）
+
+S27J-2 新增「导出年度回顾 Markdown」按钮，纯浏览器生成。详见 `docs/WEREAD_ANNUAL_REVIEW_MARKDOWN.md`：
+
+- 文件名 `weread-annual-review-<year>-YYYYMMDD.md`，仅 ASCII，长度 ≤ 80。
+- MIME `text/markdown;charset=utf-8`。
+- 文档结构：标题 + 4 条 meta + 隐私引用块 + 年度概览 + 12 个月时间轴 + 季度回顾 + 年度高互动书目 + 年度记录 + 说明。
+- 空年度保留完整 12 行零值表 + 四张零值季度卡 + 说明区，不伪造任何字段。
+- 不重新调用 annual-review API、不调用 AI、不写 localStorage / sessionStorage / IndexedDB / 服务器。

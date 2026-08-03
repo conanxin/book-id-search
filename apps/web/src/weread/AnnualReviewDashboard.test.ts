@@ -320,3 +320,97 @@ describe("AnnualReviewDashboard — responsive + class presence", () => {
     expect(styles).not.toMatch(/\.weread-annual-review[^{]*\{[^}]*position:\s*sticky/);
   });
 });
+
+// ---------- S27J-2 — Browser-local Markdown export ----------
+
+describe("AnnualReviewDashboard — S27J-2 Markdown export wiring", () => {
+  // 33
+  it("renders the export button + export actions container", () => {
+    expect(dashboard).toMatch(/weread-annual-review__export-actions/);
+    expect(dashboard).toMatch(/data-testid="weread-annual-review-export-button"/);
+    expect(dashboard).toMatch(/data-testid="weread-annual-review-export-notice"/);
+    expect(dashboard).toMatch(/data-testid="weread-annual-review-export-status"/);
+  });
+
+  // 34
+  it("renders the documented privacy / persistence notice copy", () => {
+    expect(dashboard).toMatch(/文件只在当前浏览器中生成/);
+    expect(dashboard).toMatch(/请自行妥善保管/);
+  });
+
+  // 35
+  it("never invokes fetchWereadAiSummary or fetchWereadRelatedBooks from the export path", () => {
+    const code = dashboard.replace(/^\/\*[\s\S]*?\*\//, "");
+    expect(code).not.toMatch(/fetchWereadAiSummary/);
+    expect(code).not.toMatch(/fetchWereadRelatedBooks/);
+  });
+
+  // 36
+  it("does not introduce localStorage / sessionStorage / IndexedDB / fetch usage in the export path", () => {
+    const code = dashboard.replace(/^\/\*[\s\S]*?\*\//, "");
+    expect(code).not.toMatch(/localStorage/);
+    expect(code).not.toMatch(/sessionStorage/);
+    expect(code).not.toMatch(/indexedDB|IndexedDB/);
+    expect(code).not.toMatch(/dangerouslySetInnerHTML/);
+  });
+
+  // 37
+  it("does not leak note text / private IDs in the export path", () => {
+    const code = dashboard.replace(/^\/\*[\s\S]*?\*\//, "");
+    expect(code).not.toMatch(/FORBIDDEN_NOTE_TEXT/);
+    expect(code).not.toMatch(/\bwereadBookId\b/);
+    expect(code).not.toMatch(/\bnoteId\b/);
+    expect(code).not.toMatch(/\bhighlightId\b/);
+    expect(code).not.toMatch(/\bchapterTitle\b/);
+  });
+
+  // 38
+  it("imports the Markdown model from the documented path", () => {
+    expect(dashboard).toMatch(/from "\.\/wereadAnnualReviewMarkdown"/);
+    expect(dashboard).toMatch(/buildAnnualReviewMarkdown/);
+    expect(dashboard).toMatch(/triggerAnnualReviewMarkdownDownload/);
+  });
+
+  // 39
+  it("disables the export button while a fresh request is in-flight (loading guard)", () => {
+    // The button must be `disabled={loading}` so the user cannot
+    // click before the response lands. We assert on the source so
+    // the contract survives refactors.
+    expect(dashboard).toMatch(/disabled=\{loading\}/);
+  });
+
+  // 40
+  it("clears the export success state when the user changes year or topBooks", () => {
+    // The year / topBooks change path must reset exportStatus so the
+    // previous "已生成" message does not linger after the data has
+    // changed. We assert this through the `requestAnnualReview`
+    // reset block.
+    expect(dashboard).toMatch(/exportStatus: "idle"/);
+    expect(dashboard).toMatch(/exportMessage: ""/);
+  });
+
+  // 41
+  it("clears the export success state when the token is cleared", () => {
+    // The reset effect on token change must set exportStatus to
+    // idle + exportMessage to empty.
+    const resetBlock = dashboard.match(/useEffect\(\(\) => \{[\s\S]*?\}, \[token\]\)/);
+    expect(resetBlock).not.toBeNull();
+    expect(resetBlock?.[0] ?? "").toMatch(/exportStatus: "idle"/);
+  });
+});
+
+describe("AnnualReviewDashboard — S27J-2 export styling", () => {
+  // 42
+  it("defines the export CSS classes", () => {
+    expect(styles).toMatch(/\.weread-annual-review__export\b/);
+    expect(styles).toMatch(/\.weread-annual-review__export-actions\b/);
+    expect(styles).toMatch(/\.weread-annual-review__export-notice\b/);
+    expect(styles).toMatch(/\.weread-annual-review__export-status\b/);
+  });
+
+  // 43
+  it("export CSS does not introduce fixed / sticky positioning", () => {
+    expect(styles).not.toMatch(/\.weread-annual-review__export[^{]*\{[^}]*position:\s*fixed/);
+    expect(styles).not.toMatch(/\.weread-annual-review__export[^{]*\{[^}]*position:\s*sticky/);
+  });
+});
