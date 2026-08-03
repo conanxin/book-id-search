@@ -79,6 +79,14 @@ const TOP_BOOKS_OPTIONS: ReadonlyArray<WereadAnnualReviewTopBooksOption> = [6, 1
 export interface AnnualReviewDashboardProps {
   token: string;
   active: boolean;
+  /** S27L — optional year requested by the long-term archive. When
+   *  this value changes the dashboard switches to that year (if it
+   *  exists in the loaded `availableYears`). */
+  requestedYear?: number | null;
+  /** S27L — invoked once after the dashboard has applied the
+   *  requested-year hint. The parent can clear its local state to
+   *  avoid re-applying the same hint on the next render. */
+  onRequestedYearApplied?: () => void;
 }
 
 interface DashboardState {
@@ -125,7 +133,7 @@ function compareKey(year: number, topBooks: WereadAnnualReviewTopBooksOption): s
   return `${year}:${topBooks}`;
 }
 
-export default function AnnualReviewDashboard({ token, active }: AnnualReviewDashboardProps) {
+export default function AnnualReviewDashboard({ token, active, requestedYear, onRequestedYearApplied }: AnnualReviewDashboardProps) {
   const [state, setState] = useState<DashboardState>(INITIAL_STATE);
   const [comparison, setComparison] = useState<ComparisonState>(INITIAL_COMPARISON);
   const abortRef = useRef<AbortController | null>(null);
@@ -264,6 +272,43 @@ export default function AnnualReviewDashboard({ token, active }: AnnualReviewDas
     setState((prev) => ({ ...prev, status: "loading", error: null }));
     requestAnnualReview(state.selectedYear, state.topBooks);
   }, [token, state.selectedYear, state.topBooks, requestAnnualReview]);
+
+  // S27L — when the long-term archive requests a specific year,
+  // switch the dashboard to that year. Cached responses are re-used
+  // by `fetchWereadAnnualReview` semantics (the server returns the
+  // requested year when it is in `availableYears`). We never loop:
+  // the effect fires only when `requestedYear` changes or when the
+  // loaded response makes the year available. Once we apply the
+  // hint we notify the parent so it can clear its local state.
+  const lastRequestedYearRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (requestedYear === undefined || requestedYear === null) return;
+    if (!Number.isInteger(requestedYear)) return;
+    if (lastRequestedYearRef.current === requestedYear) return;
+    if (!token) return;
+    if (!state.response) return; // wait for the initial load to land
+    const available = state.response.availableYears;
+    if (Array.isArray(available) && available.length > 0 && !available.includes(requestedYear)) {
+      // Year not available — record the hint so we don't loop, but
+      // still notify the parent so it can clear the state.
+      lastRequestedYearRef.current = requestedYear;
+      onRequestedYearApplied?.();
+      return;
+    }
+    lastRequestedYearRef.current = requestedYear;
+    if (state.selectedYear !== requestedYear) {
+      requestAnnualReview(requestedYear, state.topBooks);
+    }
+    onRequestedYearApplied?.();
+  }, [
+    requestedYear,
+    token,
+    state.response,
+    state.selectedYear,
+    state.topBooks,
+    requestAnnualReview,
+    onRequestedYearApplied,
+  ]);
 
   // S27K — write the freshly-loaded response into the compare cache
   // so the comparison view can re-use it without re-fetching.

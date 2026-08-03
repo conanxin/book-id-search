@@ -144,3 +144,11 @@ GET /api/private/weread/annual-review?year=<目标年>&topBooks=<6|12|18>
 - 文件名：`weread-year-comparison-<base>-vs-<target>-YYYYMMDD.md`，纯 ASCII，≤ 80 字符。
 - 不含笔记正文 / 私有 ID / token / AI 摘要 / 心理推断词。
 - 两年空数据也允许导出，输出零值结构。
+
+## 13. S27L — 长期档案（向上引用）
+
+`WereadCenter` 自 S27L 起把「年度回顾」与「年度对比」使用的同一 `WereadAnnualReviewResponse` 合并为多年档案索引，在独立的「长期档案」工作区：
+
+- 复用本面板同一 `GET /api/private/weread/annual-review` 响应，不新增 endpoint。
+- 「年度目录」每张卡片都有「查看年度回顾」按钮，可通过 `requestedYear` 透传回本组件。
+- 详见 [docs/WEREAD_READING_ARCHIVE.md](./WEREAD_READING_ARCHIVE.md)。

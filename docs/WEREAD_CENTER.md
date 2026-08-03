@@ -215,3 +215,19 @@ S27K-2 在「年度对比」面板新增「导出年度对比 Markdown」按钮�
 - 文件名：`weread-year-comparison-<base>-vs-<target>-YYYYMMDD.md`，纯 ASCII，≤ 80 字符；MIME：`text/markdown;charset=utf-8`。
 - 切换基准年 / 目标年 / Top N 范围 / 关闭对比时，已显示的成功状态立即清空。
 - 两年空数据也允许导出，输出零值结构；不输出心理 / 兴趣 / 性格推断。
+
+## 长期档案（S27L）
+
+`WereadCenter` 自 S27L 起提供**第五个工作区「长期档案」**，与「笔记与 AI」「个人阅读地图」「复习日历」「年度回顾」并列。它把多份 `WereadAnnualReviewResponse` 合并为多年阅读档案索引。详见 `docs/WEREAD_READING_ARCHIVE.md`：
+
+- 复用 N 个 `GET /api/private/weread/annual-review` 响应（N = 当前年份范围选项对应的年份数，最多 20），不新增 endpoint。
+- 年份范围选项：最近 5 年 / 最近 10 年 / 全部（最多 20 年）。
+- 顶部高互动书目 Top N：6 / 12 / 18（默认 12），与年度回顾 / 年度对比保持一致。
+- 前端内存 cache：按 `${year}:${topBooks}` 缓存；切换范围只清理已不在切片中的条目；最大并发 2。
+- 输出：档案总览（10 项统计）/ 跨年度趋势 / 年度目录 / 多年进入 Top N 榜单书目 / 相邻年度榜单重合。
+- 多年重复书目只基于当前 Top N 榜单口径；matchedBooks 不作为长期唯一书目数。
+- 任何一年失败不会丢掉其他年份，UI 顶部「重试失败年份」按钮仅重发失败年份。
+- 「查看年度回顾」按钮切换到「年度回顾」工作区并把 `requestedYear` 透传给 `<AnnualReviewDashboard>`，应用后父组件 0ms `setTimeout` 清除避免 effect 反复触发。
+- 不读取笔记正文 / 不调用 AI / 不调用 related-books / 不写 localStorage / sessionStorage / IndexedDB / 服务器。
+- 不做兴趣 / 心理 / 阅读质量判断；UI 上有显式「多年榜单重合仅代表榜单交集」与「不推断阅读偏好」声明。
+- 暂不支持长期档案导出（留作 S27L-2）。

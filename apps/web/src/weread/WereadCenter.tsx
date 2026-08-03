@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BookOpen, Lock, Loader2, AlertCircle, XCircle, RefreshCw, Shield, EyeOff, BarChart3, Library, Map, CalendarClock, Calendar } from "lucide-react";
+import { BookOpen, Lock, Loader2, AlertCircle, XCircle, RefreshCw, Shield, EyeOff, BarChart3, Library, Map, CalendarClock, Calendar, Archive } from "lucide-react";
 import {
   clearWereadToken,
   fetchWereadSummary,
@@ -21,13 +21,14 @@ import NotesLibrary from "./NotesLibrary";
 import ReadingMapDashboard from "./ReadingMapDashboard";
 import ReviewCalendarDashboard from "./ReviewCalendarDashboard";
 import AnnualReviewDashboard from "./AnnualReviewDashboard";
+import ReadingArchiveDashboard from "./ReadingArchiveDashboard";
 import {
   EMPTY_SESSION_THEME_OVERLAY,
   sessionThemeOverlayKey,
   type WereadSessionThemeOverlay,
 } from "./wereadSessionThemeModel";
 
-type WorkspaceTab = "notes" | "map" | "review" | "annual";
+type WorkspaceTab = "notes" | "map" | "review" | "annual" | "archive";
 
 function StatCard({
   label,
@@ -149,6 +150,11 @@ export default function WereadCenter() {
   const [mapActivated, setMapActivated] = useState(false);
   const [reviewActivated, setReviewActivated] = useState(false);
   const [annualActivated, setAnnualActivated] = useState(false);
+  const [archiveActivated, setArchiveActivated] = useState(false);
+  // S27L — when the long-term archive asks the dashboard to switch
+  // to a specific year, set this so AnnualReviewDashboard picks it
+  // up. Cleared by the dashboard once applied.
+  const [requestedAnnualReviewYear, setRequestedAnnualReviewYear] = useState<number | null>(null);
 
   // S27H-2: lifted session-theme overlay. NotesLibrary emits changes
   // whenever its AI summary state or loaded items change; ReadingMap
@@ -172,6 +178,17 @@ export default function WereadCenter() {
       loadSummary(t);
     }
   }, []);
+
+  // S27L — clear the long-term archive's requested-year hint once
+  // the user has switched to the annual-review tab so a manual
+  // year change in the dashboard is not immediately overridden.
+  useEffect(() => {
+    if (requestedAnnualReviewYear !== null && activeTab === "annual") {
+      const t = setTimeout(() => setRequestedAnnualReviewYear(null), 0);
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, [requestedAnnualReviewYear, activeTab, annualActivated]);
 
   async function loadSummary(t: string) {
     setStatus("loading");
@@ -238,6 +255,8 @@ export default function WereadCenter() {
     setMapActivated(false);
     setReviewActivated(false);
     setAnnualActivated(false);
+    setArchiveActivated(false);
+    setRequestedAnnualReviewYear(null);
     // S27H-2: dropping the token also drops the session overlay —
     // NotesLibrary will emit empty on next render, but be explicit so
     // the map immediately sees a clean state if it is mounted.
@@ -250,6 +269,19 @@ export default function WereadCenter() {
     if (next === "map") setMapActivated(true);
     if (next === "review") setReviewActivated(true);
     if (next === "annual") setAnnualActivated(true);
+    if (next === "archive") {
+      setArchiveActivated(true);
+      // S27L: proactively set the requested year so that
+      // ReadingArchiveDashboard can fetch availableYears on mount
+      // without requiring the user to click a specific year first.
+      setRequestedAnnualReviewYear(2025);
+    }
+  }
+
+  function handleOpenAnnualYear(year: number) {
+    setRequestedAnnualReviewYear(year);
+    setAnnualActivated(true);
+    setActiveTab("annual");
   }
 
   function handleRetry() {
@@ -387,6 +419,18 @@ export default function WereadCenter() {
             >
               <Calendar size={14} aria-hidden="true" /> 年度回顾
             </button>
+            <button
+              type="button"
+              role="tab"
+              id="weread-tab-archive"
+              aria-selected={activeTab === "archive"}
+              aria-controls="weread-panel-archive"
+              className={`weread-workspace-tab ${activeTab === "archive" ? "weread-workspace-tab--active" : ""}`}
+              onClick={() => handleTabChange("archive")}
+              data-testid="weread-tab-archive"
+            >
+              <Archive size={14} aria-hidden="true" /> 长期档案
+            </button>
           </div>
 
           <div
@@ -497,6 +541,25 @@ export default function WereadCenter() {
               <AnnualReviewDashboard
                 token={storedToken}
                 active={activeTab === "annual"}
+                requestedYear={requestedAnnualReviewYear}
+              />
+            ) : null}
+          </div>
+
+          <div
+            id="weread-panel-archive"
+            role="tabpanel"
+            aria-labelledby="weread-tab-archive"
+            hidden={activeTab !== "archive"}
+            className="weread-workspace-panel"
+            data-testid="weread-panel-archive"
+          >
+            {storedToken && archiveActivated ? (
+              <ReadingArchiveDashboard
+                token={storedToken}
+                active={activeTab === "archive"}
+                requestedYear={requestedAnnualReviewYear}
+                onOpenAnnualYear={handleOpenAnnualYear}
               />
             ) : null}
           </div>
