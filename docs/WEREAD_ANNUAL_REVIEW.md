@@ -246,3 +246,15 @@ UI 上明确显示：「以下为基于记录数量的描述性分类，不代�
 - 不持久化（无 localStorage / sessionStorage / IndexedDB / server 写入）。
 
 详见 [docs/WEREAD_YEAR_COMPARISON.md](WEREAD_YEAR_COMPARISON.md)。
+
+## 10. S27K-2 — 年度对比 Markdown 导出
+
+年度对比面板新增「导出年度对比 Markdown」按钮：
+
+- 文件仅使用面板当前已加载的 `WereadYearComparison`。
+- 在浏览器内生成并下载；不重新请求 API、不调用 AI、不调用 related-books、不写入 `localStorage` / `sessionStorage` / IndexedDB / 服务器。
+- 文件名：`weread-year-comparison-<base>-vs-<target>-YYYYMMDD.md`，纯 ASCII，≤ 80 字符；MIME：`text/markdown;charset=utf-8`。
+- 切换基准年 / 目标年 / Top N 范围 / 关闭对比时，已显示的成功状态立即清空。
+- 两年空数据也允许导出，输出零值结构；不输出心理 / 兴趣 / 性格推断。
+
+详见 [docs/WEREAD_YEAR_COMPARISON_MARKDOWN.md](WEREAD_YEAR_COMPARISON_MARKDOWN.md)。

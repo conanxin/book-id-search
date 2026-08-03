@@ -356,7 +356,7 @@ Caddy 是公网唯一入口。3001/5173/7700 全部绑定 `127.0.0.1`。
 
 最终公网复核报告：[reports/FINAL_PUBLIC_ACCESS_VERIFICATION.md](reports/FINAL_PUBLIC_ACCESS_VERIFICATION.md)。
 
-当前稳定 tag：`v0.16.0-weread-year-comparison`。
+当前稳定 tag：`v0.16.1-weread-year-comparison-markdown`。
 
 ## WeRead Center
 
@@ -429,3 +429,23 @@ Caddy 是公网唯一入口。3001/5173/7700 全部绑定 `127.0.0.1`。
 - 空年度保留完整 12 行零值表与四张零值季度卡，不伪造任何字段。
 - 不重新调用 annual-review API、不调用 AI、不写 `localStorage` / `sessionStorage` / IndexedDB / 服务器。
 - 详见 [docs/WEREAD_ANNUAL_REVIEW_MARKDOWN.md](docs/WEREAD_ANNUAL_REVIEW_MARKDOWN.md)。
+
+### S27K · 年度对比
+- 「年度回顾」工作区新增「开启年度对比」入口，仅当 `availableYears.length >= 2` 时启用。
+- 复用两份 `GET /api/private/weread/annual-review` 响应（基准年 + 目标年），不新增 endpoint，不调用 MiniMax。
+- 浏览器内缓存（dashboard 生命周期内）防止重复请求。
+- 输出：六张核心指标同比卡 / 12 个月双柱 / Q1–Q4 对比 / 顶部书目连续 / 进入 / 未上榜 / 描述性摘要。
+- 描述性摘要只描述数量 / 排名 / 月份变化；不做心理 / 质量 / 兴趣推断。
+- 不调用 MiniMax、不调用 related-books、不写 `localStorage` / `sessionStorage` / IndexedDB / 服务器。
+- 切换 token / 卸载组件 / 关闭对比时立即清空所有对比状态与缓存。
+- 详见 [docs/WEREAD_YEAR_COMPARISON.md](docs/WEREAD_YEAR_COMPARISON.md)。
+
+### S27K-2 · 浏览器本地年度对比 Markdown 导出
+- 「年度对比」面板新增「导出年度对比 Markdown」按钮，纯浏览器生成。
+- 仅使用面板当前已加载的 `WereadYearComparison`（基准年 / 目标年 / 当前 Top N）。
+- 文件名 `weread-year-comparison-<base>-vs-<target>-YYYYMMDD.md`（ASCII，长度 ≤ 80）。
+- MIME `text/markdown;charset=utf-8`；含年度对比标题、meta 列表、隐私 / 解释边界 / entered / left 四个 blockquote、六项核心指标同比、12 个月对比、Q1–Q4 对比、连续进入 / 进入 / 未进入三个高互动书目榜分组、描述性摘要、说明区。
+- 切换基准年 / 目标年 / Top N 范围 / 关闭对比时，已显示的成功状态立即清空。
+- 两年空数据也允许导出，输出零值结构；不输出心理 / 兴趣 / 性格推断。
+- 不重新调用 annual-review API、不调用 AI、不调用 related-books、不写 `localStorage` / `sessionStorage` / IndexedDB / 服务器。
+- 详见 [docs/WEREAD_YEAR_COMPARISON_MARKDOWN.md](docs/WEREAD_YEAR_COMPARISON_MARKDOWN.md)。

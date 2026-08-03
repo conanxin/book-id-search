@@ -233,6 +233,105 @@ describe("YearComparisonPanel structural", () => {
       expect(line).not.toMatch(/<[a-z][^>]*>/i);
     }
   });
+
+  // ---------- S27K-2 — Browser-local Markdown export ----------
+
+  it("16. declares the export button, notice and status testids", () => {
+    expect(panel).toContain("weread-year-comparison-export");
+    expect(panel).toContain("weread-year-comparison-export-actions");
+    expect(panel).toContain("weread-year-comparison-export-button");
+    expect(panel).toContain("weread-year-comparison-export-notice");
+    expect(panel).toContain("weread-year-comparison-export-status");
+    expect(panel).toContain("weread-year-comparison-export-status-error");
+  });
+
+  it("17. export button is disabled when the panel is in error state", () => {
+    // We assert this statically: canExport is gated by `!showError`
+    // and `showError` is `Boolean(errorMessage)`.
+    expect(panel).toContain("const canExport = !showError;");
+    expect(panel).toContain("disabled={!canExport}");
+  });
+
+  it("18. export button click handler does not call any fetch", () => {
+    // The handler must never re-issue an annual-review request or
+    // call AI / related-books helpers.
+    const codeOnly = (raw: string) =>
+      raw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\*.*$/gm, "");
+    const codePanel = codeOnly(panel);
+    expect(codePanel).toContain("handleExportClick");
+    expect(codePanel).toContain("buildYearComparisonMarkdown");
+    expect(codePanel).toContain("triggerYearComparisonMarkdownDownload");
+    // The click handler body itself must not contain fetch calls.
+    const handlerMatch = codePanel.match(
+      /const handleExportClick[\s\S]*?\n  \};/m
+    );
+    expect(handlerMatch).not.toBeNull();
+    expect(handlerMatch?.[0]).not.toMatch(/fetchWereadAnnualReview/);
+    expect(handlerMatch?.[0]).not.toMatch(/fetchWereadAiSummary/);
+    expect(handlerMatch?.[0]).not.toMatch(/fetchWereadRelatedBooks/);
+  });
+
+  it("19. export success state clears when base/target year or topBooks changes", () => {
+    // useEffect with `exportResetKey` as the dependency must reset
+    // both exportStatus and exportMessage.
+    expect(panel).toContain("const exportResetKey");
+    expect(panel).toContain("useEffect");
+    expect(panel).toMatch(
+      /useEffect\(\(\) => \{[\s\S]*?setExportStatus\("idle"\);[\s\S]*?setExportMessage\(""\);[\s\S]*?\}, \[exportResetKey\]\);/m
+    );
+  });
+
+  it("20. export still works when both years are empty (canExport ignores emptyComparison)", () => {
+    // canExport is `!showError` — it does NOT depend on
+    // `emptyComparison`, so the button stays enabled for empty data.
+    expect(panel).not.toMatch(/canExport\s*=\s*[^!]*emptyComparison/);
+  });
+
+  it("21. does not use dangerouslySetInnerHTML (panel + export)", () => {
+    expect(panel).not.toContain("dangerouslySetInnerHTML");
+  });
+
+  it("22. does not embed private IDs / token / AI summary fields in the export path", () => {
+    const codeOnly = (raw: string) =>
+      raw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\*.*$/gm, "");
+    const codePanel = codeOnly(panel);
+    expect(codePanel).not.toMatch(/\bnote\.text\b/);
+    expect(codePanel).not.toMatch(/\bnote\.comment\b/);
+    expect(codePanel).not.toMatch(/\bsummary\.overview\b/);
+    expect(codePanel).not.toMatch(/\bsummary\.keyPoints\b/);
+    expect(codePanel).not.toMatch(/\bsummary\.reviewQuestions\b/);
+    expect(codePanel).not.toMatch(/\bwereadBookId\b/);
+    expect(codePanel).not.toMatch(/\bnoteId\b/);
+    expect(codePanel).not.toMatch(/\bhighlightId\b/);
+    expect(codePanel).not.toMatch(/\bchapterTitle\b/);
+  });
+
+  it("23. style classes for the export block are declared in styles.css", () => {
+    for (const cls of [
+      ".weread-year-comparison__export",
+      ".weread-year-comparison__export-actions",
+      ".weread-year-comparison__export-button",
+      ".weread-year-comparison__export-notice",
+      ".weread-year-comparison__export-status",
+      ".weread-year-comparison__export-status--error",
+    ]) {
+      expect(styles).toContain(cls);
+    }
+  });
+
+  it("24. export click never alerts / prompts / logs content", () => {
+    const codeOnly = (raw: string) =>
+      raw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\*.*$/gm, "");
+    const codePanel = codeOnly(panel);
+    const handlerMatch = codePanel.match(
+      /const handleExportClick[\s\S]*?\n  \};/m
+    );
+    expect(handlerMatch).not.toBeNull();
+    expect(handlerMatch?.[0]).not.toMatch(/\balert\(/);
+    expect(handlerMatch?.[0]).not.toMatch(/\bprompt\(/);
+    expect(handlerMatch?.[0]).not.toMatch(/\bconfirm\(/);
+    expect(handlerMatch?.[0]).not.toMatch(/console\.(log|info|warn|error)/);
+  });
 });
 
 // ---------- model-driven behaviour ----------

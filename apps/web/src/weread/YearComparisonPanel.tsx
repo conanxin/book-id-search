@@ -24,8 +24,8 @@
  *     functions in `wereadYearComparisonModel`.
  */
 
-import { useMemo, useState } from "react";
-import { ArrowLeftRight, BarChart3, BookOpen, GitCompareArrows, RefreshCw, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ArrowLeftRight, BarChart3, BookOpen, Download, GitCompareArrows, RefreshCw, X } from "lucide-react";
 import type { WereadAnnualReviewResponse, WereadAnnualReviewTopBooksOption } from "../wereadPrivate";
 import {
   buildWereadYearComparison,
@@ -40,6 +40,11 @@ import {
   type YearComparisonQuarter,
 } from "./wereadYearComparisonModel";
 import { formatAnnualReviewMonth, formatAnnualReviewYear } from "./wereadAnnualReviewModel";
+import {
+  buildYearComparisonMarkdown,
+  triggerYearComparisonMarkdownDownload,
+  YEAR_COMPARISON_MARKDOWN_PRIVACY_NOTE,
+} from "./wereadYearComparisonMarkdown";
 
 const FORBIDDEN_CLASSNAMES = ["dangerously"] as const;
 
@@ -78,6 +83,49 @@ export default function YearComparisonPanel({
   const targetHasData = comparison.meta.targetHasData;
   const showError = Boolean(errorMessage);
   const emptyComparison = !hasYearComparisonData(comparison);
+  // S27K-2 — the export button is available whenever the panel
+  // could build a comparison. The spec explicitly allows exporting
+  // when both years are empty. While the error banner is shown we
+  // still let the user export the partial result they can already
+  // see.
+  const canExport = !showError;
+  const [exportStatus, setExportStatus] = useState<"idle" | "ready" | "error">("idle");
+  const [exportMessage, setExportMessage] = useState<string>("");
+
+  // S27K-2 — clear the export success/error state whenever any of
+  // the inputs that change the underlying comparison changes. This
+  // keeps the success message honest about what the user just
+  // downloaded.
+  const exportResetKey = `${comparison.baseYear}:${comparison.targetYear}:${topBooksRange}`;
+  useEffect(() => {
+    setExportStatus("idle");
+    setExportMessage("");
+    // We deliberately depend on the reset key only; the comparison
+    // values are derived from the same source.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exportResetKey]);
+
+  const handleExportClick = () => {
+    try {
+      const built = buildYearComparisonMarkdown({
+        comparison,
+        topBooksLimit: topBooksRange,
+        exportedAt: new Date(),
+      });
+      triggerYearComparisonMarkdownDownload({
+        content: built.content,
+        filename: built.filename,
+      });
+      setExportStatus("ready");
+      setExportMessage(
+        `已生成 ${comparison.baseYear}—${comparison.targetYear} 年年度对比 Markdown。`
+      );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "未能生成 Markdown，请稍后重试。";
+      setExportStatus("error");
+      setExportMessage(msg);
+    }
+  };
 
   return (
     <section
@@ -143,6 +191,54 @@ export default function YearComparisonPanel({
           </p>
         </div>
       ) : null}
+
+      {/* S27K-2 — Browser-local Markdown export */}
+      <div
+        className="weread-year-comparison__export"
+        data-testid="weread-year-comparison-export"
+      >
+        <div
+          className="weread-year-comparison__export-actions"
+          data-testid="weread-year-comparison-export-actions"
+        >
+          <button
+            type="button"
+            className="weread-year-comparison__export-button"
+            onClick={handleExportClick}
+            disabled={!canExport}
+            data-testid="weread-year-comparison-export-button"
+            aria-label="导出年度对比 Markdown"
+            title="在浏览器内生成 Markdown 文件"
+          >
+            <Download size={14} aria-hidden="true" />
+            导出年度对比 Markdown
+          </button>
+        </div>
+        <p
+          className="weread-year-comparison__export-notice"
+          data-testid="weread-year-comparison-export-notice"
+        >
+          {YEAR_COMPARISON_MARKDOWN_PRIVACY_NOTE}
+        </p>
+        {exportStatus === "ready" ? (
+          <p
+            className="weread-year-comparison__export-status"
+            data-testid="weread-year-comparison-export-status"
+            role="status"
+          >
+            {exportMessage}
+          </p>
+        ) : null}
+        {exportStatus === "error" ? (
+          <p
+            className="weread-year-comparison__export-status weread-year-comparison__export-status--error"
+            data-testid="weread-year-comparison-export-status-error"
+            role="alert"
+          >
+            {exportMessage}
+          </p>
+        ) : null}
+      </div>
 
       {showError ? (
         <div

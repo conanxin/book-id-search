@@ -205,3 +205,13 @@ S27K 在「年度回顾」工作区新增「开启年度对比」入口。详见
 - 描述性摘要只描述数量 / 排名 / 月份变化；不做心理 / 质量 / 兴趣推断。
 - 不调用 MiniMax、不调用 related-books、不写 localStorage / sessionStorage / IndexedDB / 服务器。
 - 切换 token / 卸载组件 / 关闭对比时立即清空所有对比状态与缓存。
+
+### 年度对比 Markdown 导出（S27K-2）
+
+S27K-2 在「年度对比」面板新增「导出年度对比 Markdown」按钮，纯浏览器生成。详见 `docs/WEREAD_YEAR_COMPARISON_MARKDOWN.md`：
+
+- 仅使用面板当前已加载的 `WereadYearComparison`。
+- 不重新请求 annual-review API、不调用 AI、不调用 related-books、不写 localStorage / sessionStorage / IndexedDB / 服务器。
+- 文件名：`weread-year-comparison-<base>-vs-<target>-YYYYMMDD.md`，纯 ASCII，≤ 80 字符；MIME：`text/markdown;charset=utf-8`。
+- 切换基准年 / 目标年 / Top N 范围 / 关闭对比时，已显示的成功状态立即清空。
+- 两年空数据也允许导出，输出零值结构；不输出心理 / 兴趣 / 性格推断。

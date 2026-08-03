@@ -133,3 +133,14 @@ GET /api/private/weread/annual-review?year=<目标年>&topBooks=<6|12|18>
 - 不提交 `.env` / `private-data` / `apps/web/dist` / `logs` / `screenshots` / `progress`。
 - 不新增依赖。
 - 不修改 Caddy / DNS / nginx / ICP / 公安备案配置。
+
+## 12. S27K-2 — 浏览器本地 Markdown 导出
+
+面板新增「导出年度对比 Markdown」按钮，文件完全在浏览器生成、不上传服务器、不调用 AI、不持久化。详见 [WEREAD_YEAR_COMPARISON_MARKDOWN.md](./WEREAD_YEAR_COMPARISON_MARKDOWN.md)。
+
+要点：
+- 仅使用面板当前已加载的 `WereadYearComparison`。
+- 切换基准年 / 目标年 / Top N 范围 / 关闭对比时，已显示的成功状态立即清空。
+- 文件名：`weread-year-comparison-<base>-vs-<target>-YYYYMMDD.md`，纯 ASCII，≤ 80 字符。
+- 不含笔记正文 / 私有 ID / token / AI 摘要 / 心理推断词。
+- 两年空数据也允许导出，输出零值结构。

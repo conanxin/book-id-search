@@ -5225,6 +5225,72 @@ mark.hl {
   color: #b94a48;
 }
 
+/* ----- S27K-2 — year-comparison Markdown export ----- */
+
+.weread-year-comparison__export {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px dashed #cdd2de;
+  border-radius: 8px;
+  background: #fafbfd;
+}
+
+.weread-year-comparison__export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.weread-year-comparison__export-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  padding: 5px 12px;
+  border: 1px solid #2b6cb0;
+  background: #fff;
+  color: #2b6cb0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.weread-year-comparison__export-button:disabled {
+  border-color: #cdd2de;
+  color: #9aa1ad;
+  cursor: not-allowed;
+  background: #f4f5f8;
+}
+
+.weread-year-comparison__export-notice {
+  margin: 0;
+  font-size: 12px;
+  color: #4a5366;
+  line-height: 1.5;
+}
+
+.weread-year-comparison__export-status {
+  margin: 0;
+  font-size: 12px;
+  color: #2b6cb0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.weread-year-comparison__export-status--error {
+  color: #b94a48;
+}
+
+@media (max-width: 540px) {
+  .weread-year-comparison__export-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
 /* ----- S27K — year-over-year comparison ----- */
 
 .weread-year-comparison {
