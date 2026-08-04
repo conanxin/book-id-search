@@ -356,7 +356,7 @@ Caddy 是公网唯一入口。3001/5173/7700 全部绑定 `127.0.0.1`。
 
 最终公网复核报告：[reports/FINAL_PUBLIC_ACCESS_VERIFICATION.md](reports/FINAL_PUBLIC_ACCESS_VERIFICATION.md)。
 
-当前稳定 tag：`v0.19.0-weread-comparison-filters`。
+当前稳定 tag：`v0.19.1-weread-comparison-filters-markdown`。
 
 ## WeRead Center
 

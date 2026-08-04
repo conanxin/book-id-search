@@ -103,3 +103,16 @@ S27N 在「阅读阶段」面板之后、年度档案目录之前，新增「长
 - 不输出心理 / 兴趣 / 人格 / 质量推断。
 
 详见 `docs/WEREAD_READING_COMPARISON_FILTERS.md`。
+
+## 9. 筛选比较 Markdown 导出（S27N-2）
+
+S27N-2 在「长期比较筛选」面板增加**导出筛选比较 Markdown** 按钮，纯浏览器本地生成：
+
+- 使用当前已计算的 `ReadingComparisonResult`、范围、Top N、失败年份。
+- 文件名 `weread-reading-comparison-<first>-to-<latest>-YYYYMMDD.md`（空档案为 `...-empty-YYYYMMDD.md`）。
+- MIME `text/markdown;charset=utf-8`。
+- 文件包含：标题元数据、当前筛选条件、比较总览、纳入年份指标、被排除年份及原因、筛选范围内 Recurring Books、相邻年度榜单重合、方法说明。
+- 不重新请求 annual-review、不调用 AI、不调用 related-books、不写 storage、不写入 URL、不上传服务器。
+- 不输出原始 archive/result JSON；不包含心理 / 人格 / 个人特征 / 兴趣 / 阅读质量推断。
+
+详见 `docs/WEREAD_READING_COMPARISON_MARKDOWN.md`。

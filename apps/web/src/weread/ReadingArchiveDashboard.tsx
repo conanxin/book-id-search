@@ -306,6 +306,9 @@ export default function ReadingArchiveDashboard({
 
           <ReadingComparisonFiltersPanel
             archive={dashboardArchive}
+            rangeLabel={MODEL_RANGE_TO_ERA_LABEL[modelRange]}
+            topBooksLimit={topBooks}
+            failedYears={failedYears}
             bootstrapLoading={bootstrapLoading}
           />
 

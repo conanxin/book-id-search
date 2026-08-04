@@ -97,9 +97,15 @@ function makeArchive(
 
 function Harness({
   archive,
+  rangeLabel = "最近5年",
+  topBooksLimit = 12,
+  failedYears = [],
   bootstrapLoading = false,
 }: {
   archive: WereadReadingArchive | null;
+  rangeLabel?: import("./wereadReadingComparisonMarkdown").ReadingComparisonRangeLabel;
+  topBooksLimit?: import("./wereadReadingComparisonMarkdown").ReadingComparisonTopBooksLimit;
+  failedYears?: number[];
   bootstrapLoading?: boolean;
 }) {
   // Keep the state hook so any internal state changes still render.
@@ -115,6 +121,9 @@ function Harness({
       </button>
       <ReadingComparisonFiltersPanel
         archive={archive}
+        rangeLabel={rangeLabel}
+        topBooksLimit={topBooksLimit}
+        failedYears={failedYears}
         bootstrapLoading={bootstrapLoading}
       />
     </>
@@ -123,6 +132,9 @@ function Harness({
 
 function renderAt(props: {
   archive: WereadReadingArchive | null;
+  rangeLabel?: import("./wereadReadingComparisonMarkdown").ReadingComparisonRangeLabel;
+  topBooksLimit?: import("./wereadReadingComparisonMarkdown").ReadingComparisonTopBooksLimit;
+  failedYears?: number[];
   bootstrapLoading?: boolean;
 }) {
   return renderToStaticMarkup(<Harness {...props} />);
@@ -313,5 +325,106 @@ describe("ReadingComparisonFiltersPanel (S27N)", () => {
     const html = renderAt({ archive: ARCHIVE });
     expect(html).toContain("不会重新请求年度数据");
     expect(html).toContain("不代表阅读兴趣、内在状态或阅读质量");
+  });
+});
+describe("ReadingComparisonFiltersPanel export (S27N-2)", () => {
+  const ARCHIVE: WereadReadingArchive = makeArchive(
+    [
+      makeYear(2020, { totalRecords: 100, activeMonths: 6, topBookCatalogIds: ["a", "b"] }),
+      makeYear(2021, { totalRecords: 200, activeMonths: 10, topBookCatalogIds: ["a", "c"] }),
+      makeYear(2022, { totalRecords: 50, activeMonths: 4, topBookCatalogIds: ["d", "e"] }),
+      makeYear(2023, { totalRecords: 250, activeMonths: 11, topBookCatalogIds: ["a", "f"] }),
+    ],
+    [makeLink(2020, 2021, 0.1), makeLink(2021, 2022, 0.4), makeLink(2022, 2023, 0.7)],
+  );
+
+  it("export button exists", () => {
+    const html = renderAt({ archive: ARCHIVE });
+    expect(hasTestId(html, "weread-reading-comparison-export-button")).toBe(true);
+  });
+
+  it("export button is disabled while bootstrapLoading=true", () => {
+    const html = renderAt({ archive: ARCHIVE, bootstrapLoading: true });
+    expect(isDisabled(html, "weread-reading-comparison-export-button")).toBe(true);
+  });
+
+  it("export button is enabled when archive loaded", () => {
+    const html = renderAt({ archive: ARCHIVE, bootstrapLoading: false });
+    expect(isDisabled(html, "weread-reading-comparison-export-button")).toBe(false);
+  });
+
+  it("export button is disabled when archive is null", () => {
+    const html = renderAt({ archive: null });
+    expect(isDisabled(html, "weread-reading-comparison-export-button")).toBe(true);
+  });
+
+  it("export button is enabled for empty archive after bootstrap", () => {
+    const archive = makeArchive([]);
+    const html = renderAt({ archive, bootstrapLoading: false });
+    expect(isDisabled(html, "weread-reading-comparison-export-button")).toBe(false);
+  });
+
+  it("export button is enabled for partial failure archive", () => {
+    const html = renderAt({ archive: ARCHIVE, failedYears: [2024] });
+    expect(isDisabled(html, "weread-reading-comparison-export-button")).toBe(false);
+  });
+
+  it("export summary shows range / TopN / included / excluded / failed counts", () => {
+    const html = renderAt({
+      archive: ARCHIVE,
+      rangeLabel: "最近10年",
+      topBooksLimit: 6,
+      failedYears: [2022],
+    });
+    expect(html).toContain("当前导出口径");
+    expect(html).toContain("最近 10 年");
+    expect(html).toContain("Top 6");
+  });
+
+  it("export notice is present", () => {
+    const html = renderAt({ archive: ARCHIVE });
+    expect(hasTestId(html, "weread-reading-comparison-export-notice")).toBe(true);
+    expect(html).toContain("不会重新请求年度数据");
+    expect(html).toContain("也不会上传或保存到服务器");
+  });
+
+  it("export status absent by default", () => {
+    const html = renderAt({ archive: ARCHIVE });
+    expect(html).not.toContain('data-status="success"');
+    expect(html).not.toContain('data-status="error"');
+  });
+
+  it("no fetch or storage on render", () => {
+    const fetchSpy = vi.fn();
+    const originalFetch = global.fetch;
+    global.fetch = fetchSpy as unknown as typeof global.fetch;
+    try {
+      renderAt({ archive: ARCHIVE });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("no dangerouslySetInnerHTML or innerHTML or storage in markup", () => {
+    const html = renderAt({ archive: ARCHIVE });
+    expect(html).not.toMatch(/dangerouslySetInnerHTML|innerHTML\s*=/i);
+    expect(html.toLowerCase().includes("localstorage")).toBe(false);
+    expect(html.toLowerCase().includes("sessionstorage")).toBe(false);
+    expect(html.toLowerCase().includes("indexeddb")).toBe(false);
+  });
+
+  it("no psychological vocabulary in export notice", () => {
+    const html = renderAt({ archive: ARCHIVE });
+    for (const w of FORBIDDEN_PSYCH) {
+      expect(html.includes(w)).toBe(false);
+    }
+  });
+
+  it("S27N filter functionality still present (regression)", () => {
+    const html = renderAt({ archive: ARCHIVE });
+    expect(hasTestId(html, "weread-reading-comparison-reset")).toBe(true);
+    expect(hasTestId(html, "weread-reading-comparison-overlap")).toBe(true);
+    expect(hasTestId(html, "weread-reading-comparison-start-year")).toBe(true);
   });
 });

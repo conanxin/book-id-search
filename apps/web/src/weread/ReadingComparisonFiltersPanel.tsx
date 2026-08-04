@@ -22,7 +22,7 @@
  */
 
 import { useMemo, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { Download, RefreshCw } from "lucide-react";
 
 import type { WereadReadingArchive } from "./wereadReadingArchiveModel";
 import {
@@ -39,16 +39,35 @@ import {
   type ReadingComparisonOverlapFilter,
   type ReadingComparisonExcludedYearReason,
 } from "./wereadReadingComparisonFilters";
+import {
+  buildReadingComparisonMarkdown,
+  triggerReadingComparisonMarkdownDownload,
+  formatReadingComparisonRangeLabel,
+  type ReadingComparisonRangeLabel,
+  type ReadingComparisonTopBooksLimit,
+} from "./wereadReadingComparisonMarkdown";
 
 export interface ReadingComparisonFiltersPanelProps {
   archive: WereadReadingArchive | null;
+  rangeLabel: ReadingComparisonRangeLabel;
+  topBooksLimit: ReadingComparisonTopBooksLimit;
+  failedYears: number[];
   /** Optional override; defaults to `/books`. */
   booksBasePath?: string;
+  /** Optional site base URL for the Markdown export. */
+  siteBaseUrl?: string;
   /** Disable controls during the archive bootstrap. */
   bootstrapLoading?: boolean;
 }
 
 const DEFAULT_BOOKS_BASE_PATH = "/books";
+
+const EXPORT_NOTICE =
+  "筛选比较文件只在当前浏览器中生成，不会重新请求年度数据，也不会上传或保存到服务器。";
+
+const EXPORT_SUCCESS = "筛选比较 Markdown 已生成，请在浏览器下载中查看。";
+
+const EXPORT_ERROR = "生成筛选比较文件失败，请重试。";
 
 const FORBIDDEN_PSYCH = [
   "兴趣转变",
@@ -119,12 +138,17 @@ function describeExclusion(
 
 export default function ReadingComparisonFiltersPanel({
   archive,
+  rangeLabel,
+  topBooksLimit,
+  failedYears,
   booksBasePath = DEFAULT_BOOKS_BASE_PATH,
+  siteBaseUrl,
   bootstrapLoading = false,
 }: ReadingComparisonFiltersPanelProps) {
   const [filters, setFilters] = useState<ReadingComparisonFilters>(
     createDefaultReadingComparisonFilters(),
   );
+  const [exportStatus, setExportStatus] = useState<"idle" | "success" | "error">("idle");
 
   const availableYears = useMemo<number[]>(
     () => (archive ? [...archive.years].map((y) => y.year).sort((a, b) => a - b) : []),
@@ -136,6 +160,13 @@ export default function ReadingComparisonFiltersPanel({
     [archive, filters],
   );
 
+  // Clear export status whenever the exported snapshot would change.
+  useMemo(() => {
+    setExportStatus("idle");
+    return null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters, result, rangeLabel, topBooksLimit, failedYears.join(",")]);
+
   const updateFilters = (patch: Partial<ReadingComparisonFilters>) => {
     setFilters((prev) => ({ ...prev, ...patch }));
   };
@@ -145,6 +176,32 @@ export default function ReadingComparisonFiltersPanel({
   };
 
   const empty = !archive || availableYears.length === 0;
+  // Allow export when archive is loaded (even if zero years) — the
+  // user can still capture an empty snapshot for review. Disable only
+  // during bootstrap.
+  const exportDisabled = bootstrapLoading || !archive;
+
+  const handleExport = () => {
+    if (exportDisabled) return;
+    setExportStatus("idle");
+    try {
+      const build = buildReadingComparisonMarkdown({
+        result,
+        rangeLabel,
+        topBooksLimit,
+        failedYears,
+        exportedAt: new Date(),
+        siteBaseUrl,
+      });
+      triggerReadingComparisonMarkdownDownload({
+        content: build.content,
+        filename: build.filename,
+      });
+      setExportStatus("success");
+    } catch {
+      setExportStatus("error");
+    }
+  };
 
   return (
     <section
@@ -311,7 +368,53 @@ export default function ReadingComparisonFiltersPanel({
             <RefreshCw size={12} aria-hidden="true" />
             恢复默认
           </button>
+          <button
+            type="button"
+            className="weread-reading-comparison__export-button"
+            disabled={exportDisabled}
+            onClick={handleExport}
+            data-testid="weread-reading-comparison-export-button"
+          >
+            <Download size={12} aria-hidden="true" />
+            导出筛选比较 Markdown
+          </button>
         </div>
+      </div>
+
+      <div
+        className="weread-reading-comparison__export"
+        data-testid="weread-reading-comparison-export"
+      >
+        <p
+          className="weread-reading-comparison__export-summary"
+          data-testid="weread-reading-comparison-export-summary"
+        >
+          当前导出口径：{formatReadingComparisonRangeLabel(rangeLabel)} · Top {topBooksLimit} · 纳入 {result.summary.includedYearCount} 个年份 · 排除 {result.summary.excludedYearCount} 个年份 · 失败 {failedYears.length} 个年份
+        </p>
+        <p
+          className="weread-reading-comparison__export-notice"
+          data-testid="weread-reading-comparison-export-notice"
+        >
+          {EXPORT_NOTICE}
+        </p>
+        {exportStatus === "success" ? (
+          <p
+            className="weread-reading-comparison__export-status weread-reading-comparison__export-status--success"
+            data-testid="weread-reading-comparison-export-status"
+            data-status="success"
+          >
+            {EXPORT_SUCCESS}
+          </p>
+        ) : null}
+        {exportStatus === "error" ? (
+          <p
+            className="weread-reading-comparison__export-status weread-reading-comparison__export-status--error"
+            data-testid="weread-reading-comparison-export-status"
+            data-status="error"
+          >
+            {EXPORT_ERROR}
+          </p>
+        ) : null}
       </div>
 
       {empty ? (

@@ -6365,3 +6365,68 @@ mark.hl {
     grid-template-columns: 1fr;
   }
 }
+
+.weread-reading-comparison__export {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #dde1ea;
+  border-radius: 8px;
+}
+
+.weread-reading-comparison__export-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 0;
+}
+
+.weread-reading-comparison__export-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: #1f2a44;
+  background: #f4f5f8;
+  border: 1px solid #cdd2de;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.weread-reading-comparison__export-button:hover:not(:disabled) {
+  background: #eef0f5;
+}
+
+.weread-reading-comparison__export-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.weread-reading-comparison__export-summary {
+  margin: 8px 0 0 0;
+  font-size: 12px;
+  color: #4a5366;
+  line-height: 1.55;
+}
+
+.weread-reading-comparison__export-notice {
+  margin: 6px 0 0 0;
+  font-size: 12px;
+  color: #6a7384;
+  line-height: 1.55;
+}
+
+.weread-reading-comparison__export-status {
+  margin: 8px 0 0 0;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.weread-reading-comparison__export-status--success {
+  color: #276749;
+}
+
+.weread-reading-comparison__export-status--error {
+  color: #c53030;
+}
