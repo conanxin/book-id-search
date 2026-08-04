@@ -881,12 +881,63 @@ describe("ReadingArchiveDashboard — Phase B React adapter integration", () => 
     expect(dashboard).not.toMatch(/requestedAnnualReviewYear/);
   });
 
-  it("B8-16. dashboard no longer maintains a second inflight tracker or failedYears", () => {
+  it("B8-16. dashboard no longer maintains a second inflight tracker or scheduler", () => {
     // Use the live code (without the leading JSDoc comment that
     // mentions these names for context).
     expect(dashboardCode).not.toMatch(/inflightRef/);
-    expect(dashboardCode).not.toMatch(/failedYears/);
     expect(dashboardCode).not.toMatch(/cacheRef/);
     expect(dashboardCode).not.toMatch(/scheduleYearFetches/);
+  });
+});
+
+// ---------- S27L-2: Markdown export action wiring ----------
+
+describe("ReadingArchiveDashboard — S27L-2 Markdown export wiring", () => {
+  it("renders the export button + container testids", () => {
+    expect(dashboard).toMatch(/data-testid="weread-reading-archive-export"/);
+    expect(dashboard).toMatch(/data-testid="weread-reading-archive-export-button"/);
+    expect(dashboard).toMatch(/data-testid="weread-reading-archive-export-summary"/);
+    expect(dashboard).toMatch(/data-testid="weread-reading-archive-export-notice"/);
+    expect(dashboard).toMatch(/data-testid="weread-reading-archive-export-status"/);
+  });
+
+  it("imports the Markdown model and download trigger", () => {
+    expect(dashboard).toMatch(/buildReadingArchiveMarkdown/);
+    expect(dashboard).toMatch(/triggerReadingArchiveMarkdownDownload/);
+  });
+
+  it("does NOT call any annual-review fetcher from the export handler", () => {
+    expect(dashboard).not.toMatch(/fetchWereadAnnualReview/);
+    expect(dashboard).not.toMatch(/fetchWereadAiSummary/);
+    expect(dashboard).not.toMatch(/fetchWereadRelatedBooks/);
+  });
+
+  it("does NOT use localStorage / sessionStorage / IndexedDB", () => {
+    expect(dashboardCode).not.toMatch(/localStorage/);
+    expect(dashboardCode).not.toMatch(/sessionStorage/);
+    expect(dashboardCode).not.toMatch(/IndexedDB/);
+  });
+
+  it("does NOT use dangerouslySetInnerHTML", () => {
+    expect(dashboardCode).not.toMatch(/dangerouslySetInnerHTML/);
+  });
+
+  it("export action is rendered as a JSX child (not in the state machine)", () => {
+    // The export action lives in the Dashboard, not in the reducer.
+    expect(dashboardCode).toMatch(/ReadingArchiveExportAction/);
+    // The state-machine module does not know about Markdown export.
+    const stateMachine = readFileSync(
+      resolve(
+        __dirname,
+        "wereadReadingArchiveState.ts",
+      ),
+      "utf8",
+    );
+    expect(stateMachine).not.toMatch(/Markdown/);
+    expect(stateMachine).not.toMatch(/reading-archive-markdown/);
+  });
+
+  it("export button copy is localizable Chinese", () => {
+    expect(dashboard).toMatch(/导出长期档案 Markdown/);
   });
 });

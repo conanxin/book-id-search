@@ -25,13 +25,14 @@
  * `meta.persisted: false` and `meta.source: "annual-review-cache"`.
  */
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   Archive,
   Calendar,
   CalendarRange,
   ChevronRight,
+  Download,
   EyeOff,
   Library,
   Loader2,
@@ -58,7 +59,14 @@ import {
 import {
   archiveRangeFromModel,
   archiveRangeToModel,
+  parseArchiveCacheKey,
 } from "./wereadReadingArchiveState";
+
+import {
+  buildReadingArchiveMarkdown,
+  triggerReadingArchiveMarkdownDownload,
+  type ReadingArchiveRangeLabel,
+} from "./wereadReadingArchiveMarkdown";
 
 import { useReadingArchiveMachine } from "./useReadingArchiveMachine";
 
@@ -110,6 +118,10 @@ export default function ReadingArchiveDashboard({
 
   const dataAvailable = hasReadingArchiveData(dashboardArchive);
   const failedCount = archive.failedKeys.length;
+  const failedYears = useMemo(
+    () => failedKeyYears(archive.failedKeys),
+    [archive.failedKeys],
+  );
   const loadedCount = archive.loadedCount;
   const requestedCount = archive.requestedCount;
   const bootstrapLoading = archive.bootstrapLoading;
@@ -197,6 +209,13 @@ export default function ReadingArchiveDashboard({
         >
           {getArchiveTopNScopeNotice()}
         </p>
+        <ReadingArchiveExportAction
+          archive={dashboardArchive}
+          rangeLabel={archiveRangeLabel(state.view.range)}
+          topBooksLimit={topBooks}
+          failedYears={failedYears}
+          bootstrapReady={!bootstrapLoading || loadedCount > 0}
+        />
         {bootstrapLoading && loadedCount === 0 ? (
           <button
             type="button"
@@ -630,4 +649,136 @@ function ArchiveYearLinksSection({ archive }: ArchiveYearLinksSectionProps) {
 
 function describeYear(year: number): string {
   return `${year} 年`;
+}
+
+// ---------- S27L-2: Markdown export action ----------
+
+function archiveRangeLabel(range: number): ReadingArchiveRangeLabel {
+  if (range === 5) return "最近5年";
+  if (range === 10) return "最近10年";
+  return "全部";
+}
+
+function failedKeyYears(failedKeys: readonly string[]): number[] {
+  const years: number[] = [];
+  for (const key of failedKeys) {
+    try {
+      const parsed = parseArchiveCacheKey(
+        key as unknown as Parameters<typeof parseArchiveCacheKey>[0],
+      );
+      years.push(parsed.year);
+    } catch {
+      // skip unparseable keys
+    }
+  }
+  return Array.from(new Set(years)).sort((a, b) => a - b);
+}
+
+interface ReadingArchiveExportActionProps {
+  archive: ReturnType<typeof buildWereadReadingArchive>;
+  rangeLabel: ReadingArchiveRangeLabel;
+  topBooksLimit: 6 | 12 | 18;
+  failedYears: number[];
+  bootstrapReady: boolean;
+}
+
+function ReadingArchiveExportAction({
+  archive,
+  rangeLabel,
+  topBooksLimit,
+  failedYears,
+  bootstrapReady,
+}: ReadingArchiveExportActionProps) {
+  // S27L-2: export success/error state is local UI state. It must
+  // NOT enter the state machine reducer. Reset whenever any input
+  // that changes the document body changes.
+  const [exportStatus, setExportStatus] = useState<"idle" | "ready" | "error">(
+    "idle",
+  );
+  const [exportMessage, setExportMessage] = useState<string>("");
+
+  const resetKey =
+    `${rangeLabel}|${topBooksLimit}|` +
+    `${archive.meta.loadedYears}|` +
+    `${archive.overview.firstYear ?? ""}|` +
+    `${archive.overview.latestYear ?? ""}|` +
+    `${failedYears.join(",")}`;
+  useEffect(() => {
+    setExportStatus("idle");
+    setExportMessage("");
+    // We deliberately depend on the reset key only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetKey]);
+
+  const canExport = bootstrapReady;
+
+  const handleExport = () => {
+    try {
+      const built = buildReadingArchiveMarkdown({
+        archive,
+        rangeLabel,
+        topBooksLimit,
+        failedYears,
+        exportedAt: new Date(),
+      });
+      triggerReadingArchiveMarkdownDownload({
+        content: built.content,
+        filename: built.filename,
+      });
+      setExportStatus("ready");
+      setExportMessage("已生成长期阅读档案 Markdown。");
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : "未能生成 Markdown，请稍后重试。";
+      setExportStatus("error");
+      setExportMessage(msg);
+    }
+  };
+
+  return (
+    <div
+      className="weread-reading-archive__export"
+      data-testid="weread-reading-archive-export"
+      data-export-status={exportStatus}
+    >
+      <div className="weread-reading-archive__export-actions">
+        <button
+          type="button"
+          className="weread-reading-archive__export-button"
+          onClick={handleExport}
+          disabled={!canExport}
+          data-testid="weread-reading-archive-export-button"
+          aria-label="导出长期阅读档案 Markdown"
+        >
+          <Download size={14} aria-hidden="true" /> 导出长期档案 Markdown
+        </button>
+      </div>
+      <p
+        className="weread-reading-archive__export-summary"
+        data-testid="weread-reading-archive-export-summary"
+      >
+        当前范围：{rangeLabel} · 高互动书目口径：Top {topBooksLimit} · 成功加载{" "}
+        {archive.meta.loadedYears} 个年份
+        {failedYears.length > 0
+          ? ` · 失败 ${failedYears.length} 个年份`
+          : ""}
+      </p>
+      <p
+        className="weread-reading-archive__export-notice"
+        data-testid="weread-reading-archive-export-notice"
+      >
+        长期档案文件只在当前浏览器中生成，不会重新请求年度数据，也不会上传或保存到服务器。文件包含公共书目信息和个人阅读统计。
+      </p>
+      {exportStatus !== "idle" ? (
+        <p
+          className="weread-reading-archive__export-status"
+          data-testid="weread-reading-archive-export-status"
+          data-status={exportStatus}
+          role="status"
+        >
+          {exportMessage}
+        </p>
+      ) : null}
+    </div>
+  );
 }

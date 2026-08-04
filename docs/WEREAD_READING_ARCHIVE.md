@@ -13,7 +13,7 @@
 - 不读取笔记正文、笔记评论、章节标题、划线正文、AI 概要、token、私有 ID 等任何敏感字段。
 - 不调用外部 AI（不调用 MiniMax / 不调用 `/related-books`）。
 - 不公开任何长期数据，不写入 Meilisearch。
-- **暂不支持长期档案导出**（保留 S27L-2 作为后续工作）。
+- **支持浏览器本地 Markdown 导出**（S27L-2，见 `WEREAD_READING_ARCHIVE_MARKDOWN.md`）。
 
 ## 2. 年份范围与切片
 
@@ -108,7 +108,7 @@
 - 多年唯一书目数（跨年合并去重）暂不提供；目前只提供「多年进入当前 Top N 榜单」口径。
 - 不提供主题 / 题材 / 阅读方向 / 兴趣漂移分析。
 - 不做心理 / 阅读质量判断。
-- 不导出 Markdown / PDF / ICS（留作 S27L-2）。
+- 不导出 Markdown / PDF / ICS（S27L-2 已交付 Markdown 导出；PDF / ICS 暂不支持）。
 - 不展示任何真实书目清单 / 真实 catalogId 关系（开发时全部使用合成数据）。
 
 ---
