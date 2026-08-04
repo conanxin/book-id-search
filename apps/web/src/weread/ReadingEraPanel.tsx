@@ -1,10 +1,10 @@
 /**
- * S27M — Reading Era Segmentation panel (browser-local, pure).
+ * S27M / S27M-2 — Reading Era Segmentation panel + Markdown export.
  *
  * Pure-React panel that consumes the in-memory WereadReadingArchive
- * and renders a list of reading eras with their boundaries and
- * recurring books. NEVER fetches anything; NEVER calls AI; NEVER
- * persists anything.
+ * and renders a list of reading eras plus a browser-local Markdown
+ * export. NEVER fetches anything; NEVER calls AI; NEVER persists
+ * anything.
  *
  * Hard rules:
  *   - Recomputes from props on every render (mode / archive).
@@ -15,13 +15,16 @@
  *     never embeds note text / private IDs.
  *   - Catalog book links go to `/books/:catalogId` (existing public
  *     route).
+ *   - Markdown export reads the already-computed era result, builds a
+ *     Blob, and triggers a transient browser download. No storage, no
+ *     network, no AI, no raw JSON dump.
  */
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Download } from "lucide-react";
 
 import {
   buildReadingEras,
-  describeEraBoundary,
   READING_ERA_BOUNDARY_LABELS,
   type ReadingEra,
   type ReadingEraBoundary,
@@ -29,19 +32,42 @@ import {
   type WereadReadingEraResult,
 } from "./wereadReadingEraModel";
 import type { WereadReadingArchive } from "./wereadReadingArchiveModel";
+import type { ReadingEraRangeLabel, ReadingEraTopBooksLimit } from "./wereadReadingEraMarkdown";
+import {
+  buildReadingEraMarkdown,
+  formatReadingEraRangeLabel,
+  triggerReadingEraMarkdownDownload,
+} from "./wereadReadingEraMarkdown";
 
 export interface ReadingEraPanelProps {
   archive: WereadReadingArchive | null;
   mode: ReadingEraSegmentationMode;
   onModeChange: (next: ReadingEraSegmentationMode) => void;
+  /** Mirrors the archive dashboard range label. */
+  rangeLabel: ReadingEraRangeLabel;
+  /** Mirrors the archive dashboard top-books limit. */
+  topBooksLimit: ReadingEraTopBooksLimit;
+  /** Years that failed to load from the archive state machine. */
+  failedYears: number[];
+  /** True while the archive bootstrap is still loading. */
+  bootstrapLoading?: boolean;
   /** Optional override; defaults to the URL the rest of the app uses. */
   booksBasePath?: string;
+  /** Optional site base URL for public book links inside the export. */
+  siteBaseUrl?: string;
 }
 
 const DEFAULT_BOOKS_BASE_PATH = "/books";
 const PANEL_NOTICE =
   "阶段划分只依据相邻年份的记录数量、活跃月份和当前 Top N 榜单重合情况。" +
   "它是描述性分组，不代表阅读行为或阅读质量发生变化。";
+
+const EXPORT_NOTICE =
+  "阅读阶段文件只在当前浏览器中生成，不会重新请求年度数据，也不会上传或保存到服务器。";
+
+const EXPORT_SUCCESS = "阅读阶段 Markdown 已生成，请在浏览器下载中查看。";
+
+const EXPORT_ERROR = "生成阅读阶段文件失败，请重试。";
 
 const ALLOWED_BOUNDARY_LABELS = new Set(
   Object.values(READING_ERA_BOUNDARY_LABELS),
@@ -88,8 +114,15 @@ export default function ReadingEraPanel({
   archive,
   mode,
   onModeChange,
+  rangeLabel,
+  topBooksLimit,
+  failedYears,
+  bootstrapLoading = false,
   booksBasePath = DEFAULT_BOOKS_BASE_PATH,
+  siteBaseUrl,
 }: ReadingEraPanelProps) {
+  const [exportStatus, setExportStatus] = useState<"idle" | "success" | "error">("idle");
+
   const result: WereadReadingEraResult = useMemo(() => {
     if (!archive) {
       return {
@@ -101,10 +134,40 @@ export default function ReadingEraPanel({
     return buildReadingEras(archive, mode);
   }, [archive, mode]);
 
+  // Clear export status whenever the exported snapshot would change.
+  useEffect(() => {
+    setExportStatus("idle");
+  }, [mode, result, rangeLabel, topBooksLimit, failedYears.join(",")]);
+
   const hasYears =
     archive !== null &&
     Array.isArray(archive.years) &&
     archive.years.length > 0;
+
+  const exportDisabled = bootstrapLoading || !archive;
+  const exportReady = !exportDisabled;
+
+  const handleExport = () => {
+    if (exportDisabled) return;
+    setExportStatus("idle");
+    try {
+      const build = buildReadingEraMarkdown({
+        result,
+        rangeLabel,
+        topBooksLimit,
+        failedYears,
+        exportedAt: new Date(),
+        siteBaseUrl,
+      });
+      triggerReadingEraMarkdownDownload({
+        content: build.content,
+        filename: build.filename,
+      });
+      setExportStatus("success");
+    } catch {
+      setExportStatus("error");
+    }
+  };
 
   return (
     <section
@@ -145,6 +208,54 @@ export default function ReadingEraPanel({
           />
           <span>仅按年份中断分段</span>
         </label>
+      </div>
+
+      <div
+        className="weread-reading-era__export"
+        data-testid="weread-reading-era-export"
+      >
+        <div className="weread-reading-era__export-actions">
+          <button
+            type="button"
+            className="weread-reading-era__export-button"
+            disabled={exportDisabled}
+            onClick={handleExport}
+            data-testid="weread-reading-era-export-button"
+          >
+            <Download size={14} aria-hidden="true" />
+            导出阅读阶段 Markdown
+          </button>
+        </div>
+        <p
+          className="weread-reading-era__export-summary"
+          data-testid="weread-reading-era-export-summary"
+        >
+          当前口径：{formatReadingEraRangeLabel(rangeLabel)} · Top {topBooksLimit} · {formatReadingEraMode(mode)} · 阶段 {result.eras.length} 个 · 失败年份 {failedYears.length} 个
+        </p>
+        <p
+          className="weread-reading-era__export-notice"
+          data-testid="weread-reading-era-export-notice"
+        >
+          {EXPORT_NOTICE}
+        </p>
+        {exportStatus === "success" && (
+          <p
+            className="weread-reading-era__export-status weread-reading-era__export-status--success"
+            data-testid="weread-reading-era-export-status"
+            data-status="success"
+          >
+            {EXPORT_SUCCESS}
+          </p>
+        )}
+        {exportStatus === "error" && (
+          <p
+            className="weread-reading-era__export-status weread-reading-era__export-status--error"
+            data-testid="weread-reading-era-export-status"
+            data-status="error"
+          >
+            {EXPORT_ERROR}
+          </p>
+        )}
       </div>
 
       {!hasYears ? (
@@ -261,4 +372,15 @@ export default function ReadingEraPanel({
       )}
     </section>
   );
+}
+
+function formatReadingEraMode(mode: ReadingEraSegmentationMode): string {
+  switch (mode) {
+    case "automatic":
+      return "自动阶段";
+    case "gaps_only":
+      return "仅按年份中断";
+    default:
+      return "自动阶段";
+  }
 }

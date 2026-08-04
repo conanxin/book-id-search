@@ -77,3 +77,16 @@
 ## 6. 书目链接
 
 阶段内显示的 recurring books 提供 `/books/:catalogId` 链接到公开书目页。仅包含 catalogId，不包含 token 或私人 ID。
+
+## 7. 阅读阶段 Markdown 导出（S27M-2）
+
+S27M-2 在「阅读阶段」面板增加**导出阅读阶段 Markdown** 按钮，纯浏览器本地生成：
+
+- 使用当前已计算的 `WereadReadingEraResult`、范围、Top N 和失败年份。
+- 文件名 `weread-reading-eras-<mode>-<first>-to-<latest>-YYYYMMDD.md`；空档案为 `...-empty-YYYYMMDD.md`。
+- MIME `text/markdown;charset=utf-8`。
+- 文件包含：标题元数据、阶段总览、阶段详情、阶段边界、recurring books、方法说明、隐私与解释边界。
+- 不重新请求 annual-review、不调用 AI、不调用 related-books、不写 storage、不上传服务器。
+- 不输出原始 archive/era JSON；不包含心理 / 兴趣 / 人格 / 阅读质量推断。
+
+详见 `docs/WEREAD_READING_ERAS_MARKDOWN.md`。

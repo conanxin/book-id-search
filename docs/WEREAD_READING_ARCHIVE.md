@@ -14,6 +14,7 @@
 - 不调用外部 AI（不调用 MiniMax / 不调用 `/related-books`）。
 - 不公开任何长期数据，不写入 Meilisearch。
 - **支持浏览器本地 Markdown 导出**（S27L-2，见 `WEREAD_READING_ARCHIVE_MARKDOWN.md`）。
+- **支持阅读阶段 Markdown 导出**（S27M-2，在「阅读阶段」面板导出当前阶段结果，见 `WEREAD_READING_ERAS_MARKDOWN.md`）。
 
 ## 2. 年份范围与切片
 

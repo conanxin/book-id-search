@@ -141,6 +141,28 @@ AI 摘要成功显示后，会在同一区域下方出现一个虚框入口「�
 
 详见 `docs/WEREAD_RELATED_BOOKS.md`。
 
+## 阅读阶段（S27M）
+
+`WereadCenter` 自 S27M 起在长期档案内新增「阅读阶段」面板，位于跨年度趋势之后、年度目录之前。详见 `docs/WEREAD_READING_ERAS.md`：
+
+- 完全基于当前已加载的 `WereadReadingArchive`，浏览器本地计算，不新增 endpoint。
+- 四种相邻年份边界：`year_gap` / `activity_shift` / `active_month_shift` / `top_list_shift`。
+- 两种模式：`automatic`（默认）与 `gaps_only`。
+- 单年份段按确定性规则合并；阶段统计包含记录、月份、年均、高峰年份与阶段内 recurring Top N 书目。
+- 不调用 AI、不读取笔记正文、不写 storage、不推断心理 / 兴趣 / 阅读质量。
+
+### 阅读阶段 Markdown 导出（S27M-2）
+
+S27M-2 在「阅读阶段」面板增加「导出阅读阶段 Markdown」按钮，纯浏览器本地生成。详见 `docs/WEREAD_READING_ERAS_MARKDOWN.md`：
+
+- 使用当前已计算的 `WereadReadingEraResult`、范围、Top N、失败年份。
+- 文件名 `weread-reading-eras-<mode>-<first>-to-<latest>-YYYYMMDD.md`（空档案为 `...-empty-YYYYMMDD.md`）。
+- MIME `text/markdown;charset=utf-8`。
+- 不重新请求 annual-review、不调用 AI、不调用 related-books、不写 storage、不上传服务器。
+- 不输出原始 archive/era JSON；不包含心理 / 兴趣 / 人格 / 阅读质量推断。
+
+---
+
 ## 与主搜索的关系
 
 - WeRead Center 是独立页面，只读取私有 overlay API。

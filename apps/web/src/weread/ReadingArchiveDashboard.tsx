@@ -68,9 +68,19 @@ import {
   type ReadingArchiveRangeLabel,
 } from "./wereadReadingArchiveMarkdown";
 
+import type { ReadingEraRangeLabel } from "./wereadReadingEraMarkdown";
 import { useReadingArchiveMachine } from "./useReadingArchiveMachine";
 import ReadingEraPanel from "./ReadingEraPanel";
 import type { ReadingEraSegmentationMode } from "./wereadReadingEraModel";
+
+const MODEL_RANGE_TO_ERA_LABEL: Record<
+  ReadingArchiveRangeValue,
+  ReadingEraRangeLabel
+> = {
+  recent5: "最近5年",
+  recent10: "最近10年",
+  all: "全部",
+};
 
 // ---------- props ----------
 
@@ -287,6 +297,10 @@ export default function ReadingArchiveDashboard({
             archive={dashboardArchive}
             mode={eraMode}
             onModeChange={setEraMode}
+            rangeLabel={MODEL_RANGE_TO_ERA_LABEL[modelRange]}
+            topBooksLimit={topBooks}
+            failedYears={failedYears}
+            bootstrapLoading={bootstrapLoading}
           />
 
           <ArchiveYearDirectory
