@@ -1,14 +1,16 @@
 # WEREAD_READING_ARCHIVE_REPORT.md
 
 **任务：** S27L Long-term Reading Archive Index — Finalize & Release
-**日期：** 2026-08-03
+**日期：** 2026-08-04
 **目标版本：** v0.17.0-weread-reading-archive
 
 ---
 
-## STATUS: WARN
+## STATUS: PASS
 
-Browser smoke (Puppeteer + synthetic request interception) 通过 20/38 检查后崩溃于等待 tab 切回后渲染控件。按 spec F10 规则：commit + push，不打 tag，README 保持 v0.16.1-weread-year-comparison-markdown。
+Browser smoke (Puppeteer + synthetic request interception) 38/38 PASS with request
+safety gate verified. Phase B state machine integration complete. Production deployed
+and verified on https://books.conanxin.com/weread.
 
 ---
 

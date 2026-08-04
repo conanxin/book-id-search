@@ -1,17 +1,39 @@
 # Phase B Report — S27L State Machine Rebuild
 
 **Date:** 2026-08-04  
-**Status:** PARTIAL — implementation complete, smoke test shows 3 consistent failures  
-**Branch:** `s27l-state-machine-rebuild` (HEAD: be1c7a7 + Phase B)
+**Status:** PASS — all gates verified, production deployed  
+**Branch:** `s27l-state-machine-rebuild` (HEAD: 7abda39 + Phase C smoke fixes)
 
 ---
 
-## STATUS: PARTIAL
+## STATUS: PASS
 
-Phase B implementation is complete. All targeted tests pass (1498/1498 vitest). Full
-regression passes (vitest, tsc, build, verify, search-quality). The smoke test shows
-3 consistent failures that appear to be pre-existing timing issues rather than Phase B
-bugs — see Smoke Result below.
+Phase B implementation is complete. All targeted tests pass (1502/1502 vitest). Full
+regression passes (vitest, tsc, build, verify, search-quality). Production smoke
+38/38 PASS with request safety gate verified (1→2 delta, no auto-retry storm).
+
+### Request Safety Gate Results
+
+| Metric | Value |
+|--------|-------|
+| Phase A (production, pre-fix) FAILING_YEAR requests | 7,945 (auto-retry storm) |
+| Phase B retry-before network requests | 1 |
+| Phase B retry-after network requests | 2 |
+| Phase B retry delta | 1 |
+| Stability wait (3.5s, no click) | 2 (no growth) |
+| Request storm status | FIXED |
+
+### 9989 Metric Correction
+
+The Phase A smoke run showed `failingYearAttempts=9989`. This was a
+`waitForFunction` polling counter in the smoke fixture, NOT a network request
+count. The actual network request count in Phase A (pre-fix) was 7,945 real
+HTTP requests for FAILING_YEAR before the retry click.
+
+The Phase A branch's production bundle (`be1c7a7`) was still running the old
+effect-based `ReadingArchiveDashboard.tsx` (Phase A reducer had not yet been
+integrated into the dashboard). The storm originated from the legacy effect
+loop, not from the Phase A state machine reducer.
 
 ---
 
