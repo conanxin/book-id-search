@@ -40,6 +40,41 @@ export const DEFAULT_ARCHIVE_TOP_BOOKS: ArchiveTopBooks = 12;
 
 export const MAX_ARCHIVE_CONCURRENCY = 2;
 
+// ---------- model-side range mapping ----------
+//
+// The UI surface uses string-valued range options
+// ("recent5" | "recent10" | "all") defined in
+// `wereadReadingArchiveModel.ts`. The state machine works in
+// numeric counts (5 | 10 | 20). This module exposes a small
+// adapter that bridges the two encodings so the React adapter
+// can dispatch RANGE_CHANGED without leaking the model strings
+// into the reducer.
+
+export type ArchiveModelRangeValue = "recent5" | "recent10" | "all";
+
+export const ARCHIVE_MODEL_RANGE_MAP: Readonly<
+  Record<ArchiveModelRangeValue, ArchiveRange>
+> = {
+  recent5: 5,
+  recent10: 10,
+  all: 20,
+};
+
+export function archiveRangeFromModel(
+  v: ArchiveModelRangeValue | ArchiveRange,
+): ArchiveRange {
+  if (typeof v === "number") return v;
+  return ARCHIVE_MODEL_RANGE_MAP[v];
+}
+
+export function archiveRangeToModel(
+  r: ArchiveRange,
+): ArchiveModelRangeValue {
+  if (r === 5) return "recent5";
+  if (r === 10) return "recent10";
+  return "all";
+}
+
 // ---------- request status ----------
 
 export type ArchiveRequestStatus = "idle" | "pending" | "success" | "error";

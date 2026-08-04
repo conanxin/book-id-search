@@ -207,22 +207,33 @@ describe("ReadingArchiveDashboard — WereadCenter wiring (5th workspace)", () =
   });
 
   // 4
-  it("loads at most once per token (initialFetchIssuedRef guard)", () => {
-    expect(dashboard).toMatch(/initialFetchIssuedRef/);
+  it("loads at most once per token (machine bootstrap is single-shot)", () => {
+    // Phase B: bootstrap is single-shot because the reducer
+    // transitions bootstrap.status out of "idle" on
+    // BOOTSTRAP_STARTED, and the controller only fires a bootstrap
+    // when status === "idle". The dashboard delegates this to the
+    // adapter hook + state machine.
+    expect(dashboard).toMatch(/useReadingArchiveMachine/);
   });
 
   // 5
   it("switching back to archive reuses cached data (no refetch on re-activation)", () => {
-    // The dashboard only fires the bootstrap fetch when
-    // initialFetchIssuedRef is false, and all subsequent year loads
-    // come from the in-memory cache. Re-activation must not refetch.
-    expect(dashboard).toMatch(/if \(initialFetchIssuedRef\.current\) return/);
+    // Phase B: cache is owned by the reducer; the selector
+    // `selectArchiveRequestsToStart` returns an empty list when
+    // every required key is cached. Re-activation does not issue
+    // a new bootstrap.
+    expect(dashboard).not.toMatch(/initialFetchIssuedRef/);
+    expect(dashboard).toMatch(/cachedResponses/);
   });
 
   // 6
   it("range / topBooks change only reschedules missing cache keys", () => {
-    expect(dashboard).toMatch(/pickArchiveYearSlice/);
-    expect(dashboard).toMatch(/cacheRef\.current\.delete\(key\)/);
+    // Phase B: the selector returns only the keys that are not
+    // already cached, so changing range / topBooks triggers
+    // fetches only for the new gap. The dashboard forwards the
+    // view changes to the reducer via `setRange` / `setTopBooks`.
+    expect(dashboard).toMatch(/setRange\(archiveRangeFromModel/);
+    expect(dashboard).toMatch(/setTopBooks\(opt\)/);
   });
 
   // 7
@@ -355,16 +366,25 @@ describe("ReadingArchiveDashboard — render contract", () => {
 
   // 21
   it("switching back to the archive tab preserves the cached state", () => {
-    // The dashboard guards re-fetch with initialFetchIssuedRef and
-    // checks the cache before scheduling a request.
-    expect(dashboard).toMatch(/if \(cacheRef\.current\.has\(key\)\) return false/);
-    expect(dashboard).toMatch(/if \(inflightRef\.current\.has\(key\)\) return false/);
+    // Phase B: the reducer's cache lives across renders. The hook
+    // only fires a bootstrap when bootstrap.status === "idle"
+    // (which only happens on first activation or after TOKEN_RESET).
+    expect(dashboard).toMatch(/useReadingArchiveMachine/);
+    expect(dashboard).toMatch(/cachedResponses/);
   });
 
   // 22
   it("token change aborts in-flight requests and clears the cache", () => {
-    expect(dashboard).toMatch(/ctrl\.abort\(\)/);
-    expect(dashboard).toMatch(/cacheRef\.current\.clear\(\)/);
+    // Phase B: the hook module owns the token-change path; the
+    // dashboard just forwards `token` to the hook. Verify the
+    // hook module (which is the one with the wiring) handles
+    // TOKEN_RESET + abortAll + onAbortAll.
+    const hookSource = readFileSync(
+      resolve(__dirname, "./useReadingArchiveMachine.ts"),
+      "utf8",
+    );
+    expect(hookSource).toMatch(/TOKEN_RESET/);
+    expect(hookSource).toMatch(/abortAll|onAbortAll/);
   });
 
   // 23
@@ -730,15 +750,22 @@ describe("ReadingArchiveDashboard — section-3 navigation + cache", () => {
   });
 
   // 58
-  it("the dashboard supports bounded concurrency (MAX_CONCURRENT_REQUESTS = 2)", () => {
-    expect(dashboard).toMatch(/MAX_CONCURRENT_REQUESTS = 2/);
-    expect(dashboard).toMatch(/inflightRef\.current\.size >= MAX_CONCURRENT_REQUESTS/);
+  it("the dashboard supports bounded concurrency (MAX_ARCHIVE_CONCURRENCY = 2)", () => {
+    // Phase B: concurrency is enforced by the state machine
+    // selector + reducer (YEAR_REQUEST_STARTED on already-pending
+    // keys is a no-op). The dashboard never holds a parallel
+    // inflight tracker.
+    expect(dashboard).toMatch(/useReadingArchiveMachine/);
+    expect(dashboard).not.toMatch(/MAX_CONCURRENT_REQUESTS/);
+    expect(dashboard).not.toMatch(/inflightRef/);
   });
 
   // 59
   it("the dashboard does NOT request annual-review before activation (behaviour)", () => {
-    // The activation effect is gated by `if (!active) return`.
-    expect(dashboard).toMatch(/if \(!active\) return/);
+    // Phase B: the hook gates the bootstrap + scheduler on the
+    // `active` flag (controller.tick returns early when
+    // !getActive()). The dashboard forwards `active` to the hook.
+    expect(dashboard).toMatch(/useReadingArchiveMachine\(\{ token, active \}\)/);
   });
 
   // 60
@@ -748,5 +775,118 @@ describe("ReadingArchiveDashboard — section-3 navigation + cache", () => {
     const manyYears = Array.from({ length: 100 }, (_, i) => 2100 - i);
     const slice = pickArchiveYearSlice({ availableYears: manyYears, range: "all" });
     expect(slice.length).toBeLessThanOrEqual(READING_ARCHIVE_MAX_YEARS);
+  });
+});
+
+// ============================================================
+// Section 8: Phase B supplementary tests (S27L-B8)
+// ============================================================
+
+describe("ReadingArchiveDashboard — Phase B React adapter integration", () => {
+  it("B8-1. dashboard imports useReadingArchiveMachine", () => {
+    expect(dashboard).toMatch(/from "\.\/useReadingArchiveMachine"/);
+  });
+
+  it("B8-2. dashboard no longer has `requestedYear` prop", () => {
+    // The state machine discovers availableYears via bootstrap, so
+    // the dashboard no longer needs a "hint" year from the parent.
+    expect(dashboard).not.toMatch(/requestedYear\??: number/);
+  });
+
+  it("B8-3. dashboard shell always renders controls (no early return on bootstrap loading)", () => {
+    // The controls block must appear in the JSX regardless of
+    // bootstrap status, so the user can see the range / topBooks
+    // options even while data is loading.
+    expect(dashboard).toMatch(/weread-reading-archive-controls/);
+    // The early-return for "loading" must NOT short-circuit the
+    // whole component.
+    expect(dashboard).not.toMatch(/if \(isLoading && loadedCount === 0\) \{[\s\S]*?return \(/);
+  });
+
+  it("B8-4. controls are disabled while bootstrap is loading (and no data yet)", () => {
+    expect(dashboard).toMatch(/disabled=\{bootstrapLoading && loadedCount === 0\}/);
+  });
+
+  it("B8-5. controls are enabled once any year is loaded", () => {
+    // Same expression as B8-4: when `loadedCount > 0`, the
+    // `&& loadedCount === 0` short-circuits to false.
+    expect(dashboard).toMatch(/loadedCount === 0/);
+  });
+
+  it("B8-6. range change calls machine setRange with the model value (5/10/all)", () => {
+    expect(dashboard).toMatch(/onChange=\{\(\) => setRange\(archiveRangeFromModel\(opt\.value\)\)\}/);
+  });
+
+  it("B8-7. topBooks change calls machine setTopBooks", () => {
+    expect(dashboard).toMatch(/onChange=\{\(\) => setTopBooks\(opt\)\}/);
+  });
+
+  it("B8-8. retry button calls machine retryFailed", () => {
+    expect(dashboard).toMatch(/onClick=\{retryFailed\}/);
+    expect(dashboard).toMatch(/data-testid="weread-reading-archive-retry-failed"/);
+  });
+
+  it("B8-9. controls are visible while bootstrap is in-flight", () => {
+    // The `data-testid` block must be in the JSX (not inside a
+    // conditional that hides during bootstrap).
+    expect(dashboard).toMatch(/data-testid="weread-reading-archive-controls"/);
+  });
+
+  it("B8-10. failed year still surfaces the retry button", () => {
+    expect(dashboard).toMatch(/failedCount > 0/);
+    expect(dashboard).toMatch(/重试失败年份/);
+  });
+
+  it("B8-11. plain archive tab activation does NOT pre-set requestedAnnualReviewYear", () => {
+    // The state machine discovers availableYears on its own via
+    // the bootstrap. The WereadCenter should not pre-set a year
+    // when switching to the archive tab. Restrict the regex to
+    // the archive-branch body (the if-block ends at the next `}`
+    // at the same indent level).
+    const archiveBlock = center.match(
+      /if \(next === "archive"\) \{[\s\S]*?\n    \}/,
+    );
+    expect(archiveBlock).not.toBeNull();
+    expect(archiveBlock?.[0] ?? "").not.toMatch(/setRequestedAnnualReviewYear/);
+  });
+
+  it("B8-12. clicking 年度回顾 (onOpenAnnualYear) writes requestedAnnualReviewYear", () => {
+    expect(center).toMatch(/function handleOpenAnnualYear\(year: number\)/);
+    expect(center).toMatch(/setRequestedAnnualReviewYear\(year\)/);
+  });
+
+  it("B8-13. token clear in WereadCenter also clears the machine (TOKEN_RESET)", () => {
+    // WereadCenter.handleClear sets requestedAnnualReviewYear to
+    // null; the archive machine handles its own token-change path
+    // via the hook. Verify the wiring stays symmetric: the
+    // dashboard's `token` prop comes from `storedToken`, which
+    // is reset by handleClear.
+    expect(center).toMatch(/handleClear/);
+    expect(center).toMatch(/setStoredToken\(null\)/);
+    expect(center).toMatch(/setRequestedAnnualReviewYear\(null\)/);
+  });
+
+  it("B8-14. other four workspaces' state is not touched by ReadingArchiveDashboard", () => {
+    // The dashboard import surface is restricted to its own
+    // state machine + the private annual-review fetcher. It must
+    // not import any of the other four workspace modules.
+    // Use the live code (without the leading JSDoc comment).
+    expect(dashboardCode).not.toMatch(/NotesLibrary/);
+    expect(dashboardCode).not.toMatch(/ReadingMap/);
+    expect(dashboardCode).not.toMatch(/ReviewCalendar/);
+    expect(dashboardCode).not.toMatch(/AnnualReviewDashboard/);
+  });
+
+  it("B8-15. dashboard never imports requestedAnnualReviewYear", () => {
+    expect(dashboard).not.toMatch(/requestedAnnualReviewYear/);
+  });
+
+  it("B8-16. dashboard no longer maintains a second inflight tracker or failedYears", () => {
+    // Use the live code (without the leading JSDoc comment that
+    // mentions these names for context).
+    expect(dashboardCode).not.toMatch(/inflightRef/);
+    expect(dashboardCode).not.toMatch(/failedYears/);
+    expect(dashboardCode).not.toMatch(/cacheRef/);
+    expect(dashboardCode).not.toMatch(/scheduleYearFetches/);
   });
 });

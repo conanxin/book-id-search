@@ -270,11 +270,11 @@ export default function WereadCenter() {
     if (next === "review") setReviewActivated(true);
     if (next === "annual") setAnnualActivated(true);
     if (next === "archive") {
+      // S27L Phase B: the archive state machine discovers
+      // availableYears on its own via the bootstrap fetch. We must
+      // NOT pre-set a requested year here — that's a separate
+      // concern owned by the annual-review dashboard.
       setArchiveActivated(true);
-      // S27L: proactively set the requested year so that
-      // ReadingArchiveDashboard can fetch availableYears on mount
-      // without requiring the user to click a specific year first.
-      setRequestedAnnualReviewYear(2025);
     }
   }
 
@@ -558,7 +558,6 @@ export default function WereadCenter() {
               <ReadingArchiveDashboard
                 token={storedToken}
                 active={activeTab === "archive"}
-                requestedYear={requestedAnnualReviewYear}
                 onOpenAnnualYear={handleOpenAnnualYear}
               />
             ) : null}
