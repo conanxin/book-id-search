@@ -5878,3 +5878,170 @@ mark.hl {
     align-items: stretch;
   }
 }
+
+/* ----- S27M: reading era segmentation ----- */
+
+.weread-reading-era {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid #cdd2de;
+  border-radius: 8px;
+  background: #fafbfd;
+}
+
+.weread-reading-era__notice h3 {
+  margin: 0 0 6px 0;
+  font-size: 14px;
+}
+
+.weread-reading-era__notice-body {
+  margin: 0;
+  font-size: 12px;
+  color: #4a5366;
+  line-height: 1.55;
+}
+
+.weread-reading-era__controls {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 13px;
+  color: #4a5366;
+}
+
+.weread-reading-era__mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.weread-reading-era__mode input {
+  margin: 0;
+}
+
+.weread-reading-era__empty {
+  margin: 10px 0 0 0;
+  font-size: 12px;
+  color: #4a5366;
+}
+
+.weread-reading-era__timeline {
+  margin: 12px 0 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.weread-reading-era__card {
+  background: #fff;
+  border: 1px solid #dde1ea;
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.weread-reading-era__card-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  border-bottom: 1px solid #eef0f5;
+  padding-bottom: 6px;
+  margin-bottom: 8px;
+}
+
+.weread-reading-era__card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2a44;
+}
+
+.weread-reading-era__card-count {
+  font-size: 12px;
+  color: #6a7384;
+}
+
+.weread-reading-era__metrics {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 12px;
+  font-size: 12px;
+}
+
+.weread-reading-era__metrics > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.weread-reading-era__metrics dt {
+  margin: 0;
+  color: #6a7384;
+}
+
+.weread-reading-era__metrics dd {
+  margin: 0;
+  font-size: 14px;
+  color: #1f2a44;
+}
+
+.weread-reading-era__boundary {
+  margin: 10px 0 0 0;
+  font-size: 12px;
+  color: #4a5366;
+  padding: 6px 8px;
+  background: #f4f5f8;
+  border-radius: 6px;
+}
+
+.weread-reading-era__books {
+  margin-top: 10px;
+}
+
+.weread-reading-era__books h4 {
+  margin: 0 0 4px 0;
+  font-size: 12px;
+  color: #4a5366;
+}
+
+.weread-reading-era__books ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.weread-reading-era__book {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+  padding: 2px 0;
+}
+
+.weread-reading-era__book a {
+  color: #2b6cb0;
+  text-decoration: none;
+}
+
+.weread-reading-era__book a:hover {
+  text-decoration: underline;
+}
+
+.weread-reading-era__book-meta {
+  font-size: 12px;
+  color: #6a7384;
+}
+
+@media (max-width: 540px) {
+  .weread-reading-era__timeline {
+    grid-template-columns: 1fr;
+  }
+  .weread-reading-era__metrics {
+    grid-template-columns: 1fr;
+  }
+}

@@ -69,6 +69,8 @@ import {
 } from "./wereadReadingArchiveMarkdown";
 
 import { useReadingArchiveMachine } from "./useReadingArchiveMachine";
+import ReadingEraPanel from "./ReadingEraPanel";
+import type { ReadingEraSegmentationMode } from "./wereadReadingEraModel";
 
 // ---------- props ----------
 
@@ -126,6 +128,9 @@ export default function ReadingArchiveDashboard({
   const requestedCount = archive.requestedCount;
   const bootstrapLoading = archive.bootstrapLoading;
   const topBooks = state.view.topBooks;
+  const [eraMode, setEraMode] = useState<ReadingEraSegmentationMode>(
+    "automatic",
+  );
 
   // ----- render: not activated -----
   if (!active) {
@@ -277,6 +282,12 @@ export default function ReadingArchiveDashboard({
           <ArchiveOverviewSection archive={dashboardArchive} />
 
           <ArchiveTimelineSection years={yearsAsc} />
+
+          <ReadingEraPanel
+            archive={dashboardArchive}
+            mode={eraMode}
+            onModeChange={setEraMode}
+          />
 
           <ArchiveYearDirectory
             years={yearsDesc}
