@@ -24,7 +24,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { Repeat, Shuffle, Undo2 } from "lucide-react";
+import { Download, Repeat, Shuffle, Undo2 } from "lucide-react";
 
 import type {
   WereadReadingArchive,
@@ -39,6 +39,11 @@ import {
   type MetricDeltaDirection,
   type ReadingPeriod,
 } from "./wereadDualPeriodComparison";
+import {
+  buildDualPeriodMarkdown,
+  triggerDualPeriodMarkdownDownload,
+  type DualPeriodRangeLabel,
+} from "./wereadDualPeriodMarkdown";
 
 // ---------- props ----------
 
@@ -82,6 +87,13 @@ const METRIC_LABELS: ReadonlyArray<{
 ];
 
 const RECURRING_CARDS_LIMIT = 12;
+
+const EXPORT_NOTICE =
+  "双时间段比较文件只在当前浏览器生成，不会重新请求数据，也不会上传或保存到服务器。";
+
+const EXPORT_SUCCESS = "双时间段比较 Markdown 已生成，请在浏览器下载中查看。";
+
+const EXPORT_ERROR = "生成双时间段比较文件失败，请重试。";
 
 // ---------- helpers ----------
 
@@ -253,11 +265,31 @@ export default function DualPeriodComparisonPanel({
   const [periodA, setPeriodA] = useState<ReadingPeriod>(defaults.periodA);
   const [periodB, setPeriodB] = useState<ReadingPeriod>(defaults.periodB);
 
+  // Export status lives entirely in local component state. It must
+  // NEVER enter the archive reducer / machine state.
+  const [exportStatus, setExportStatus] = useState<"idle" | "ready" | "error">(
+    "idle",
+  );
+  const [exportMessage, setExportMessage] = useState<string>("");
+
   // If availableYears change (new archive loaded), reset to defaults.
   useEffect(() => {
     setPeriodA(defaults.periodA);
     setPeriodB(defaults.periodB);
   }, [defaults.periodA.startYear, defaults.periodA.endYear, defaults.periodB.startYear, defaults.periodB.endYear]);
+
+  // Reset export status whenever the export body inputs change.
+  useEffect(() => {
+    setExportStatus("idle");
+    setExportMessage("");
+  }, [
+    rangeLabel,
+    topBooksLimit,
+    periodA.startYear,
+    periodA.endYear,
+    periodB.startYear,
+    periodB.endYear,
+  ]);
 
   // ---- derived comparison result ----
   const result = useMemo(() => {
@@ -441,10 +473,40 @@ export default function DualPeriodComparisonPanel({
           <MetricsTable result={result} />
           <RecurringBooksDiff result={result} />
           <OverlapComparison result={result} />
+          <ExportAction
+            rangeLabel={rangeLabel}
+            topBooksLimit={topBooksLimit}
+            bootstrapReady={!bootstrapLoading}
+            disabled={controlsDisabled}
+            exportStatus={exportStatus}
+            exportMessage={exportMessage}
+            onExport={() => handleExport(result)}
+          />
         </>
       ) : null}
     </section>
   );
+
+  function handleExport(snapshot: DualPeriodComparisonResult) {
+    try {
+      const built = buildDualPeriodMarkdown({
+        result: snapshot,
+        rangeLabel: rangeLabel as DualPeriodRangeLabel,
+        topBooksLimit,
+        exportedAt: new Date(),
+      });
+      triggerDualPeriodMarkdownDownload({
+        content: built.content,
+        filename: built.filename,
+      });
+      setExportStatus("ready");
+      setExportMessage(EXPORT_SUCCESS);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : EXPORT_ERROR;
+      setExportStatus("error");
+      setExportMessage(msg);
+    }
+  }
 }
 
 // ---------- period selector ----------
@@ -802,6 +864,71 @@ function collectOverlapRatios(
   // model; for the dashboard we approximate by repeating the global
   // average. This is consistent and deterministic.
   return [result.overlap.average];
+}
+
+// ---------- export action ----------
+
+interface ExportActionProps {
+  rangeLabel: string;
+  topBooksLimit: 6 | 12 | 18;
+  bootstrapReady: boolean;
+  disabled: boolean;
+  exportStatus: "idle" | "ready" | "error";
+  exportMessage: string;
+  onExport: () => void;
+}
+
+function ExportAction({
+  rangeLabel,
+  topBooksLimit,
+  bootstrapReady,
+  disabled,
+  exportStatus,
+  exportMessage,
+  onExport,
+}: ExportActionProps) {
+  return (
+    <div
+      className="weread-dual-period__export"
+      data-testid="weread-dual-period-export"
+      data-export-status={exportStatus}
+    >
+      <div className="weread-dual-period__export-actions">
+        <button
+          type="button"
+          className="weread-dual-period__export-button"
+          onClick={onExport}
+          disabled={disabled || !bootstrapReady}
+          data-testid="weread-dual-period-export-button"
+          aria-label="导出双时间段比较 Markdown"
+        >
+          <Download size={14} aria-hidden="true" /> 导出双时间段比较 Markdown
+        </button>
+      </div>
+      <p
+        className="weread-dual-period__export-summary"
+        data-testid="weread-dual-period-export-summary"
+      >
+        当前范围：{rangeLabel} · Top {topBooksLimit}
+      </p>
+      <p
+        className="weread-dual-period__export-notice"
+        data-testid="weread-dual-period-export-notice"
+      >
+        {EXPORT_NOTICE}
+      </p>
+      {exportStatus !== "idle" ? (
+        <p
+          className="weread-dual-period__export-status"
+          data-testid="weread-dual-period-export-status"
+          data-status={exportStatus}
+          role="status"
+        >
+          {exportMessage}
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 // re-export utility for tests

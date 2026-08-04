@@ -613,3 +613,103 @@ describe("DualPeriodComparisonPanel — scope display", () => {
     expect(html).toContain("失败年份 0 个");
   });
 });
+
+describe("DualPeriodComparisonPanel — Markdown export", () => {
+  it("renders the export button", () => {
+    const archive = makeArchive([makeYear(2020), makeYear(2021), makeYear(2022)]);
+    const html = renderAt({ archive });
+    expect(html).toContain('data-testid="weread-dual-period-export"');
+    expect(html).toContain('data-testid="weread-dual-period-export-button"');
+  });
+
+  it("renders the export summary", () => {
+    const archive = makeArchive([makeYear(2020), makeYear(2021), makeYear(2022)]);
+    const html = renderAt({ archive, rangeLabel: "最近5年", topBooksLimit: 12 });
+    expect(html).toContain('data-testid="weread-dual-period-export-summary"');
+    expect(html).toContain("最近5年");
+    expect(html).toContain("Top 12");
+  });
+
+  it("renders the export notice", () => {
+    const archive = makeArchive([makeYear(2020), makeYear(2021)]);
+    const html = renderAt({ archive });
+    expect(html).toContain('data-testid="weread-dual-period-export-notice"');
+    expect(html).toContain("当前浏览器生成");
+    expect(html).toContain("不会重新请求数据");
+    expect(html).toContain("不会上传或保存");
+  });
+
+  it("export button is disabled while bootstrap loading", () => {
+    const archive = makeArchive([makeYear(2020), makeYear(2021), makeYear(2022)]);
+    const html = renderAt({ archive, bootstrapLoading: true });
+    expect(html).toMatch(/<button[^>]*disabled[^>]*data-testid="weread-dual-period-export-button"/);
+  });
+
+  it("export button is disabled when archive is empty", () => {
+    const html = renderAt({ archive: null });
+    // No archive → no export button rendered (panel returns early).
+    expect(html).not.toContain('data-testid="weread-dual-period-export-button"');
+  });
+
+  it("export button is hidden when one period is empty", () => {
+    // Two-year archive → A = [2020], B = [2021] — both have data, button should render.
+    const archive = makeArchive([makeYear(2020), makeYear(2021)]);
+    const html = renderAt({ archive });
+    expect(html).toContain('data-testid="weread-dual-period-export-button"');
+  });
+
+  it("does not include dangerouslySetInnerHTML in export block", () => {
+    const archive = makeArchive([makeYear(2020), makeYear(2021)]);
+    const html = renderAt({ archive });
+    expect(html).not.toMatch(/dangerouslySetInnerHTML|innerHTML\s*=/i);
+  });
+
+  it("does not include forbidden privacy tokens in export area", () => {
+    const archive = makeArchive([makeYear(2020), makeYear(2021)]);
+    const html = renderAt({ archive });
+    const lower = html.toLowerCase();
+    for (const token of [
+      "note.text",
+      "note.comment",
+      "wereadbookid",
+      "noteid",
+      "highlightid",
+      "authorization",
+      "api key",
+      "wr_skey",
+      "wr_vid",
+    ]) {
+      expect(lower.includes(token.toLowerCase()), `forbidden: ${token}`).toBe(false);
+    }
+  });
+
+  it("does not include psychological vocabulary in export area", () => {
+    const archive = makeArchive([makeYear(2020), makeYear(2021), makeYear(2022)]);
+    const html = renderAt({ archive });
+    for (const word of [
+      "兴趣转变",
+      "偏好改变",
+      "阅读低谷",
+      "探索期",
+      "成熟期",
+      "提升",
+      "成长",
+      "退步",
+      "人格",
+      "心理",
+    ]) {
+      expect(html.includes(word), `forbidden: ${word}`).toBe(false);
+    }
+  });
+
+  it("does not include storage / URL write tokens", () => {
+    const archive = makeArchive([makeYear(2020), makeYear(2021), makeYear(2022)]);
+    const html = renderAt({ archive });
+    const lower = html.toLowerCase();
+    expect(lower.includes("localstorage")).toBe(false);
+    expect(lower.includes("sessionstorage")).toBe(false);
+    expect(lower.includes("indexeddb")).toBe(false);
+    expect(lower.includes("pushstate")).toBe(false);
+    expect(lower.includes("replacestate")).toBe(false);
+  });
+});
