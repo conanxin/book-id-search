@@ -748,6 +748,175 @@ describe("useReadingArchiveMachine — failure + retry", () => {
     const attemptsAfterRetry = h.state.requests[failedKey]?.attempts ?? 0;
     expect(attemptsAfterRetry).toBe(attemptsAfterFirst + 1);
   });
+
+  // S27L-PHASE-C — release-gate: no auto-retry storm.
+  // These tests enforce the Phase B invariant that a failed key
+  // is NOT re-fetched unless YEAR_RETRY_REQUESTED is explicitly
+  // dispatched. The full-mode smoke relies on this to keep the
+  // real network request count at 1 → 2 (not 1 → many).
+  it("16a. YEAR_REQUEST_FAILED → selector doesn't return the error key as 'idle' (no auto-retry)", async () => {
+    const h = makeHarness(scripted, { active: true, token: "tok" });
+    h.tick();
+    await flush();
+    scripted.resolveNext(
+      syntheticResponse({
+        selectedYear: 2025,
+        availableYears: [2025, 2024, 2023, 2022, 2021],
+      }),
+    );
+    await flush();
+    h.tick();
+    await flush();
+    scripted.rejectNext(new Error("boom"));
+    await flush();
+    // Identify the failed key's year.
+    const failedCall = scripted.calls[scripted.calls.length - 1];
+    const failedYear = failedCall.options.year!;
+    const callsForFailedKeyBefore = scripted.calls.filter(
+      (c) => c.options.year === failedYear,
+    ).length;
+    expect(callsForFailedKeyBefore).toBe(1);
+    // Force many ticks; no extra fetches for the failed key.
+    for (let i = 0; i < 10; i++) {
+      h.tick();
+      await flush();
+    }
+    scripted.drain();
+    await flush();
+    const callsForFailedKeyAfter = scripted.calls.filter(
+      (c) => c.options.year === failedYear,
+    ).length;
+    expect(callsForFailedKeyAfter).toBe(1);
+  });
+
+  it("16b. no fetch is issued for the failed key without YEAR_RETRY_REQUESTED", async () => {
+    const h = makeHarness(scripted, { active: true, token: "tok" });
+    h.tick();
+    await flush();
+    scripted.resolveNext(
+      syntheticResponse({
+        selectedYear: 2025,
+        availableYears: [2025, 2024, 2023, 2022, 2021],
+      }),
+    );
+    await flush();
+    h.tick();
+    await flush();
+    // Capture the year that will be rejected. rejectNext rejects the
+    // FIRST pending call; the scheduler picks years ascending so the
+    // first in-flight call is the first year in the slice.
+    const preRejectCalls = scripted.calls.length;
+    scripted.rejectNext(new Error("boom"));
+    await flush();
+    // Find the failed year by inspecting state.requests for the
+    // entry that became 'error' between before and after.
+    const failedEntry = Object.entries(h.state.requests).find(
+      ([, r]) => r !== undefined && r.status === "error",
+    ) as readonly [string, { status: string }] | undefined;
+    expect(failedEntry).toBeDefined();
+    const failedKey = failedEntry![0];
+    const failedYear = Number(failedKey.split(":")[0]);
+    // Drain, force multiple ticks, no dispatch.
+    scripted.drain();
+    await flush();
+    for (let i = 0; i < 10; i++) {
+      h.tick();
+      await flush();
+    }
+    const callsForFailedKey = scripted.calls.filter(
+      (c) => c.options.year === failedYear,
+    ).length;
+    // Only the original failed request — no extra fetches.
+    expect(callsForFailedKey).toBe(1);
+    // failedKeys still references the year.
+    const r = h.state.requests[failedKey as keyof typeof h.state.requests];
+    expect(r).toBeDefined();
+    expect(r!.status).toBe("error");
+  });
+
+  it("16c. dispatch retry → exactly one new fetch for the failed key", async () => {
+    const h = makeHarness(scripted, { active: true, token: "tok" });
+    h.tick();
+    await flush();
+    scripted.resolveNext(
+      syntheticResponse({
+        selectedYear: 2025,
+        availableYears: [2025, 2024, 2023, 2022, 2021],
+      }),
+    );
+    await flush();
+    h.tick();
+    await flush();
+    // Reject one in-flight call as the failure. rejectNext rejects
+    // the first pending call; identify the failed year from state.
+    scripted.rejectNext(new Error("boom"));
+    await flush();
+    const failedEntryC = Object.entries(h.state.requests).find(
+      ([, r]) => r !== undefined && r.status === "error",
+    ) as readonly [string, { status: string }] | undefined;
+    expect(failedEntryC).toBeDefined();
+    const failedKeyC = failedEntryC![0];
+    const failedYear = Number(failedKeyC.split(":")[0]);
+    // Drain remaining in-flight so the scheduler is idle.
+    scripted.drain();
+    await flush();
+    h.tick();
+    await flush();
+    const callsBefore = scripted.calls.length;
+    const failedKeyCallsBefore = scripted.calls.filter(
+      (c) => c.options.year === failedYear,
+    ).length;
+    h.ctrl.retryFailed(h.state);
+    h.tick();
+    await flush();
+    const failedKeyCallsAfter = scripted.calls.filter(
+      (c) => c.options.year === failedYear,
+    ).length;
+    // Exactly one new fetch for the failed key.
+    expect(failedKeyCallsAfter - failedKeyCallsBefore).toBe(1);
+    // And only one new call total (idle set is empty).
+    expect(scripted.calls.length - callsBefore).toBe(1);
+  });
+
+  it("16d. retry success → no further fetches for the same key", async () => {
+    const h = makeHarness(scripted, { active: true, token: "tok" });
+    h.tick();
+    await flush();
+    scripted.resolveNext(
+      syntheticResponse({
+        selectedYear: 2025,
+        availableYears: [2025, 2024, 2023, 2022, 2021],
+      }),
+    );
+    await flush();
+    h.tick();
+    await flush();
+    const firstCall = scripted.calls[scripted.calls.length - 1];
+    const failedYear = firstCall.options.year!;
+    scripted.rejectNext(new Error("boom"));
+    await flush();
+    scripted.drain();
+    await flush();
+    h.tick();
+    await flush();
+    h.ctrl.retryFailed(h.state);
+    h.tick();
+    await flush();
+    scripted.drain();
+    await flush();
+    const failedKeyCalls = scripted.calls.filter(
+      (c) => c.options.year === failedYear,
+    ).length;
+    // Many additional ticks; no further fetches for the now-cached key.
+    for (let i = 0; i < 5; i++) {
+      h.tick();
+      await flush();
+    }
+    const failedKeyCallsAfter = scripted.calls.filter(
+      (c) => c.options.year === failedYear,
+    ).length;
+    expect(failedKeyCallsAfter).toBe(failedKeyCalls);
+  });
 });
 
 // ============================================================

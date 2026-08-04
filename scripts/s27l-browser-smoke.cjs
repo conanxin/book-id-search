@@ -375,6 +375,16 @@ function isHmrRequest(url) {
   let failingYearSuccessfulAttempts = 0;
   let bootstrapRequestCount = 0;
   let yearRequestCounts = {};
+  // S27L-PHASE-C: independent real network-request counter.
+  // Incremented ONLY inside the annual-review request interceptor
+  // when the requested year is FAILING_YEAR. Never incremented in
+  // waitForFunction, DOM queries, timers, or retry state polling.
+  // Reading this counter tells you exactly how many real HTTP
+  // fetches the dashboard issued for FAILING_YEAR — no other
+  // signal (polling, timer, picker, etc.) is mixed in.
+  let failingYearNetworkRequests = 0;
+  let failingYearNetworkRequestsBeforeRetry = 0;
+  let failingYearNetworkRequestsAfterRetry = 0;
 
   await page.setRequestInterception(true);
   page.on("request", async (req) => {
@@ -432,6 +442,9 @@ function isHmrRequest(url) {
         // behaviour — that hides retry coverage.
         if (year === FAILING_YEAR) {
           failingYearAttempts += 1;
+          // S27L-PHASE-C: real network request counter. Increments
+          // here ONLY — never in waitForFunction / DOM / timers.
+          failingYearNetworkRequests += 1;
           if (!allowFailingYearRecovery) {
             return req.respond({
               status: 500,
@@ -880,6 +893,8 @@ function isHmrRequest(url) {
   // 2022 card appears, button disappears) remain strict.
   const callsBeforeRetry = annualReviewCalls;
   const attemptsBeforeRetry = failingYearAttempts;
+  // S27L-PHASE-C: real network-request counter snapshot.
+  failingYearNetworkRequestsBeforeRetry = failingYearNetworkRequests;
   const successfulYearsBeforeRetry = (await getYearCardIds(page)).length;
   const retryBtn = await page.evaluate(() => {
     const btn = document.querySelector(
@@ -899,6 +914,10 @@ function isHmrRequest(url) {
   });
   check("22a. retry-failed button present (visible + enabled)", retryBtn);
   check("22a-pre. at least 1 failing attempt was attempted before retry", attemptsBeforeRetry >= 1);
+  check(
+    "22a-pre. real FAILING_YEAR network requests before retry click === 1 (no auto-retry storm)",
+    failingYearNetworkRequestsBeforeRetry === 1
+  );
   check("22a-pre. year directory currently has 5 successful years (2022 still failing)", successfulYearsBeforeRetry === 5);
 
   if (retryBtn) {
@@ -931,10 +950,13 @@ function isHmrRequest(url) {
     const successfulYearsAfterRetry = (await getYearCardIds(page)).length;
     const callsAfterRetry = annualReviewCalls;
     const attemptsAfterRetry = failingYearAttempts;
+    // S27L-PHASE-C: real network-request counter snapshot.
+    failingYearNetworkRequestsAfterRetry = failingYearNetworkRequests;
     const retryCallsDelta = callsAfterRetry - callsBeforeRetry;
     const retryAttemptsDelta = attemptsAfterRetry - attemptsBeforeRetry;
+    const retryNetworkDelta = failingYearNetworkRequestsAfterRetry - failingYearNetworkRequestsBeforeRetry;
     console.log(
-      `[s27l-smoke] retry result: callsDelta=${retryCallsDelta} attemptsDelta=${retryAttemptsDelta}`
+      `[s27l-smoke] retry result: callsDelta=${retryCallsDelta} attemptsDelta=${retryAttemptsDelta} networkDelta=${retryNetworkDelta} (networkBefore=${failingYearNetworkRequestsBeforeRetry} networkAfter=${failingYearNetworkRequestsAfterRetry})`
     );
     check(
       "22a. retry-failed click triggers new annual-review call(s) for FAILING_YEAR",
@@ -943,6 +965,14 @@ function isHmrRequest(url) {
     check(
       "22a-extra. failingYearAttempts increments by at least 1 (product fires 2 concurrent requests per click)",
       retryAttemptsDelta >= 1
+    );
+    check(
+      "22a-network. real FAILING_YEAR network requests after retry click === 2 (1 → 2, delta 1)",
+      failingYearNetworkRequestsAfterRetry === 2
+    );
+    check(
+      "22a-network. retry click network delta === 1 (no request storm)",
+      retryNetworkDelta === 1
     );
     check(
       "22b. retry succeeds: 2022 is now in the year directory",
