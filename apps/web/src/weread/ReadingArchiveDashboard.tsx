@@ -71,6 +71,7 @@ import {
 import type { ReadingEraRangeLabel } from "./wereadReadingEraMarkdown";
 import { useReadingArchiveMachine } from "./useReadingArchiveMachine";
 import ReadingEraPanel from "./ReadingEraPanel";
+import DualPeriodComparisonPanel from "./DualPeriodComparisonPanel";
 import ReadingComparisonFiltersPanel from "./ReadingComparisonFiltersPanel";
 import type { ReadingEraSegmentationMode } from "./wereadReadingEraModel";
 
@@ -159,6 +160,10 @@ export default function ReadingArchiveDashboard({
   // ----- render: shell (always rendered while active, regardless of bootstrap state) -----
   const yearsAsc = [...dashboardArchive.years].sort((a, b) => a.year - b.year);
   const yearsDesc = [...dashboardArchive.years].sort((a, b) => b.year - a.year);
+  const availableYearsForDualPeriod = useMemo(
+    () => yearsAsc.map((y) => y.year),
+    [yearsAsc],
+  );
 
   return (
     <section
@@ -298,6 +303,15 @@ export default function ReadingArchiveDashboard({
             archive={dashboardArchive}
             mode={eraMode}
             onModeChange={setEraMode}
+            rangeLabel={MODEL_RANGE_TO_ERA_LABEL[modelRange]}
+            topBooksLimit={topBooks}
+            failedYears={failedYears}
+            bootstrapLoading={bootstrapLoading}
+          />
+
+          <DualPeriodComparisonPanel
+            archive={dashboardArchive}
+            availableYears={availableYearsForDualPeriod}
             rangeLabel={MODEL_RANGE_TO_ERA_LABEL[modelRange]}
             topBooksLimit={topBooks}
             failedYears={failedYears}
