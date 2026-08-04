@@ -585,11 +585,27 @@ function isHmrRequest(url) {
       await waitForRetryButtonVisible(page, 20000);
       await new Promise((r) => setTimeout(r, 1500));
     } else {
-      // Cache / round-trip / regression focuses: temporarily open
-      // the gate so FAILING_YEAR can load (the gate is closed again
-      // before the retry section, if any).
+      // Cache / round-trip / regression focuses: open the gate
+      // AND click the retry button so FAILING_YEAR re-enters
+      // the scheduler. Phase B does not auto-retry error keys
+      // — opening the gate alone is not enough. The gate is
+      // closed again before the retry section, if any.
       allowFailingYearRecovery = true;
-      await waitForYearCount(page, 6, 20000);
+      await page.evaluate(() => {
+        const btn = document.querySelector(
+          '[data-testid="weread-reading-archive-retry-failed"]',
+        );
+        if (btn) btn.click();
+      });
+      await page
+        .waitForFunction(
+          () =>
+            !!document.querySelector(
+              '[data-testid="weread-reading-archive-year-2022"]',
+            ),
+          { timeout: 20000 },
+        )
+        .catch(() => {});
       allowFailingYearRecovery = false;
       await new Promise((r) => setTimeout(r, 1500));
     }
@@ -673,9 +689,33 @@ function isHmrRequest(url) {
   await runIfActive("bootstrap-6", async () => {
     await page.click('[data-testid="weread-reading-archive-range-all"]');
     if (focus === null) {
-      // Full mode: open the gate temporarily so all 6 can load.
+      // Full mode: gate open + manual retry click to fetch 2022.
+      // S27L-PHASE-C: Phase B scheduler skips error keys; we must
+      // explicitly trigger the retry so the failed key re-enters
+      // the scheduler queue. Opening the gate alone is not enough.
       allowFailingYearRecovery = true;
-      await waitForYearCount(page, 6, 15000);
+      const retryTriggered = await page.evaluate(() => {
+        const btn = document.querySelector(
+          '[data-testid="weread-reading-archive-retry-failed"]',
+        );
+        if (btn) {
+          btn.click();
+          return true;
+        }
+        return false;
+      });
+      if (retryTriggered) {
+        // Wait for the 6th card to appear (2022).
+        await page
+          .waitForFunction(
+            () =>
+              !!document.querySelector(
+                '[data-testid="weread-reading-archive-year-2022"]',
+              ),
+            { timeout: 15000 },
+          )
+          .catch(() => {});
+      }
       allowFailingYearRecovery = false;
     } else {
       // Focused mode: prerequisite already loaded what it could.
@@ -791,9 +831,24 @@ function isHmrRequest(url) {
     await page.waitForSelector('[data-testid="weread-reading-archive-range-all"]', { timeout: 25000 });
     await page.click('[data-testid="weread-reading-archive-range-all"]');
     if (focus === null) {
-      // Full mode: temporarily open the gate so all 6 years load.
+      // Full mode: open the gate AND click retry so 2022 loads.
+      // Phase B does not auto-retry; the retry click is required.
       allowFailingYearRecovery = true;
-      await waitForYearCount(page, 6, 15000);
+      await page.evaluate(() => {
+        const btn = document.querySelector(
+          '[data-testid="weread-reading-archive-retry-failed"]',
+        );
+        if (btn) btn.click();
+      });
+      await page
+        .waitForFunction(
+          () =>
+            !!document.querySelector(
+              '[data-testid="weread-reading-archive-year-2022"]',
+            ),
+          { timeout: 15000 },
+        )
+        .catch(() => {});
       allowFailingYearRecovery = false;
     } else {
       await new Promise((r) => setTimeout(r, 1500));
@@ -823,7 +878,13 @@ function isHmrRequest(url) {
   // the retry button). A page reload is the cleanest reset: the
   // hook re-bootstraps, all 6 years re-fetch, and with the gate
   // closed 2022 fails on every attempt.
+  //
+  // S27L-PHASE-C: reset the network-request counter at this
+  // boundary so the safety gate measures ONLY the reload under
+  // test (plus the manual retry click). The bootstrap section's
+  // earlier request is not part of the safety contract.
   console.log(`[s27l-smoke] pre-retry reset: failingAttempts=${failingYearAttempts} callsBefore=${annualReviewCalls}`);
+  failingYearNetworkRequests = 0;
   await page.goto(URL, { waitUntil: "load", timeout: 30000 });
   await page.waitForSelector('[data-testid="weread-tab-archive"]', { timeout: 20000 });
   // evaluateOnNewDocument already re-sets the token, so the
@@ -989,6 +1050,15 @@ function isHmrRequest(url) {
     '[data-testid="weread-reading-archive-retry-failed"]'
   ));
   check("22c. retry button disappears after successful retry", !retryBtnAfter);
+
+  // S27L-PHASE-C: stability wait. After a successful retry the
+  // counter must stay flat for 3+ seconds — no auto-retry storm.
+  const stabilitySnapshot = failingYearNetworkRequests;
+  await new Promise((r) => setTimeout(r, 3500));
+  check(
+    "22a-network-stability. FAILING_YEAR network count unchanged after 3.5s stability wait (no auto-retry)",
+    failingYearNetworkRequests === stabilitySnapshot
+  );
 
   // 23: open annual-year button works
   const openBtnExists = await page.evaluate(() => !!document.querySelector('[data-testid="weread-reading-archive-open-2024"]'));
