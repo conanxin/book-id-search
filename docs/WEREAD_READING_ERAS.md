@@ -90,3 +90,16 @@ S27M-2 在「阅读阶段」面板增加**导出阅读阶段 Markdown** 按钮�
 - 不输出原始 archive/era JSON；不包含心理 / 兴趣 / 人格 / 阅读质量推断。
 
 详见 `docs/WEREAD_READING_ERAS_MARKDOWN.md`。
+
+## 8. 长期比较筛选（S27N）
+
+S27N 在「阅读阶段」面板之后、年度档案目录之前，新增「长期比较筛选」面板。筛选作用于当前已加载档案：
+
+- 六类筛选：起始年份 / 结束年份 / 最低阅读记录 / 最低活跃月份 / Recurring 最低上榜年份 / 榜单重合范围。
+- 默认纳入全部成功加载年份，恢复默认按钮一键清空。
+- 被排除年份及原因（中文）：早于起始年份 / 晚于结束年份 / 低于最低阅读记录 / 低于最低活跃月份。
+- 输出：纳入/排除计数、年份范围、合计、年均记录；年度指标比较表；筛选范围内 Recurring Books；相邻年度榜单重合（按当前 overlap filter）。
+- 不重新请求 annual-review、不调用 AI、不调用 related-books、不写 storage、不写入 URL、不修改 archive reducer / cache / retry 语义。
+- 不输出心理 / 兴趣 / 人格 / 质量推断。
+
+详见 `docs/WEREAD_READING_COMPARISON_FILTERS.md`。

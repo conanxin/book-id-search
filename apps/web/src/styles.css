@@ -6120,3 +6120,248 @@ mark.hl {
 .weread-reading-era__export-status--error {
   color: #c53030;
 }
+
+.weread-reading-comparison {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid #cdd2de;
+  border-radius: 8px;
+  background: #fafbfd;
+}
+
+.weread-reading-comparison__notice h3 {
+  margin: 0 0 6px 0;
+  font-size: 14px;
+}
+
+.weread-reading-comparison__notice-body {
+  margin: 0;
+  font-size: 12px;
+  color: #4a5366;
+  line-height: 1.55;
+}
+
+.weread-reading-comparison__controls {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 12px;
+  font-size: 13px;
+  color: #4a5366;
+}
+
+.weread-reading-comparison__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.weread-reading-comparison__field span {
+  font-size: 12px;
+  color: #6a7384;
+}
+
+.weread-reading-comparison__field select {
+  padding: 4px 6px;
+  border: 1px solid #cdd2de;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13px;
+}
+
+.weread-reading-comparison__field select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.weread-reading-comparison__actions {
+  display: flex;
+  align-items: end;
+}
+
+.weread-reading-comparison__reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: #1f2a44;
+  background: #f4f5f8;
+  border: 1px solid #cdd2de;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.weread-reading-comparison__reset:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.weread-reading-comparison__summary {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #dde1ea;
+  border-radius: 8px;
+}
+
+.weread-reading-comparison__summary h4 {
+  margin: 0 0 6px 0;
+  font-size: 13px;
+}
+
+.weread-reading-comparison__summary ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px 12px;
+  font-size: 12px;
+  color: #4a5366;
+}
+
+.weread-reading-comparison__excluded {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #dde1ea;
+  border-radius: 8px;
+}
+
+.weread-reading-comparison__excluded h4 {
+  margin: 0 0 6px 0;
+  font-size: 13px;
+}
+
+.weread-reading-comparison__excluded ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: #4a5366;
+}
+
+.weread-reading-comparison__excluded li {
+  padding: 2px 0;
+}
+
+.weread-reading-comparison__table {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #dde1ea;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+
+.weread-reading-comparison__table h4 {
+  margin: 0 0 6px 0;
+  font-size: 13px;
+}
+
+.weread-reading-comparison__table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.weread-reading-comparison__table th,
+.weread-reading-comparison__table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid #eef0f5;
+  text-align: right;
+}
+
+.weread-reading-comparison__table th:first-child,
+.weread-reading-comparison__table td:first-child {
+  text-align: left;
+}
+
+.weread-reading-comparison__books {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #dde1ea;
+  border-radius: 8px;
+}
+
+.weread-reading-comparison__books h4 {
+  margin: 0 0 6px 0;
+  font-size: 13px;
+}
+
+.weread-reading-comparison__books ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.weread-reading-comparison__book {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+  padding: 4px 0;
+}
+
+.weread-reading-comparison__book a {
+  color: #2b6cb0;
+  text-decoration: none;
+}
+
+.weread-reading-comparison__book a:hover {
+  text-decoration: underline;
+}
+
+.weread-reading-comparison__book span {
+  font-size: 12px;
+  color: #6a7384;
+}
+
+.weread-reading-comparison__overlap {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #dde1ea;
+  border-radius: 8px;
+}
+
+.weread-reading-comparison__overlap h4 {
+  margin: 0 0 6px 0;
+  font-size: 13px;
+}
+
+.weread-reading-comparison__overlap ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: #4a5366;
+}
+
+.weread-reading-comparison__overlap li {
+  padding: 2px 0;
+}
+
+.weread-reading-comparison__empty {
+  margin: 10px 0 0 0;
+  font-size: 12px;
+  color: #4a5366;
+}
+
+@media (max-width: 720px) {
+  .weread-reading-comparison__controls {
+    grid-template-columns: 1fr;
+  }
+  .weread-reading-comparison__summary ul {
+    grid-template-columns: 1fr;
+  }
+  .weread-reading-comparison__books ul {
+    grid-template-columns: 1fr;
+  }
+}

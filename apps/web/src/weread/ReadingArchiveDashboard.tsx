@@ -71,6 +71,7 @@ import {
 import type { ReadingEraRangeLabel } from "./wereadReadingEraMarkdown";
 import { useReadingArchiveMachine } from "./useReadingArchiveMachine";
 import ReadingEraPanel from "./ReadingEraPanel";
+import ReadingComparisonFiltersPanel from "./ReadingComparisonFiltersPanel";
 import type { ReadingEraSegmentationMode } from "./wereadReadingEraModel";
 
 const MODEL_RANGE_TO_ERA_LABEL: Record<
@@ -300,6 +301,11 @@ export default function ReadingArchiveDashboard({
             rangeLabel={MODEL_RANGE_TO_ERA_LABEL[modelRange]}
             topBooksLimit={topBooks}
             failedYears={failedYears}
+            bootstrapLoading={bootstrapLoading}
+          />
+
+          <ReadingComparisonFiltersPanel
+            archive={dashboardArchive}
             bootstrapLoading={bootstrapLoading}
           />
 
