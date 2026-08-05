@@ -177,15 +177,51 @@ leftover temp downloads in `/tmp`.
 
 ## REQUEST_SAFETY
 
-| Suite   | before-retry | after-retry | delta | stability wait |
-|---------|--------------|-------------|-------|----------------|
-| S27M    | 1            | 2           | 1     | 3              |
-| S27M-2  | 1            | 2           | 1     | 3              |
-| S27N    | 1            | 2           | 1     | 2              |
-| S27N-2  | 1            | 2           | 1     | 3              |
+| Suite   | before-retry | after-retry | delta | stability wait | explicit action after wait |
+|---------|--------------|-------------|-------|----------------|---------------------------|
+| S27M    | 1            | 2           | 1     | 3              | Top N 12→18 (cache miss on all years including failing-year) |
+| S27M-2  | 1            | 2           | 1     | 3              | Top N 12→18 (cache miss on all years including failing-year) |
+| S27N    | 1            | 2           | 1     | 2              | Top N 18→12 (cached subset — 0 new fetches) |
+| S27N-2  | 1            | 2           | 1     | 3              | Top N 12→18 (cache miss on all years including failing-year) |
 
 The 1→2 retry safety contract is unchanged. Stability wait does not grow
 across runs.
+
+### Per-suite stability-wait value clarification
+
+The `stabilityAfter3.5s` reading is printed at the END of each smoke run,
+AFTER all subsequent checks have executed. It is NOT the request count
+immediately after the 3.5s wait — it is the request count after the wait
+PLUS any subsequent explicit user actions that triggered network requests.
+
+- **S27M / S27M-2 / S27N-2 — stabilityAfter3.5s=3**:
+  After the 3.5s stability wait the smoke clicks the Top N dropdown from
+  12 to 18. Top N is an independent cache dimension in
+  `wereadReadingArchiveState.ts` (line 458: `TOP_BOOKS_CHANGED` keeps old
+  Top N entries and adds the new one). Switching from 12 to 18 triggers a
+  cache miss on every year, including the previously-cached failing-year.
+  Each year gets exactly one fresh request, so `yearRequestCounts[FAILING_YEAR]`
+  rises from 2 to 3.
+
+- **S27N — stabilityAfter3.5s=2**:
+  After the 3.5s stability wait the smoke clicks the Top N dropdown from
+  18 back to 12. The 12-entry is already cached from the initial bootstrap
+  (the smoke starts with `recent5` range and default Top N=12), so the
+  cache hits and `yearRequestCounts[FAILING_YEAR]` stays at 2.
+
+### No automatic retry
+
+The 1→2 increment at the `retry-failed` click is the EXPLICIT user
+action, not auto-retry. The 3.5s stability wait before any subsequent
+Top N action proves there is NO auto-retry mechanism — if there were,
+the failing-year count would climb during the 3.5s wait, not stay at 2.
+
+The 3-suite value 3 is therefore:
+- Explicit: Top N dropdown click (`weread-reading-archive-top-books-18`).
+- Expected: 1 (initial) + 1 (retry click) + 1 (Top N switch) = 3.
+- Not a stability-wait violation: stability-wait itself held at 2.
+- Not auto-retry: 3.5s wait shows no growth.
+- Deterministic across sequential runs: confirmed in run 1 + run 2.
 
 ## PRIVACY_BOUNDARY
 
