@@ -273,3 +273,23 @@ S27K-2 在「年度对比」面板新增「导出年度对比 Markdown」按钮�
 - 不读取笔记正文 / 不调用 AI / 不调用 related-books / 不写 localStorage / sessionStorage / IndexedDB / 服务器。
 - 不做兴趣 / 心理 / 阅读质量判断；UI 上有显式「多年榜单重合仅代表榜单交集」与「不推断阅读偏好」声明。
 - 暂不支持长期档案导出（留作 S27L-2）。
+
+### 年度统计演变时间线（S27P）
+
+`WereadCenter` 自 S27P 起在「长期档案」工作区新增「年度统计演变时间线」面板。详见 `docs/WEREAD_READING_EVOLUTION_TIMELINE.md`：
+
+- 完全复用当前已加载的 `WereadReadingArchive`，不新增 API endpoint、不重新请求 `annual-review`。
+- 按相邻成功年份顺序计算描述性统计差异：记录数、活跃月份、高互动书目数、榜单重叠数、月均记录、高峰月份记录。
+- 相邻年份差异超过数值阈值时标记为「显著增加 / 显著减少」；标记仅描述数字变化，不推断阅读兴趣、心理特征或阅读质量。
+- Top N 公共书目差异按相邻年份榜单做集合差分：连续出现、新进入、离开。
+- 任何失败年份自动跳过，仅对连续成功年份段计算，并在顶部显示 completeness 提示。
+- 不读取笔记正文、不调用 AI / related-books、不写 `localStorage` / `sessionStorage` / IndexedDB / 服务器。
+
+#### 年度统计演变时间线 Markdown 导出（S27P-2）
+
+S27P-2 在「年度统计演变时间线」面板新增「导出时间线 Markdown」按钮，纯浏览器本地生成。详见 `docs/WEREAD_READING_EVOLUTION_TIMELINE_MARKDOWN.md`：
+
+- 文件名 `weread-reading-evolution-<first>-to-<latest>-YYYYMMDD.md`（空档案为 `...-empty-YYYYMMDD.md`），纯 ASCII，长度 ≤ 80。
+- MIME `text/markdown;charset=utf-8`；含时间线概览、里程碑、年度详情、相邻年度指标差异、Top N 书目差异、方法说明。
+- 不重新请求 annual-review API、不调用 AI / related-books、不写 `localStorage` / `sessionStorage` / IndexedDB / 服务器。
+- 不输出真实笔记正文 / 私有 ID / AI 摘要 / 心理推断词汇。

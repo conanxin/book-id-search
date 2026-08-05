@@ -356,7 +356,7 @@ Caddy 是公网唯一入口。3001/5173/7700 全部绑定 `127.0.0.1`。
 
 最终公网复核报告：[reports/FINAL_PUBLIC_ACCESS_VERIFICATION.md](reports/FINAL_PUBLIC_ACCESS_VERIFICATION.md)。
 
-当前稳定 tag：`v0.20.2-weread-hook-order-hotfix`。
+当前稳定 tag：`v0.21.1-weread-reading-evolution-timeline-markdown`。\n
 
 ## WeRead Center
 
@@ -449,3 +449,20 @@ Caddy 是公网唯一入口。3001/5173/7700 全部绑定 `127.0.0.1`。
 - 两年空数据也允许导出，输出零值结构；不输出心理 / 兴趣 / 性格推断。
 - 不重新调用 annual-review API、不调用 AI、不调用 related-books、不写 `localStorage` / `sessionStorage` / IndexedDB / 服务器。
 - 详见 [docs/WEREAD_YEAR_COMPARISON_MARKDOWN.md](docs/WEREAD_YEAR_COMPARISON_MARKDOWN.md)。
+
+### S27P · 年度统计演变时间线
+- 在「长期档案」工作区新增「年度统计演变时间线」面板，复用当前已加载的 `WereadReadingArchive`。
+- 按相邻成功年份顺序计算六项描述性指标差异：记录数、活跃月份、高互动书目数、榜单重叠数、月均记录、高峰月份记录。
+- 差异超过数值阈值时标记为「显著增加 / 显著减少」；仅描述数字变化，不推断阅读兴趣、心理特征或阅读质量。
+- 按相邻年份 Top N 榜单做集合差分：连续出现、新进入、离开。
+- 失败年份自动跳过，仅对连续成功年份段计算，并在顶部显示 completeness 提示。
+- 不读取笔记正文、不调用 AI / related-books、不写 `localStorage` / `sessionStorage` / `IndexedDB` / 服务器。
+- 详见 [docs/WEREAD_READING_EVOLUTION_TIMELINE.md](docs/WEREAD_READING_EVOLUTION_TIMELINE.md)。
+
+### S27P-2 · 浏览器本地 Timeline Markdown 导出
+- 「年度统计演变时间线」面板新增「导出时间线 Markdown」按钮，纯浏览器本地生成。
+- 文件名 `weread-reading-evolution-<first>-to-<latest>-YYYYMMDD.md`（空档案为 `...-empty-YYYYMMDD.md`），纯 ASCII，长度 ≤ 80。
+- MIME `text/markdown;charset=utf-8`；含时间线概览、里程碑、年度详情、相邻年度指标差异、Top N 书目差异、方法说明。
+- 不重新调用 annual-review API、不调用 AI / related-books、不写 `localStorage` / `sessionStorage` / `IndexedDB` / 服务器。
+- 不输出真实笔记正文 / 私有 ID / AI 摘要 / 心理推断词汇。
+- 详见 [docs/WEREAD_READING_EVOLUTION_TIMELINE_MARKDOWN.md](docs/WEREAD_READING_EVOLUTION_TIMELINE_MARKDOWN.md)。

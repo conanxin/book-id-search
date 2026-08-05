@@ -16,9 +16,8 @@
 - **支持浏览器本地 Markdown 导出**（S27L-2，见 `WEREAD_READING_ARCHIVE_MARKDOWN.md`）。
 - **支持阅读阶段 Markdown 导出**（S27M-2，在「阅读阶段」面板导出当前阶段结果，见 `WEREAD_READING_ERAS_MARKDOWN.md`）。
 - **支持长期比较筛选**（S27N，在「长期比较筛选」面板按年份范围/记录阈值/榜单重合范围筛选比较结果，见 `WEREAD_READING_COMPARISON_FILTERS.md`）。
-- **支持筛选比较 Markdown 导出**（S27N-2，在「长期比较筛选」面板导出当前筛选结果为浏览器本地 Markdown，见 `WEREAD_READING_COMPARISON_MARKDOWN.md`）。
-
-## 2. 年份范围与切片
+- **支持年度统计演变时间线**（S27P，在「长期档案」内新增时间线面板，展示相邻年度指标差异与 Top N 书目进入/离开/连续出现，见 `WEREAD_READING_EVOLUTION_TIMELINE.md`）。
+- **支持浏览器本地 Timeline Markdown 导出**（S27P-2，在「年度统计演变时间线」面板导出当前时间线结果为 Markdown，见 `WEREAD_READING_EVOLUTION_TIMELINE_MARKDOWN.md`）。
 
 | 选项 | 实际加载年份数 | 备注 |
 |------|---------------|------|
@@ -118,6 +117,8 @@
 
 **相关文件：**
 
+- Markdown 导出：[`WEREAD_READING_ARCHIVE_MARKDOWN.md`](./WEREAD_READING_ARCHIVE_MARKDOWN.md)、[`WEREAD_READING_ERAS_MARKDOWN.md`](./WEREAD_READING_ERAS_MARKDOWN.md)、[`WEREAD_READING_COMPARISON_MARKDOWN.md`](./WEREAD_READING_COMPARISON_MARKDOWN.md)、[`WEREAD_READING_EVOLUTION_TIMELINE_MARKDOWN.md`](./WEREAD_READING_EVOLUTION_TIMELINE_MARKDOWN.md)
+- 时间线面板：[`WEREAD_READING_EVOLUTION_TIMELINE.md`](./WEREAD_READING_EVOLUTION_TIMELINE.md)
 - 模型：`apps/web/src/weread/wereadReadingArchiveModel.ts`
 - 组件：`apps/web/src/weread/ReadingArchiveDashboard.tsx`
 - 测试：`apps/web/src/weread/wereadReadingArchiveModel.test.ts`（56 项） + `apps/web/src/weread/ReadingArchiveDashboard.test.ts`（60 项）
