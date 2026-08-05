@@ -74,6 +74,7 @@ import ReadingEraPanel from "./ReadingEraPanel";
 import DualPeriodComparisonPanel from "./DualPeriodComparisonPanel";
 import ReadingComparisonFiltersPanel from "./ReadingComparisonFiltersPanel";
 import ReadingEvolutionTimelinePanel from "./ReadingEvolutionTimelinePanel";
+import ReadingDataQualityAuditPanel from "./ReadingDataQualityAuditPanel";
 import type { ReadingEraSegmentationMode } from "./wereadReadingEraModel";
 
 const MODEL_RANGE_TO_ERA_LABEL: Record<
@@ -303,6 +304,14 @@ export default function ReadingArchiveDashboard({
           <ArchiveOverviewSection archive={dashboardArchive} />
 
           <ArchiveTimelineSection years={yearsAsc} />
+
+          <ReadingDataQualityAuditPanel
+            archive={dashboardArchive}
+            targetYears={archive.visibleYears}
+            failedYears={failedYears}
+            topBooksLimit={topBooks}
+            bootstrapLoading={bootstrapLoading}
+          />
 
           <ReadingEvolutionTimelinePanel
             archive={dashboardArchive}
