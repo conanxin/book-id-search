@@ -73,6 +73,7 @@ import { useReadingArchiveMachine } from "./useReadingArchiveMachine";
 import ReadingEraPanel from "./ReadingEraPanel";
 import DualPeriodComparisonPanel from "./DualPeriodComparisonPanel";
 import ReadingComparisonFiltersPanel from "./ReadingComparisonFiltersPanel";
+import ReadingEvolutionTimelinePanel from "./ReadingEvolutionTimelinePanel";
 import type { ReadingEraSegmentationMode } from "./wereadReadingEraModel";
 
 const MODEL_RANGE_TO_ERA_LABEL: Record<
@@ -302,6 +303,14 @@ export default function ReadingArchiveDashboard({
           <ArchiveOverviewSection archive={dashboardArchive} />
 
           <ArchiveTimelineSection years={yearsAsc} />
+
+          <ReadingEvolutionTimelinePanel
+            archive={dashboardArchive}
+            rangeLabel={MODEL_RANGE_TO_ERA_LABEL[modelRange]}
+            topBooksLimit={topBooks}
+            failedYears={failedYears}
+            bootstrapLoading={bootstrapLoading}
+          />
 
           <ReadingEraPanel
             archive={dashboardArchive}

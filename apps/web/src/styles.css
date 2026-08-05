@@ -6430,3 +6430,520 @@ mark.hl {
 .weread-reading-comparison__export-status--error {
   color: #c53030;
 }
+
+/* ----- S27P-2: reading evolution timeline ----- */
+
+.weread-reading-evolution {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid #cdd2de;
+  border-radius: 8px;
+  background: #fafbfd;
+}
+
+.weread-reading-evolution__header h3 {
+  margin: 0 0 6px 0;
+  font-size: 14px;
+}
+
+.weread-reading-evolution__notice {
+  margin: 0 0 8px 0;
+  font-size: 12px;
+  color: #4a5366;
+  line-height: 1.55;
+}
+
+.weread-reading-evolution__completeness {
+  margin-top: 6px;
+}
+
+.weread-reading-evolution__scope-line {
+  margin: 0;
+  font-size: 12px;
+  color: #4a5366;
+  line-height: 1.55;
+}
+
+.weread-reading-evolution__partial-failure {
+  margin: 4px 0 0 0;
+  font-size: 12px;
+  color: #6a7384;
+  line-height: 1.55;
+}
+
+.weread-reading-evolution__summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.weread-reading-evolution__stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid #cdd2de;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.weread-reading-evolution__stat-label {
+  font-size: 11px;
+  color: #6a7384;
+}
+
+.weread-reading-evolution__stat-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2a44;
+}
+
+.weread-reading-evolution__stat-hint {
+  font-size: 11px;
+  color: #6a7384;
+  line-height: 1.4;
+}
+
+.weread-reading-evolution__milestones {
+  margin-top: 12px;
+}
+
+.weread-reading-evolution__milestones h4 {
+  margin: 0 0 6px 0;
+  font-size: 13px;
+  color: #1f2a44;
+}
+
+.weread-reading-evolution__milestone-list {
+  margin: 0;
+  padding-left: 18px;
+  list-style: decimal;
+}
+
+.weread-reading-evolution__milestone {
+  margin: 4px 0;
+  font-size: 12px;
+  color: #1f2a44;
+  line-height: 1.55;
+}
+
+.weread-reading-evolution__milestone--year_gap,
+.weread-reading-evolution__milestone--statistical_shift {
+  font-weight: 500;
+}
+
+.weread-reading-evolution__milestone-year {
+  margin-right: 6px;
+  color: #1f2a44;
+  font-weight: 500;
+}
+
+.weread-reading-evolution__milestone-kind {
+  margin-right: 6px;
+  color: #4a5366;
+}
+
+.weread-reading-evolution__milestone-score {
+  margin-right: 6px;
+  color: #6a7384;
+  font-size: 11px;
+}
+
+.weread-reading-evolution__milestone-reasons {
+  margin: 4px 0 0 0;
+  padding-left: 18px;
+  list-style: disc;
+}
+
+.weread-reading-evolution__milestone-reason {
+  margin: 2px 0;
+  font-size: 11px;
+  color: #4a5366;
+}
+
+.weread-reading-evolution__timeline {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.weread-reading-evolution__timeline-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.weread-reading-evolution__year {
+  padding: 10px 12px;
+  border: 1px solid #d8dde6;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.weread-reading-evolution__year-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.weread-reading-evolution__year-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2a44;
+}
+
+.weread-reading-evolution__year-topn {
+  font-size: 11px;
+  color: #6a7384;
+}
+
+.weread-reading-evolution__year-stats {
+  margin: 6px 0 0 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 6px;
+}
+
+.weread-reading-evolution__year-stats > div {
+  margin: 0;
+  padding: 4px 0;
+  border-top: 1px solid #eef0f5;
+}
+
+.weread-reading-evolution__year-stats dt {
+  font-size: 11px;
+  color: #6a7384;
+  margin: 0;
+}
+
+.weread-reading-evolution__year-stats dd {
+  margin: 0;
+  font-size: 13px;
+  color: #1f2a44;
+  font-weight: 500;
+}
+
+.weread-reading-evolution__year-top-books {
+  margin-top: 8px;
+}
+
+.weread-reading-evolution__year-top-books-scope {
+  margin: 0 0 4px 0;
+  font-size: 11px;
+  color: #6a7384;
+  line-height: 1.5;
+}
+
+.weread-reading-evolution__year-top-books-list {
+  margin: 0;
+  padding-left: 18px;
+  list-style: decimal;
+}
+
+.weread-reading-evolution__book {
+  margin: 4px 0;
+  font-size: 12px;
+  color: #1f2a44;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.weread-reading-evolution__book-rank {
+  font-size: 11px;
+  color: #6a7384;
+}
+
+.weread-reading-evolution__book-title {
+  color: #1f2a44;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.weread-reading-evolution__book-title:hover {
+  text-decoration: underline;
+}
+
+.weread-reading-evolution__book-author {
+  font-size: 11px;
+  color: #6a7384;
+}
+
+.weread-reading-evolution__year-top-books-more {
+  margin: 4px 0 0 0;
+  font-size: 11px;
+  color: #6a7384;
+}
+
+.weread-reading-evolution__transition {
+  padding: 10px 12px;
+  border: 1px dashed #cdd2de;
+  border-radius: 6px;
+  background: #fff;
+  margin-left: 16px;
+}
+
+.weread-reading-evolution__transition--significant {
+  border-style: solid;
+  border-color: #9aa7c2;
+  background: #f5f7fb;
+}
+
+.weread-reading-evolution__transition-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.weread-reading-evolution__transition-header h4 {
+  margin: 0;
+  font-size: 13px;
+  color: #1f2a44;
+}
+
+.weread-reading-evolution__transition-score {
+  font-size: 11px;
+  color: #6a7384;
+}
+
+.weread-reading-evolution__transition-significance {
+  font-size: 11px;
+  color: #4a5366;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #eef0f5;
+}
+
+.weread-reading-evolution__transition--significant .weread-reading-evolution__transition-significance {
+  background: #d6e0f0;
+  color: #1f2a44;
+}
+
+.weread-reading-evolution__transition-overlap {
+  margin-top: 6px;
+}
+
+.weread-reading-evolution__transition-overlap p {
+  margin: 2px 0;
+  font-size: 11px;
+  color: #4a5366;
+}
+
+.weread-reading-evolution__reasons {
+  margin-top: 6px;
+}
+
+.weread-reading-evolution__reasons-list {
+  margin: 0;
+  padding-left: 18px;
+  list-style: disc;
+}
+
+.weread-reading-evolution__reason {
+  margin: 2px 0;
+  font-size: 11px;
+  color: #4a5366;
+}
+
+.weread-reading-evolution__reasons-empty {
+  margin: 0;
+  font-size: 11px;
+  color: #6a7384;
+}
+
+.weread-reading-evolution__metrics {
+  margin-top: 8px;
+}
+
+.weread-reading-evolution__metrics h4 {
+  margin: 0 0 4px 0;
+  font-size: 12px;
+  color: #1f2a44;
+}
+
+.weread-reading-evolution__metrics-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.weread-reading-evolution__metrics-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  color: #1f2a44;
+}
+
+.weread-reading-evolution__metrics-table th,
+.weread-reading-evolution__metrics-table td {
+  padding: 4px 6px;
+  border: 1px solid #eef0f5;
+  text-align: left;
+}
+
+.weread-reading-evolution__metrics-table thead th {
+  background: #f4f5f8;
+  font-weight: 600;
+}
+
+.weread-reading-evolution__metric-absolute {
+  font-weight: 500;
+}
+
+.weread-reading-evolution__metric-percent {
+  margin-left: 4px;
+  color: #6a7384;
+}
+
+.weread-reading-evolution__metric-direction {
+  margin-left: 4px;
+  font-size: 11px;
+  color: #4a5366;
+}
+
+.weread-reading-evolution__books {
+  margin-top: 8px;
+}
+
+.weread-reading-evolution__books h4 {
+  margin: 0 0 4px 0;
+  font-size: 12px;
+  color: #1f2a44;
+}
+
+.weread-reading-evolution__book-summary p {
+  margin: 2px 0 6px 0;
+  font-size: 11px;
+  color: #4a5366;
+}
+
+.weread-reading-evolution__book-details {
+  margin-top: 6px;
+}
+
+.weread-reading-evolution__book-details summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: #1f2a44;
+  padding: 4px 0;
+}
+
+.weread-reading-evolution__book-diff-group {
+  margin-top: 6px;
+}
+
+.weread-reading-evolution__book-diff-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+  margin-bottom: 2px;
+}
+
+.weread-reading-evolution__book-diff-header h5 {
+  margin: 0;
+  font-size: 11px;
+  color: #1f2a44;
+}
+
+.weread-reading-evolution__book-diff-count {
+  font-size: 11px;
+  color: #6a7384;
+}
+
+.weread-reading-evolution__book-diff-list {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.weread-reading-evolution__book-diff {
+  margin: 4px 0;
+  padding: 4px 0;
+  border-top: 1px solid #eef0f5;
+  font-size: 11px;
+  color: #1f2a44;
+}
+
+.weread-reading-evolution__book-diff-title {
+  color: #1f2a44;
+  text-decoration: none;
+  font-weight: 500;
+  margin-right: 6px;
+}
+
+.weread-reading-evolution__book-diff-title:hover {
+  text-decoration: underline;
+}
+
+.weread-reading-evolution__book-diff-author {
+  color: #6a7384;
+  margin-right: 6px;
+}
+
+.weread-reading-evolution__book-diff-stats {
+  margin: 4px 0 0 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 4px;
+}
+
+.weread-reading-evolution__book-diff-stats > div {
+  margin: 0;
+}
+
+.weread-reading-evolution__book-diff-stats dt {
+  font-size: 10px;
+  color: #6a7384;
+  margin: 0;
+}
+
+.weread-reading-evolution__book-diff-stats dd {
+  margin: 0;
+  font-size: 11px;
+  color: #1f2a44;
+}
+
+.weread-reading-evolution__book-diff-empty {
+  margin: 4px 0;
+  font-size: 11px;
+  color: #6a7384;
+}
+
+.weread-reading-evolution__book-diff-overflow {
+  margin: 4px 0 0 0;
+  font-size: 11px;
+  color: #6a7384;
+}
+
+.weread-reading-evolution__loading,
+.weread-reading-evolution__empty,
+.weread-reading-evolution__single-year {
+  margin: 8px 0 0 0;
+  font-size: 12px;
+  color: #6a7384;
+  line-height: 1.55;
+}
+
+.weread-reading-evolution__privacy {
+  margin: 10px 0 0 0;
+  font-size: 11px;
+  color: #6a7384;
+  line-height: 1.55;
+}
+
+@media (max-width: 720px) {
+  .weread-reading-evolution__summary,
+  .weread-reading-evolution__year-stats,
+  .weread-reading-evolution__book-diff-stats {
+    grid-template-columns: 1fr;
+  }
+  .weread-reading-evolution__transition {
+    margin-left: 0;
+  }
+}
