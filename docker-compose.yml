@@ -42,6 +42,7 @@ services:
       - ./private-data/weread:/app/private-data/weread:ro
 
   web:
+    image: ${BOOK_ID_SEARCH_WEB_IMAGE:-book-id-search/web:dev}
     build:
       context: .
       dockerfile: apps/web/Dockerfile
