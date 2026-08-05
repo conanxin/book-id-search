@@ -8,7 +8,7 @@
  * layer (no DOM testing library).
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
@@ -939,5 +939,233 @@ describe("ReadingArchiveDashboard — S27L-2 Markdown export wiring", () => {
 
   it("export button copy is localizable Chinese", () => {
     expect(dashboard).toMatch(/导出长期档案 Markdown/);
+  });
+});
+
+// ============================================================================
+// S27P-0B — Reading Archive hook-order regression (Rules of Hooks hard-rules)
+// ----------------------------------------------------------------------------
+// The S27P-0 diagnostic proved that calling `useMemo` after the
+// `if (!active)` early return corrupts React's internal hook list when the
+// smoke does an "archive → notes → archive" round-trip. The fix is to
+// guarantee that EVERY hook call in ReadingArchiveDashboard is invoked
+// BEFORE any conditional return — including the three derived values
+// (`yearsAsc`, `yearsDesc`, `availableYearsForDualPeriod`) that were
+// previously nested after the early return.
+//
+// These tests are the regression net for that fix. They are guarded by
+// source-level structural checks (the most authoritative way to catch
+// Rules of Hooks violations) plus a real React render using
+// react-dom/server's renderToStaticMarkup (the same tool already used by
+// S27O-2 / DualPeriodComparisonPanel.test.tsx).
+// ============================================================================
+
+
+describe("ReadingArchiveDashboard — S27P-0B hook-order regression (parent body only)", () => {
+  // Scope to the body of the parent `export default function
+  // ReadingArchiveDashboard({...})`, NOT to the sub-component
+  // `ReadingArchiveExportAction` that lives later in the same file.
+  function sliceParentBody(): string {
+    const startMatch = dashboardCode.match(
+      /export default function ReadingArchiveDashboard[\s\S]*?\)\s*\{/,
+    );
+    if (!startMatch || startMatch.index === undefined) return "";
+    const startSearch = startMatch.index + startMatch[0].length;
+    // Find the matching closing brace of the parent component. We
+    // track depth starting from the parent's opening brace.
+    const endMarker = /\nfunction ReadingArchiveExportAction\b/;
+    const endMatch = dashboardCode.slice(startSearch).search(endMarker);
+    if (endMatch < 0) return dashboardCode.slice(startSearch);
+    return dashboardCode.slice(startSearch, startSearch + endMatch);
+  }
+
+  const parentBody = sliceParentBody();
+  const earlyReturnMatch = parentBody.match(/if\s*\(\s*!\s*active\s*\)/);
+  const earlyReturnIndex = earlyReturnMatch ? (earlyReturnMatch.index ?? 0) : -1;
+  const beforeEarlyReturn = earlyReturnIndex >= 0
+    ? parentBody.slice(0, earlyReturnIndex)
+    : parentBody;
+  const afterEarlyReturn = earlyReturnIndex >= 0
+    ? parentBody.slice(earlyReturnIndex)
+    : "";
+
+  // 1. inactive 首次渲染不崩溃 — source confirms the early return exists
+  //    and the empty-hint paragraph is reachable.
+  it("1. inactive first render path is intact (early return + empty hint)", () => {
+    expect(parentBody).toMatch(/if\s*\(\s*!\s*active\s*\)/);
+    expect(parentBody).toMatch(/weread-reading-archive__empty-hint/);
+  });
+
+  // 2. Hook order — the rule of hooks forbids ANY hook call after an
+  //    early return in the SAME component. This is the most critical
+  //    assertion. It catches regressions where a future commit
+  //    re-introduces a `useMemo` / `useState` / `useEffect` call in the
+  //    post-early-return section of the parent component.
+  it("2. no hook call appears after the `if (!active)` early return (parent component only)", () => {
+    // Strip block comments + single-line comments AFTER the early return
+    // so a comment like `// useMemo(...)` does not produce a false positive.
+    const sanitized = afterEarlyReturn
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/.*$/gm, "");
+    expect(sanitized, "after early return must contain no hook calls").not.toMatch(
+      /\buseMemo\s*\(/,
+    );
+    expect(sanitized).not.toMatch(/\buseState\s*\(/);
+    expect(sanitized).not.toMatch(/\buseEffect\s*\(/);
+    expect(sanitized).not.toMatch(/\buseReducer\s*\(/);
+    expect(sanitized).not.toMatch(/\buseRef\s*\(/);
+    expect(sanitized).not.toMatch(/\buseLayoutEffect\s*\(/);
+    expect(sanitized).not.toMatch(/\buseImperativeHandle\s*\(/);
+    expect(sanitized).not.toMatch(/\buseInsertionEffect\s*\(/);
+    expect(sanitized).not.toMatch(/\buseTransition\s*\(/);
+    expect(sanitized).not.toMatch(/\buseDeferredValue\s*\(/);
+    expect(sanitized).not.toMatch(/\buseId\s*\(/);
+    expect(sanitized).not.toMatch(/\buseSyncExternalStore\s*\(/);
+  });
+
+  // 3. active → inactive 不崩溃 — i.e. hooks are present BEFORE the early
+  //    return so the early-return render path still calls them in the
+  //    same order as the full-render path.
+  it("3. all hooks in the parent component are called before the early return", () => {
+    expect(beforeEarlyReturn).toMatch(/useReadingArchiveMachine/);
+    expect(beforeEarlyReturn).toMatch(/\buseMemo\s*\(/);
+    // useState may be followed by `<` (generic) or `(` — allow both.
+    expect(beforeEarlyReturn).toMatch(/\buseState\s*[<(]/);
+  });
+
+  // 4. inactive → active → inactive → active must not change hook order.
+  //    Source-level check: the same hook list runs in both render paths.
+  it("4. hook identity is identical between the early-return path and the full-render path (parent component only)", () => {
+    const hookRe = /\b(useMemo|useState|useEffect|useReducer|useRef|useLayoutEffect|useImperativeHandle|useInsertionEffect|useReadingArchiveMachine|useTransition|useDeferredValue|useId|useSyncExternalStore)\s*\(/g;
+    const beforeMatches = (beforeEarlyReturn.match(hookRe) || []).length;
+    const afterSanitized = afterEarlyReturn
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/.*$/gm, "");
+    const afterMatches = (afterSanitized.match(hookRe) || []).length;
+    expect(afterMatches).toBe(0);
+    // The full parent body must contain exactly the same hook calls as
+    // the pre-early-return section. Everything before the early return
+    // is the comprehensive hook list.
+    const totalMatches = (parentBody.match(hookRe) || []).length;
+    expect(totalMatches).toBe(beforeMatches);
+  });
+
+  // 5. The three derived values that previously lived after the early
+  //    return must now be declared as plain computations BEFORE the
+  //    early return so the hook order is stable.
+  it("5. yearsAsc / yearsDesc / availableYearsForDualPeriod are computed BEFORE the early return", () => {
+    // Strip comment lines so a doc comment that mentions the variable
+    // names doesn't trick indexOf.
+    const codeOnly = beforeEarlyReturn
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/.*$/gm, "");
+    const yearsAscMatch = codeOnly.match(/const\s+yearsAsc\b/);
+    const yearsDescMatch = codeOnly.match(/const\s+yearsDesc\b/);
+    const availableMatch = codeOnly.match(
+      /const\s+availableYearsForDualPeriod\b/,
+    );
+    expect(yearsAscMatch, "yearsAsc must be declared before early return").not.toBeNull();
+    expect(yearsDescMatch, "yearsDesc must be declared before early return").not.toBeNull();
+    expect(availableMatch, "availableYearsForDualPeriod must be declared before early return").not.toBeNull();
+    const yearsAscIdx = yearsAscMatch!.index!;
+    const yearsDescIdx = yearsDescMatch!.index!;
+    const availableIdx = availableMatch!.index!;
+    expect(yearsAscIdx).toBeGreaterThan(-1);
+    expect(yearsDescIdx).toBeGreaterThan(yearsAscIdx);
+    expect(availableIdx).toBeGreaterThan(yearsDescIdx);
+  });
+
+  // 6. availableYearsForDualPeriod is now a plain `.map()` (or equivalent
+  //    pure expression) — not a `useMemo` call. The variable can still
+  //    be USED after the early return (in the JSX) — only the
+  //    DECLARATION must move before the early return.
+  it("6. availableYearsForDualPeriod declaration is no longer wrapped in useMemo", () => {
+    // The declaration `const availableYearsForDualPeriod = useMemo(...)`
+    // must not exist anywhere in the parent component.
+    expect(parentBody).not.toMatch(/const\s+availableYearsForDualPeriod\s*=\s*useMemo/);
+    // The declaration must be in the pre-early-return section.
+    const beforeSanitized = beforeEarlyReturn
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/.*$/gm, "");
+    expect(beforeSanitized).toMatch(/const\s+availableYearsForDualPeriod\s*=/);
+  });
+
+  // 7. The DualPeriodComparisonPanel still receives the
+  //    availableYearsForDualPeriod prop unchanged.
+  it("7. DualPeriodComparisonPanel still receives availableYears prop (interface unchanged)", () => {
+    expect(dashboard).toMatch(/availableYears=\{availableYearsForDualPeriod\}/);
+  });
+
+  // 8. The dual-period comparison wiring is untouched.
+  it("8. dual-period wiring is unchanged", () => {
+    // The dashboard still imports DualPeriodComparisonPanel — the
+    // component boundary is what matters, not the model modules.
+    expect(dashboard).toMatch(/from "\.\/DualPeriodComparisonPanel"/);
+    // And the JSX still renders the panel with availableYears.
+    expect(dashboard).toMatch(/<DualPeriodComparisonPanel/);
+    expect(dashboard).toMatch(/availableYears=\{availableYearsForDualPeriod\}/);
+  });
+
+  // 9. Real React render — renders the component with `active=false`
+  //    and asserts the inactive render path produces the empty-hint
+  //    paragraph and does NOT log "Rendered fewer hooks" /
+  //    "Minified React error #300" via console.error. The active
+  //    render is harder to drive without a DOM (the machine has
+  //    network effects); we rely on the smoke tests for the active
+  //    path end-to-end.
+  it("9. real React render: active=false renders without hook-order error", async () => {
+    const React = await import("react");
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const { default: ReadingArchiveDashboard } = await import(
+      "./ReadingArchiveDashboard"
+    );
+
+    const setError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const props = {
+        token: "smoke-token",
+        active: false,
+        onOpenAnnualYear: () => {},
+      };
+
+      const html = renderToStaticMarkup(
+        React.createElement(ReadingArchiveDashboard, {
+          ...props,
+          active: false,
+        }),
+      );
+      expect(html).toMatch(/weread-reading-archive__empty-hint/);
+      expect(html).toMatch(/点击上方「长期档案」工作区后开始加载/);
+
+      const errorCalls = setError.mock.calls
+        .map((args) => args.map(String).join(" "))
+        .join(" \n ");
+      expect(errorCalls).not.toMatch(/Minified React error #300/i);
+      expect(errorCalls).not.toMatch(/Rendered fewer hooks/i);
+      expect(errorCalls).not.toMatch(/Rendered more hooks/i);
+    } finally {
+      setError.mockRestore();
+    }
+  });
+
+  // 10. No mid-render `active` mutation.
+  it("10. no mid-render `active` mutation (prevent re-render storm)", () => {
+    expect(parentBody).not.toMatch(/setActive\s*\(/);
+  });
+
+  // 11. The retry-fetch URL is never constructed or called from the
+  //     dashboard component itself — the fix must not regress the
+  //     sidebar contract.
+  it("11. no annual-review URL string constructed in the dashboard", () => {
+    expect(parentBody).not.toMatch(/annual-review\?/);
+  });
+
+  // 12. The dashboard never writes to localStorage / sessionStorage /
+  //     IndexedDB — the fix must not regress storage safety.
+  it("12. no localStorage / sessionStorage / IndexedDB usage in the dashboard", () => {
+    expect(parentBody).not.toMatch(/localStorage/);
+    expect(parentBody).not.toMatch(/sessionStorage/);
+    expect(parentBody).not.toMatch(/IndexedDB/);
   });
 });

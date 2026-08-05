@@ -144,6 +144,18 @@ export default function ReadingArchiveDashboard({
     "automatic",
   );
 
+  // S27P-0B: yearsAsc / yearsDesc / availableYearsForDualPeriod must be
+  // computed BEFORE any conditional return so the hook order stays
+  // stable across the active toggle. They are cheap pure derivations
+  // (no React state, no side effects) so no useMemo is required.
+  const yearsAsc = [...dashboardArchive.years].sort(
+    (a, b) => a.year - b.year,
+  );
+  const yearsDesc = [...dashboardArchive.years].sort(
+    (a, b) => b.year - a.year,
+  );
+  const availableYearsForDualPeriod = yearsAsc.map((year) => year.year);
+
   // ----- render: not activated -----
   if (!active) {
     return (
@@ -156,14 +168,6 @@ export default function ReadingArchiveDashboard({
       </section>
     );
   }
-
-  // ----- render: shell (always rendered while active, regardless of bootstrap state) -----
-  const yearsAsc = [...dashboardArchive.years].sort((a, b) => a.year - b.year);
-  const yearsDesc = [...dashboardArchive.years].sort((a, b) => b.year - a.year);
-  const availableYearsForDualPeriod = useMemo(
-    () => yearsAsc.map((y) => y.year),
-    [yearsAsc],
-  );
 
   return (
     <section
