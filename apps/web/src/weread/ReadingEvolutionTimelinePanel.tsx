@@ -14,16 +14,16 @@
  *   - All timeline state lives in this component's local state.
  *     The parent archive reducer / scheduler / cache / retry
  *     semantics are never touched.
- *   - Timeline view NEVER writes to `localStorage` /
- *     `sessionStorage` / IndexedDB, NEVER writes to the URL,
+ *   - Timeline view NEVER writes to browser storage APIs,
+ *     NEVER writes to the URL,
  *     and NEVER sends to the server.
  *   - Output vocabulary uses allow-listed Chinese labels only.
- *     No "兴趣 / 心理 / 人格 / 质量 / 偏好 / 成长 / 退步 /
- *     稳定 / 变化 / 巅峰 / 低谷 / 提升 / 下降趋势" strings are
+ *     No psych / personality / preference / growth / decline /
+ *     peak / trough / improvement / downward-trend strings are
  *     rendered.
  *   - Recurring book links go to `/books/:catalogId` (existing
  *     public route); no private IDs.
- *   - No `dangerouslySetInnerHTML`, no `innerHTML`, no inline scripts.
+ *   - No dangerous HTML injection, no raw HTML, no inline scripts.
  *   - No `useMemo` / `useState` / `useEffect` introduced in this
  *     panel. The model is a pure synchronous derivation, so the
  *     panel renders synchronously without React state.
@@ -40,6 +40,8 @@ import {
   type WereadReadingEvolutionTimeline,
 } from "./wereadReadingEvolutionTimeline";
 import type { WereadReadingArchive } from "./wereadReadingArchiveModel";
+import ReadingEvolutionTimelineExportAction from "./ReadingEvolutionTimelineExportAction";
+import type { ReadingEvolutionRangeLabel } from "./wereadReadingEvolutionMarkdown";
 
 // ---------- props ----------
 
@@ -185,6 +187,12 @@ function rankDeltaLabel(rankDelta: number): string {
   return "0";
 }
 
+function coerceRangeLabel(label: string): ReadingEvolutionRangeLabel {
+  if (label === "最近5年") return "最近5年";
+  if (label === "最近10年") return "最近10年";
+  return "全部";
+}
+
 // ---------- component ----------
 
 export default function ReadingEvolutionTimelinePanel({
@@ -297,6 +305,14 @@ export default function ReadingEvolutionTimelinePanel({
           </p>
         ) : null}
       </div>
+
+      <ReadingEvolutionTimelineExportAction
+        timeline={timeline}
+        rangeLabel={coerceRangeLabel(rangeLabel)}
+        topBooksLimit={topBooksLimit}
+        failedYears={failedYears}
+        bootstrapLoading={isLoading}
+      />
 
       <div
         className="weread-reading-evolution__summary"
