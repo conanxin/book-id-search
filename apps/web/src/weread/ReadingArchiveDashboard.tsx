@@ -75,6 +75,8 @@ import DualPeriodComparisonPanel from "./DualPeriodComparisonPanel";
 import ReadingComparisonFiltersPanel from "./ReadingComparisonFiltersPanel";
 import ReadingEvolutionTimelinePanel from "./ReadingEvolutionTimelinePanel";
 import ReadingDataQualityAuditPanel from "./ReadingDataQualityAuditPanel";
+import { ReadingDataRepairRecommendationsPanel } from "./ReadingDataRepairRecommendationsPanel";
+import { buildWereadReadingDataQualityAudit } from "./wereadReadingDataQualityAudit";
 import type { ReadingEraSegmentationMode } from "./wereadReadingEraModel";
 
 const MODEL_RANGE_TO_ERA_LABEL: Record<
@@ -157,6 +159,16 @@ export default function ReadingArchiveDashboard({
     (a, b) => b.year - a.year,
   );
   const availableYearsForDualPeriod = yearsAsc.map((year) => year.year);
+
+  // S27R-2B: derive the same audit input for the repair recommendations
+  // panel as we feed into the audit panel above. Pure derivation, no state,
+  // no Hook. The two panels must share the exact same audit semantic.
+  const repairAudit = buildWereadReadingDataQualityAudit({
+    archive: dashboardArchive,
+    targetYears: archive.visibleYears,
+    failedYears,
+    topBooksLimit: topBooks,
+  });
 
   // ----- render: not activated -----
   if (!active) {
@@ -312,6 +324,11 @@ export default function ReadingArchiveDashboard({
             topBooksLimit={topBooks}
             bootstrapLoading={bootstrapLoading}
             rangeLabel={archiveRangeLabel(state.view.range)}
+          />
+
+          <ReadingDataRepairRecommendationsPanel
+            audit={repairAudit}
+            loading={bootstrapLoading}
           />
 
           <ReadingEvolutionTimelinePanel

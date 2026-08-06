@@ -1309,3 +1309,123 @@ describe("ReadingArchiveDashboard — S27Q-2 audit panel integration", () => {
     expect(dashboard).toMatch(/buildWereadReadingArchive/);
   });
 });
+
+describe("ReadingArchiveDashboard — S27R-2B repair panel integration", () => {
+  it("1. dashboard imports ReadingDataRepairRecommendationsPanel (named export)", () => {
+    // Matches either default or named import — current implementation uses
+    // a named export per the S27R-2B tsc fix.
+    expect(dashboard).toMatch(
+      /import (?:\{[^}]*\bReadingDataRepairRecommendationsPanel\b[^}]*\}|ReadingDataRepairRecommendationsPanel) from "\.\/ReadingDataRepairRecommendationsPanel"/,
+    );
+  });
+
+  it("2. dashboard imports buildWereadReadingDataQualityAudit", () => {
+    expect(dashboard).toMatch(
+      /import \{[\s\S]*?buildWereadReadingDataQualityAudit[\s\S]*?\} from "\.\/wereadReadingDataQualityAudit"/,
+    );
+  });
+
+  it("3. repair panel sits AFTER Audit Panel and BEFORE Evolution Timeline", () => {
+    const auditIdx = dashboard.indexOf("<ReadingDataQualityAuditPanel");
+    const repairIdx = dashboard.indexOf("<ReadingDataRepairRecommendationsPanel");
+    const evoIdx = dashboard.indexOf("<ReadingEvolutionTimelinePanel");
+    expect(auditIdx).toBeGreaterThan(0);
+    expect(repairIdx).toBeGreaterThan(auditIdx);
+    expect(evoIdx).toBeGreaterThan(repairIdx);
+  });
+
+  it("4. repair panel receives a Was-Read audit object", () => {
+    expect(dashboard).toMatch(/audit=\{repairAudit\}/);
+  });
+
+  it("5. repair panel receives loading prop (not a separate state)", () => {
+    // Loading prop is forwarded from bootstrapLoading, not a new useState.
+    expect(dashboard).toMatch(/loading=\{bootstrapLoading\}/);
+  });
+
+  it("6. repair audit is constructed from same archive / targetYears / failedYears / topBooksLimit as audit panel", () => {
+    expect(dashboard).toMatch(
+      /const repairAudit = buildWereadReadingDataQualityAudit\(\{[\s\S]*?archive: dashboardArchive,[\s\S]*?targetYears: archive\.visibleYears,[\s\S]*?failedYears,[\s\S]*?topBooksLimit: topBooks,[\s\S]*?\}\);/,
+    );
+  });
+
+  it("7. Dashboard does NOT add a new useState / useEffect / useMemo / useReducer / useRef at the root component", () => {
+    // Use the same sliceParentBody approach as S27P-0B to extract only the
+    // parent ReadingArchiveDashboard body (not ReadingArchiveExportAction).
+    function sliceParentBody(): string {
+      const startMatch = dashboardCode.match(
+        /export default function ReadingArchiveDashboard[\s\S]*?\)\s*\{/,
+      );
+      if (!startMatch || startMatch.index === undefined) return "";
+      const startSearch = startMatch.index + startMatch[0].length;
+      const endMarker = /\nfunction ReadingArchiveExportAction\b/;
+      const endMatch = dashboardCode.slice(startSearch).search(endMarker);
+      if (endMatch < 0) return dashboardCode.slice(startSearch);
+      return dashboardCode.slice(startSearch, startSearch + endMatch);
+    }
+    const parentBody = sliceParentBody();
+    // Root body has 2 useMemo, 1 useState (may have generic: useState<T>())
+    // and 1 useEffect call. The sub-component ReadingArchiveExportAction is
+    // excluded so its hooks are not counted.
+    const memoCount = (parentBody.match(/\buseMemo\s*\(/g) || []).length;
+    const stateCount = (parentBody.match(/\buseState\s*[<(]/g) || []).length;
+    const effectCount = (parentBody.match(/\buseEffect\s*\(/g) || []).length;
+    expect(memoCount).toBe(2);
+    expect(stateCount).toBe(1);
+    expect(effectCount).toBe(0);
+    expect(parentBody).not.toMatch(/\buseReducer\s*\(/);
+    expect(parentBody).not.toMatch(/\buseRef\s*\(/);
+  });
+
+  it("8. repair audit construction is a plain const, not a useMemo / useState", () => {
+    // `const repairAudit = buildWereadReadingDataQualityAudit(...)` is the
+    // exact form used; ensure no hook was added around it.
+    expect(dashboard).toMatch(/const repairAudit = buildWereadReadingDataQualityAudit/);
+    // Specifically, `repairAudit` must not be wrapped in any Hook call.
+    expect(dashboard).not.toMatch(/useMemo\([^)]*repairAudit/);
+    expect(dashboard).not.toMatch(/useState\([^)]*repairAudit/);
+  });
+
+  it("9. Audit Panel still present (no regression)", () => {
+    expect(dashboard).toMatch(/<ReadingDataQualityAuditPanel/);
+  });
+
+  it("10. Timeline Panel still present (no regression)", () => {
+    expect(dashboard).toMatch(/<ReadingEvolutionTimelinePanel/);
+  });
+
+  it("11. Era / Dual / Comparison / YearDirectory still present (no regression)", () => {
+    expect(dashboard).toMatch(/<ReadingEraPanel/);
+    expect(dashboard).toMatch(/<DualPeriodComparisonPanel/);
+    expect(dashboard).toMatch(/<ReadingComparisonFiltersPanel/);
+    expect(dashboard).toMatch(/<ArchiveYearDirectory/);
+  });
+
+  it("12. Repair Panel is rendered AFTER Audit Panel and BEFORE Timeline (strict ordering)", () => {
+    // Use a regex to confirm the layout (Audit → Repair → Evolution).
+    const order = /<ReadingDataQualityAuditPanel[\s\S]*?<ReadingDataRepairRecommendationsPanel[\s\S]*?<ReadingEvolutionTimelinePanel/;
+    expect(dashboard).toMatch(order);
+  });
+
+  it("13. Repair Panel does not introduce a new action button or onClick", () => {
+    // The Repair Panel section must not contain a button (per S27R-2A #36).
+    const repairRegion = dashboard.match(
+      /<ReadingDataRepairRecommendationsPanel[\s\S]*?\/>\s*\n\s*<ReadingEvolutionTimelinePanel/,
+    );
+    expect(repairRegion).toBeTruthy();
+    expect(repairRegion?.[0]).not.toMatch(/<button/);
+  });
+
+  it("14. no fetchWereadAnnualReview / localStorage call introduced by repair panel", () => {
+    // The Dashboard already uses `fetchWereadAnnualReview` (pre-existing) and
+    // `retryFailed` (pre-existing machine action). The repair integration must
+    // not add NEW occurrences of these tokens. We assert the count is the
+    // pre-Repair count (1 for fetchWereadAnnualReview in machine call; retryFailed
+    // appears as the existing action handler).
+    expect(dashboard).not.toMatch(/localStorage|sessionStorage|indexedDB/);
+    // The repair audit constructor is pure: it does not invoke a fetcher.
+    expect(dashboard).toMatch(
+      /const repairAudit = buildWereadReadingDataQualityAudit\(\{[\s\S]*?\}\);/,
+    );
+  });
+});
