@@ -31,6 +31,7 @@ import {
   type ReadingDataQualityStatus,
 } from "./wereadReadingDataQualityAudit";
 import type { WereadReadingArchive } from "./wereadReadingArchiveModel";
+import ReadingDataQualityAuditExportAction from "./ReadingDataQualityAuditExportAction";
 
 // ---------- props ----------
 
@@ -40,6 +41,7 @@ export interface ReadingDataQualityAuditPanelProps {
   failedYears: number[];
   topBooksLimit: 6 | 12 | 18;
   bootstrapLoading: boolean;
+  rangeLabel: string;
 }
 
 // ---------- exhaustive label tables ----------
@@ -176,6 +178,7 @@ export default function ReadingDataQualityAuditPanel({
   failedYears,
   topBooksLimit,
   bootstrapLoading,
+  rangeLabel,
 }: ReadingDataQualityAuditPanelProps) {
   // Pure model call — no hooks. Re-runs on every render with stable
   // deterministic output.
@@ -552,6 +555,13 @@ export default function ReadingDataQualityAuditPanel({
           </section>
         </>
       ) : null}
+
+      <ReadingDataQualityAuditExportAction
+        audit={audit}
+        rangeLabel={rangeLabel}
+        topBooksLimit={topBooksLimit}
+        bootstrapLoading={bootstrapLoading}
+      />
 
       <p
         className="weread-reading-data-quality__limitation"

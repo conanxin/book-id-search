@@ -97,6 +97,7 @@ function renderPanel(args: {
   failedYears?: number[];
   topBooksLimit?: 6 | 12 | 18;
   bootstrapLoading?: boolean;
+  rangeLabel?: string;
 }): string {
   return renderToStaticMarkup(
     React.createElement(ReadingDataQualityAuditPanel, {
@@ -105,6 +106,7 @@ function renderPanel(args: {
       failedYears: args.failedYears ?? [],
       topBooksLimit: args.topBooksLimit ?? 12,
       bootstrapLoading: args.bootstrapLoading ?? false,
+      rangeLabel: args.rangeLabel ?? "全部",
     }),
   );
 }

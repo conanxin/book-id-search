@@ -311,6 +311,7 @@ export default function ReadingArchiveDashboard({
             failedYears={failedYears}
             topBooksLimit={topBooks}
             bootstrapLoading={bootstrapLoading}
+            rangeLabel={archiveRangeLabel(state.view.range)}
           />
 
           <ReadingEvolutionTimelinePanel
