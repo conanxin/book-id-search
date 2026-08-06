@@ -356,7 +356,23 @@ Caddy 是公网唯一入口。3001/5173/7700 全部绑定 `127.0.0.1`。
 
 最终公网复核报告：[reports/FINAL_PUBLIC_ACCESS_VERIFICATION.md](reports/FINAL_PUBLIC_ACCESS_VERIFICATION.md)。
 
-当前稳定 tag：`v0.21.1-weread-reading-evolution-timeline-markdown`。\n
+当前稳定 tag：`v0.22.1-weread-data-quality-audit-markdown`。
+
+#### v0.22.1 新增能力（数据质量审计）
+
+- 长期档案数据质量审计（仅审计当前浏览器已加载档案）
+- 年份覆盖与未闭合年份检测
+- 年度指标内部一致性校验（finite / non-negative / 月份齐全 / 比例合法）
+- Top N 公共元数据、排名和重复审计
+- YearLink 相邻年度链接审计
+- Recurring 聚合审计
+- 输出中性的 `pass / warn / fail` 状态，**审计数据，不评价用户**
+- 五项数据覆盖比例（年份闭合 / 有效日期记录 / 已匹配记录 / Top N 公共元数据 / YearLink 覆盖），全部衡量「数据覆盖和可核对程度」，不是用户评分
+- 浏览器本地审计 Markdown 导出（`weread-reading-data-quality-audit-YYYYMMDD.md`，MIME `text/markdown;charset=utf-8`）
+- 0 额外请求、0 AI 调用、0 持久化
+- 确定性候选镜像 + 严格线上 manifest 验证
+
+**严格边界**：不输出用户评分、不输出阅读质量高低、不评价兴趣/能力/心理状态、不自动修复问题。详见 [docs/WEREAD_READING_DATA_QUALITY_AUDIT.md](docs/WEREAD_READING_DATA_QUALITY_AUDIT.md) 和 [docs/WEREAD_READING_DATA_QUALITY_AUDIT_MARKDOWN.md](docs/WEREAD_READING_DATA_QUALITY_AUDIT_MARKDOWN.md)。
 
 ## WeRead Center
 

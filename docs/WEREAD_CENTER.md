@@ -293,3 +293,22 @@ S27P-2 在「年度统计演变时间线」面板新增「导出时间线 Markdo
 - MIME `text/markdown;charset=utf-8`；含时间线概览、里程碑、年度详情、相邻年度指标差异、Top N 书目差异、方法说明。
 - 不重新请求 annual-review API、不调用 AI / related-books、不写 `localStorage` / `sessionStorage` / IndexedDB / 服务器。
 - 不输出真实笔记正文 / 私有 ID / AI 摘要 / 心理推断词汇。
+
+### 数据质量审计（S27Q-1C）
+
+`WereadCenter` 自 S27Q-1C 起在「长期档案」工作区新增「数据质量审计」面板。详见 `docs/WEREAD_READING_DATA_QUALITY_AUDIT.md`：
+
+- 对当前浏览器已加载的「长期档案」多年聚合数据做**静态审计**，不重新请求 `annual-review`、不调用 MiniMax / related-books、不写 storage / URL。
+- 输出六个分组：`coverage` / `year-metrics` / `top-n` / `year-link` / `recurring` / `summary-debug`，每组输出 `error / warning / info` 三档严重级。
+- 整体状态为中性的 `pass / warn / fail`，**审计数据，不评价用户**——不出现「兴趣增强 / 能力提升 / 阅读质量 / 用户评分 / 优秀 / 较差」等评价性语言。
+- 五项覆盖比例：年份闭合比例 / 有效日期记录占比 / 已匹配记录占比 / Top N 公共元数据完整比例 / 相邻年度链接覆盖比例，全部衡量「数据覆盖和可核对程度」而非用户表现。
+- 不读取笔记正文、不持久化、不写 raw archive、不上传。
+
+#### 数据质量审计 Markdown 导出（S27Q-3B）
+
+S27Q-3B 在「数据质量审计」面板新增「导出审计 Markdown」按钮，纯浏览器本地生成。详见 `docs/WEREAD_READING_DATA_QUALITY_AUDIT_MARKDOWN.md`：
+
+- 文件名 `weread-reading-data-quality-audit-YYYYMMDD.md`，纯 ASCII；MIME `text/markdown;charset=utf-8`。
+- 内容含元数据、隐私说明、完整性提示、审计总览、五项比例、年份覆盖、Issue 三档分组、当前模型限制、方法说明。
+- 不重新请求 `annual-review`、不调用 AI、不写 storage、不修改 URL。
+- 排除：Issue ID、title/author/catalogId、note/comment、私有 ID、token/API key、raw archive/audit JSON、评价性语言。
