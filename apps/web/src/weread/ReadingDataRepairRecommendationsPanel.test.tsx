@@ -947,15 +947,26 @@ describe("S27R-2A — Reading Data Repair Recommendations Panel", () => {
     expect(emptyHtml).not.toContain("weread-reading-data-repair__loading");
   });
 
-  // 61 — S27R-2C no action buttons are rendered (style + structure guarantee)
-  it("rendered HTML contains no button (no action triggers from styling either)", () => {
+  // 61 — S27R-2C no retry / reload / auto-repair action buttons (export button OK)
+  it("rendered HTML contains no retry / reload / auto-repair action buttons (export button only)", () => {
     const audit = makeAudit([
       makeIssue({ code: "partial_archive", severity: "error", id: "s61" }),
     ]);
     const html = renderToStaticMarkup(
       <ReadingDataRepairRecommendationsPanel audit={audit} loading={false} />,
     );
-    expect(html).not.toMatch(/<button\b/);
+    // The single export button is allowed; it does NOT trigger retry /
+    // reload / auto-repair. No additional buttons should exist.
+    const buttons = html.match(/<button\b/g) || [];
+    expect(buttons.length).toBe(1);
+    expect(html).toContain("导出修复建议 Markdown");
+    // The button text/labels: only the canonical export label exists.
+    // The model-derived strings 「可重试」 / 「可重新加载」 / 「重试暂时失败年份」
+    // appear in the rendered DOM as labels (NOT as buttons), and are
+    // permitted because they describe capability / action categories,
+    // not triggers.
+    const buttonInner = (html.match(/<button[^>]*>[\s\S]*?<\/button>/) || [""])[0];
+    expect(buttonInner).not.toMatch(/重试|重新加载|重载|一键修复/);
   });
 
   // 62 — S27R-2C no inline style attributes leaked
@@ -1021,5 +1032,151 @@ describe("S27R-2A — Reading Data Repair Recommendations Panel", () => {
     expect(start).toBeGreaterThan(-1);
     const slice = css.slice(start);
     expect(slice).not.toMatch(/position\s*:\s*(fixed|sticky)/);
+  });
+
+  // 66 — S27R-3B Export Action exists in rendered HTML
+  it("renders the ExportAction child component with canonical testid", () => {
+    const html = renderToStaticMarkup(
+      <ReadingDataRepairRecommendationsPanel
+        audit={makeAudit([])}
+        loading={false}
+      />,
+    );
+    expect(html).toContain('data-testid="weread-reading-data-repair-export"');
+    expect(html).toContain("导出修复建议 Markdown");
+  });
+
+  // 67 — S27R-3B Export Action receives a plan
+  it("renders the export button regardless of audit shape (plan is built from audit)", () => {
+    const audit = makeAudit([
+      makeIssue({ code: "partial_archive", severity: "error", id: "s67" }),
+    ]);
+    const html = renderToStaticMarkup(
+      <ReadingDataRepairRecommendationsPanel audit={audit} loading={false} />,
+    );
+    expect(html).toContain('data-testid="weread-reading-data-repair-export-button"');
+    expect(html).toContain("建议总数：");
+  });
+
+  // 68 — S27R-3B Export Action receives loading prop
+  it("renders the export button as disabled while loading=true", () => {
+    const audit = makeAudit([
+      makeIssue({ code: "partial_archive", severity: "error", id: "s68" }),
+    ]);
+    const htmlLoading = renderToStaticMarkup(
+      <ReadingDataRepairRecommendationsPanel audit={audit} loading={true} />,
+    );
+    expect(htmlLoading).toMatch(/<button[^>]*disabled/);
+    expect(htmlLoading).toContain('data-loading="true"');
+    const htmlReady = renderToStaticMarkup(
+      <ReadingDataRepairRecommendationsPanel audit={audit} loading={false} />,
+    );
+    expect(htmlReady).not.toMatch(/<button[^>]*disabled/);
+    expect(htmlReady).toContain('data-loading="false"');
+  });
+
+  // 69 — S27R-3B parent Panel remains zero-hook
+  it("parent Panel source remains zero-hook (no useState/useEffect/useMemo/useReducer/useRef)", async () => {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const file = path.resolve(
+      process.cwd(),
+      "apps/web/src/weread/ReadingDataRepairRecommendationsPanel.tsx",
+    );
+    const src = await fs.readFile(file, "utf8");
+    // Exclude the leading file-level block comment so the privacy
+    // contract narrative is not counted as code usage.
+    const code = src.replace(/^\/\*[\s\S]*?\*\//, "");
+    expect(code).not.toMatch(/\buseState\b/);
+    expect(code).not.toMatch(/\buseEffect\b/);
+    expect(code).not.toMatch(/\buseMemo\b/);
+    expect(code).not.toMatch(/\buseReducer\b/);
+    expect(code).not.toMatch(/\buseRef\b/);
+  });
+
+  // 70 — S27R-3B parent Panel does not introduce new Hooks at the parent level
+  it("parent Panel does not introduce new Hooks in its component body (post-S27R-3B)", () => {
+    // The Panel itself continues to derive the plan via a single
+    // buildWereadReadingDataRepairPlan call — no Hook wrapping the
+    // plan / reset-key. We verify by reading the source.
+    const fs = require("node:fs") as typeof import("node:fs");
+    const path = require("node:path") as typeof import("node:path");
+    const file = path.resolve(
+      process.cwd(),
+      "apps/web/src/weread/ReadingDataRepairRecommendationsPanel.tsx",
+    );
+    const src = fs.readFileSync(file, "utf8");
+    const code = src.replace(/^\/\*[\s\S]*?\*\//, "");
+    // The plan is a plain const call to buildWereadReadingDataRepairPlan
+    // (with an explicit type annotation).
+    expect(code).toMatch(/buildWereadReadingDataRepairPlan\(\s*props\.audit/);
+    // The reset key is also a plain const: `const repairExportResetKey = JSON.stringify(...)`.
+    expect(code).toMatch(/const repairExportResetKey = JSON\.stringify\(/);
+    // Neither is wrapped in a Hook.
+    expect(code).not.toMatch(/useState\([^)]*plan/);
+    expect(code).not.toMatch(/useMemo\([^)]*plan/);
+    expect(code).not.toMatch(/useState\([^)]*repairExportResetKey/);
+    expect(code).not.toMatch(/useMemo\([^)]*repairExportResetKey/);
+  });
+
+  // 71 — S27R-3B export area has no retry / reload / auto-repair buttons
+  it("export area exposes only the export button (no retry / reload / auto-repair)", () => {
+    const audit = makeAudit([
+      makeIssue({ code: "partial_archive", severity: "error", id: "s71" }),
+    ]);
+    const html = renderToStaticMarkup(
+      <ReadingDataRepairRecommendationsPanel audit={audit} loading={false} />,
+    );
+    const start = html.indexOf('weread-reading-data-repair__export"');
+    const end = html.indexOf("</div>", start);
+    const section = html.slice(start, end);
+    expect(section).not.toMatch(/重试|重新加载|重载|一键修复|自动修复/);
+  });
+
+  // 72 — S27R-3B Panel never exposes Recommendation IDs / Issue IDs to the export HTML
+  it("export HTML does not contain Recommendation IDs or Issue IDs", () => {
+    const audit = makeAudit([
+      makeIssue({
+        id: "rec_integration_test_id_xyz",
+        code: "partial_archive",
+        severity: "error",
+      }),
+    ]);
+    const html = renderToStaticMarkup(
+      <ReadingDataRepairRecommendationsPanel audit={audit} loading={false} />,
+    );
+    expect(html).not.toContain("rec_integration_test_id_xyz");
+    expect(html).not.toMatch(/issue[a-z0-9]{8,}/i);
+  });
+
+  // 73 — S27R-3B Panel keeps existing privacy contract intact
+  it("Panel still does not mutate the input audit on render", () => {
+    const audit = makeAudit([
+      makeIssue({ code: "partial_archive", severity: "error", id: "s73" }),
+    ]);
+    const snap = JSON.stringify(audit);
+    renderToStaticMarkup(
+      <ReadingDataRepairRecommendationsPanel audit={audit} loading={false} />,
+    );
+    expect(JSON.stringify(audit)).toBe(snap);
+  });
+
+  // 74 — S27R-3B reset key changes when plan shape changes (priority/count)
+  it("reset key derived from the plan changes when priorities / counts change", async () => {
+    // Source-level check: the parent uses the debug snapshot to derive
+    // the reset key, which captures priority counts, action counts,
+    // capability counts, and per-group counts. Any change forces a
+    // fresh remount of the export child.
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const src = await fs.readFile(
+      path.resolve(
+        process.cwd(),
+        "apps/web/src/weread/ReadingDataRepairRecommendationsPanel.tsx",
+      ),
+      "utf8",
+    );
+    expect(src).toMatch(/buildReadingDataRepairDebugSnapshot/);
+    expect(src).toMatch(/const repairExportResetKey = JSON\.stringify\(/);
   });
 });

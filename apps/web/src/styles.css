@@ -7786,3 +7786,90 @@ mark.hl {
     margin-left: 0;
   }
 }
+
+/* ---------- S27R-3B: Reading Data Repair Export Action ---------- */
+
+.weread-reading-data-repair__export {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px dashed #d3d8e2;
+}
+
+.weread-reading-data-repair__export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.weread-reading-data-repair__export-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border: 1px solid #4a5568;
+  border-radius: 6px;
+  background: #1f2937;
+  color: #f7f8fb;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.weread-reading-data-repair__export-button:disabled {
+  background: #d3d8e2;
+  border-color: #d3d8e2;
+  color: #6a7384;
+  cursor: not-allowed;
+}
+
+.weread-reading-data-repair__export-button:not(:disabled):hover {
+  background: #111827;
+}
+
+.weread-reading-data-repair__export-summary {
+  margin: 0;
+  font-size: 11px;
+  color: #4a5568;
+  line-height: 1.55;
+}
+
+.weread-reading-data-repair__export-notice {
+  margin: 0;
+  font-size: 11px;
+  color: #6a7384;
+  line-height: 1.55;
+}
+
+.weread-reading-data-repair__export-status {
+  margin: 0;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  align-self: flex-start;
+}
+
+.weread-reading-data-repair__export-status--success {
+  background: #e6f4ea;
+  color: #1e6e3a;
+}
+
+.weread-reading-data-repair__export-status--error {
+  background: #fde7e7;
+  color: #8a2424;
+}
+
+@media (max-width: 720px) {
+  .weread-reading-data-repair__export-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .weread-reading-data-repair__export-button {
+    width: 100%;
+    justify-content: center;
+  }
+}

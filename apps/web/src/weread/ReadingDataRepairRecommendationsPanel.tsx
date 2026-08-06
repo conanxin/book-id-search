@@ -30,12 +30,15 @@ import {
   type ReadingDataRepairRecommendation,
   type ReadingDataRepairRecommendationGroup,
   type WereadReadingDataRepairPlan,
+  buildReadingDataRepairDebugSnapshot,
   buildWereadReadingDataRepairPlan,
   selectActionableRepairRecommendations,
   selectHighestPriorityRepairRecommendations,
   selectManualReviewRepairRecommendations,
   selectUnsupportedRepairRecommendations,
 } from "./wereadReadingDataRepairRecommendations";
+
+import ReadingDataRepairExportAction from "./ReadingDataRepairExportAction";
 
 // ---------- i18n tables (exhaustive `satisfies Record<…>`) ----------
 
@@ -182,6 +185,16 @@ export function ReadingDataRepairRecommendationsPanel(
     props.audit,
   );
 
+  // Privacy-safe reset key for the export child component.
+  // JSON.stringify of the model's debug snapshot gives us a
+  // deterministic, side-effect-free digest that excludes the raw
+  // audit, Recommendation / Issue IDs, title / author / catalogId,
+  // and private IDs. Any change to the plan forces a fresh remount
+  // of the export child, clearing any prior success status.
+  const repairExportResetKey = JSON.stringify(
+    buildReadingDataRepairDebugSnapshot(plan),
+  );
+
   return (
     <section
       className="weread-reading-data-repair"
@@ -199,6 +212,12 @@ export function ReadingDataRepairRecommendationsPanel(
       </header>
 
       <RepairPlanSummary plan={plan} loading={props.loading} />
+
+      <ReadingDataRepairExportAction
+        key={repairExportResetKey}
+        plan={plan}
+        loading={props.loading}
+      />
 
       <RepairPlanGroups plan={plan} loading={props.loading} />
 
