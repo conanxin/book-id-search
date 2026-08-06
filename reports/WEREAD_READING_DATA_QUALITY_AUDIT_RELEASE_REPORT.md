@@ -14,7 +14,7 @@
 
 - **target_version**: `v0.22.1-weread-data-quality-audit-markdown`
 - **candidate_source_sha**: `4abec8e95d6f409cd8f5711a36fffcd6dcc65fce`
-- **release_metadata_commit**: `PENDING`（在 D9 提交后回填）
+- **release_metadata_commit**: `0593de246390f356833c5726c7e008df0de8878d`
 - **final_tag_commit**: `tag_target_commit: documented in Git tag verification`
 - **product_commits**:
   - `7699eaf` — Data Quality Audit Model
