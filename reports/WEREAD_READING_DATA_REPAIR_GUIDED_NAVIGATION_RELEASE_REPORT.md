@@ -13,8 +13,8 @@
 
 - **target_version**: `v0.24.0-weread-guided-repair-navigation`
 - **production_source_sha**: `1ab120c4798a403739ab57c729783b76fb1b89af`（生产运行的 Docker 镜像源码 commit）
-- **release_metadata_commit**: 见本节末尾（文档 metadata commit，不影响生产运行的 Docker 镜像源码）
-- **final_release_commit**: 见本节末尾（**这是 tag 指向的 commit**）
+- **release_metadata_commit**: `a2f7bc982119a4aa27bba3d589d3ca80bf855f8c`（文档 metadata commit，不影响生产运行的 Docker 镜像源码）
+- **final_release_commit**: `a2f7bc982119a4aa27bba3d589d3ca80bf855f8c`（**这是 tag 指向的 commit**；本仓库沿用 S27R 单 commit 约定，`final_release_commit = release_metadata_commit`）
 - 三者**不得混淆**：发布文档 commit 不影响生产运行的 Docker 镜像源码。
 - **product_commits**:
   - `b74ac72` — Reading Data Repair Guided Navigation Model
