@@ -40,6 +40,7 @@ import {
 
 import {
   buildWereadReadingDataRepairNavigationPlan,
+  buildReadingDataRepairNavigationDebugSnapshot,
   type ReadingDataRepairNavigationIntent,
 } from "./wereadReadingDataRepairNavigation";
 
@@ -47,11 +48,20 @@ import {
   ReadingDataRepairNavigationAction,
 } from "./ReadingDataRepairNavigationAction";
 
-import {
-  executeReadingDataRepairNavigationRequest,
-} from "./wereadReadingDataRepairNavigationRuntime";
+import type {
+  ReadingDataRepairNavigationRequest,
+} from "./wereadReadingDataRepairNavigationUi";
 
 import ReadingDataRepairExportAction from "./ReadingDataRepairExportAction";
+
+import {
+  ReadingDataRepairGuidedSessionController,
+  type ReadingDataRepairGuidedSessionRenderContext,
+} from "./ReadingDataRepairGuidedSessionController";
+
+import {
+  ReadingDataRepairNavigationFeedback,
+} from "./ReadingDataRepairNavigationFeedback";
 
 // ---------- i18n tables (exhaustive `satisfies Record<…>`) ----------
 
@@ -218,37 +228,61 @@ export function ReadingDataRepairRecommendationsPanel(
     buildReadingDataRepairDebugSnapshot(plan),
   );
 
+  // Same approach for the guided session controller: a deterministic,
+  // privacy-safe digest of the navigation plan. When the navigation plan
+  // semantically changes, React remounts the controller, resetting the
+  // ephemeral session.
+  const guidedSessionResetKey = JSON.stringify(
+    buildReadingDataRepairNavigationDebugSnapshot(navigationPlan),
+  );
+
   return (
-    <section
-      className="weread-reading-data-repair"
-      data-testid="weread-reading-data-repair"
+    <ReadingDataRepairGuidedSessionController
+      key={guidedSessionResetKey}
     >
-      <header className="weread-reading-data-repair__header">
-        <h3 className="weread-reading-data-repair__title">数据修复建议</h3>
-        <p className="weread-reading-data-repair__intro">
-          建议根据当前数据质量审计结果生成，只说明可检查或可重试的方向，
-          <strong>不会自动请求、修改或修复任何数据</strong>。
-        </p>
-        <p className="weread-reading-data-repair__priority-note">
-          建议优先级仅表示处理顺序，不代表用户或阅读行为的好坏。
-        </p>
-      </header>
+      {(context: ReadingDataRepairGuidedSessionRenderContext) => (
+        <section
+          className="weread-reading-data-repair"
+          data-testid="weread-reading-data-repair"
+        >
+          <header className="weread-reading-data-repair__header">
+            <h3 className="weread-reading-data-repair__title">数据修复建议</h3>
+            <p className="weread-reading-data-repair__intro">
+              建议根据当前数据质量审计结果生成，只说明可检查或可重试的方向，
+              <strong>不会自动请求、修改或修复任何数据</strong>。
+            </p>
+            <p className="weread-reading-data-repair__priority-note">
+              建议优先级仅表示处理顺序，不代表用户或阅读行为的好坏。
+            </p>
+          </header>
 
-      <RepairPlanSummary plan={plan} loading={props.loading} />
+          <RepairPlanSummary plan={plan} loading={props.loading} />
 
-      <ReadingDataRepairExportAction
-        key={repairExportResetKey}
-        plan={plan}
-        loading={props.loading}
-      />
+          <ReadingDataRepairExportAction
+            key={repairExportResetKey}
+            plan={plan}
+            loading={props.loading}
+          />
 
-      <RepairPlanGroups plan={plan} loading={props.loading} intentByRecId={intentByRecId} />
+          <RepairPlanGroups
+            plan={plan}
+            loading={props.loading}
+            intentByRecId={intentByRecId}
+            onRequestNavigation={context.onRequestNavigation}
+          />
 
-      <RepairPlanActionable plan={plan} loading={props.loading} />
-      <RepairPlanManualReview plan={plan} loading={props.loading} />
-      <RepairPlanUnsupported plan={plan} loading={props.loading} />
-      <RepairPlanHighestPriority plan={plan} loading={props.loading} />
-    </section>
+          <ReadingDataRepairNavigationFeedback
+            session={context.session}
+            summary={context.summary}
+          />
+
+          <RepairPlanActionable plan={plan} loading={props.loading} />
+          <RepairPlanManualReview plan={plan} loading={props.loading} />
+          <RepairPlanUnsupported plan={plan} loading={props.loading} />
+          <RepairPlanHighestPriority plan={plan} loading={props.loading} />
+        </section>
+      )}
+    </ReadingDataRepairGuidedSessionController>
   );
 }
 
@@ -299,9 +333,10 @@ function RepairPlanGroups(
     plan: WereadReadingDataRepairPlan;
     loading: boolean;
     intentByRecId: Map<string, ReadingDataRepairNavigationIntent>;
+    onRequestNavigation: (request: ReadingDataRepairNavigationRequest) => void;
   },
 ): JSX.Element {
-  const { plan, loading, intentByRecId } = props;
+  const { plan, loading, intentByRecId, onRequestNavigation } = props;
   if (loading) {
     return (
       <p
@@ -332,6 +367,7 @@ function RepairPlanGroups(
           key={`${group.priority}|${group.action}`}
           group={group}
           intentByRecId={intentByRecId}
+          onRequestNavigation={onRequestNavigation}
         />
       ))}
     </ol>
@@ -342,9 +378,10 @@ function RepairPlanGroup(
   props: {
     group: ReadingDataRepairRecommendationGroup;
     intentByRecId: Map<string, ReadingDataRepairNavigationIntent>;
+    onRequestNavigation: (request: ReadingDataRepairNavigationRequest) => void;
   },
 ): JSX.Element {
-  const { group, intentByRecId } = props;
+  const { group, intentByRecId, onRequestNavigation } = props;
   return (
     <li
       className="weread-reading-data-repair__group"
@@ -376,7 +413,12 @@ function RepairPlanGroup(
       </header>
       <ul className="weread-reading-data-repair__items">
         {group.recommendations.map((rec) => (
-          <RepairPlanItem key={rec.id} rec={rec} intent={intentByRecId.get(rec.id)!} />
+          <RepairPlanItem
+            key={rec.id}
+            rec={rec}
+            intent={intentByRecId.get(rec.id)!}
+            onRequestNavigation={onRequestNavigation}
+          />
         ))}
       </ul>
     </li>
@@ -387,9 +429,10 @@ function RepairPlanItem(
   props: {
     rec: ReadingDataRepairRecommendation;
     intent: ReadingDataRepairNavigationIntent;
+    onRequestNavigation: (request: ReadingDataRepairNavigationRequest) => void;
   },
 ): JSX.Element {
-  const { rec, intent } = props;
+  const { rec, intent, onRequestNavigation } = props;
   return (
     <li
       className="weread-reading-data-repair__item"
@@ -404,9 +447,7 @@ function RepairPlanItem(
       <RepairPlanItemLocation rec={rec} />
       <ReadingDataRepairNavigationAction
         intent={intent}
-        onRequestNavigation={(request) => {
-          executeReadingDataRepairNavigationRequest(request);
-        }}
+        onRequestNavigation={onRequestNavigation}
       />
     </li>
   );

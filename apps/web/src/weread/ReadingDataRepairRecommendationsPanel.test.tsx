@@ -1177,3 +1177,227 @@ describe("S27R-2A — Reading Data Repair Recommendations Panel", () => {
     expect(src).toMatch(/const repairExportResetKey = JSON\.stringify\(/);
   });
 });
+
+// ============================================================================
+// S27S-3B — Guided Navigation Feedback and Ephemeral Session integration
+// ============================================================================
+
+describe("S27S-3B — Guided Navigation Feedback integration", () => {
+  it("75. Panel wraps content in ReadingDataRepairGuidedSessionController", async () => {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const src = await fs.readFile(
+      path.resolve(
+        process.cwd(),
+        "apps/web/src/weread/ReadingDataRepairRecommendationsPanel.tsx",
+      ),
+      "utf8",
+    );
+    expect(src).toContain("ReadingDataRepairGuidedSessionController");
+  });
+
+  it("76. Panel renders the ReadingDataRepairNavigationFeedback child", async () => {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const src = await fs.readFile(
+      path.resolve(
+        process.cwd(),
+        "apps/web/src/weread/ReadingDataRepairRecommendationsPanel.tsx",
+      ),
+      "utf8",
+    );
+    expect(src).toContain("ReadingDataRepairNavigationFeedback");
+  });
+
+  it("77. Panel remains zero-hook (no useState/useEffect/useMemo/useReducer/useRef in code)", async () => {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const src = await fs.readFile(
+      path.resolve(
+        process.cwd(),
+        "apps/web/src/weread/ReadingDataRepairRecommendationsPanel.tsx",
+      ),
+      "utf8",
+    );
+    const codeOnly = src
+      .split("\n")
+      .filter((line) => !line.trimStart().startsWith("import") && !line.trimStart().startsWith("}"))
+      .join("\n")
+      .replace(/\/\/[^\n]*/g, "")
+      .replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(codeOnly).not.toMatch(/\buseState\b/);
+    expect(codeOnly).not.toMatch(/\buseEffect\b/);
+    expect(codeOnly).not.toMatch(/\buseMemo\b/);
+    expect(codeOnly).not.toMatch(/\buseReducer\b/);
+    expect(codeOnly).not.toMatch(/\buseRef\b/);
+  });
+
+  it("78. Panel computes a guidedSessionResetKey from navigation plan snapshot", async () => {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const src = await fs.readFile(
+      path.resolve(
+        process.cwd(),
+        "apps/web/src/weread/ReadingDataRepairRecommendationsPanel.tsx",
+      ),
+      "utf8",
+    );
+    expect(src).toMatch(/const guidedSessionResetKey = JSON\.stringify\(/);
+    expect(src).toContain("buildReadingDataRepairNavigationDebugSnapshot");
+  });
+
+  it("79. Panel does not pass raw request or raw result to Feedback", async () => {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const src = await fs.readFile(
+      path.resolve(
+        process.cwd(),
+        "apps/web/src/weread/ReadingDataRepairRecommendationsPanel.tsx",
+      ),
+      "utf8",
+    );
+    // Panel only forwards session + summary to Feedback.
+    expect(src).toContain("session={context.session}");
+    expect(src).toContain("summary={context.summary}");
+  });
+
+  it("80. Panel initial render does not include any feedback element", () => {
+    const html = renderToStaticMarkup(
+      <ReadingDataRepairRecommendationsPanel
+        audit={makeAudit([])}
+        loading={false}
+      />,
+    );
+    expect(html).not.toContain('data-testid="weread-reading-data-repair-navigation-feedback"');
+  });
+
+  it("81. Panel does not execute Runtime itself (delegates to Controller)", async () => {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const src = await fs.readFile(
+      path.resolve(
+        process.cwd(),
+        "apps/web/src/weread/ReadingDataRepairRecommendationsPanel.tsx",
+      ),
+      "utf8",
+    );
+    expect(src).not.toContain("executeReadingDataRepairNavigationRequest");
+  });
+
+  it("82. Panel does not import the Feedback Builder directly", async () => {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const src = await fs.readFile(
+      path.resolve(
+        process.cwd(),
+        "apps/web/src/weread/ReadingDataRepairRecommendationsPanel.tsx",
+      ),
+      "utf8",
+    );
+    expect(src).not.toContain("buildReadingDataRepairNavigationFeedback");
+    expect(src).not.toContain("applyReadingDataRepairNavigationFeedback");
+  });
+
+  it("83. Panel does not pass surfaceKey / IDs to Feedback", async () => {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const src = await fs.readFile(
+      path.resolve(
+        process.cwd(),
+        "apps/web/src/weread/ReadingDataRepairRecommendationsPanel.tsx",
+      ),
+      "utf8",
+    );
+    const feedbackProps = src.match(/<ReadingDataRepairNavigationFeedback[^>]*\/>/s);
+    expect(feedbackProps).toBeTruthy();
+    expect(feedbackProps![0]).not.toContain("surfaceKey");
+    expect(feedbackProps![0]).not.toContain("rec");
+    expect(feedbackProps![0]).not.toContain("issue");
+  });
+
+  it("84. Panel initial render does not contain user-evaluation wording in feedback area", () => {
+    const html = renderToStaticMarkup(
+      <ReadingDataRepairRecommendationsPanel
+        audit={makeAudit([])}
+        loading={false}
+      />,
+    );
+    // No Feedback element on initial render.
+    expect(html).not.toContain("已定位");
+    expect(html).not.toContain("导航失败");
+  });
+
+  it("85. Panel never executes repair / fetches / stores URL in source", async () => {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const src = await fs.readFile(
+      path.resolve(
+        process.cwd(),
+        "apps/web/src/weread/ReadingDataRepairRecommendationsPanel.tsx",
+      ),
+      "utf8",
+    );
+    expect(src).not.toMatch(/fetch\(|XMLHttpRequest|WebSocket/);
+    expect(src).not.toMatch(/pushState|replaceState/);
+    expect(src).not.toMatch(/setTimeout|requestAnimationFrame|MutationObserver/);
+    expect(src).not.toMatch(/Math\.random|crypto\.randomUUID|new Date|Date\.now/);
+  });
+
+  it("86. Panel does not render raw Runtime Result fields (scrollCount/focusCount)", () => {
+    const html = renderToStaticMarkup(
+      <ReadingDataRepairRecommendationsPanel
+        audit={makeAudit([])}
+        loading={false}
+      />,
+    );
+    expect(html).not.toContain("scrollCount");
+    expect(html).not.toContain("focusCount");
+  });
+
+  it("87. Panel wires NavigationAction onRequestNavigation through Controller context", async () => {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const src = await fs.readFile(
+      path.resolve(
+        process.cwd(),
+        "apps/web/src/weread/ReadingDataRepairRecommendationsPanel.tsx",
+      ),
+      "utf8",
+    );
+    expect(src).toContain("context.onRequestNavigation");
+    expect(src).toMatch(/onRequestNavigation=\{context\.onRequestNavigation\}/);
+  });
+
+  it("88. Panel always renders the canonical repair testid", () => {
+    const html = renderToStaticMarkup(
+      <ReadingDataRepairRecommendationsPanel
+        audit={makeAudit([])}
+        loading={false}
+      />,
+    );
+    expect(html).toContain('data-testid="weread-reading-data-repair"');
+  });
+
+  it("89. Panel renders the same data-testids as before integration", () => {
+    const html = renderToStaticMarkup(
+      <ReadingDataRepairRecommendationsPanel
+        audit={makeAudit([])}
+        loading={false}
+      />,
+    );
+    expect(html).toContain('data-testid="weread-reading-data-repair"');
+    expect(html).toContain('data-testid="weread-reading-data-repair-summary"');
+    expect(html).toContain('data-testid="weread-reading-data-repair-export"');
+  });
+
+  it("90. Panel renders existing recommendation items with navigation buttons", () => {
+    const audit = makeAudit([
+      makeIssue({ code: "partial_archive", severity: "error", id: "s90" }),
+    ]);
+    const html = renderToStaticMarkup(
+      <ReadingDataRepairRecommendationsPanel audit={audit} loading={false} />,
+    );
+    expect(html).toContain('data-testid="weread-reading-data-repair-item"');
+    expect(html).toContain("查看对应区域");
+  });
+});
