@@ -330,3 +330,16 @@ S27R-3 在「数据修复建议」面板新增「导出修复建议 Markdown」�
 - 内容含元数据、安全说明、建议总览、建议明细、三档分组列表、方法说明。
 - 不重新请求 `annual-review`、不调用 AI、不写 storage、不修改 URL、不自动修复。
 - 排除：Recommendation ID、Issue ID、actual/expected、title/author/catalogId、note/comment、私有 ID、token/API key、raw audit/plan JSON、评价性语言。
+
+### 引导式修复导航（S27S）
+
+`WereadCenter` 自 S27S 起在「数据修复建议」面板新增「引导至视图区域」按钮，由用户对每条建议显式点击触发。详见 `docs/WEREAD_READING_DATA_REPAIR_GUIDED_NAVIGATION.md`：
+
+- 命中范围仅限 `WereadCenter` 已挂载的 7 个视图区域（运行期硬编码白名单，不依赖 DOM 查询 / selector）。
+- 触发源只能是用户对 `NavigationAction` 的真实点击；不存在任何自动滚动 / 自动聚焦 / mount/rerender 触发。
+- 每次成功导航执行：滚动 1 次 + 聚焦 1 次；不存在重复滚动 / 重复聚焦。
+- 缺失 / 歧义 / 拒绝场景一律 fail closed，产出 `surface_unavailable` / `surface_ambiguous` / `request_rejected` 中性 Feedback。
+- Feedback 只描述本次跳转状态（`navigation_complete` 等），**绝不**代表数据已被修复；`success` 仅代表 `navigation_complete`。
+- 引导会话（attempts / successful / unavailable / ambiguous / rejected）是纯内存计数，plan 变更 / unmount / tab 切换即重置；不写 storage / 不上传 / 不进 Meilisearch。
+- 不重新请求 `annual-review` / `related-books`、不调用 AI、不写 storage、不修改 URL、不发起任何网络请求。
+- 排除：Recommendation ID、Issue ID、surfaceKey、locator、raw request/result、actual/expected、title/author/catalogId、私有 ID、token/API key、评价性语言。

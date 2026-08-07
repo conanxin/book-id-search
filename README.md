@@ -356,7 +356,21 @@ Caddy 是公网唯一入口。3001/5173/7700 全部绑定 `127.0.0.1`。
 
 最终公网复核报告：[reports/FINAL_PUBLIC_ACCESS_VERIFICATION.md](reports/FINAL_PUBLIC_ACCESS_VERIFICATION.md)。
 
-当前稳定 tag：`v0.23.1-weread-data-repair-recommendations-markdown`。
+当前稳定 tag：`v0.24.0-weread-guided-repair-navigation`。
+
+#### v0.24.0 新增能力（引导式修复导航）
+
+- 长期档案数据修复建议的「引导至视图区域」能力（基于 S27R 已固化的中性建议）
+- 9 个 `RepairAction` × 8 个 `NavigationTarget`（7 个真实 verified surface + 1 个 `no_surface`）
+- 3 种 `NavigationKind`（scroll / focus / noop）；运行期硬编码白名单只命中 `WereadCenter` 已挂载区域
+- 显式触发：只能由用户对 `NavigationAction` 的真实点击触发；不存在 mount/rerender/effect 触发
+- 运行期安全：exactly-one Surface、scroll once、focus once、缺失 / 歧义 / 拒绝场景一律 fail closed
+- 4 种中性 Feedback status（`navigation_complete` / `surface_unavailable` / `surface_ambiguous` / `request_rejected`）+ 3 种 kind
+- 短暂会话（attempts / successful / unavailable / ambiguous / rejected）只存在于内存；plan 变更 / unmount 即重置
+- 0 额外请求、0 AI 调用、0 持久化、不修改 URL、不发起任何网络请求
+- 确定性候选镜像 + 严格线上 manifest 验证
+
+**严格边界**：引导式导航只改变当前页面视图位置；**不是自动修复**；`feedback.kind === "success"` **仅代表 NAVIGATION COMPLETE**，**不代表数据已被修复**。详见 [docs/WEREAD_READING_DATA_REPAIR_GUIDED_NAVIGATION.md](docs/WEREAD_READING_DATA_REPAIR_GUIDED_NAVIGATION.md)。
 
 #### v0.23.1 新增能力（数据修复建议）
 

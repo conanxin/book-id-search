@@ -22,6 +22,7 @@
 - **支持浏览器本地审计 Markdown 导出**（S27Q-3B，在「数据质量审计」面板导出当前审计结果为 Markdown，详见 `WEREAD_READING_DATA_QUALITY_AUDIT_MARKDOWN.md`）。
 - **支持数据修复建议**（S27R，在「长期档案」内新增建议面板，把当前审计结果确定性地映射为中性修复建议，详见 `WEREAD_READING_DATA_REPAIR_RECOMMENDATIONS.md`）。
 - **支持浏览器本地修复建议 Markdown 导出**（S27R-3，在「数据修复建议」面板导出当前建议结果为 Markdown，详见 `WEREAD_READING_DATA_REPAIR_RECOMMENDATIONS_MARKDOWN.md`）。
+- **支持引导式修复导航**（S27S，在「数据修复建议」面板内为每条建议增加「引导至视图区域」按钮，由用户显式点击触发；运行期白名单只命中当前 `WereadCenter` 中已存在的视图区域；不修改 URL，不发起网络请求，不持久化任何会话。详见 `WEREAD_READING_DATA_REPAIR_GUIDED_NAVIGATION.md`）。
 
 | 选项 | 实际加载年份数 | 备注 |
 |------|---------------|------|
