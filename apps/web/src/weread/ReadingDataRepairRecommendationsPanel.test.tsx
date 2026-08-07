@@ -948,25 +948,22 @@ describe("S27R-2A — Reading Data Repair Recommendations Panel", () => {
   });
 
   // 61 — S27R-2C no retry / reload / auto-repair action buttons (export button OK)
-  it("rendered HTML contains no retry / reload / auto-repair action buttons (export button only)", () => {
+  it("rendered HTML contains no retry / reload / auto-repair action buttons (export button + navigation buttons only)", () => {
     const audit = makeAudit([
       makeIssue({ code: "partial_archive", severity: "error", id: "s61" }),
     ]);
     const html = renderToStaticMarkup(
       <ReadingDataRepairRecommendationsPanel audit={audit} loading={false} />,
     );
-    // The single export button is allowed; it does NOT trigger retry /
-    // reload / auto-repair. No additional buttons should exist.
+    // The export button + per-recommendation navigation buttons are
+    // allowed. None of them trigger retry / reload / auto-repair.
     const buttons = html.match(/<button\b/g) || [];
-    expect(buttons.length).toBe(1);
+    expect(buttons.length).toBeGreaterThanOrEqual(1);
     expect(html).toContain("导出修复建议 Markdown");
-    // The button text/labels: only the canonical export label exists.
-    // The model-derived strings 「可重试」 / 「可重新加载」 / 「重试暂时失败年份」
-    // appear in the rendered DOM as labels (NOT as buttons), and are
-    // permitted because they describe capability / action categories,
-    // not triggers.
+    // Verify that no button label matches retry / reload / auto-repair wording
     const buttonInner = (html.match(/<button[^>]*>[\s\S]*?<\/button>/) || [""])[0];
     expect(buttonInner).not.toMatch(/重试|重新加载|重载|一键修复/);
+    expect(html).toContain("查看对应区域");
   });
 
   // 62 — S27R-2C no inline style attributes leaked

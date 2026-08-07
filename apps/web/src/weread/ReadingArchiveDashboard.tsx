@@ -634,6 +634,8 @@ function ArchiveRecurringBooksSection({ archive }: ArchiveRecurringBooksSectionP
     <section
       className="weread-reading-archive__book-grid"
       data-testid="weread-reading-archive-book-grid"
+      data-weread-repair-surface="archive_book_grid:recurring"
+      tabIndex={-1}
     >
       <h3>多年进入 Top {archive.meta.topBooksLimit} 高互动榜的书目</h3>
       <p

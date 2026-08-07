@@ -38,6 +38,19 @@ import {
   selectUnsupportedRepairRecommendations,
 } from "./wereadReadingDataRepairRecommendations";
 
+import {
+  buildWereadReadingDataRepairNavigationPlan,
+  type ReadingDataRepairNavigationIntent,
+} from "./wereadReadingDataRepairNavigation";
+
+import {
+  ReadingDataRepairNavigationAction,
+} from "./ReadingDataRepairNavigationAction";
+
+import {
+  executeReadingDataRepairNavigationRequest,
+} from "./wereadReadingDataRepairNavigationRuntime";
+
 import ReadingDataRepairExportAction from "./ReadingDataRepairExportAction";
 
 // ---------- i18n tables (exhaustive `satisfies Record<…>`) ----------
@@ -185,6 +198,16 @@ export function ReadingDataRepairRecommendationsPanel(
     props.audit,
   );
 
+  // Build navigation intents deterministically (1:1 with plan.recommendations).
+  // Internal Map key is rec.id (never rendered to DOM). The Map is passed
+  // down to RepairPlanItem so each item can look up its intent. This keeps
+  // the Panel stays zero-hook.
+  const navigationPlan = buildWereadReadingDataRepairNavigationPlan(plan);
+  const intentByRecId = new Map<string, ReadingDataRepairNavigationIntent>();
+  for (let i = 0; i < plan.recommendations.length; i += 1) {
+    intentByRecId.set(plan.recommendations[i].id, navigationPlan.intents[i]);
+  }
+
   // Privacy-safe reset key for the export child component.
   // JSON.stringify of the model's debug snapshot gives us a
   // deterministic, side-effect-free digest that excludes the raw
@@ -219,7 +242,7 @@ export function ReadingDataRepairRecommendationsPanel(
         loading={props.loading}
       />
 
-      <RepairPlanGroups plan={plan} loading={props.loading} />
+      <RepairPlanGroups plan={plan} loading={props.loading} intentByRecId={intentByRecId} />
 
       <RepairPlanActionable plan={plan} loading={props.loading} />
       <RepairPlanManualReview plan={plan} loading={props.loading} />
@@ -272,9 +295,13 @@ function SummaryRow(props: { label: string; value: number }): JSX.Element {
 }
 
 function RepairPlanGroups(
-  props: { plan: WereadReadingDataRepairPlan; loading: boolean },
+  props: {
+    plan: WereadReadingDataRepairPlan;
+    loading: boolean;
+    intentByRecId: Map<string, ReadingDataRepairNavigationIntent>;
+  },
 ): JSX.Element {
-  const { plan, loading } = props;
+  const { plan, loading, intentByRecId } = props;
   if (loading) {
     return (
       <p
@@ -304,6 +331,7 @@ function RepairPlanGroups(
         <RepairPlanGroup
           key={`${group.priority}|${group.action}`}
           group={group}
+          intentByRecId={intentByRecId}
         />
       ))}
     </ol>
@@ -311,9 +339,12 @@ function RepairPlanGroups(
 }
 
 function RepairPlanGroup(
-  props: { group: ReadingDataRepairRecommendationGroup },
+  props: {
+    group: ReadingDataRepairRecommendationGroup;
+    intentByRecId: Map<string, ReadingDataRepairNavigationIntent>;
+  },
 ): JSX.Element {
-  const { group } = props;
+  const { group, intentByRecId } = props;
   return (
     <li
       className="weread-reading-data-repair__group"
@@ -345,7 +376,7 @@ function RepairPlanGroup(
       </header>
       <ul className="weread-reading-data-repair__items">
         {group.recommendations.map((rec) => (
-          <RepairPlanItem key={rec.id} rec={rec} />
+          <RepairPlanItem key={rec.id} rec={rec} intent={intentByRecId.get(rec.id)!} />
         ))}
       </ul>
     </li>
@@ -353,9 +384,12 @@ function RepairPlanGroup(
 }
 
 function RepairPlanItem(
-  props: { rec: ReadingDataRepairRecommendation },
+  props: {
+    rec: ReadingDataRepairRecommendation;
+    intent: ReadingDataRepairNavigationIntent;
+  },
 ): JSX.Element {
-  const { rec } = props;
+  const { rec, intent } = props;
   return (
     <li
       className="weread-reading-data-repair__item"
@@ -368,6 +402,12 @@ function RepairPlanItem(
         </span>
       </div>
       <RepairPlanItemLocation rec={rec} />
+      <ReadingDataRepairNavigationAction
+        intent={intent}
+        onRequestNavigation={(request) => {
+          executeReadingDataRepairNavigationRequest(request);
+        }}
+      />
     </li>
   );
 }
