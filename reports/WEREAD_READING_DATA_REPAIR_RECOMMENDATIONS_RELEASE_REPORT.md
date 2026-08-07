@@ -14,7 +14,8 @@
 
 - **target_version**: `v0.23.1-weread-data-repair-recommendations-markdown`
 - **production_source_sha**: `86b6b7b5d8927b9624cf2fb399d934c828815175`
-- **release_metadata_commit**: 见仓库 tag 引用（`FINAL_RELEASE_COMMIT`，在 `git tag -a` 输出中记录）
+- **release_metadata_commit**: `aaecef9754ca4f3a6944ff0eac6abf912b8aaf42`（文档 metadata commit，不影响 Docker 镜像源码）
+- **final_tag_commit**: `tag_target_commit: documented in Git tag verification`（tag 指向本 commit 之后的下一个 commit）
 - **product_commits**:
   - `a0126a5` — Reading Data Repair Recommendation Model
   - `2162083` — Reading Data Repair Recommendations Dashboard
