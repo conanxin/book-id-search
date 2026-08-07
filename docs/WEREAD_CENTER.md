@@ -312,3 +312,21 @@ S27Q-3B 在「数据质量审计」面板新增「导出审计 Markdown」按钮
 - 内容含元数据、隐私说明、完整性提示、审计总览、五项比例、年份覆盖、Issue 三档分组、当前模型限制、方法说明。
 - 不重新请求 `annual-review`、不调用 AI、不写 storage、不修改 URL。
 - 排除：Issue ID、title/author/catalogId、note/comment、私有 ID、token/API key、raw archive/audit JSON、评价性语言。
+
+### 数据修复建议（S27R）
+
+`WereadCenter` 自 S27R 起在「长期档案」工作区新增「数据修复建议」面板。详见 `docs/WEREAD_READING_DATA_REPAIR_RECOMMENDATIONS.md`：
+
+- 输入是当前「数据质量审计」结果，不重新请求 `annual-review`，不调用 AI，不写 storage，不修改 URL。
+- 输出 36 个当前 IssueCode 对应的确定性的中性修复建议，按 `actionable` / `manual-review` / `unsupported` 三档分组。
+- 面板内**不存在任何执行修复动作的按钮**；不存在「一键修复」「自动修复」等措辞。
+- 不读取笔记正文、不持久化、不写 raw archive/plan、不上传、不评价用户本人。
+
+#### 数据修复建议 Markdown 导出（S27R-3）
+
+S27R-3 在「数据修复建议」面板新增「导出修复建议 Markdown」按钮，纯浏览器本地生成。详见 `docs/WEREAD_READING_DATA_REPAIR_RECOMMENDATIONS_MARKDOWN.md`：
+
+- 文件名 `weread-reading-data-repair-plan-YYYYMMDD.md`，纯 ASCII；MIME `text/markdown;charset=utf-8`。
+- 内容含元数据、安全说明、建议总览、建议明细、三档分组列表、方法说明。
+- 不重新请求 `annual-review`、不调用 AI、不写 storage、不修改 URL、不自动修复。
+- 排除：Recommendation ID、Issue ID、actual/expected、title/author/catalogId、note/comment、私有 ID、token/API key、raw audit/plan JSON、评价性语言。

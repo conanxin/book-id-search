@@ -20,6 +20,8 @@
 - **支持浏览器本地 Timeline Markdown 导出**（S27P-2，在「年度统计演变时间线」面板导出当前时间线结果为 Markdown，见 `WEREAD_READING_EVOLUTION_TIMELINE_MARKDOWN.md`）。
 - **支持数据质量审计**（S27Q-1C，在「长期档案」内新增审计面板，对当前已加载档案做静态审计，输出 `pass / warn / fail` 中性状态，详见 `WEREAD_READING_DATA_QUALITY_AUDIT.md`）。
 - **支持浏览器本地审计 Markdown 导出**（S27Q-3B，在「数据质量审计」面板导出当前审计结果为 Markdown，详见 `WEREAD_READING_DATA_QUALITY_AUDIT_MARKDOWN.md`）。
+- **支持数据修复建议**（S27R，在「长期档案」内新增建议面板，把当前审计结果确定性地映射为中性修复建议，详见 `WEREAD_READING_DATA_REPAIR_RECOMMENDATIONS.md`）。
+- **支持浏览器本地修复建议 Markdown 导出**（S27R-3，在「数据修复建议」面板导出当前建议结果为 Markdown，详见 `WEREAD_READING_DATA_REPAIR_RECOMMENDATIONS_MARKDOWN.md`）。
 
 | 选项 | 实际加载年份数 | 备注 |
 |------|---------------|------|

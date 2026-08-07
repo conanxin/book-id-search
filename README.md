@@ -356,7 +356,20 @@ Caddy 是公网唯一入口。3001/5173/7700 全部绑定 `127.0.0.1`。
 
 最终公网复核报告：[reports/FINAL_PUBLIC_ACCESS_VERIFICATION.md](reports/FINAL_PUBLIC_ACCESS_VERIFICATION.md)。
 
-当前稳定 tag：`v0.22.1-weread-data-quality-audit-markdown`。
+当前稳定 tag：`v0.23.1-weread-data-repair-recommendations-markdown`。
+
+#### v0.23.1 新增能力（数据修复建议）
+
+- 长期档案数据修复建议（基于当前「数据质量审计」结果确定性地映射为中性建议）
+- 36 个当前 IssueCode 对应的 9 个动作、5 个能力、4 个优先级、9 个指导语
+- 建议分组：可由现有界面处理（actionable）/ 需要人工核对（manual-review）/ 当前字段不足（unsupported）
+- 决定性排序：相同输入下输出建议集顺序稳定
+- 浏览器本地修复建议 Markdown 导出（`weread-reading-data-repair-plan-YYYYMMDD.md`，MIME `text/markdown;charset=utf-8`）
+- **建议不是自动修复**：面板内不存在任何执行修复动作的按钮；不存在「一键修复」「自动修复」措辞
+- 0 额外请求、0 AI 调用、0 持久化、不修改源数据
+- 确定性候选镜像 + 严格线上 manifest 验证
+
+**严格边界**：建议只描述「数据是否自洽、是否对得上、当前字段能否承载该建议」的中性事实；不输出用户评分、不输出阅读质量高低、不评价兴趣/能力/心理状态、不执行任何修复动作。详见 [docs/WEREAD_READING_DATA_REPAIR_RECOMMENDATIONS.md](docs/WEREAD_READING_DATA_REPAIR_RECOMMENDATIONS.md) 和 [docs/WEREAD_READING_DATA_REPAIR_RECOMMENDATIONS_MARKDOWN.md](docs/WEREAD_READING_DATA_REPAIR_RECOMMENDATIONS_MARKDOWN.md)。
 
 #### v0.22.1 新增能力（数据质量审计）
 
