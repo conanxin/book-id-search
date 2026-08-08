@@ -306,6 +306,204 @@ else
 fi
 
 # ============================================================
+# S27T-1A: Path-resolution tests (script-relative APP_DIR)
+#
+# These tests verify the patched deploy script resolves its APP_DIR from
+# its own location (BASH_SOURCE[0]) instead of from a hardcoded absolute
+# path. They DO NOT touch real Docker / production; they use the same fake
+# docker harness but record PWD at compose-time.
+# ============================================================
+
+# Helper: extract the PWD observed by fake docker at the compose-up call
+compose_seen_pwd() {
+  local log="$1"
+  awk -F= '/^PWD=/ && !seen { print $2; seen=1 }' "$log"
+}
+
+# Helper: set up a relocated copy of the deploy script at a given parent
+# directory, with a docker-compose.yml marker so the script's fail-closed
+# root validation accepts it. Echoes the absolute path to the relocated
+# script.
+relocate_deploy_script() {
+  local parent_dir="$1"
+  local scripts_dir="$parent_dir/scripts"
+  mkdir -p "$scripts_dir"
+  cp "$DEPLOY_SCRIPT" "$scripts_dir/deploy-web-release-candidate.sh"
+  cp "$APP_DIR/docker-compose.yml" "$parent_dir/docker-compose.yml"
+  echo "$scripts_dir/deploy-web-release-candidate.sh"
+}
+
+# Helper: run the deploy script under a given scenario. Records PWD via
+# the fake docker log.
+run_root_scenario() {
+  local scenario_name="$1"
+  local script_path="$2"   # absolute path to deploy script
+  local caller_cwd="$3"    # where to cd before invocation
+  local image_tag="$4"     # image tag to deploy
+  local extra_env=("${@:5}")
+
+  local SCEN_TMP="$RUN_TMP/$scenario_name"
+  mkdir -p "$SCEN_TMP"
+  local SUDO_LOG="$SCEN_TMP/fake-sudo.log"
+  local DOCKER_LOG="$SCEN_TMP/fake-docker.log"
+  rm -f "$SUDO_LOG" "$DOCKER_LOG"
+
+  local EXPORT_VARS=(
+    "FAKE_SUDO_LOG=$SUDO_LOG"
+    "FAKE_DOCKER_LOG=$DOCKER_LOG"
+    "PATH=$RUN_TMP/bin:$PATH"
+  )
+  for kv in "${extra_env[@]}"; do
+    EXPORT_VARS+=("$kv")
+  done
+
+  (
+    cd "$caller_cwd"
+    env "${EXPORT_VARS[@]}" \
+      bash "$script_path" "$image_tag" \
+      > "$SCEN_TMP/stdout.txt" 2> "$SCEN_TMP/stderr.txt"
+    echo $? > "$SCEN_TMP/exit.txt"
+  )
+
+  echo "[scenario=$scenario_name] caller_cwd=$caller_cwd script=$script_path" \
+    > "$SCEN_TMP/scenario-info.txt"
+  cat "$SCEN_TMP/scenario-info.txt"
+}
+
+# ============================================================
+# TEST 7: production-layout root resolution
+# (script at /opt/book-id-search/scripts/, PWD at compose-time must
+# equal /opt/book-id-search)
+# ============================================================
+SCEN="test7_production_layout_root"
+run_root_scenario "$SCEN" "$DEPLOY_SCRIPT" "$APP_DIR" "book-id-search-web:test-root-resolution" "FAKE_SUDO_LOG=$RUN_TMP/$SCEN/fake-sudo.log"
+
+# Compute expected root via script-location resolution (independent of
+# any hardcode in the script).
+EXPECTED_ROOT="$(cd "$APP_DIR" && pwd)"
+ACTUAL_PWD="$(compose_seen_pwd "$RUN_TMP/$SCEN/fake-docker.log")"
+if [ "$ACTUAL_PWD" = "$EXPECTED_ROOT" ]; then
+  assert_pass "TEST7_production_layout_root (compose PWD=$ACTUAL_PWD)"
+else
+  assert_fail "TEST7_production_layout_root" \
+    "compose PWD=$ACTUAL_PWD, expected $EXPECTED_ROOT"
+fi
+
+# ============================================================
+# TEST 8: exact-byte relocated copy resolves to its own root
+# (NOT /opt/book-id-search)
+# ============================================================
+RELO_TMP="$RUN_TMP/test8_relocated"
+rm -rf "$RELO_TMP"
+RELO_SCRIPT="$(relocate_deploy_script "$RELO_TMP")"
+# Sanity: SHA of relocated copy matches the production script
+RELO_SHA="$(sha256sum "$RELO_SCRIPT" | awk '{print $1}')"
+ORIG_SHA="$(sha256sum "$DEPLOY_SCRIPT" | awk '{print $1}')"
+if [ "$RELO_SHA" != "$ORIG_SHA" ]; then
+  assert_fail "TEST8_exact_byte_sha_match" \
+    "relocated SHA=$RELO_SHA differs from original SHA=$ORIG_SHA"
+else
+  assert_pass "TEST8_exact_byte_sha_match"
+fi
+
+SCEN="test8_relocated_root"
+run_root_scenario "$SCEN" "$RELO_SCRIPT" "$RELO_TMP" "book-id-search-web:test-root-resolution"
+
+EXPECTED_RELO_ROOT="$(cd "$RELO_TMP" && pwd)"
+ACTUAL_PWD="$(compose_seen_pwd "$RUN_TMP/$SCEN/fake-docker.log")"
+# Hard requirement: must NOT be the production root
+if [ "$ACTUAL_PWD" = "$APP_DIR" ]; then
+  assert_fail "TEST8_relocated_root_does_not_resolve_to_production" \
+    "relocated script resolved to production APP_DIR=$APP_DIR (bug)"
+elif [ "$ACTUAL_PWD" = "$EXPECTED_RELO_ROOT" ]; then
+  assert_pass "TEST8_relocated_root (compose PWD=$ACTUAL_PWD)"
+else
+  assert_fail "TEST8_relocated_root" \
+    "compose PWD=$ACTUAL_PWD, expected $EXPECTED_RELO_ROOT (and NOT $APP_DIR)"
+fi
+
+# ============================================================
+# TEST 9: caller-cwd independence (production script, called from /tmp)
+# ============================================================
+SCEN="test9_caller_cwd_independence"
+run_root_scenario "$SCEN" "$DEPLOY_SCRIPT" "/tmp" "book-id-search-web:test-root-resolution"
+
+EXPECTED_ROOT="$(cd "$APP_DIR" && pwd)"
+ACTUAL_PWD="$(compose_seen_pwd "$RUN_TMP/$SCEN/fake-docker.log")"
+if [ "$ACTUAL_PWD" = "$EXPECTED_ROOT" ]; then
+  assert_pass "TEST9_caller_cwd_independence (compose PWD=$ACTUAL_PWD despite caller_cwd=/tmp)"
+else
+  assert_fail "TEST9_caller_cwd_independence" \
+    "compose PWD=$ACTUAL_PWD, expected $EXPECTED_ROOT"
+fi
+
+# ============================================================
+# TEST 10: relocated copy, called from / (different cwd)
+# ============================================================
+SCEN="test10_relocated_different_cwd"
+run_root_scenario "$SCEN" "$RELO_SCRIPT" "/" "book-id-search-web:test-root-resolution"
+
+EXPECTED_RELO_ROOT="$(cd "$RELO_TMP" && pwd)"
+ACTUAL_PWD="$(compose_seen_pwd "$RUN_TMP/$SCEN/fake-docker.log")"
+if [ "$ACTUAL_PWD" = "$EXPECTED_RELO_ROOT" ]; then
+  assert_pass "TEST10_relocated_different_cwd (compose PWD=$ACTUAL_PWD despite caller_cwd=/)"
+else
+  assert_fail "TEST10_relocated_different_cwd" \
+    "compose PWD=$ACTUAL_PWD, expected $EXPECTED_RELO_ROOT"
+fi
+
+# ============================================================
+# TEST 11: path with spaces
+# ============================================================
+SPACE_TMP="/tmp/s27t space $(date +%s)-$$"
+SPACE_TMP="$(echo "$SPACE_TMP" | tr ' ' '_')"  # mktemp disallows spaces; use underscores but log intent
+# Actually the task wants real spaces; use a name with real spaces.
+SPACE_NAME="s27t space $(date +%s)-$$"
+SPACE_TMP="/tmp/$SPACE_NAME"
+rm -rf "$SPACE_TMP"
+SPACE_SCRIPT="$(relocate_deploy_script "$SPACE_TMP")"
+
+SCEN="test11_path_with_spaces"
+run_root_scenario "$SCEN" "$SPACE_SCRIPT" "/tmp" "book-id-search-web:test-root-resolution"
+
+EXPECTED_SPACE_ROOT="$(cd "$SPACE_TMP" && pwd)"
+ACTUAL_PWD="$(compose_seen_pwd "$RUN_TMP/$SCEN/fake-docker.log")"
+if [ "$ACTUAL_PWD" = "$EXPECTED_SPACE_ROOT" ]; then
+  assert_pass "TEST11_path_with_spaces (compose PWD=$ACTUAL_PWD)"
+else
+  assert_fail "TEST11_path_with_spaces" \
+    "compose PWD=$ACTUAL_PWD, expected $EXPECTED_SPACE_ROOT"
+fi
+rm -rf "$SPACE_TMP"
+
+# ============================================================
+# TEST 12: missing docker-compose.yml at resolved root fails closed
+# ============================================================
+MISSING_TMP="$RUN_TMP/test12_missing_compose"
+rm -rf "$MISSING_TMP"
+mkdir -p "$MISSING_TMP/scripts"
+# Copy deploy script but NOT docker-compose.yml
+cp "$DEPLOY_SCRIPT" "$MISSING_TMP/scripts/deploy-web-release-candidate.sh"
+
+EXIT_FILE="$MISSING_TMP/exit.txt"
+(
+  cd "$MISSING_TMP"
+  PATH="$RUN_TMP/bin:$PATH" \
+    bash "$MISSING_TMP/scripts/deploy-web-release-candidate.sh" "book-id-search-web:test-root-resolution" \
+    > "$MISSING_TMP/stdout.txt" 2> "$MISSING_TMP/stderr.txt"
+  echo $? > "$EXIT_FILE"
+)
+EXIT_VAL="$(cat "$EXIT_FILE")"
+# Expect exit 6 per the fail-closed root validation
+if [ "$EXIT_VAL" = "6" ]; then
+  assert_pass "TEST12_missing_compose_yml_fails_closed (exit=6)"
+else
+  assert_fail "TEST12_missing_compose_yml_fails_closed" \
+    "expected exit 6, got exit=$EXIT_VAL"
+fi
+rm -rf "$MISSING_TMP"
+
+# ============================================================
 # Negative guard: never allow book-id-search/web:dev fallback
 # ============================================================
 # This guard runs after all tests. It asserts that across ALL scenarios,

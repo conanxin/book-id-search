@@ -4,7 +4,40 @@
 #    or: BOOK_ID_SEARCH_WEB_IMAGE=<tag> scripts/deploy-web-release-candidate.sh
 set -euo pipefail
 
-APP_DIR="/opt/book-id-search"
+# Resolve the repository root from this script's own location.
+#
+# Production layout: <repo>/scripts/deploy-web-release-candidate.sh
+#                   -> SCRIPT_DIR=<repo>/scripts, APP_DIR=<repo>
+# Exact-byte relocation: <anywhere>/scripts/deploy-web-release-candidate.sh
+#                        -> APP_DIR follows the script (supports isolated
+#                           test harnesses and operator relocation without
+#                           environment overrides).
+#
+# This avoids hardcoding an absolute production path and keeps the deploy
+# script working both at the production install location and when copied
+# verbatim to a different root for verification.
+SCRIPT_DIR="$(
+  CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd
+)" || {
+  echo "[deploy-web-release-candidate] ERROR: cannot resolve script directory" >&2
+  exit 5
+}
+APP_DIR="$(
+  CDPATH= cd -- "$SCRIPT_DIR/.." && pwd
+)" || {
+  echo "[deploy-web-release-candidate] ERROR: cannot resolve app root from $SCRIPT_DIR" >&2
+  exit 5
+}
+
+# Fail closed if the resolved root does not look like a deployable repository
+# (must contain docker-compose.yml at the root). This guards against typos
+# in SCRIPT_DIR and against accidentally copying the script into a non-repo
+# tree.
+if [ ! -f "$APP_DIR/docker-compose.yml" ]; then
+  echo "[deploy-web-release-candidate] ERROR: docker-compose.yml not found at resolved root: $APP_DIR" >&2
+  exit 6
+fi
+
 cd "$APP_DIR"
 
 IMAGE_TAG="${1:-${BOOK_ID_SEARCH_WEB_IMAGE:-}}"

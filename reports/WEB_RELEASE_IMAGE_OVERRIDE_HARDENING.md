@@ -146,6 +146,12 @@ Production was **not touched** by the isolated test:
 ## DEBT_STATUS
 
 - `SUDO_IMAGE_OVERRIDE_PROPAGATION: CLOSED_WITH_SPLIT_EVIDENCE` (not `FULL_DEPLOY_SCRIPT_ISOLATED_E2E_COMPLETE`)
+
+FOLLOW_UP:
+- S27T-1A closed `APP_DIR_HARDCODE_TESTABILITY_DEBT` (deploy script now derives APP_DIR from `BASH_SOURCE[0]`)
+- S27T-1B closed `ACTUAL_DEPLOY_SCRIPT_ISOLATED_E2E_GAP` (actual deploy script run end-to-end under real sudo + real docker compose + isolated project; exact frozen image ID + JS/CSS SHA matched)
+
+FINAL_STATUS: CLOSED
 - The deploy script's hardcoded `APP_DIR="/opt/book-id-search"; cd "$APP_DIR"` is a **separate** low-priority **testability** debt (it prevents an isolated end-to-end run of the actual deploy script). This is documented here for transparency but is NOT mixed with the env-propagation debt.
 
 ## KNOWN_LIMITATIONS
