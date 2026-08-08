@@ -32,7 +32,25 @@ echo "[deploy-web-release-candidate] deploying ${IMAGE_TAG} (${CANDIDATE_IMAGE_I
 
 # Deploy the exact image. --no-deps avoids touching api/meilisearch.
 # --no-build is the critical rule: the deploy must never implicitly rebuild.
-BOOK_ID_SEARCH_WEB_IMAGE="$IMAGE_TAG" $DOCKER_SUDO docker compose up -d --no-deps --no-build web
+#
+# The candidate image override must reach the privileged `docker compose`
+# invocation even when `$DOCKER_SUDO="sudo"` (sudo's default `env_reset`
+# would strip an inherited `BOOK_ID_SEARCH_WEB_IMAGE` set in the parent
+# shell). When `$DOCKER_SUDO=""`, the leading `env` is a no-op wrapper that
+# still establishes the variable for the immediate `docker compose` command.
+#
+# Form:
+#   $DOCKER_SUDO env BOOK_ID_SEARCH_WEB_IMAGE="$IMAGE_TAG" docker compose ...
+# Use a helper to keep the rule in one place and avoid string interpolation.
+run_compose_with_release_image() {
+  local image="$1"
+  if [ -n "$DOCKER_SUDO" ]; then
+    "$DOCKER_SUDO" env "BOOK_ID_SEARCH_WEB_IMAGE=$image" docker compose up -d --no-deps --no-build web
+  else
+    env "BOOK_ID_SEARCH_WEB_IMAGE=$image" docker compose up -d --no-deps --no-build web
+  fi
+}
+run_compose_with_release_image "$IMAGE_TAG"
 
 # Wait for the container to be running and verify its image ID.
 for _ in $(seq 1 30); do
