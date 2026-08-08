@@ -19,6 +19,9 @@
 #   TEST 6 — missing candidate fails closed.
 set -uo pipefail
 
+# Cleanup on exit (any reason): remove self-created fake harness tmp dir
+trap 'rm -rf "$RUN_TMP" 2>/dev/null || true' EXIT INT TERM
+
 # Locate repo and script under test
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -29,19 +32,101 @@ if [ ! -f "$DEPLOY_SCRIPT" ]; then
   exit 99
 fi
 
-# Per-run working directory
-RUN_TMP="$(mktemp -d -t s27t0a-XXXXXX)"
+# Per-run working directory (self-contained: no historical evidence dependency)
+RUN_TMP="$(mktemp -d -t s27t-XXXXXX)"
 mkdir -p "$RUN_TMP/bin"
 
-# Copy fake-bin scaffolding into RUN_TMP
-SOURCE_BIN="${FAKE_BIN_SOURCE:-}"
-if [ -z "$SOURCE_BIN" ] || [ ! -x "$SOURCE_BIN/sudo" ] || [ ! -x "$SOURCE_BIN/docker" ]; then
-  echo "FATAL: FAKE_BIN_SOURCE must point to a dir containing fake sudo+docker" >&2
-  exit 98
+# Self-create fake sudo + fake docker at runtime. These are recreated on
+# every test invocation so the test is portable across fresh checkouts and
+# does not depend on any gitignored historical progress/ evidence.
+cat > "$RUN_TMP/bin/sudo" <<'FAKE_SUDO_EOF'
+#!/usr/bin/env bash
+# S27T-2B: fake sudo simulating env_reset.
+# $0 is this script; $1..$N are the args after "sudo".
+set -e
+LOG="${FAKE_SUDO_LOG:-/dev/null}"
+{
+  echo "=== fake-sudo called ==="
+  echo "argv0: $0"
+  echo "argv: $*"
+  echo "inherited BOOK_ID_SEARCH_WEB_IMAGE=${BOOK_ID_SEARCH_WEB_IMAGE:-<unset>}"
+} >> "$LOG" 2>&1
+# Simulate sudo env_reset: drop inherited BOOK_ID_SEARCH_WEB_IMAGE
+unset BOOK_ID_SEARCH_WEB_IMAGE
+exec "$@"
+FAKE_SUDO_EOF
+chmod +x "$RUN_TMP/bin/sudo"
+
+cat > "$RUN_TMP/bin/docker" <<'FAKE_DOCKER_EOF'
+#!/usr/bin/env bash
+# S27T-2B: fake docker with full S27T-1 coverage.
+set -e
+LOG="${FAKE_DOCKER_LOG:-/dev/null}"
+STATE="${FAKE_DOCKER_STATE:-/dev/null}"
+
+log_kv() { printf '%s=%s\n' "$1" "$2" >> "$LOG"; }
+
+# `docker ps` (no args) → exit 0 (deploy script: DOCKER_SUDO="")
+if [ "$1" = "ps" ] && [ "$#" -eq 1 ]; then
+  exit 0
 fi
-cp "$SOURCE_BIN/sudo" "$RUN_TMP/bin/sudo"
-cp "$SOURCE_BIN/docker" "$RUN_TMP/bin/docker"
-chmod +x "$RUN_TMP/bin/sudo" "$RUN_TMP/bin/docker"
+
+# `docker inspect --format='{{.Id}}' <image>`
+if [ "$1" = "inspect" ]; then
+  shift
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --format=*) shift ;;
+      --format) shift 2 ;;
+      *) break ;;
+    esac
+  done
+  if [ $# -gt 0 ]; then
+    IMG="$1"
+    SYNTH_ID="sha256:$(printf '%s' "$IMG" | sha256sum | awk '{print $1}')"
+    if [ "$IMG" = "fakewebcid0000000000000000000000000000000000000000000000000000" ]; then
+      CACHED="$(cat "$STATE" 2>/dev/null || true)"
+      if [ -n "$CACHED" ]; then echo "$CACHED"; else echo "$SYNTH_ID"; fi
+    else
+      echo "$SYNTH_ID" > "$STATE"
+      echo "$SYNTH_ID"
+    fi
+  fi
+  exit 0
+fi
+
+{
+  echo "=== fake-docker called ==="
+  echo "argv: $0 $*"
+  echo "BOOK_ID_SEARCH_WEB_IMAGE=${BOOK_ID_SEARCH_WEB_IMAGE:-<unset>}"
+  echo "PWD=${PWD}"
+  echo "PATH=${PATH}"
+} >> "$LOG"
+
+# `docker compose ...`
+if [ "$1" = "compose" ]; then
+  shift
+  log_kv COMPOSE_ARGV "$*"
+  log_kv COMPOSE_SEEN_IMAGE "${BOOK_ID_SEARCH_WEB_IMAGE:-<unset>}"
+  if [ "$1" = "up" ]; then
+    : > "$STATE"
+    exit 0
+  fi
+  if [ "$1" = "ps" ]; then
+    if [ "$2" = "-q" ] && [ "$3" = "web" ]; then
+      echo "fakewebcid0000000000000000000000000000000000000000000000000000"
+      exit 0
+    fi
+    echo "NAME                IMAGE"
+    echo "fake-web-1          book-id-search-web"
+    exit 0
+  fi
+  exit 0
+fi
+
+exit 0
+FAKE_DOCKER_EOF
+chmod +x "$RUN_TMP/bin/docker"
 
 # Confirm the test harness will resolve docker/sudo via PATH (NOT the real ones)
 RESOLVED_SUDO="$(PATH="$RUN_TMP/bin" command -v sudo)"
