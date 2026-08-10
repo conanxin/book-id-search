@@ -129,3 +129,21 @@ The gate does not automatically deploy. It validates readiness. A `READY=true` l
 - The gate is deterministic: same `SOURCE_SHA` + same environment → same `STATUS` / `READY`.
 
 NEXT_STEP: S27T-2 UNIFIED WEB RELEASE READINESS GATE COMPLETE
+
+## FOLLOW-UP (S27T-3, 2026-08-10)
+
+Release Plan / Orchestrator implemented in S27T-3.
+
+See: `reports/WEB_RELEASE_PLAN_ORCHESTRATOR.md`
+
+The "operator reviews and invokes `scripts/deploy-web-release-candidate.sh <image-tag>`"
+step in the USAGE section above is **superseded** by:
+
+```
+scripts/orchestrate-web-production-release.sh isolated-e2e <SOURCE_SHA>
+```
+
+which binds `SOURCE_SHA → Readiness → Plan → Actual Deploy Script` as a single
+machine-checked chain. `IMAGE_TAG` / `IMAGE_ID` no longer require manual handoff —
+they are read out of `progress/web-release-candidate-${SOURCE_SHA}/candidate.json`
+by the gate, validated, fingerprinted, and passed to the deploy script unchanged.

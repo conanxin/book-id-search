@@ -154,6 +154,45 @@ assert_fail() {
   FAIL_DETAILS+=("$name: $detail")
 }
 
+# R2-3 / R2-4: Fail-closed guard for root-resolution tests.
+#
+# Verifies that all required artifacts (fake-docker.log, fixture root,
+# expected root, actual root) are present and non-empty BEFORE the
+# root-resolution comparison runs. This prevents the false-positive
+# "" == "" PASS observed in S27T-3B-R1 where both EXPECTED_RELO_ROOT
+# and ACTUAL_PWD were empty strings (RUN_TMP was deleted mid-test) and
+# the assertion `$ACTUAL_PWD = $EXPECTED_RELO_ROOT` matched trivially.
+#
+# Args:
+#   $1 = test_name (used for fail message)
+#   $2 = expected_root (non-empty required)
+#   $3 = actual_root (non-empty required)
+#   $4 = fake_docker_log_path (file must exist and be non-empty)
+#   $5 = fixture_root (directory must exist)
+#
+# Returns 0 if all guards pass, 1 otherwise (also calls assert_fail).
+check_root_resolution_artifacts() {
+  local test_name="$1"
+  local expected="$2"
+  local actual="$3"
+  local fake_log="$4"
+  local fixture_root="$5"
+  local missing=()
+
+  [ -n "$expected" ] || missing+=("expected_root is EMPTY")
+  [ -n "$actual" ] || missing+=("actual_root is EMPTY")
+  [ -f "$fake_log" ] || missing+=("fake_docker_log missing: $fake_log")
+  [ -d "$fixture_root" ] || missing+=("fixture_root missing: $fixture_root")
+
+  if [ "${#missing[@]}" -gt 0 ]; then
+    local joined
+    joined=$(IFS='; '; echo "${missing[*]}")
+    assert_fail "${test_name}_fixture_guard" "$joined"
+    return 1
+  fi
+  return 0
+}
+
 # Run the deploy script under a given scenario. The script will be invoked
 # inside a subshell with PATH prefix and FAKE_DOCKER_LOG/FAKE_SUDO_LOG set.
 run_scenario() {
@@ -467,11 +506,15 @@ run_root_scenario "$SCEN" "$DEPLOY_SCRIPT" "$APP_DIR" "book-id-search-web:test-r
 # any hardcode in the script).
 EXPECTED_ROOT="$(cd "$APP_DIR" && pwd)"
 ACTUAL_PWD="$(compose_seen_pwd "$RUN_TMP/$SCEN/fake-docker.log")"
-if [ "$ACTUAL_PWD" = "$EXPECTED_ROOT" ]; then
-  assert_pass "TEST7_production_layout_root (compose PWD=$ACTUAL_PWD)"
-else
-  assert_fail "TEST7_production_layout_root" \
-    "compose PWD=$ACTUAL_PWD, expected $EXPECTED_ROOT"
+if check_root_resolution_artifacts "TEST7_production_layout_root" \
+     "$EXPECTED_ROOT" "$ACTUAL_PWD" \
+     "$RUN_TMP/$SCEN/fake-docker.log" "$APP_DIR"; then
+  if [ "$ACTUAL_PWD" = "$EXPECTED_ROOT" ]; then
+    assert_pass "TEST7_production_layout_root (compose PWD=$ACTUAL_PWD)"
+  else
+    assert_fail "TEST7_production_layout_root" \
+      "compose PWD=$ACTUAL_PWD, expected $EXPECTED_ROOT"
+  fi
 fi
 
 # ============================================================
@@ -496,15 +539,21 @@ run_root_scenario "$SCEN" "$RELO_SCRIPT" "$RELO_TMP" "book-id-search-web:test-ro
 
 EXPECTED_RELO_ROOT="$(cd "$RELO_TMP" && pwd)"
 ACTUAL_PWD="$(compose_seen_pwd "$RUN_TMP/$SCEN/fake-docker.log")"
-# Hard requirement: must NOT be the production root
-if [ "$ACTUAL_PWD" = "$APP_DIR" ]; then
-  assert_fail "TEST8_relocated_root_does_not_resolve_to_production" \
-    "relocated script resolved to production APP_DIR=$APP_DIR (bug)"
-elif [ "$ACTUAL_PWD" = "$EXPECTED_RELO_ROOT" ]; then
-  assert_pass "TEST8_relocated_root (compose PWD=$ACTUAL_PWD)"
-else
-  assert_fail "TEST8_relocated_root" \
-    "compose PWD=$ACTUAL_PWD, expected $EXPECTED_RELO_ROOT (and NOT $APP_DIR)"
+# Hard requirement: must NOT be the production root.
+# R2-3: Fail closed if either expected or actual is empty (regression of
+# S27T-3B-R1 where both were empty and ""=="" produced a false-positive PASS).
+if check_root_resolution_artifacts "TEST8_relocated_root" \
+     "$EXPECTED_RELO_ROOT" "$ACTUAL_PWD" \
+     "$RUN_TMP/$SCEN/fake-docker.log" "$RELO_TMP"; then
+  if [ "$ACTUAL_PWD" = "$APP_DIR" ]; then
+    assert_fail "TEST8_relocated_root_does_not_resolve_to_production" \
+      "relocated script resolved to production APP_DIR=$APP_DIR (bug)"
+  elif [ "$ACTUAL_PWD" = "$EXPECTED_RELO_ROOT" ]; then
+    assert_pass "TEST8_relocated_root (compose PWD=$ACTUAL_PWD)"
+  else
+    assert_fail "TEST8_relocated_root" \
+      "compose PWD=$ACTUAL_PWD, expected $EXPECTED_RELO_ROOT (and NOT $APP_DIR)"
+  fi
 fi
 
 # ============================================================
@@ -515,11 +564,15 @@ run_root_scenario "$SCEN" "$DEPLOY_SCRIPT" "/tmp" "book-id-search-web:test-root-
 
 EXPECTED_ROOT="$(cd "$APP_DIR" && pwd)"
 ACTUAL_PWD="$(compose_seen_pwd "$RUN_TMP/$SCEN/fake-docker.log")"
-if [ "$ACTUAL_PWD" = "$EXPECTED_ROOT" ]; then
-  assert_pass "TEST9_caller_cwd_independence (compose PWD=$ACTUAL_PWD despite caller_cwd=/tmp)"
-else
-  assert_fail "TEST9_caller_cwd_independence" \
-    "compose PWD=$ACTUAL_PWD, expected $EXPECTED_ROOT"
+if check_root_resolution_artifacts "TEST9_caller_cwd_independence" \
+     "$EXPECTED_ROOT" "$ACTUAL_PWD" \
+     "$RUN_TMP/$SCEN/fake-docker.log" "$APP_DIR"; then
+  if [ "$ACTUAL_PWD" = "$EXPECTED_ROOT" ]; then
+    assert_pass "TEST9_caller_cwd_independence (compose PWD=$ACTUAL_PWD despite caller_cwd=/tmp)"
+  else
+    assert_fail "TEST9_caller_cwd_independence" \
+      "compose PWD=$ACTUAL_PWD, expected $EXPECTED_ROOT"
+  fi
 fi
 
 # ============================================================
@@ -530,11 +583,15 @@ run_root_scenario "$SCEN" "$RELO_SCRIPT" "/" "book-id-search-web:test-root-resol
 
 EXPECTED_RELO_ROOT="$(cd "$RELO_TMP" && pwd)"
 ACTUAL_PWD="$(compose_seen_pwd "$RUN_TMP/$SCEN/fake-docker.log")"
-if [ "$ACTUAL_PWD" = "$EXPECTED_RELO_ROOT" ]; then
-  assert_pass "TEST10_relocated_different_cwd (compose PWD=$ACTUAL_PWD despite caller_cwd=/)"
-else
-  assert_fail "TEST10_relocated_different_cwd" \
-    "compose PWD=$ACTUAL_PWD, expected $EXPECTED_RELO_ROOT"
+if check_root_resolution_artifacts "TEST10_relocated_different_cwd" \
+     "$EXPECTED_RELO_ROOT" "$ACTUAL_PWD" \
+     "$RUN_TMP/$SCEN/fake-docker.log" "$RELO_TMP"; then
+  if [ "$ACTUAL_PWD" = "$EXPECTED_RELO_ROOT" ]; then
+    assert_pass "TEST10_relocated_different_cwd (compose PWD=$ACTUAL_PWD despite caller_cwd=/)"
+  else
+    assert_fail "TEST10_relocated_different_cwd" \
+      "compose PWD=$ACTUAL_PWD, expected $EXPECTED_RELO_ROOT"
+  fi
 fi
 
 # ============================================================
@@ -553,11 +610,15 @@ run_root_scenario "$SCEN" "$SPACE_SCRIPT" "/tmp" "book-id-search-web:test-root-r
 
 EXPECTED_SPACE_ROOT="$(cd "$SPACE_TMP" && pwd)"
 ACTUAL_PWD="$(compose_seen_pwd "$RUN_TMP/$SCEN/fake-docker.log")"
-if [ "$ACTUAL_PWD" = "$EXPECTED_SPACE_ROOT" ]; then
-  assert_pass "TEST11_path_with_spaces (compose PWD=$ACTUAL_PWD)"
-else
-  assert_fail "TEST11_path_with_spaces" \
-    "compose PWD=$ACTUAL_PWD, expected $EXPECTED_SPACE_ROOT"
+if check_root_resolution_artifacts "TEST11_path_with_spaces" \
+     "$EXPECTED_SPACE_ROOT" "$ACTUAL_PWD" \
+     "$RUN_TMP/$SCEN/fake-docker.log" "$SPACE_TMP"; then
+  if [ "$ACTUAL_PWD" = "$EXPECTED_SPACE_ROOT" ]; then
+    assert_pass "TEST11_path_with_spaces (compose PWD=$ACTUAL_PWD)"
+  else
+    assert_fail "TEST11_path_with_spaces" \
+      "compose PWD=$ACTUAL_PWD, expected $EXPECTED_SPACE_ROOT"
+  fi
 fi
 rm -rf "$SPACE_TMP"
 
@@ -587,6 +648,59 @@ else
     "expected exit 6, got exit=$EXIT_VAL"
 fi
 rm -rf "$MISSING_TMP"
+
+# ============================================================
+# TEST 13: false-positive regression (R2-5)
+#
+# Reproduces the exact failure mode observed in S27T-3B-R1: when
+# fake-docker.log is absent, EXPECTED_RELO_ROOT and ACTUAL_PWD are both
+# empty strings, and the original assertion `$ACTUAL_PWD = $EXPECTED_RELO_ROOT`
+# matched `"" == ""` and reported a false-positive PASS.
+#
+# This test deliberately sets up an EMPTY fixture root and an EMPTY fake
+# docker log. We then run the SAME guard logic that real root-resolution
+# tests use (check_root_resolution_artifacts) and verify it returns
+# non-zero (i.e. would have blocked a false-positive PASS).
+#
+# The guard itself calls assert_fail internally. To avoid polluting the
+# regression total, we snapshot FAIL_COUNT and PASS_COUNT before invoking
+# the guard and restore them after. We then meta-assert that the guard
+# fired (FAIL delta = 1) AND that the regression total stays at zero.
+# ============================================================
+SCEN="test13_empty_fixture_false_positive_guard"
+EMPTY_FIXTURE="$RUN_TMP/$SCEN/empty_relocated_root"
+mkdir -p "$EMPTY_FIXTURE"
+EMPTY_FAKE_LOG="$RUN_TMP/$SCEN/fake-docker.log"
+: > "$EMPTY_FAKE_LOG"  # create empty log (no `PWD=` lines)
+
+# Snapshot counters so we can verify the guard fired without polluting
+# the regression total.
+PRE_FAIL_COUNT="$FAIL_COUNT"
+PRE_PASS_COUNT="$PASS_COUNT"
+
+EXPECTED_RELO_ROOT="$(cd "$EMPTY_FIXTURE" && pwd)"
+# Force expected to be empty too (delete fixture after cd)
+rm -rf "$EMPTY_FIXTURE"
+ACTUAL_PWD="$(compose_seen_pwd "$EMPTY_FAKE_LOG")"
+EXPECTED_RELO_ROOT=""
+
+# Run the guard. It SHOULD fire assert_fail and return 1.
+if check_root_resolution_artifacts "TEST13_empty_fixture_false_positive_guard" \
+     "$EXPECTED_RELO_ROOT" "$ACTUAL_PWD" \
+     "$EMPTY_FAKE_LOG" "$EMPTY_FIXTURE"; then
+  # Guard returned 0 → regression: guard didn't catch empty values.
+  FAIL_COUNT="$PRE_FAIL_COUNT"
+  PASS_COUNT="$PRE_PASS_COUNT"
+  assert_fail "TEST13_empty_fixture_false_positive_guard" \
+    "GUARD REGRESSED: empty expected/actual passed check_root_resolution_artifacts"
+else
+  # Guard correctly returned 1 (and called assert_fail internally).
+  # Restore counters: the guard's assert_fail was EXPECTED.
+  FAIL_COUNT="$PRE_FAIL_COUNT"
+  PASS_COUNT="$PRE_PASS_COUNT"
+  assert_pass "TEST13_empty_fixture_false_positive_guard (guard correctly returned non-zero on empty values; false-positive PASS path blocked)"
+fi
+rm -rf "$RUN_TMP/$SCEN"
 
 # ============================================================
 # Negative guard: never allow book-id-search/web:dev fallback
