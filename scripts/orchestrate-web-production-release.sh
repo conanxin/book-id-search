@@ -2,13 +2,23 @@
 # Release Orchestrator: Gate → Plan → Actual Deploy Script (isolated E2E).
 #
 # This script wires the S27T-3A Release Plan to the actual deploy script in
-# an isolated /tmp project. In this stage it ONLY supports the
-# "isolated-e2e" mode; production deploy mode is intentionally absent.
+# an isolated /tmp project. It supports exactly two modes:
+#
+#   isolated-e2e              — pure technical isolated E2E (no auth needed).
+#   authorized-isolated-e2e   — fresh Plan + matching Authorization
+#                               artifact → still isolated E2E only.
+#
+# Production deploy is NOT supported. The actual deployment of the
+# authorized candidate into production is intentionally absent.
 #
 # Chain:
 #   SOURCE_SHA
 #     → scripts/plan-web-production-release.sh  (forwards to readiness gate)
 #     → machine-parsed Release Plan fields + recomputed fingerprint
+#     → [authorized mode only] Authorization artifact validation
+#         (regular file, mode 600, 12 unique fields, semantic flags,
+#          identity match against fresh Plan, not already consumed,
+#          not already claimed)
 #     → pre-deploy TOCTOU image guard (docker inspect IMAGE_TAG)
 #     → evidence identity guard (candidate.json image tag & ID)
 #     → isolated /tmp repo with exact-byte deploy script + minimal compose
@@ -17,12 +27,15 @@
 #     → cleanup
 #
 # Usage:
-#   scripts/orchestrate-web-production-release.sh isolated-e2e <SOURCE_SHA>
+#   scripts/orchestrate-web-production-release.sh \
+#       isolated-e2e <SOURCE_SHA>
+#   scripts/orchestrate-web-production-release.sh \
+#       authorized-isolated-e2e <SOURCE_SHA>
 #
 # Production deploy is NOT supported in this stage. Any mode other than
-# "isolated-e2e" is BLOCKED.
+# the two above is BLOCKED.
 #
-# Output contract (success):
+# Output contract (success — isolated-e2e):
 #   STATUS=PASS
 #   ORCHESTRATION_MODE=isolated-e2e
 #   SOURCE_SHA=<...>
@@ -30,6 +43,7 @@
 #   IMAGE_TAG=<...>
 #   IMAGE_ID=<...>
 #   PLAN_READY=PASS
+#   AUTHORIZATION_REQUIRED=false
 #   PRE_DEPLOY_IMAGE_IDENTITY=PASS
 #   HANDOFF_IDENTITY_SOURCE=RELEASE_PLAN
 #   ACTUAL_DEPLOY_SCRIPT_E2E=PASS
@@ -37,12 +51,35 @@
 #   DEV_FALLBACK_USED=false
 #   PRODUCTION_UNCHANGED=PASS
 #   PRODUCTION_DEPLOY_EXECUTED=false
+#   AUTHORIZATION_CONSUMED=false
+#   ORCHESTRATOR_ISOLATED_E2E_VERIFIED=true
+#
+# Output contract (success — authorized-isolated-e2e):
+#   STATUS=PASS
+#   ORCHESTRATION_MODE=authorized-isolated-e2e
+#   SOURCE_SHA=<...>
+#   RELEASE_PLAN_FINGERPRINT=<...>
+#   IMAGE_TAG=<...>
+#   IMAGE_ID=<...>
+#   PLAN_READY=PASS
+#   AUTHORIZATION_REQUIRED=true
+#   AUTHORIZATION_VALIDATED=PASS
+#   AUTHORIZATION_CONSUMABLE=PASS
+#   AUTHORIZED_ACTION=production-deploy
+#   EXPLICIT_APPROVAL=true
+#   HANDOFF_IDENTITY_SOURCE=RELEASE_PLAN
+#   ACTUAL_DEPLOY_SCRIPT_E2E=PASS
+#   DEV_FALLBACK_USED=false
+#   PRODUCTION_UNCHANGED=PASS
+#   PRODUCTION_DEPLOY_EXECUTED=false
+#   AUTHORIZATION_CONSUMED=false
 #   ORCHESTRATOR_ISOLATED_E2E_VERIFIED=true
 #
 # Output contract (block):
 #   STATUS=BLOCKED
 #   BLOCK_REASON=<enum>
 #   PRODUCTION_DEPLOY_EXECUTED=false
+#   AUTHORIZATION_CONSUMED=false
 #   ORCHESTRATOR_ISOLATED_E2E_VERIFIED=false
 #
 # Block reasons (enum):
@@ -57,6 +94,16 @@
 #   SOURCE_IDENTITY_MISMATCH
 #   INVALID_IMAGE_TAG
 #   INVALID_IMAGE_ID
+#   AUTHORIZATION_MISSING
+#   AUTHORIZATION_UNSAFE_FILE
+#   AUTHORIZATION_UNSAFE_PERMISSIONS
+#   AUTHORIZATION_INCOMPLETE
+#   AUTHORIZATION_AMBIGUOUS
+#   AUTHORIZATION_NOT_CONSUMABLE
+#   AUTHORIZATION_ALREADY_CONSUMED
+#   AUTHORIZATION_ALREADY_CLAIMED
+#   AUTHORIZATION_UNSAFE_CLAIM_FILE
+#   AUTHORIZATION_PLAN_MISMATCH
 #   PRE_DEPLOY_IMAGE_MISSING
 #   PRE_DEPLOY_IMAGE_IDENTITY_CHANGED
 #   PRE_DEPLOY_CANDIDATE_EVIDENCE_CHANGED
@@ -94,6 +141,7 @@ block() {
   emit_kv STATUS BLOCKED
   emit_kv BLOCK_REASON "$reason"
   emit_kv PRODUCTION_DEPLOY_EXECUTED false
+  emit_kv AUTHORIZATION_CONSUMED false
   emit_kv ORCHESTRATOR_ISOLATED_E2E_VERIFIED false
   exit 1
 }
@@ -138,9 +186,10 @@ if [ "${3:-}" != "" ]; then
 fi
 
 case "$ORCHESTRATION_MODE" in
-  isolated-e2e) ;;
-  "")           block UNSUPPORTED_ORCHESTRATION_MODE ;;
-  *)            block UNSUPPORTED_ORCHESTRATION_MODE ;;
+  isolated-e2e)            AUTHORIZATION_REQUIRED="false" ;;
+  authorized-isolated-e2e) AUTHORIZATION_REQUIRED="true" ;;
+  "")                      block UNSUPPORTED_ORCHESTRATION_MODE ;;
+  *)                       block UNSUPPORTED_ORCHESTRATION_MODE ;;
 esac
 
 # -----------------------------------------------------------------------------
@@ -264,6 +313,132 @@ RECOMPUTED_FINGERPRINT="$(
 )"
 if [ "$RECOMPUTED_FINGERPRINT" != "$PLAN_FINGERPRINT" ]; then
   block RELEASE_PLAN_FINGERPRINT_MISMATCH
+fi
+
+# -----------------------------------------------------------------------------
+# B7-B15 — Authorization artifact validation (authorized-isolated-e2e only)
+#
+# The artifact is derived from the fresh Plan's fingerprint. The caller
+# cannot override the path, fingerprint, image identity, or any other
+# authorization field. The artifact is parsed as pure text (no source,
+# eval, bash -c). The authorization is NOT mutated by this orchestrator.
+# -----------------------------------------------------------------------------
+if [ "$AUTHORIZATION_REQUIRED" = "true" ]; then
+  AUTHORIZATION_PATH="$REPO_ROOT/progress/web-release-authorization-${PLAN_FINGERPRINT}.env"
+
+  # B8 — File safety (regular file, no symlink)
+  if [ ! -e "$AUTHORIZATION_PATH" ]; then
+    block AUTHORIZATION_MISSING
+  fi
+  if [ -L "$AUTHORIZATION_PATH" ]; then
+    block AUTHORIZATION_UNSAFE_FILE
+  fi
+  if [ ! -f "$AUTHORIZATION_PATH" ]; then
+    block AUTHORIZATION_UNSAFE_FILE
+  fi
+
+  # B9 — Permission contract (must be 600)
+  AUTH_MODE="$(stat -c '%a' "$AUTHORIZATION_PATH" 2>/dev/null || true)"
+  if [ "$AUTH_MODE" != "600" ]; then
+    block AUTHORIZATION_UNSAFE_PERMISSIONS
+  fi
+
+  # B10 — Parse 12 mandatory fields, each exactly once
+  AUTH_MANDATORY_KEYS=(
+    AUTHORIZATION_VERSION
+    AUTHORIZED_ACTION
+    SOURCE_SHA
+    RELEASE_PLAN_FINGERPRINT
+    IMAGE_TAG
+    IMAGE_ID
+    MANIFEST_SHA
+    LOCKFILE_SHA
+    EXPLICIT_APPROVAL
+    CONSUMABLE_ONCE
+    PRODUCTION_DEPLOY_AUTHORIZED
+    PRODUCTION_DEPLOY_EXECUTED
+  )
+  declare -A AUTH_KV
+  for key in "${AUTH_MANDATORY_KEYS[@]}"; do
+    count="$(grep -cE "^${key}=" "$AUTHORIZATION_PATH" 2>/dev/null | head -1)"
+    count="$(printf '%s' "${count:-0}" | tr -d '[:space:]')"
+    if [ "${count:-0}" -eq 0 ]; then
+      block AUTHORIZATION_INCOMPLETE
+    fi
+    if [ "${count:-0}" -gt 1 ]; then
+      block AUTHORIZATION_AMBIGUOUS
+    fi
+    AUTH_KV[$key]="$(grep -E "^${key}=" "$AUTHORIZATION_PATH" | head -1 | sed -e "s/^${key}=//")"
+  done
+
+  # B11 — Semantic flags
+  if [ "${AUTH_KV[AUTHORIZATION_VERSION]}" != "1" ]; then
+    block AUTHORIZATION_NOT_CONSUMABLE
+  fi
+  if [ "${AUTH_KV[AUTHORIZED_ACTION]}" != "production-deploy" ]; then
+    block AUTHORIZATION_NOT_CONSUMABLE
+  fi
+  if [ "${AUTH_KV[EXPLICIT_APPROVAL]}" != "true" ]; then
+    block AUTHORIZATION_NOT_CONSUMABLE
+  fi
+  if [ "${AUTH_KV[CONSUMABLE_ONCE]}" != "true" ]; then
+    block AUTHORIZATION_NOT_CONSUMABLE
+  fi
+  if [ "${AUTH_KV[PRODUCTION_DEPLOY_AUTHORIZED]}" != "true" ]; then
+    block AUTHORIZATION_NOT_CONSUMABLE
+  fi
+
+  # B14 — Consumed-state guard (artifact must declare not-yet-executed)
+  if [ "${AUTH_KV[PRODUCTION_DEPLOY_EXECUTED]}" != "false" ]; then
+    block AUTHORIZATION_ALREADY_CONSUMED
+  fi
+
+  # C19/C20 — Claim-state guard (S27T-4C atomic one-time claim).
+  #
+  # The claim is an atomic hard-link from the authorization to a sibling
+  # claim artifact at progress/web-release-authorization-claim-<FINGERPRINT>.env.
+  # A claim exists once the authorization has been reserved for one
+  # future production deploy attempt. Whether the future deploy ultimately
+  # succeeds or fails, the authorization is single-use and may not be
+  # reused. CONSUMABLE_ONCE is therefore false from this point on.
+  #
+  # The actual atomic transition happens inside the claim script via
+  # `ln --`; here we only observe the resulting filesystem state.
+  CLAIM_ARTIFACT_PATH="$REPO_ROOT/progress/web-release-authorization-claim-${PLAN_FINGERPRINT}.env"
+  if [ -L "$CLAIM_ARTIFACT_PATH" ]; then
+    block AUTHORIZATION_UNSAFE_CLAIM_FILE
+  fi
+  if [ -e "$CLAIM_ARTIFACT_PATH" ] && [ ! -f "$CLAIM_ARTIFACT_PATH" ]; then
+    block AUTHORIZATION_UNSAFE_CLAIM_FILE
+  fi
+  if [ -e "$CLAIM_ARTIFACT_PATH" ]; then
+    block AUTHORIZATION_ALREADY_CLAIMED
+  fi
+
+  # B12 + B13 — Identity binding to fresh Plan (every identity field must match)
+  if [ "${AUTH_KV[SOURCE_SHA]}" != "$SOURCE_SHA" ]; then
+    block AUTHORIZATION_PLAN_MISMATCH
+  fi
+  if [ "${AUTH_KV[RELEASE_PLAN_FINGERPRINT]}" != "$PLAN_FINGERPRINT" ]; then
+    block AUTHORIZATION_PLAN_MISMATCH
+  fi
+  if [ "${AUTH_KV[IMAGE_TAG]}" != "$PLAN_IMAGE_TAG" ]; then
+    block AUTHORIZATION_PLAN_MISMATCH
+  fi
+  if [ "${AUTH_KV[IMAGE_ID]}" != "$PLAN_IMAGE_ID" ]; then
+    block AUTHORIZATION_PLAN_MISMATCH
+  fi
+  if [ "${AUTH_KV[MANIFEST_SHA]}" != "$PLAN_MANIFEST_SHA" ]; then
+    block AUTHORIZATION_PLAN_MISMATCH
+  fi
+  if [ "${AUTH_KV[LOCKFILE_SHA]}" != "$PLAN_LOCKFILE_SHA" ]; then
+    block AUTHORIZATION_PLAN_MISMATCH
+  fi
+
+  # B28 — Capture pre-orchestration artifact SHA for the
+  # "authorization must remain unchanged" invariant. The orchestrator
+  # never opens the artifact for writing.
+  AUTHORIZATION_PRE_SHA="$(sha256sum "$AUTHORIZATION_PATH" | awk '{print $1}')"
 fi
 
 # -----------------------------------------------------------------------------
@@ -515,13 +690,30 @@ fi
 # -----------------------------------------------------------------------------
 # B26 — Success output (PRODUCTION_DEPLOY_EXECUTED=false ALWAYS)
 # -----------------------------------------------------------------------------
+
+# B28 — Invariant: authorization artifact bytes are unchanged after
+# authorized-isolated-e2e. The orchestrator must NEVER modify the file.
+if [ "$AUTHORIZATION_REQUIRED" = "true" ]; then
+  AUTHORIZATION_POST_SHA="$(sha256sum "$AUTHORIZATION_PATH" | awk '{print $1}')"
+  if [ "$AUTHORIZATION_POST_SHA" != "$AUTHORIZATION_PRE_SHA" ]; then
+    block AUTHORIZATION_MUTATED
+  fi
+fi
+
 emit_kv STATUS PASS
-emit_kv ORCHESTRATION_MODE isolated-e2e
+emit_kv ORCHESTRATION_MODE "$ORCHESTRATION_MODE"
 emit_kv SOURCE_SHA "$SOURCE_SHA"
 emit_kv RELEASE_PLAN_FINGERPRINT "$PLAN_FINGERPRINT"
 emit_kv IMAGE_TAG "$PLAN_IMAGE_TAG"
 emit_kv IMAGE_ID "$PLAN_IMAGE_ID"
 emit_kv PLAN_READY PASS
+emit_kv AUTHORIZATION_REQUIRED "$AUTHORIZATION_REQUIRED"
+if [ "$AUTHORIZATION_REQUIRED" = "true" ]; then
+  emit_kv AUTHORIZATION_VALIDATED PASS
+  emit_kv AUTHORIZATION_CONSUMABLE PASS
+  emit_kv AUTHORIZED_ACTION production-deploy
+  emit_kv EXPLICIT_APPROVAL true
+fi
 emit_kv PRE_DEPLOY_IMAGE_IDENTITY PASS
 emit_kv HANDOFF_IDENTITY_SOURCE "$HANDOFF_IMAGE_TAG_SOURCE"
 emit_kv ACTUAL_DEPLOY_SCRIPT_E2E PASS
@@ -529,4 +721,5 @@ emit_kv POST_DEPLOY_IMAGE_IDENTITY PASS
 emit_kv DEV_FALLBACK_USED false
 emit_kv PRODUCTION_UNCHANGED PASS
 emit_kv PRODUCTION_DEPLOY_EXECUTED false
+emit_kv AUTHORIZATION_CONSUMED false
 emit_kv ORCHESTRATOR_ISOLATED_E2E_VERIFIED true
