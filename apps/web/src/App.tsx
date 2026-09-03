@@ -454,14 +454,13 @@ function BookCard({ book, query, weread }: { book: Book; query: string; weread?:
   const exact = isExactMatch(book.match);
   return (
     <article className={`book-card ${exact ? "book-card--exact" : ""}`.trim()}>
-      <ExactMatchStrip book={book} />
       <Link className="book-card__hit" to={`/books/${encodeURIComponent(book.id)}`} aria-label={`查看 ${book.title || "未命名图书"} 详情`}>
         <div className="book-card__main">
           <div className="book-title-row">
             <h2>
               {query ? <Highlight value={book.title || "未命名图书"} query={query} /> : book.title || "未命名图书"}
             </h2>
-            <StatusBadge status={book.parseStatus} />
+            {book.parseStatus !== "ok" && <StatusBadge status={book.parseStatus} />}
           </div>
           <p>
             {query ? <Highlight value={book.author || "作者未知"} query={query} /> : book.author || "作者未知"}
@@ -470,27 +469,32 @@ function BookCard({ book, query, weread }: { book: Book; query: string; weread?:
             <MatchBadge match={book.match} />
             <WereadBadge status={weread} compact />
           </div>
-          <RankingChips ranking={book.ranking} />
         </div>
         <div className="book-grid">
           <Field label="出版社" value={book.publisher} highlight query={query} />
           <Field label="年份" value={book.year} />
           <Field label="页数" value={book.pages} />
           <Field label="ISBN" value={book.isbn} highlight query={query} mono fallback="缺失" />
-          <Field label="SSID" value={book.ssid} highlight query={query} mono />
-          <Field label="DXID" value={book.dxid} highlight query={query} mono />
         </div>
       </Link>
-      <TrustHint book={book} />
+      {book.parseStatus !== "ok" && <TrustHint book={book} />}
       {book.parseStatus === "failed" ? (
         <div className="parse-hint parse-hint--failed">本条解析异常，请谨慎引用。</div>
       ) : null}
-      <div className="book-card__actions" onClick={(event) => event.stopPropagation()}>
-        <CopyButton value={book.ssid} label="SSID" title={`复制 SSID ${book.ssid}`} />
-        <CopyButton value={book.dxid} label="DXID" title={`复制 DXID ${book.dxid}`} />
-        <CopyButton value={book.isbn} label="ISBN" title="复制 ISBN" />
-        <CopyButton value={fullRecordText(book)} label="整条" variant="primary" title="复制整条书目信息" />
-      </div>
+      <details className="book-card__tech">
+        <summary>技术信息</summary>
+        <div className="book-grid">
+          <Field label="SSID" value={book.ssid} highlight query={query} mono />
+          <Field label="DXID" value={book.dxid} highlight query={query} mono />
+        </div>
+        <div className="book-card__actions" onClick={(event) => event.stopPropagation()}>
+          <CopyButton value={book.ssid} label="SSID" title={`复制 SSID ${book.ssid}`} />
+          <CopyButton value={book.dxid} label="DXID" title={`复制 DXID ${book.dxid}`} />
+          <CopyButton value={book.isbn} label="ISBN" title="复制 ISBN" />
+          <CopyButton value={fullRecordText(book)} label="整条" variant="primary" title="复制整条书目信息" />
+        </div>
+        <RankingChips ranking={book.ranking} />
+      </details>
     </article>
   );
 }
