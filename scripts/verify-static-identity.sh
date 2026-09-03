@@ -175,7 +175,7 @@ for i in "${!ENTRIES_PATH[@]}"; do
   EXPECTED_SHA="${ENTRIES_SHA[$i]}"
 
   # Compose container absolute path. Reject any path containing newline first.
-  if printf '%s' "$FILE" | grep -q $'\n'; then
+  if [[ "$FILE" == *$'\n'* ]]; then
     echo "STATUS=FAIL" >&2
     echo "REASON=MANIFEST_PATH_NEWLINE: $FILE" >&2
     exit 1
