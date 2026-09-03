@@ -1,0 +1,21 @@
+services:
+  web:
+    logging:
+      driver: json-file
+      options:
+        max-size: "25m"
+        max-file: "3"
+
+  api:
+    logging:
+      driver: json-file
+      options:
+        max-size: "25m"
+        max-file: "3"
+
+  meilisearch:
+    logging:
+      driver: json-file
+      options:
+        max-size: "25m"
+        max-file: "3"
