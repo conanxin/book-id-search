@@ -60,7 +60,7 @@ fi
 
 # Extract the static artifact manifest from the candidate image.
 STATIC_ROOT="/usr/share/nginx/html"
-CID="$("$DOCKER_SUDO" docker create "$TAG")"
+CID="$($DOCKER_SUDO docker create "$TAG")"
 mkdir -p "${OUT_DIR}/static"
 $DOCKER_SUDO docker cp "${CID}:${STATIC_ROOT}/." "${OUT_DIR}/static/"
 $DOCKER_SUDO docker rm "$CID"
@@ -77,7 +77,7 @@ while IFS=$'\t' read -r FILE SIZE; do
 done < "${OUT_DIR}/static-files.txt"
 
 MANIFEST_HASH="$(sha256sum "$MANIFEST" | awk '{print $1}')"
-IMAGE_ID="$("$DOCKER_SUDO" docker images --no-trunc --format '{{.ID}}' "$TAG" | head -n1)"
+IMAGE_ID="$($DOCKER_SUDO docker images --no-trunc --format '{{.ID}}' "$TAG" | head -n1)"
 
 # Record provenance metadata.
 cat >"${OUT_DIR}/candidate.json" <<EOF
