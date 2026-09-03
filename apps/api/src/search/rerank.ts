@@ -26,6 +26,7 @@
 import { type MatchInfo } from "./match.js";
 import type { IntentProfile } from "./intent-profile.js";
 import type { QueryType } from "./normalize.js";
+import { isDerivative } from "./derivative.js";
 
 export interface RerankHit {
   match: MatchInfo | null | undefined;
@@ -305,6 +306,21 @@ export function rankSearchResults(
   indexed.sort((a, b) => {
     if (a.priority !== b.priority) return b.priority - a.priority;
     if (a.parseRank !== b.parseRank) return b.parseRank - a.parseRank;
+    // S28-R2: exact_title derivative tie-break.
+    // Direct match.type check — decoupled from the priority table
+    // so future priorityFor() changes cannot silently break this.
+    // Put clean exact_title rows ahead of derivative ones. No
+    // ranking.score mutation, no +/- deltas — a pure comparator
+    // branch. If both are clean or both are derivative, fall
+    // through to ranking.score / _rankingScore / idx unchanged.
+    if (
+      a.hit.match?.type === "exact_title" &&
+      b.hit.match?.type === "exact_title"
+    ) {
+      const aDeriv = isDerivative(a.hit);
+      const bDeriv = isDerivative(b.hit);
+      if (aDeriv !== bDeriv) return aDeriv ? 1 : -1;
+    }
     if (a.ranking.score !== b.ranking.score) return b.ranking.score - a.ranking.score;
     if (a.remote !== b.remote) return b.remote - a.remote;
     return a.idx - b.idx;

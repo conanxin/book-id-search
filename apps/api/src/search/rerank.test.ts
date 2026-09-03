@@ -20,6 +20,10 @@ function makeContext(q: string, intent = detectIntentProfile(q)): RerankContext 
 
 function makeHit(over: Partial<RerankHit> & { title: string }): RerankHit {
   return {
+    // Spread first so custom fixture fields (year / isbn / id / …)
+    // round-trip into the returned hit. Explicit defaults below
+    // still override anything missing from `over`.
+    ...over,
     title: over.title,
     author: over.author ?? "",
     publisher: over.publisher ?? "",
@@ -171,5 +175,151 @@ describe("rankSearchResults (S24-3)", () => {
     ];
     const ranked = rankSearchResults(hits, ctx);
     expect(ranked.map((r) => r.title)).toEqual(["北京1", "北京2", "北京3"]);
+  });
+});
+
+// ------------------------------------------------------------------
+// S28-R2: derivative exact_title tie-break regression tests.
+// (S28-R2A/C impl + S28-R2D regression coverage)
+// ------------------------------------------------------------------
+describe("rankSearchResults S28-R2 derivative tie-break", () => {
+  const exactTitleMatch = {
+    type: "exact_title" as const,
+    label: "书名完全匹配",
+    score: 0.95,
+    fields: ["title"],
+  };
+  const titleMatch = {
+    type: "title" as const,
+    label: "书名命中",
+    score: 0.8,
+    fields: ["title"],
+  };
+
+  it("围城: explicit year ordering 1997 → 2000 → 2013 编剧", () => {
+    // S28-R1 observation: all three hits tie on priority=90,
+    // parseRank=3, score=1720 — without S28-R2 the tiebreak falls
+    // through to _rankingScore / idx, so 2013 编剧版 sits #1.
+    // After S28-R2, derivative author must move to last.
+    //
+    // The two clean "钱钟书著" editions share the same author
+    // string, so author alone cannot disambiguate them — use year
+    // (1997 / 2000 / 2013) as the strict unique field per the
+    // real S28-R0B baseline fixture. publisher / isbn are
+    // attached for cross-reference and to make the fixture
+    // resemble the live data shape.
+    const ctx = makeContext("围城");
+    const hits: RerankHit[] = [
+      // input #1 — derivative (2013, 黄蜀芹编剧 — 白名单命中)
+      makeHit({
+        title: "围城",
+        author: "钱钟书原著；孙雄飞，屠传德，黄蜀芹编剧",
+        publisher: "北京：人民文学出版社",
+        year: 2013,
+        isbn: "9787020081554",
+        parseStatus: "ok",
+        match: exactTitleMatch,
+      }),
+      // input #2 — clean (1997, 漓江出版社)
+      makeHit({
+        title: "围城",
+        author: "钱钟书著",
+        publisher: "桂林：漓江出版社",
+        year: 1997,
+        isbn: "7540715790",
+        parseStatus: "ok",
+        match: exactTitleMatch,
+      }),
+      // input #3 — clean (2000, 人民文学出版社)
+      makeHit({
+        title: "围城",
+        author: "钱钟书著",
+        publisher: "北京：人民文学出版社",
+        year: 2000,
+        isbn: "702003246X",
+        parseStatus: "ok",
+        match: exactTitleMatch,
+      }),
+    ];
+    const ranked = rankSearchResults(hits, ctx);
+    // Primary: explicit year-based ordering assertion.
+    expect(ranked[0].year).toBe(1997);
+    expect(ranked[1].year).toBe(2000);
+    expect(ranked[2].year).toBe(2013);
+    // Cross-reference: derivative marker + publisher + isbn.
+    expect(ranked[2].author).toContain("编剧");
+    expect(ranked[0].publisher).toBe("桂林：漓江出版社");
+    expect(ranked[1].isbn).toBe("702003246X");
+    expect(ranked[2].isbn).toBe("9787020081554");
+  });
+
+  it("百年孤独: 范晔译 is NOT demoted (translation stays clean)", () => {
+    // The 9-token white-list deliberately excludes
+    // 译 / 译者 / 翻译 / 译本 — translations must not be flagged.
+    // Translation should rank above the 编剧改编 derivative.
+    const ctx = makeContext("百年孤独");
+    const hits: RerankHit[] = [
+      // translation — clean (no white-list token)
+      makeHit({
+        title: "百年孤独",
+        author: "加西亚·马尔克斯著；范晔译",
+        parseStatus: "ok",
+        match: exactTitleMatch,
+      }),
+      // original — clean
+      makeHit({
+        title: "百年孤独",
+        author: "加西亚·马尔克斯著",
+        parseStatus: "ok",
+        match: exactTitleMatch,
+      }),
+      // derivative — 改编 + 编剧 must rank last
+      makeHit({
+        title: "百年孤独",
+        author: "加西亚·马尔克斯原著；某编剧改编",
+        parseStatus: "ok",
+        match: exactTitleMatch,
+      }),
+    ];
+    const ranked = rankSearchResults(hits, ctx);
+    expect(ranked[0].author).toBe("加西亚·马尔克斯著；范晔译");
+    expect(ranked[1].author).toBe("加西亚·马尔克斯著");
+    expect(ranked[2].author).toBe("加西亚·马尔克斯原著；某编剧改编");
+  });
+
+  it("非 exact_title: 编剧 in author does not trigger tie-break (input order preserved with derivative FIRST)", () => {
+    // Both hits are match.type="title" (priority=80, NOT 90).
+    // The S28-R2 tie-break is gated on exact_title on BOTH sides,
+    // so it must not fire here — original sort (priority → parseRank
+    // → score → _rankingScore → idx) determines order.
+    //
+    // Input order is intentionally derivative FIRST, clean SECOND.
+    // If the gate were broken and the tie-break leaked to non
+    // exact_title, the clean row would jump ahead of the derivative
+    // and the assertions below would fail. Asserting the
+    // derivative stays at input position #1 is the strict proof
+    // that the gate is honoured.
+    const ctx = makeContext("三体");
+    const hits: RerankHit[] = [
+      // input #1 — derivative (must stay #1)
+      makeHit({
+        title: "三体",
+        author: "刘慈欣；某编剧改编",
+        parseStatus: "ok",
+        match: titleMatch,
+      }),
+      // input #2 — clean (must stay #2)
+      makeHit({
+        title: "三体",
+        author: "刘慈欣",
+        parseStatus: "ok",
+        match: titleMatch,
+      }),
+    ];
+    const ranked = rankSearchResults(hits, ctx);
+    // Both score=220, _rankingScore=0, parseRank=3, priority=80;
+    // tie-break skipped → fall through to idx, input order preserved.
+    expect(ranked[0].author).toBe("刘慈欣；某编剧改编");
+    expect(ranked[1].author).toBe("刘慈欣");
   });
 });
