@@ -1,17 +1,26 @@
 #!/usr/bin/env bash
-# S27T-0A regression test for scripts/deploy-web-release-candidate.sh
+# S27T-5E-R3A-I3 regression test for scripts/deploy-web-release-candidate.sh
 #
 # Uses a fake command harness to safely reproduce the
 # RELEASE_PIPELINE_ENV_PROPAGATION_INCIDENT observed during S27S-R2.
 #
 # This test does NOT touch real Docker, real production, or real compose.
 # All commands exercised by the deploy script are intercepted by fake
-# binaries in $TMP/bin (a docker shim and a sudo shim that simulates
+# binaries in $RUN_TMP/bin (a docker shim and a sudo shim that simulates
 # env_reset behavior).
 #
+# Design constraints (I3):
+# - HOST_SYSTEM_BINARY_MUTATION_ALLOWED=false
+# - No mount/umount/unshare/nsenter
+# - DOCKER_SUDO resolution via harness-owned absolute fake sudo
+# - Fake sudo self-locates via $0; no FAKE_BIN_DIR inheritance
+# - Fake sudo simulates env_reset with env -i
+# - Fake docker self-locates via $0; logs to $SELF_DIR/fake-docker.log
+# - Fake docker fail-closed (no fallback to real docker)
+#
 # Tests:
-#   TEST 1 — sudo env_reset reproduction: current script fails to deliver
-#             BOOK_ID_SEARCH_WEB_IMAGE to docker compose.
+#   TEST 1 — sudo env_reset reproduction: caller BOOK_ID_SEARCH_WEB_IMAGE
+#            is stripped; only deploy-explicit image survives.
 #   TEST 2 — no-sudo path: candidate image override propagates.
 #   TEST 3 — exact image identity: registry/path:tag survives unchanged.
 #   TEST 4 — no build flag in compose invocation.
@@ -39,41 +48,116 @@ mkdir -p "$RUN_TMP/bin"
 # Self-create fake sudo + fake docker at runtime. These are recreated on
 # every test invocation so the test is portable across fresh checkouts and
 # does not depend on any gitignored historical progress/ evidence.
+
 cat > "$RUN_TMP/bin/sudo" <<'FAKE_SUDO_EOF'
-#!/usr/bin/env bash
-# S27T-2B: fake sudo simulating env_reset.
-# $0 is this script; $1..$N are the args after "sudo".
+# S27T-5E-R3A-I3 fake-sudo
+# - Self-locates via $0 (SELF_DIR parameter expansion)
+# - Simulates real sudo env_reset via `env -i` (clean environment)
+# - Preserves harness-controlled PATH so sibling fake docker is found
+# - Logs to self-contained $SELF_DIR/fake-sudo.log
+# - NO FAKE_BIN_DIR / FAKE_SUDO_LOG / FAKE_DOCKER_LOG dependency
+# - Fail-closed: invoked without a path -> nonzero
+
 set -e
-LOG="${FAKE_SUDO_LOG:-/dev/null}"
+case "$0" in
+  */*) SELF_DIR="${0%/*}" ;;
+  *) echo "ERROR: fake-sudo invoked without path: $0" >&2; exit 1 ;;
+esac
+SELF_DIR="$(cd "$SELF_DIR" && pwd)"
+
+# Simulate sudo env_reset: drop ALL inherited env except PATH/HOME.
+# PATH is preserved (not minimized) because the harness places per-scenario
+# fake docker directories ahead of system dirs; this keeps resolution correct
+# after env_reset without leaking caller BOOK_ID_SEARCH_WEB_IMAGE.
+ENV_ARGS=(
+  env -i
+  PATH="${PATH:-$SELF_DIR:/usr/bin:/bin}"
+  HOME="${HOME:-/tmp}"
+)
+
+# Log call to self-contained path
+LOG="$SELF_DIR/fake-sudo.log"
 {
   echo "=== fake-sudo called ==="
   echo "argv0: $0"
+  echo "SELF_DIR: $SELF_DIR"
   echo "argv: $*"
   echo "inherited BOOK_ID_SEARCH_WEB_IMAGE=${BOOK_ID_SEARCH_WEB_IMAGE:-<unset>}"
-} >> "$LOG" 2>&1
-# Simulate sudo env_reset: drop inherited BOOK_ID_SEARCH_WEB_IMAGE
-unset BOOK_ID_SEARCH_WEB_IMAGE
-exec "$@"
+} >> "$LOG" 2>&1 || true
+
+# Simulate env_reset and execute the command sudo would have run.
+exec "${ENV_ARGS[@]}" "$@"
 FAKE_SUDO_EOF
+
 chmod +x "$RUN_TMP/bin/sudo"
 
-cat > "$RUN_TMP/bin/docker" <<'FAKE_DOCKER_EOF'
+# Generate a fake docker executable at $1 with a hardcoded `docker ps` exit
+# code ($2).  The fake docker self-locates via $0, logs to
+# "$SELF_DIR/../fake-docker.log", and is fail-closed (no real docker
+# fallback).  This satisfies the I3 requirement that logging must be
+# self-contained and not depend on inherited env vars.
+
+# Write fake docker identity state for the current scenario.
+write_fake_docker_state() {
+  local state_file="$1"
+  local candidate_tag="$2"
+  local candidate_id="$3"
+  local container_id="$4"
+  local container_image_id="$5"
+  {
+    printf "CANDIDATE_TAG='%s'\n" "$candidate_tag"
+    printf "CANDIDATE_ID='%s'\n" "$candidate_id"
+    printf "CONTAINER_ID='%s'\n" "$container_id"
+    printf "CONTAINER_IMAGE_ID='%s'\n" "$container_image_id"
+  } > "$state_file"
+}
+
+# Compute a deterministic image ID from an image tag.
+image_id_from_tag() {
+  printf 'sha256:%s' "$(printf '%s' "$1" | sha256sum | awk '{print $1}')"
+}
+
+
+# Generate a fake docker executable at $1 with a hardcoded `docker ps` exit
+# code ($2).  The fake docker self-locates via $0, logs to
+# "$SELF_DIR/../fake-docker.log", and is fail-closed (no real docker
+# fallback).  If a state file "$SELF_DIR/../fake-docker-state" exists, it is
+# sourced and used to answer identity queries consistently:
+#   - docker inspect <CANDIDATE_TAG>  -> CANDIDATE_ID
+#   - docker inspect <CONTAINER_ID>   -> CONTAINER_IMAGE_ID
+#   - docker compose ps -q web         -> CONTAINER_ID
+# Missing state makes image inspect fail closed.
+make_fake_docker() {
+  local target_path="$1"
+  local ps_exit_code="$2"
+  mkdir -p "$(dirname "$target_path")"
+  cat > "$target_path" <<'FAKE_DOCKER_EOF'
 #!/usr/bin/env bash
-# S27T-2B: fake docker with full S27T-1 coverage.
+# S27T-5E-R3A-I3 fake-docker (stateful identity model)
+# - Self-locates via $0 (SELF_DIR parameter expansion)
+# - Logs to self-contained $SELF_DIR/../fake-docker.log
+# - Fail-closed (unknown argv -> exit 1)
+# - NO fallback to real docker
+# - NO dependency on FAKE_DOCKER_LOG / FAKE_BIN_DIR / outer env
+
 set -e
-LOG="${FAKE_DOCKER_LOG:-/dev/null}"
-STATE="${FAKE_DOCKER_STATE:-/dev/null}"
+SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
+LOG="$SELF_DIR/../fake-docker.log"
+LOG_STATE="$SELF_DIR/../fake-docker-state"
 
-log_kv() { printf '%s=%s\n' "$1" "$2" >> "$LOG"; }
+log_kv() {
+  printf '%s=%s\n' "$1" "$2" >> "$LOG"
+}
 
-# `docker ps` (no args) → exit 0 (deploy script: DOCKER_SUDO="")
-if [ "$1" = "ps" ] && [ "$#" -eq 1 ]; then
-  exit 0
+CANDIDATE_TAG=""
+CANDIDATE_ID=""
+CONTAINER_ID=""
+CONTAINER_IMAGE_ID=""
+if [ -f "$LOG_STATE" ]; then
+  . "$LOG_STATE"
 fi
 
-# `docker inspect --format='{{.Id}}' <image>`
-if [ "$1" = "inspect" ]; then
-  shift
+parse_target() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --format=*) shift ;;
@@ -81,60 +165,94 @@ if [ "$1" = "inspect" ]; then
       *) break ;;
     esac
   done
-  if [ $# -gt 0 ]; then
-    IMG="$1"
-    SYNTH_ID="sha256:$(printf '%s' "$IMG" | sha256sum | awk '{print $1}')"
-    if [ "$IMG" = "fakewebcid0000000000000000000000000000000000000000000000000000" ]; then
-      CACHED="$(cat "$STATE" 2>/dev/null || true)"
-      if [ -n "$CACHED" ]; then echo "$CACHED"; else echo "$SYNTH_ID"; fi
-    else
-      echo "$SYNTH_ID" > "$STATE"
-      echo "$SYNTH_ID"
+  printf '%s' "$1"
+}
+
+case "$1" in
+  "ps")
+    exit $ps_exit_code
+    ;;
+  "image")
+    if [ "$2" = "inspect" ]; then
+      shift 2
+      TARGET="$(parse_target "$@")"
+      if [ -n "$CANDIDATE_TAG" ] && [ "$TARGET" = "$CANDIDATE_TAG" ]; then
+        log_kv INSPECT_IMAGE "$TARGET"
+        log_kv INSPECT_ID "$CANDIDATE_ID"
+        echo "$CANDIDATE_ID"
+        exit 0
+      fi
+      echo "ERROR: fake-docker image inspect: unregistered image: $TARGET" >&2
+      exit 1
     fi
-  fi
-  exit 0
-fi
-
-{
-  echo "=== fake-docker called ==="
-  echo "argv: $0 $*"
-  echo "BOOK_ID_SEARCH_WEB_IMAGE=${BOOK_ID_SEARCH_WEB_IMAGE:-<unset>}"
-  echo "PWD=${PWD}"
-  echo "PATH=${PATH}"
-} >> "$LOG"
-
-# `docker compose ...`
-if [ "$1" = "compose" ]; then
-  shift
-  log_kv COMPOSE_ARGV "$*"
-  log_kv COMPOSE_SEEN_IMAGE "${BOOK_ID_SEARCH_WEB_IMAGE:-<unset>}"
-  if [ "$1" = "up" ]; then
-    : > "$STATE"
-    exit 0
-  fi
-  if [ "$1" = "ps" ]; then
-    if [ "$2" = "-q" ] && [ "$3" = "web" ]; then
-      echo "fakewebcid0000000000000000000000000000000000000000000000000000"
+    echo "ERROR: fake-docker does not support: docker image $*" >&2
+    exit 1
+    ;;
+  "inspect")
+    shift
+    TARGET="$(parse_target "$@")"
+    if [ -n "$CANDIDATE_TAG" ] && [ "$TARGET" = "$CANDIDATE_TAG" ]; then
+      log_kv INSPECT_IMAGE "$TARGET"
+      log_kv INSPECT_ID "$CANDIDATE_ID"
+      echo "$CANDIDATE_ID"
       exit 0
     fi
-    echo "NAME                IMAGE"
-    echo "fake-web-1          book-id-search-web"
-    exit 0
-  fi
-  exit 0
-fi
-
-exit 0
+    if [ -n "$CONTAINER_ID" ] && [ "$TARGET" = "$CONTAINER_ID" ]; then
+      log_kv INSPECT_IMAGE "$TARGET"
+      log_kv INSPECT_ID "$CONTAINER_IMAGE_ID"
+      echo "$CONTAINER_IMAGE_ID"
+      exit 0
+    fi
+    echo "ERROR: fake-docker inspect: unregistered target: $TARGET" >&2
+    exit 1
+    ;;
+  "compose")
+    shift
+    log_kv PWD "${PWD:-<unset>}"
+    log_kv PATH "${PATH}"
+    log_kv ARGV "$*"
+    log_kv COMPOSE_ARGV "$*"
+    log_kv COMPOSE_SEEN_IMAGE "${BOOK_ID_SEARCH_WEB_IMAGE:-<unset>}"
+    case "$1" in
+      "up")
+        log_kv COMPOSE_UP_CALLED "true"
+        exit 0
+        ;;
+      "ps")
+        if [ "$2" = "-q" ] && [ "$3" = "web" ]; then
+          if [ -n "$CONTAINER_ID" ]; then
+            echo "$CONTAINER_ID"
+          fi
+          exit 0
+        fi
+        echo "NAME                IMAGE"
+        echo "fake-web-1          book-id-search-web"
+        exit 0
+        ;;
+      *)
+        echo "ERROR: fake-docker compose subcommand not supported: $*" >&2
+        exit 1
+        ;;
+    esac
+    ;;
+  *)
+    echo "ERROR: fake-docker does not support argv: $*" >&2
+    exit 1
+    ;;
+esac
 FAKE_DOCKER_EOF
-chmod +x "$RUN_TMP/bin/docker"
+  chmod +x "$target_path"
+}
 
-# Confirm the test harness will resolve docker/sudo via PATH (NOT the real ones)
+
+make_fake_docker "$RUN_TMP/bin/docker" 0
+# Confirm the test harness owns the absolute fake sudo used for TEST1/TEST3.
+# DOCKER_SUDO will resolve to "$RUN_TMP/bin/sudo" because the harness places
+# that directory first in PATH for every deploy invocation.
 RESOLVED_SUDO="$(PATH="$RUN_TMP/bin" command -v sudo)"
-RESOLVED_DOCKER="$(PATH="$RUN_TMP/bin" command -v docker)"
-if [ "$RESOLVED_SUDO" != "$RUN_TMP/bin/sudo" ] || [ "$RESOLVED_DOCKER" != "$RUN_TMP/bin/docker" ]; then
-  echo "FATAL: fake harness not on PATH for child processes" >&2
+if [ "$RESOLVED_SUDO" != "$RUN_TMP/bin/sudo" ]; then
+  echo "FATAL: harness-owned fake sudo not absolute-resolvable" >&2
   echo "  resolved sudo=$RESOLVED_SUDO" >&2
-  echo "  resolved docker=$RESOLVED_DOCKER" >&2
   exit 97
 fi
 
@@ -211,79 +329,39 @@ run_scenario() {
   local EXIT_FILE="$SCEN_TMP/exit.txt"
   rm -f "$SUDO_LOG" "$DOCKER_LOG" "$EXIT_FILE"
 
-  # Build environment to pass to the deploy script invocation
+  # Build environment to pass to the deploy script invocation.
+  # Only PATH is explicitly controlled; no FAKE_* vars are leaked to the
+  # fake boundary, satisfying the I3 self-contained/logging requirement.
   local EXPORT_VARS=(
-    "FAKE_SUDO_LOG=$SUDO_LOG"
-    "FAKE_DOCKER_LOG=$DOCKER_LOG"
-    "PATH=$RUN_TMP/bin:$PATH"
+    "PATH=$SCEN_TMP/bin:$RUN_TMP/bin:$PATH"
   )
   for kv in "${extra_env[@]}"; do
     EXPORT_VARS+=("$kv")
   done
 
-  # Force DOCKER_SUDO detection: if expect_sudo="sudo", make `docker ps` FAIL
-  # so the deploy script's detection sets DOCKER_SUDO="sudo". We'll achieve
-  # this by prepending a tiny wrapper script to PATH that shadows `docker`
-  # *only* for the detection phase. Simplest: set a flag env var that the
-  # fake-docker itself checks. But to keep fake-docker simple, we use a
-  # second wrapper inside $RUN_TMP/bin that overrides ONLY for `docker ps`.
-  #
-  # Approach: create $SCEN_TMP/bin that re-exports docker depending on need.
-  # To keep this simple, we use the existing fake-docker and instead force
-  # DOCKER_SUDO via a known flag. The deploy script reads DOCKER_SUDO only
-  # via its own detection. To make detection reproducible, we'll create a
-  # directory $SCEN_TMP/bin that:
-  #   - contains a `docker` shim that exits 0 on `docker ps` for the nosudo
-  #     scenario, and exits non-zero (with sudo required) for the sudo scenario.
-  #   - delegates all other docker subcommands to the standard fake-docker
-  #     from RUN_TMP/bin/docker.
-  # Simpler: we use the standard fake-docker for both (which always says
-  # `docker ps` exits 0 → DOCKER_SUDO=""). For the "sudo" scenario we
-  # intentionally override DOCKER_SUDO via a sentinel approach: we put a
-  # tiny `docker` shim in $SCEN_TMP/bin that fails `docker ps` so detection
-  # sets DOCKER_SUDO="sudo", and delegates everything else to the standard
-  # fake-docker.
-  mkdir -p "$SCEN_TMP/bin"
-  cat > "$SCEN_TMP/bin/docker" <<EOSUDOCHECK
-#!/usr/bin/env bash
-# scenario docker: `docker ps` exits 1 (forces DOCKER_SUDO="sudo" detection)
-# everything else delegates to the standard fake-docker.
-if [ "\$1" = "ps" ] && [ "\$#" -eq 1 ]; then
-  echo "FAKE: docker ps denied (scenario=$scenario_name)" >&2
-  exit 1
-fi
-exec "$RUN_TMP/bin/docker" "\$@"
-EOSUDOCHECK
-  chmod +x "$SCEN_TMP/bin/docker"
-
-  # PATH for the deploy script = SCEN_TMP/bin first (so detection sees this docker),
-  # then RUN_TMP/bin (so subsequent docker commands use the real fake docker).
-  # For the "nosudo" scenario we want detection to succeed, so we need the
-  # SCEN_TMP/bin docker to ALLOW docker ps. Override per-scenario below.
-  if [ "$expect_sudo" = "nosudo" ]; then
-    cat > "$SCEN_TMP/bin/docker" <<EONOSUDO
-#!/usr/bin/env bash
-# scenario docker: all calls pass through to standard fake-docker
-exec "$RUN_TMP/bin/docker" "\$@"
-EONOSUDO
-    chmod +x "$SCEN_TMP/bin/docker"
+  # Create a per-scenario fake docker that self-locates and logs to
+  # $SCEN_TMP/fake-docker.log.  Its `docker ps` exit code drives the deploy
+  # script's DOCKER_SUDO detection: 1 -> DOCKER_SUDO="sudo", 0 -> "".
+  if [ "$expect_sudo" = "sudo" ]; then
+    make_fake_docker "$SCEN_TMP/bin/docker" 1
+  else
+    make_fake_docker "$SCEN_TMP/bin/docker" 0
   fi
+  # Register deterministic candidate/container identity for this scenario.
+  local CAND_ID
+  CAND_ID="$(image_id_from_tag "$image_tag")"
+  write_fake_docker_state     "$SCEN_TMP/fake-docker-state"     "$image_tag"     "$CAND_ID"     "fakewebcid0000000000000000000000000000000000000000000000000000"     "$CAND_ID"
 
   # Set up compose-seen log path
   local COMPOSE_SEEN_LOG="$SCEN_TMP/compose-seen-env.txt"
   : > "$COMPOSE_SEEN_LOG"
 
-  # Patch FAKE_DOCKER_LOG via a per-scenario override so we can capture
-  # exactly what the deploy script's docker compose call saw. We use an
-  # env-var trick: extend FAKE_DOCKER_LOG to also tee into COMPOSE_SEEN_LOG.
-  local DOCKER_LOG_AND_SEEN="$DOCKER_LOG"
-  # Use the docker log directly; we'll grep it after the run.
-
   # Run the deploy script under the controlled environment.
+  # DOCKER_SUDO resolves to the absolute path "$RUN_TMP/bin/sudo" because
+  # "sudo" is looked up in the PATH we provide (which has RUN_TMP/bin first).
   (
     cd "$APP_DIR"
     env "${EXPORT_VARS[@]}" \
-      PATH="$SCEN_TMP/bin:$RUN_TMP/bin:$PATH" \
       bash "$DEPLOY_SCRIPT" "$image_tag" \
       > "$SCEN_TMP/stdout.txt" 2> "$SCEN_TMP/stderr.txt"
     echo $? > "$EXIT_FILE"
@@ -468,14 +546,20 @@ run_root_scenario() {
 
   local SCEN_TMP="$RUN_TMP/$scenario_name"
   mkdir -p "$SCEN_TMP"
-  local SUDO_LOG="$SCEN_TMP/fake-sudo.log"
   local DOCKER_LOG="$SCEN_TMP/fake-docker.log"
-  rm -f "$SUDO_LOG" "$DOCKER_LOG"
+  rm -f "$DOCKER_LOG"
 
+  # Self-contained per-scenario fake docker.  For root-resolution tests we
+  # do not need sudo simulation, so `docker ps` exits 0 -> DOCKER_SUDO="".
+  make_fake_docker "$SCEN_TMP/bin/docker" 0
+  # Register deterministic candidate/container identity for this scenario.
+  local CAND_ID
+  CAND_ID="$(image_id_from_tag "$image_tag")"
+  write_fake_docker_state     "$SCEN_TMP/fake-docker-state"     "$image_tag"     "$CAND_ID"     "fakewebcid0000000000000000000000000000000000000000000000000000"     "$CAND_ID"
+
+  # No FAKE_* env vars are passed; fake boundary logs are self-contained.
   local EXPORT_VARS=(
-    "FAKE_SUDO_LOG=$SUDO_LOG"
-    "FAKE_DOCKER_LOG=$DOCKER_LOG"
-    "PATH=$RUN_TMP/bin:$PATH"
+    "PATH=$SCEN_TMP/bin:$RUN_TMP/bin:$PATH"
   )
   for kv in "${extra_env[@]}"; do
     EXPORT_VARS+=("$kv")
