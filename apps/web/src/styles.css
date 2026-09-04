@@ -7952,3 +7952,42 @@ mark.hl {
     padding: 10px 12px;
   }
 }
+
+/* S29-P3B1: results tools collapsible wrapper */
+.results-tools {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border, #dfe5ee);
+}
+
+.results-tools > summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 13px;
+  color: var(--color-text-muted, #63728a);
+  padding: 2px 4px;
+  user-select: none;
+}
+
+.results-tools > summary::-webkit-details-marker {
+  display: none;
+}
+
+.results-tools > summary::before {
+  content: "▸ ";
+  display: inline-block;
+  margin-right: 4px;
+  transition: transform 0.15s ease;
+}
+
+.results-tools[open] > summary {
+  color: var(--color-text, #172033);
+}
+
+.results-tools[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.results-tools .results__toolbar {
+  margin-top: 6px;
+}

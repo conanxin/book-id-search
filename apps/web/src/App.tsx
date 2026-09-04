@@ -861,7 +861,9 @@ function SearchPage() {
         </div>
 
         {currentQ ? (
-          <div className="results__toolbar" role="toolbar" aria-label="搜索结果操作">
+          <details className="results-tools">
+            <summary>结果工具</summary>
+            <div className="results__toolbar" role="toolbar" aria-label="搜索结果操作">
             <button
               type="button"
               className="toolbar-button"
@@ -898,6 +900,7 @@ function SearchPage() {
               快捷键：<kbd>/</kbd> 聚焦 · <kbd>Enter</kbd> 搜索 · <kbd>Esc</kbd> 清空 · <kbd>←</kbd>/<kbd>→</kbd> 翻页
             </span>
           </div>
+          </details>
         ) : null}
 
         {!loading && !error && input.trim() === "" && !currentQ ? (
