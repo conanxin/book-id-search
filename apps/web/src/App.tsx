@@ -842,7 +842,7 @@ function SearchPage() {
             {data && currentQ
               ? `共找到 ${data.total.toLocaleString()} 条结果`
               : input.trim() === ""
-              ? "输入关键词开始搜索"
+              ? "等待搜索"
               : "准备搜索"}
           </span>
           <div className="results__bar-right">
@@ -897,6 +897,18 @@ function SearchPage() {
             <span className="results__toolbar-hint">
               快捷键：<kbd>/</kbd> 聚焦 · <kbd>Enter</kbd> 搜索 · <kbd>Esc</kbd> 清空 · <kbd>←</kbd>/<kbd>→</kbd> 翻页
             </span>
+          </div>
+        ) : null}
+
+        {!loading && !error && input.trim() === "" && !currentQ ? (
+          <div className="search-empty-guide">
+            <Search size={20} aria-hidden="true" />
+            <div>
+              <strong>从书名或作者开始</strong>
+              <p>
+                也可以输入 ISBN、SSID 或 DXID。搜索后可以比较出版社、年份和版本信息。
+              </p>
+            </div>
           </div>
         ) : null}
 

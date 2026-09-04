@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { createElement } from "react";
+import { MemoryRouter } from "react-router-dom";
+import { renderToStaticMarkup } from "react-dom/server";
+import SiteFooter from "./SiteFooter";
 
 /**
  * POST-ICP-COMPLIANCE — structural assertions for the global site footer.
@@ -32,6 +36,16 @@ const stylesSrc = readFileSync(
   resolve(__dirname, "..", "styles.css"),
   "utf8"
 );
+
+function renderFooterAt(pathname: string): string {
+  return renderToStaticMarkup(
+    createElement(
+      MemoryRouter,
+      { initialEntries: [pathname] },
+      createElement(SiteFooter)
+    )
+  );
+}
 
 describe("siteCompliance.ts (POST-ICP-COMPLIANCE)", () => {
   it("icpNumber is set", () => {
@@ -72,6 +86,27 @@ describe("siteCompliance.ts (POST-ICP-COMPLIANCE)", () => {
 
   it("does not contain identity materials", () => {
     expect(complianceSrc).not.toMatch(/居民身份证|身份证号码|备案订单号|手机号码|家庭住址/);
+  });
+});
+
+describe("SiteFooter.tsx runtime 返回搜索 routing (S29-P2B1T2)", () => {
+  it("does not render .site-footer__back on home (pathname '/')", () => {
+    const html = renderFooterAt("/");
+    expect(html).not.toContain('data-testid="site-footer-back"');
+  });
+
+  it("renders .site-footer__back on detail page (pathname '/books/test-id')", () => {
+    const html = renderFooterAt("/books/test-id");
+    expect(html).toContain('data-testid="site-footer-back"');
+    expect(html).toContain('href="/"');
+    expect(html).toContain("返回搜索");
+  });
+
+  it("renders .site-footer__back on weread page (pathname '/weread')", () => {
+    const html = renderFooterAt("/weread");
+    expect(html).toContain('data-testid="site-footer-back"');
+    expect(html).toContain('href="/"');
+    expect(html).toContain("返回搜索");
   });
 });
 

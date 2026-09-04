@@ -7911,3 +7911,44 @@ mark.hl {
   flex-direction: column;
   gap: 12px;
 }
+
+/* S29-P2C1: empty-query guidance */
+.search-empty-guide {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  margin-top: 8px;
+  border: 1px solid var(--color-border, #dfe5ee);
+  border-radius: 8px;
+  background: var(--color-bg-soft, #f6f7f9);
+  color: var(--color-text-muted, #63728a);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.search-empty-guide > svg {
+  flex-shrink: 0;
+  color: var(--color-text-faint, #546179);
+  margin-top: 1px;
+}
+
+.search-empty-guide strong {
+  display: block;
+  color: var(--color-text, #172033);
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.search-empty-guide p {
+  margin: 0;
+  color: var(--color-text-faint, #546179);
+  font-size: 13px;
+}
+
+@media (max-width: 720px) {
+  .search-empty-guide {
+    gap: 10px;
+    padding: 10px 12px;
+  }
+}

@@ -1,4 +1,5 @@
 import { ArrowLeft, ShieldCheck } from "lucide-react";
+import { useLocation } from "react-router-dom";
 import { SITE_COMPLIANCE } from "../siteCompliance";
 
 /**
@@ -22,14 +23,18 @@ export default function SiteFooter() {
   const year = new Date().getFullYear();
   const hasPoliceRecord = SITE_COMPLIANCE.publicSecurityNumber.trim().length > 0;
   const hasPoliceUrl = SITE_COMPLIANCE.publicSecurityUrl.trim().length > 0;
+  const location = useLocation();
+  const isHomePage = location.pathname === "/";
 
   return (
     <footer className="site-footer" data-testid="site-footer">
       <div className="site-footer__inner">
-        <a className="site-footer__back" href="/" data-testid="site-footer-back">
-          <ArrowLeft size={14} aria-hidden="true" />
-          返回搜索
-        </a>
+        {!isHomePage && (
+          <a className="site-footer__back" href="/" data-testid="site-footer-back">
+            <ArrowLeft size={14} aria-hidden="true" />
+            返回搜索
+          </a>
+        )}
 
         <div className="site-footer__records" data-testid="site-footer-records">
           <a
