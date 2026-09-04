@@ -767,17 +767,13 @@ function SearchPage() {
         <AiSearchPanel />
       ) : (
       <section className="search-panel">
-        <WereadPrivatePanel />
-        <div className="weread-center-link-row">
-          <a href="/weread" className="weread-center-link">
-            <BookOpen size={14} />
-            微信读书中心
-          </a>
-        </div>
         <div className="brand-row">
           <BookOpen size={28} />
-          <h1>图书 SSID / DXID 检索</h1>
+          <h1>找一本书</h1>
         </div>
+        <p className="search-subtitle">
+          输入书名、作者、ISBN 或 SSID / DXID，找到你真正想要的版本。
+        </p>
         <form className="search-form" onSubmit={submit} role="search">
           <Search size={22} aria-hidden="true" />
           <input
@@ -818,12 +814,24 @@ function SearchPage() {
           </div>
         ) : null}
 
-        <div className="stats-strip">
-          <Field label="records" value={stats?.numberOfDocuments?.toLocaleString()} />
-          <Field label="index" value={stats?.indexName} mono />
-          <Field label="indexing" value={stats ? (stats.isIndexing ? "进行中" : "空闲") : statsError || "读取中"} />
-          <Field label="last import" value={formatDate(stats?.lastImportReport?.finishedAt)} />
-        </div>
+        <details className="search-advanced">
+          <summary>高级工具与数据状态</summary>
+          <div className="search-advanced__content">
+            <WereadPrivatePanel />
+            <div className="weread-center-link-row">
+              <a href="/weread" className="weread-center-link">
+                <BookOpen size={14} />
+                微信读书中心
+              </a>
+            </div>
+            <div className="stats-strip">
+              <Field label="records" value={stats?.numberOfDocuments?.toLocaleString()} />
+              <Field label="index" value={stats?.indexName} mono />
+              <Field label="indexing" value={stats ? (stats.isIndexing ? "进行中" : "空闲") : statsError || "读取中"} />
+              <Field label="last import" value={formatDate(stats?.lastImportReport?.finishedAt)} />
+            </div>
+          </div>
+        </details>
       </section>
       )}
 

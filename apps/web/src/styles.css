@@ -7873,3 +7873,41 @@ mark.hl {
     justify-content: center;
   }
 }
+
+/* S29-P1A: search-first layout — subtitle + collapsible advanced section */
+.search-subtitle {
+  margin: 0 0 12px;
+  color: var(--color-text-muted, #63728a);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.search-advanced {
+  margin-top: 16px;
+  border: 1px solid var(--color-border, #dfe5ee);
+  border-radius: 8px;
+  background: var(--color-bg-soft, #f6f7f9);
+}
+
+.search-advanced > summary {
+  cursor: pointer;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--color-text-muted, #63728a);
+  list-style: none;
+}
+
+.search-advanced > summary::-webkit-details-marker {
+  display: none;
+}
+
+.search-advanced[open] > summary {
+  border-bottom: 1px solid var(--color-border, #dfe5ee);
+}
+
+.search-advanced__content {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
