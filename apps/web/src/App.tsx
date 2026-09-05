@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { getBook, getRelatedBooks, getStats, searchBooks, type Book, type MatchInfo, type SearchResponse, type StatsResponse } from "./api";
+import { EDITION_COMPARE_MAX, EditionComparePanel, toggleEditionCompareSelection } from "./EditionCompare";
 import BookInsightSection from "./BookInsight";
 import { detailMatchInfo, isExactMatch, matchBadgeLabel, matchBadgeVariant, parseStatusNarrative, explainParseWarnings } from "./match-ui";
 import AiSearchPanel from "./AiSearchPanel";
@@ -450,7 +451,19 @@ function fullRecordText(book: Book): string {
 // buttons stop propagation so they don't accidentally trigger navigation.
 // ---------------------------------------------------------------------------
 
-function BookCard({ book, query, weread }: { book: Book; query: string; weread?: WereadStatus | null }) {
+function BookCard({
+  book,
+  query,
+  weread,
+  compareSelected = false,
+  onToggleCompare,
+}: {
+  book: Book;
+  query: string;
+  weread?: WereadStatus | null;
+  compareSelected?: boolean;
+  onToggleCompare?: (book: Book) => void;
+}) {
   const exact = isExactMatch(book.match);
   return (
     <article className={`book-card ${exact ? "book-card--exact" : ""}`.trim()}>
@@ -477,6 +490,21 @@ function BookCard({ book, query, weread }: { book: Book; query: string; weread?:
           <Field label="ISBN" value={book.isbn} highlight query={query} mono fallback="缺失" />
         </div>
       </Link>
+        {onToggleCompare ? (
+          <div className="book-card__compare-row">
+            <button
+              type="button"
+              className="toolbar-button book-card__compare-toggle"
+              aria-pressed={compareSelected}
+              onClick={(event) => {
+                event.stopPropagation();
+                onToggleCompare(book);
+              }}
+            >
+              {compareSelected ? "已加入对比" : "加入对比"}
+            </button>
+          </div>
+        ) : null}
       {book.parseStatus !== "ok" && <TrustHint book={book} />}
       {book.parseStatus === "failed" ? (
         <div className="parse-hint parse-hint--failed">本条解析异常，请谨慎引用。</div>
@@ -524,12 +552,27 @@ function SearchPage() {
   const [wereadToken, setWereadToken] = useState<string | null>(getWereadToken());
   const [wereadStatuses, setWereadStatuses] = useState<Record<string, WereadStatus>>({});
   const [wereadLoading, setWereadLoading] = useState(false);
+  const [compareBooks, setCompareBooks] = useState<Book[]>([]);
+  const [compareOpen, setCompareOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   // currentQ = the query that the latest request was fired with. Used by
   // results__bar so it always renders against the query that produced `data`,
   // not whatever is in the input field at the moment.
   const currentQ = useMemo(() => debouncedQ.trim(), [debouncedQ]);
+
+  // Version comparison belongs to the active search query.
+  // Pagination preserves selections; a different query resets them.
+  useEffect(() => {
+    setCompareBooks([]);
+    setCompareOpen(false);
+  }, [currentQ]);
+
+  useEffect(() => {
+    if (compareBooks.length < 2) {
+      setCompareOpen(false);
+    }
+  }, [compareBooks.length]);
 
   // Stats: fetch once on mount.
   useEffect(() => {
@@ -628,6 +671,12 @@ function SearchPage() {
       if (!trimmed) return;
       pushRecent(trimmed);
       setRecent(readRecent());
+
+      // Submit is an explicit query commit. Promote the current input
+      // immediately instead of waiting for the 300ms typing debounce;
+      // otherwise a params-triggered search effect can restore the stale
+      // debounced query before the debounce fires.
+      setDebouncedQ(trimmed);
       setParams({ q: trimmed, page: "1" });
     },
     [input, setParams]
@@ -654,6 +703,34 @@ function SearchPage() {
   // current page summary. Toast on success or failure.
   // ------------------------------------------------------------------
   const items = data?.items ?? [];
+
+  const toggleCompareBook = useCallback(
+    (book: Book) => {
+      const result = toggleEditionCompareSelection(compareBooks, book);
+
+      if (result.limitReached) {
+        showToast(
+          `最多对比 ${EDITION_COMPARE_MAX} 个版本`,
+          "info"
+        );
+        return;
+      }
+
+      setCompareBooks(result.items);
+    },
+    [compareBooks]
+  );
+
+  const removeCompareBook = useCallback((id: string) => {
+    setCompareBooks((current) =>
+      current.filter((book) => book.id !== id)
+    );
+  }, []);
+
+  const clearCompareBooks = useCallback(() => {
+    setCompareBooks([]);
+    setCompareOpen(false);
+  }, []);
 
   const copySearchUrl = useCallback(async () => {
     const href = window.location.href;
@@ -903,7 +980,48 @@ function SearchPage() {
           </details>
         ) : null}
 
-        {!loading && !error && input.trim() === "" && !currentQ ? (
+                  {compareBooks.length ? (
+            <section
+              className="edition-compare-dock"
+              aria-label="版本对比选择"
+            >
+              <div>
+                已选择 <strong>{compareBooks.length}</strong> /{" "}
+                {EDITION_COMPARE_MAX} 个版本
+              </div>
+
+              <div className="edition-compare-dock__actions">
+                <button
+                  type="button"
+                  className="toolbar-button"
+                  onClick={clearCompareBooks}
+                >
+                  清空
+                </button>
+
+                <button
+                  type="button"
+                  className="toolbar-button"
+                  disabled={compareBooks.length < 2}
+                  onClick={() => setCompareOpen(true)}
+                >
+                  {compareBooks.length < 2
+                    ? "至少选择 2 个版本"
+                    : `对比 ${compareBooks.length} 个版本`}
+                </button>
+              </div>
+            </section>
+          ) : null}
+
+          {compareOpen && compareBooks.length >= 2 ? (
+            <EditionComparePanel
+              books={compareBooks}
+              onRemove={removeCompareBook}
+              onClear={clearCompareBooks}
+            />
+          ) : null}
+
+{!loading && !error && input.trim() === "" && !currentQ ? (
           <div className="search-empty-guide">
             <Search size={20} aria-hidden="true" />
             <div>
@@ -923,7 +1041,16 @@ function SearchPage() {
 
         <div className="card-list">
           {data?.items.map((book) => (
-            <BookCard key={book.id} book={book} query={currentQ} weread={wereadStatuses[book.id]} />
+            <BookCard
+                key={book.id}
+                book={book}
+                query={currentQ}
+                weread={wereadStatuses[book.id]}
+                compareSelected={compareBooks.some(
+                  (item) => item.id === book.id
+                )}
+                onToggleCompare={toggleCompareBook}
+              />
           ))}
         </div>
 

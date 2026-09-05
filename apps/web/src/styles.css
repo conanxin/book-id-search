@@ -7991,3 +7991,120 @@ mark.hl {
 .results-tools .results__toolbar {
   margin-top: 6px;
 }
+
+
+/* S30-P2C: public catalog edition comparison */
+
+.book-card__compare-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.7rem;
+}
+
+.book-card__compare-toggle[aria-pressed="true"] {
+  font-weight: 700;
+}
+
+.edition-compare-dock {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0.85rem 0;
+  padding: 0.75rem 0;
+}
+
+.edition-compare-dock__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.edition-compare {
+  margin: 0.85rem 0 1.1rem;
+}
+
+.edition-compare__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.edition-compare__header > div {
+  display: flex;
+  align-items: baseline;
+  gap: 0.65rem;
+}
+
+.edition-compare__header span {
+  font-size: 0.9rem;
+  opacity: 0.72;
+}
+
+.edition-compare__table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.edition-compare table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+}
+
+.edition-compare th,
+.edition-compare td {
+  padding: 0.7rem;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.edition-compare thead th {
+  min-width: 160px;
+}
+
+.edition-compare thead th:first-child,
+.edition-compare tbody th {
+  width: 90px;
+  min-width: 90px;
+}
+
+.edition-compare__title,
+.edition-compare__edition {
+  display: block;
+}
+
+.edition-compare__edition {
+  margin-top: 0.25rem;
+  font-size: 0.85rem;
+  font-weight: 400;
+  opacity: 0.72;
+}
+
+.edition-compare__remove {
+  margin-top: 0.55rem;
+}
+
+.edition-compare__mono {
+  font-family:
+    SFMono-Regular,
+    Consolas,
+    "Liberation Mono",
+    monospace;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .edition-compare-dock,
+  .edition-compare__header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .edition-compare-dock__actions {
+    width: 100%;
+  }
+}
