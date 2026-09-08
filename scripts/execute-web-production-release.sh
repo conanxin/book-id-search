@@ -651,7 +651,9 @@ export BOOK_ID_SEARCH_WEB_IMAGE="$IMAGE_TAG"
 PRODUCTION_DEPLOY_STARTED=true
 # Exactly one deploy invocation per executor invocation.  No retry.  No pull.
 # No build.  IMAGE_TAG sourced from Execution Plan only.
-if ! bash "$DEPLOY_SCRIPT" "$IMAGE_TAG" >"$DEPLOY_OUT" 2>"$DEPLOY_ERR"; then
+if bash "$DEPLOY_SCRIPT" "$IMAGE_TAG" >"$DEPLOY_OUT" 2>"$DEPLOY_ERR"; then
+  DEPLOY_EXIT_CODE=0
+else
   DEPLOY_EXIT_CODE=$?
   PRODUCTION_TOUCHED=true  # production partially touched
   PRODUCTION_WRITE_EXECUTED=true
@@ -700,7 +702,6 @@ if ! bash "$DEPLOY_SCRIPT" "$IMAGE_TAG" >"$DEPLOY_OUT" 2>"$DEPLOY_ERR"; then
   emit_block DEPLOY_FAILED true true true true true true
 fi
 
-DEPLOY_EXIT_CODE=0
 PRODUCTION_DEPLOY_EXECUTED=true
 PRODUCTION_WRITE_EXECUTED=true
 PRODUCTION_TOUCHED=true

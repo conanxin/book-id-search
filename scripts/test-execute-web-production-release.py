@@ -1762,13 +1762,32 @@ def t_G35_deploy_called_exactly_once():
 
 @test("G36_deploy_nonzero")
 def t_G36_deploy_nonzero():
-    tmp, repo, _ = make_full_test_workspace("G36_deploy_nonzero", deploy_exit=7)
+    tmp, repo, ctx = make_full_test_workspace("G36_deploy_nonzero", deploy_exit=7)
     try:
         rc, d = run_executor(repo)
         _ok(rc != 0)
         _ok(d.get("BLOCK_REASON") == "DEPLOY_FAILED", f"reason={d.get('BLOCK_REASON')}")
         _ok(d.get("AUTO_RETRY") == "false")
         _ok(d.get("AUTO_ROLLBACK") == "false")
+
+        result_path = (
+            repo / "progress" /
+            f"web-release-production-attempt-{ctx['ep_fp']}.result.env"
+        )
+        _ok(result_path.is_file(), f"missing result artifact: {result_path}")
+        result = _parse_output(result_path.read_text())
+        _ok(
+            result.get("FINAL_STATUS") == "FAILED",
+            f"FINAL_STATUS={result.get('FINAL_STATUS')}",
+        )
+        _ok(
+            result.get("FINAL_FAILURE_REASON") == "DEPLOY_FAILED",
+            f"FINAL_FAILURE_REASON={result.get('FINAL_FAILURE_REASON')}",
+        )
+        _ok(
+            result.get("DEPLOY_EXIT_CODE") == "7",
+            f"DEPLOY_EXIT_CODE={result.get('DEPLOY_EXIT_CODE')}",
+        )
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
