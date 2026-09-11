@@ -210,7 +210,7 @@ if [ "$BRANCH" != "main" ]; then
   emit_block NOT_MAIN_BRANCH
 fi
 
-if [ -n "$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null | grep -v -E '^\?\? (progress/|\.git/)')" ]; then
+if [ -n "$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null | grep -v -E '^\?\? (progress/|\.git/|scripts/__pycache__/|scripts/verify/__pycache__/)')" ]; then
   emit_block WORKTREE_NOT_CLEAN
 fi
 

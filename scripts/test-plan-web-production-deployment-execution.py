@@ -495,6 +495,183 @@ def t05():
         shutil.rmtree(repo, ignore_errors=True)
 
 
+
+@test("05b_pycache_side_effect_not_dirty")
+def t05b():
+    """Python bytecode cache is an expected verifier side effect and must not
+    make Planner disagree with Executor about worktree cleanliness."""
+    repo = make_temp_repo()
+    try:
+        # The normal success fixture ignores __pycache__, which masked the
+        # production bug.  Remove any such fixture ignore here so this test
+        # exercises Planner's own worktree policy.
+        gi = repo / ".gitignore"
+        if gi.exists():
+            original = gi.read_text()
+            kept = []
+            for line in original.splitlines():
+                stripped = line.strip()
+                if stripped in (
+                    "__pycache__/",
+                    "/__pycache__/",
+                    "scripts/__pycache__/",
+                    "/scripts/__pycache__/",
+                    "scripts/verify/__pycache__/",
+                    "/scripts/verify/__pycache__/",
+                ):
+                    continue
+                kept.append(line)
+
+            rewritten = "\n".join(kept)
+            if original.endswith("\n") and rewritten:
+                rewritten += "\n"
+
+            if rewritten != original:
+                gi.write_text(rewritten)
+                subprocess.run(
+                    ["git", "-C", str(repo), "add", ".gitignore"],
+                    check=True,
+                )
+                subprocess.run(
+                    [
+                        "git", "-C", str(repo),
+                        "commit", "-q",
+                        "-m", "fixture: expose pycache to git status",
+                    ],
+                    check=True,
+                )
+
+        # Production already has tracked files under scripts/verify/.
+        # Reproduce that topology explicitly; otherwise porcelain status may
+        # collapse the whole new parent as "?? scripts/verify/" instead of
+        # exposing only its __pycache__ child.
+        verify_parent = repo / "scripts/verify"
+        verify_parent.mkdir(parents=True, exist_ok=True)
+
+        tracked_verify_file = verify_parent / "fixture_tracked_runtime.py"
+        tracked_verify_file.write_text("# tracked fixture parent\n")
+
+        subprocess.run(
+            [
+                "git", "-C", str(repo),
+                "add",
+                "scripts/verify/fixture_tracked_runtime.py",
+            ],
+            check=True,
+        )
+
+        subprocess.run(
+            [
+                "git", "-C", str(repo),
+                "commit", "-q",
+                "-m", "fixture: track scripts verify parent",
+            ],
+            check=True,
+        )
+
+        # Keep HEAD == origin/main so a successful worktree-policy check can
+        # proceed to a later gate instead of failing for repository drift.
+        head = subprocess.check_output(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"]
+        ).decode().strip()
+
+        subprocess.run(
+            [
+                "git", "-C", str(repo),
+                "update-ref",
+                "refs/remotes/origin/main",
+                head,
+            ],
+            check=True,
+        )
+
+        cache_a = repo / "scripts/__pycache__"
+        cache_b = repo / "scripts/verify/__pycache__"
+
+        cache_a.mkdir(parents=True, exist_ok=True)
+        cache_b.mkdir(parents=True, exist_ok=True)
+
+        probe_a = cache_a / "planner_probe.pyc"
+        probe_b = cache_b / "runtime_probe.pyc"
+
+        probe_a.write_bytes(b"synthetic-planner-pyc")
+        probe_b.write_bytes(b"synthetic-runtime-pyc")
+
+        raw_status = subprocess.check_output(
+            [
+                "git", "-C", str(repo),
+                "status",
+                "--porcelain=v1",
+                "--untracked-files=all",
+            ]
+        ).decode()
+
+        assert "scripts/__pycache__/planner_probe.pyc" in raw_status, (
+            "RED1_FIXTURE_INVALID: scripts/__pycache__ probe is not visible "
+            "to git status"
+        )
+        assert "scripts/verify/__pycache__/runtime_probe.pyc" in raw_status, (
+            "RED1_FIXTURE_INVALID: scripts/verify/__pycache__ probe is not "
+            "visible to git status"
+        )
+
+        # Planner uses default porcelain mode rather than --untracked-files=all.
+        # Assert that its actual input surface sees the two cache directories
+        # and does not collapse scripts/verify/ as a wholly-untracked parent.
+        planner_status = subprocess.check_output(
+            [
+                "git", "-C", str(repo),
+                "status",
+                "--porcelain=v1",
+            ]
+        ).decode()
+
+        assert "?? scripts/__pycache__/" in planner_status, (
+            "RED1_FIXTURE_INVALID: default porcelain did not expose "
+            "scripts/__pycache__; status=" + repr(planner_status)
+        )
+
+        assert "?? scripts/verify/__pycache__/" in planner_status, (
+            "RED1_FIXTURE_INVALID: default porcelain did not expose "
+            "scripts/verify/__pycache__; status=" + repr(planner_status)
+        )
+
+        assert "?? scripts/verify/" not in [
+            line
+            for line in planner_status.splitlines()
+            if line == "?? scripts/verify/"
+        ], (
+            "RED1_FIXTURE_INVALID: scripts/verify parent is wholly untracked; "
+            "status=" + repr(planner_status)
+        )
+
+        env = os.environ.copy()
+        env["PATH"] = f"{repo}/fake_bin:{env['PATH']}"
+
+        proc = subprocess.run(
+            [
+                str(repo / "scripts/plan-web-production-deployment-execution.sh"),
+                "--plan-production-deploy",
+                head,
+            ],
+            cwd=str(repo),
+            env=env,
+            capture_output=True,
+            timeout=30,
+        )
+
+        out = proc.stdout.decode("utf-8", errors="replace")
+
+        assert "WORKTREE_NOT_CLEAN" not in out, (
+            "PYCACHE_POLICY_BUG: Planner treated expected Python bytecode "
+            "cache as a dirty worktree; output=" + repr(out)
+        )
+
+    finally:
+        shutil.rmtree(repo, ignore_errors=True)
+
+
+
 @test("06_HEAD_origin_mismatch")
 def t06():
     repo = make_temp_repo()

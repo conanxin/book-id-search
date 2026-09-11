@@ -1087,6 +1087,60 @@ def t_B07b_planner_failure_no_unbound_variable_in_stderr():
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
+
+@test("B07c_planner_failure_reason_passthrough")
+def t_B07c_planner_failure_reason_passthrough():
+    """Executor keeps its stable PLANNER_FAILED reason while exposing the
+    Planner's own machine-readable BLOCK_REASON for diagnostics."""
+    override = textwrap.dedent("""\
+        cat <<'PLN_EOF'
+STATUS=BLOCKED
+BLOCK_REASON=WORKTREE_NOT_CLEAN
+READY_TO_CLAIM=false
+EXECUTION_PLAN_READY=false
+CLAIM_EXECUTED=false
+PRODUCTION_DEPLOY_STARTED=false
+PRODUCTION_DEPLOY_EXECUTED=false
+PRODUCTION_WRITE_EXECUTED=false
+EXECUTION_AUTHORIZED=false
+PLN_EOF
+        exit 1""")
+
+    tmp, repo, _ = make_full_test_workspace(
+        "B07c_planner_failure_reason_passthrough",
+        plan_output_override=override,
+    )
+
+    try:
+        rc, d = run_executor(repo)
+
+        _ok(rc != 0, f"rc={rc}")
+
+        # Preserve the existing Executor-level compatibility contract.
+        _ok(
+            d.get("BLOCK_REASON") == "PLANNER_FAILED",
+            f"BLOCK_REASON={d.get('BLOCK_REASON')}",
+        )
+
+        # New diagnostic contract: preserve the Planner's actual cause.
+        _ok(
+            d.get("PLANNER_BLOCK_REASON") == "WORKTREE_NOT_CLEAN",
+            "PLANNER_BLOCK_REASON="
+            + repr(d.get("PLANNER_BLOCK_REASON")),
+        )
+
+        # Failure is still strictly pre-claim / pre-production.
+        _ok(d.get("CLAIM_EXECUTED") == "false")
+        _ok(d.get("AUTHORIZATION_CONSUMED") == "false")
+        _ok(d.get("PRODUCTION_DEPLOY_STARTED") == "false")
+        _ok(d.get("PRODUCTION_DEPLOY_EXECUTED") == "false")
+        _ok(d.get("PRODUCTION_WRITE_EXECUTED") == "false")
+
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+
 @test("B08_planner_not_ready")
 def t_B08_planner_not_ready():
     # Override planner output to not be READY_TO_CLAIM

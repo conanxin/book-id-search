@@ -118,9 +118,14 @@ emit_block() {
   local deploy_executed="${5:-false}"
   local write_executed="${6:-false}"
   local touched="${7:-false}"
+  local planner_block_reason="${8:-}"
   printf '%s\n' \
     "STATUS=BLOCKED" \
-    "BLOCK_REASON=$reason" \
+    "BLOCK_REASON=$reason"
+  if [ -n "$planner_block_reason" ]; then
+    printf '%s\n' "PLANNER_BLOCK_REASON=$planner_block_reason"
+  fi
+  printf '%s\n' \
     "CLAIM_EXECUTED=$claim_executed" \
     "AUTHORIZATION_CONSUMED=$auth_consumed" \
     "PRODUCTION_DEPLOY_STARTED=$deploy_started" \
@@ -287,7 +292,9 @@ PLANNER_ERR="$(mktemp)"
 trap 'rm -f "${PLANNER_OUT:-}" "${PLANNER_ERR:-}" "${CLAIM_OUT:-}" "${CLAIM_ERR:-}" "${DEPLOY_OUT:-}" "${DEPLOY_ERR:-}" 2>/dev/null' EXIT INT TERM
 
 if ! bash "$PLANNER_SCRIPT" --plan-production-deploy "$SOURCE_SHA" >"$PLANNER_OUT" 2>"$PLANNER_ERR"; then
-  emit_block PLANNER_FAILED
+  PLANNER_TEXT="$(cat "$PLANNER_OUT")"
+  PLANNER_FAILURE_REASON="$(kv_parse_text "$PLANNER_TEXT" BLOCK_REASON)"
+  emit_block PLANNER_FAILED false false false false false false "$PLANNER_FAILURE_REASON"
 fi
 
 PLANNER_TEXT="$(cat "$PLANNER_OUT")"
