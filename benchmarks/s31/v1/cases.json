@@ -1,0 +1,189 @@
+{
+  "benchmark": "BOOK-ID-SEARCH S31",
+  "version": "v1",
+  "status": "FROZEN_V1",
+  "metricCases": 19,
+  "behaviorCases": 1,
+  "cases": [
+    {
+      "id": "edition-choice-01",
+      "category": "edition-choice",
+      "difficulty": "hard",
+      "query": "围城哪个版本适合普通阅读",
+      "expectedIntent": null,
+      "judgmentMode": "edition_choice",
+      "metricEligible": true
+    },
+    {
+      "id": "edition-choice-02",
+      "category": "edition-choice",
+      "difficulty": "hard",
+      "query": "钱钟书围城 漓江1997和人民文学2000有什么版本差别",
+      "expectedIntent": null,
+      "judgmentMode": "edition_choice",
+      "metricEligible": true
+    },
+    {
+      "id": "edition-choice-03",
+      "category": "edition-choice",
+      "difficulty": "medium",
+      "query": "想找《围城》较早的版本",
+      "expectedIntent": null,
+      "judgmentMode": "edition_choice",
+      "metricEligible": true
+    },
+    {
+      "id": "edition-choice-04",
+      "category": "edition-choice",
+      "difficulty": "hard",
+      "query": "鲁迅《呐喊》哪个出版社版本比较适合阅读",
+      "expectedIntent": null,
+      "judgmentMode": "edition_choice",
+      "metricEligible": true
+    },
+    {
+      "id": "edition-choice-05",
+      "category": "edition-choice",
+      "difficulty": "hard",
+      "query": "《乡土中国》想找经典版本 不要教辅改写",
+      "expectedIntent": null,
+      "judgmentMode": "edition_choice",
+      "metricEligible": true
+    },
+    {
+      "id": "edition-choice-06",
+      "category": "edition-choice",
+      "difficulty": "hard",
+      "query": "《中国建筑史》梁思成 想找完整版本",
+      "expectedIntent": "academic_research",
+      "judgmentMode": "edition_choice",
+      "metricEligible": true
+    },
+    {
+      "id": "edition-choice-07",
+      "category": "edition-choice",
+      "difficulty": "hard",
+      "query": "《史记》想找点校本 不要学生版",
+      "expectedIntent": null,
+      "judgmentMode": "edition_choice",
+      "metricEligible": true
+    },
+    {
+      "id": "edition-choice-08",
+      "category": "edition-choice",
+      "difficulty": "medium",
+      "query": "《红楼梦》想找人民文学出版社版本",
+      "expectedIntent": "literature",
+      "judgmentMode": "edition_choice",
+      "metricEligible": true
+    },
+    {
+      "id": "edition-choice-09",
+      "category": "edition-choice",
+      "difficulty": "hard",
+      "query": "《古文观止》想找注释比较完整的版本",
+      "expectedIntent": null,
+      "judgmentMode": "edition_choice",
+      "metricEligible": true
+    },
+    {
+      "id": "edition-choice-10",
+      "category": "edition-choice",
+      "difficulty": null,
+      "query": "同一本书有很多条记录 怎么找原版而不是编剧改写版",
+      "expectedIntent": null,
+      "judgmentMode": "behavior",
+      "metricEligible": false
+    },
+    {
+      "id": "exact-natural-01",
+      "category": "exact-natural",
+      "difficulty": "easy",
+      "query": "帮我找钱钟书的《围城》",
+      "expectedIntent": null,
+      "judgmentMode": "exact_work",
+      "metricEligible": true
+    },
+    {
+      "id": "exact-natural-02",
+      "category": "exact-natural",
+      "difficulty": "easy",
+      "query": "找鲁迅的《呐喊》",
+      "expectedIntent": "literature",
+      "judgmentMode": "exact_work",
+      "metricEligible": true
+    },
+    {
+      "id": "exact-natural-03",
+      "category": "exact-natural",
+      "difficulty": "easy",
+      "query": "帮我找老舍写的《骆驼祥子》",
+      "expectedIntent": "literature",
+      "judgmentMode": "exact_work",
+      "metricEligible": true
+    },
+    {
+      "id": "exact-natural-04",
+      "category": "exact-natural",
+      "difficulty": "easy",
+      "query": "想找沈从文的《边城》",
+      "expectedIntent": "literature",
+      "judgmentMode": "exact_work",
+      "metricEligible": true
+    },
+    {
+      "id": "exact-natural-05",
+      "category": "exact-natural",
+      "difficulty": "easy",
+      "query": "找一本余华的《活着》",
+      "expectedIntent": "literature",
+      "judgmentMode": "exact_work",
+      "metricEligible": true
+    },
+    {
+      "id": "exact-natural-06",
+      "category": "exact-natural",
+      "difficulty": "easy",
+      "query": "有没有费孝通《乡土中国》",
+      "expectedIntent": null,
+      "judgmentMode": "exact_work",
+      "metricEligible": true
+    },
+    {
+      "id": "exact-natural-07",
+      "category": "exact-natural",
+      "difficulty": "easy",
+      "query": "找梁思成《中国建筑史》",
+      "expectedIntent": "academic_research",
+      "judgmentMode": "exact_work",
+      "metricEligible": true
+    },
+    {
+      "id": "exact-natural-08",
+      "category": "exact-natural",
+      "difficulty": "medium",
+      "query": "找陈寅恪《隋唐制度渊源略论稿》",
+      "expectedIntent": "academic_research",
+      "judgmentMode": "exact_work",
+      "metricEligible": true
+    },
+    {
+      "id": "exact-natural-09",
+      "category": "exact-natural",
+      "difficulty": "easy",
+      "query": "帮我找司马迁《史记》",
+      "expectedIntent": null,
+      "judgmentMode": "exact_work",
+      "metricEligible": true
+    },
+    {
+      "id": "exact-natural-10",
+      "category": "exact-natural",
+      "difficulty": "easy",
+      "query": "找一本《汉语大词典》",
+      "expectedIntent": "reference",
+      "judgmentMode": "exact_work",
+      "metricEligible": true
+    }
+  ]
+}

@@ -1,0 +1,713 @@
+case_id	query	book_id	title	author	publisher	year	grade	rule	policy_source	original_top10	original_rank	pool_best_rank
+edition-choice-01	围城哪个版本适合普通阅读	10023151_000004641759	围城	钱钟书	北京市：人民文学出版社		3	standalone-original-reading-edition	A1E-subjective-policy	False		15
+edition-choice-01	围城哪个版本适合普通阅读	10176495_000000319289	“围城”内外  钱钟书的文学世界	陆文虎著	北京：解放军文艺出版社	1992	0	not-target-work	A1E-subjective-policy	False		2
+edition-choice-01	围城哪个版本适合普通阅读	10315902_000001012917	记钱钟书与《围城》	杨绛著；朱正责任编辑	长沙：湖南人民出版社	1986	0	not-target-work	A1E-subjective-policy	False		6
+edition-choice-01	围城哪个版本适合普通阅读	10322289_000004118418	钱钟书修改围城	张明亮著	太原：北岳文艺出版社	1996	0	not-target-work	A1E-subjective-policy	False		8
+edition-choice-01	围城哪个版本适合普通阅读	10804295_000001078788	围城	钱钟书著；晓愉缩写	贵阳：贵州人民出版社	1988	0	derivative	A1E-subjective-policy	False		14
+edition-choice-01	围城哪个版本适合普通阅读	10877917_000000092460	钱钟书《围城》批判	汤溢泽编	长沙：湖南大学出版社	2000	0	not-target-work	A1E-subjective-policy	False		3
+edition-choice-01	围城哪个版本适合普通阅读	10975004_000000314674	钱钟书和他的《围城》  美国学者论钱钟书	张泉编	北京：中国和平出版社	1991	0	not-target-work	A1E-subjective-policy	False		12
+edition-choice-01	围城哪个版本适合普通阅读	11053125_000004025754	名作欣赏·钱钟书  围城  人·鬼·兽	林非主编	北京：当代世界出版社	2002	0	not-target-work	A1E-subjective-policy	False		4
+edition-choice-01	围城哪个版本适合普通阅读	11182511_000003140541	围城	钱钟书著；（美）Jeanne Kelly，（美）Nathan K.Mao译	北京：外语教学与研究出版社	2003	1	translation-or-bilingual	A1E-subjective-policy	True	4	3
+edition-choice-01	围城哪个版本适合普通阅读	11205685_000001258429	围城	钱钟书著	北京：生活·读书·新知三联书店	2002	3	standalone-original-reading-edition	A1E-subjective-policy	True	5	4
+edition-choice-01	围城哪个版本适合普通阅读	11342286_000005807983	围城	钱钟书著	北京：人民文学出版社	1980	3	standalone-original-reading-edition	A1E-subjective-policy	True	6	5
+edition-choice-01	围城哪个版本适合普通阅读	11385150_000005712370	围城	钱钟书作	晨光出版公司		3	standalone-original-reading-edition	A1E-subjective-policy	False		16
+edition-choice-01	围城哪个版本适合普通阅读	11414550_000003127110	围城内外  钱钟书的文学世界	陆文虎著	北京：解放军出版社	2004	0	not-target-work	A1E-subjective-policy	False		1
+edition-choice-01	围城哪个版本适合普通阅读	11673516_161000038780	围城	钱钟书著	北京：人民文学出版社	1991	3	standalone-original-reading-edition	A1E-subjective-policy	True	7	6
+edition-choice-01	围城哪个版本适合普通阅读	12035427_000006534314	围城	钱钟书原著	北京：华语教学出版社	2008	3	standalone-original-reading-edition	A1E-subjective-policy	True	8	7
+edition-choice-01	围城哪个版本适合普通阅读	12145118_161000141628	围城·人兽鬼：钱钟书精品文集	钱钟书著	贵阳：贵州人民出版社	2001	2	original-work-in-collection	A1E-subjective-policy	False		10
+edition-choice-01	围城哪个版本适合普通阅读	12384129_000006643261	围城	钱钟书著	北京：人民文学出版社	2008	3	standalone-original-reading-edition	A1E-subjective-policy	True	9	8
+edition-choice-01	围城哪个版本适合普通阅读	12679719_000006658192	围城	钱钟书著	北京：人民文学出版社	2009	3	standalone-original-reading-edition	A1E-subjective-policy	True	10	9
+edition-choice-01	围城哪个版本适合普通阅读	12746747_000005011567	围城	钱钟书著	北京：人民文学出版社	2004	3	standalone-original-reading-edition	A1E-subjective-policy	False		10
+edition-choice-01	围城哪个版本适合普通阅读	12767951_000003053680	围城里的智者  钱钟书	季进著	文史哲出版社	2002	0	not-target-work	A1E-subjective-policy	False		11
+edition-choice-01	围城哪个版本适合普通阅读	13195426_000008324570	围城	钱钟书原著；孙雄飞，屠传德，黄蜀芹编剧	北京：人民文学出版社	2013	0	derivative	A1E-subjective-policy	True	1	1
+edition-choice-01	围城哪个版本适合普通阅读	13221028_000007911212	钱钟书集  围城  人·兽·鬼	钱钟书著	北京：生活·读书·新知三联书店	2011	2	original-work-in-collection	A1E-subjective-policy	False		7
+edition-choice-01	围城哪个版本适合普通阅读	13295263_000007939550	围城	钱钟书著	桂林：漓江出版社	1997	3	standalone-original-reading-edition	A1E-subjective-policy	True	2	1
+edition-choice-01	围城哪个版本适合普通阅读	13324908_000012415181	人生边上，心城内外  钱钟书的围城人生	田梦著	北京：中国华侨出版社	2013	0	not-target-work	A1E-subjective-policy	False		9
+edition-choice-01	围城哪个版本适合普通阅读	13330603_000000054715	围城	钱钟书著	北京：人民文学出版社	2000	3	standalone-original-reading-edition	A1E-subjective-policy	True	3	2
+edition-choice-01	围城哪个版本适合普通阅读	13350034_000012442155	最忆当年初遇时  钱钟书和杨绛的百年围城	朱云乔编	北京：石油工业出版社	2013	0	not-target-work	A1E-subjective-policy	False		13
+edition-choice-01	围城哪个版本适合普通阅读	13782427_000015486135	细水流年里的围城故事  杨绛与钱钟书	李清秋著	武汉：华中科技大学出版社	2015	0	not-target-work	A1E-subjective-policy	False		14
+edition-choice-01	围城哪个版本适合普通阅读	14252597_000030283773	围城	钱钟书著	北京：人民文学出版社	2017	3	standalone-original-reading-edition	A1E-subjective-policy	False		11
+edition-choice-01	围城哪个版本适合普通阅读	14350345_000017012040	小说逸语  钱钟书（围城）九段	栾贵明著	北京：新世界出版社	2018	0	not-target-work	A1E-subjective-policy	False		5
+edition-choice-01	围城哪个版本适合普通阅读	14483230_000017441499	认知视角下的汉德身体部位类熟语理据对比研究  以钱钟书的小说《围城》及其德译本为例	陆巍著	北京/西安：世界图书出版公司	2018	0	not-target-work	A1E-subjective-policy	False		15
+edition-choice-01	围城哪个版本适合普通阅读	96032620_000006192886	围城	乔迎迎编	呼和浩特：远方出版社	2007	0	not-target-work	A1E-subjective-policy	False		12
+edition-choice-01	围城哪个版本适合普通阅读	line_4697581	围城	钱钟书著	四川文艺出版社		3	standalone-original-reading-edition	A1E-subjective-policy	False		17
+edition-choice-01	围城哪个版本适合普通阅读	line_4711219	围城	钱钟书著	晨光出版公司		3	standalone-original-reading-edition	A1E-subjective-policy	False		18
+edition-choice-01	围城哪个版本适合普通阅读	line_4716698	围城	钱钟书著	人民文学出版社		3	standalone-original-reading-edition	A1E-subjective-policy	False		19
+edition-choice-01	围城哪个版本适合普通阅读	line_5020515	围城	钱钟书著		1991	3	standalone-original-reading-edition	A1E-subjective-policy	False		20
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	10176495_000000319289	“围城”内外  钱钟书的文学世界	陆文虎著	北京：解放军文艺出版社	1992	0	not-explicit-target	A1D-objective	True	2	2
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	10315902_000001012917	记钱钟书与《围城》	杨绛著；朱正责任编辑	长沙：湖南人民出版社	1986	0	not-explicit-target	A1D-objective	False		6
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	10322289_000004118418	钱钟书修改围城	张明亮著	太原：北岳文艺出版社	1996	0	not-explicit-target	A1D-objective	False		8
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	10877917_000000092460	钱钟书《围城》批判	汤溢泽编	长沙：湖南大学出版社	2000	0	not-explicit-target	A1D-objective	True	7	3
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	10975004_000000314674	钱钟书和他的《围城》  美国学者论钱钟书	张泉编	北京：中国和平出版社	1991	0	not-explicit-target	A1D-objective	True	5	4
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	11053125_000004025754	名作欣赏·钱钟书  围城  人·鬼·兽	林非主编	北京：当代世界出版社	2002	0	not-explicit-target	A1D-objective	True	8	4
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	11176745_000001200813	围城  汉英·对照	钱钟书著；（美）珍妮·凯利（Jeanne Kelly），茅国权译	北京：人民文学出版社	2003	0	derivative-or-translation	A1D-objective	False		14
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	11182511_000003140541	围城	钱钟书著；（美）Jeanne Kelly，（美）Nathan K.Mao译	北京：外语教学与研究出版社	2003	1	other-original-edition	A1D-objective	False		19
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	11205685_000001258429	围城	钱钟书著	北京：生活·读书·新知三联书店	2002	1	other-original-edition	A1D-objective	False		20
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	11342286_000005807983	围城	钱钟书著	北京：人民文学出版社	1980	1	other-original-edition	A1D-objective	False		15
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	11414550_000003127110	围城内外  钱钟书的文学世界	陆文虎著	北京：解放军出版社	2004	0	not-explicit-target	A1D-objective	True	1	1
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	11517410_000004349034	围城  第2版	钱钟书著	北京：人民文学出版社	1991	0	not-explicit-target	A1D-objective	False		16
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	11673516_161000038780	围城	钱钟书著	北京：人民文学出版社	1991	1	other-original-edition	A1D-objective	False		17
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	12145118_161000141628	围城·人兽鬼：钱钟书精品文集	钱钟书著	贵阳：贵州人民出版社	2001	0	not-explicit-target	A1D-objective	True	4	1
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	12384129_000006643261	围城	钱钟书著	北京：人民文学出版社	2008	1	other-original-edition	A1D-objective	False		18
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	12679719_000006658192	围城	钱钟书著	北京：人民文学出版社	2009	1	other-original-edition	A1D-objective	False		19
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	12746747_000005011567	围城	钱钟书著	北京：人民文学出版社	2004	1	other-original-edition	A1D-objective	False		20
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	12767951_000003053680	围城里的智者  钱钟书	季进著	文史哲出版社	2002	0	not-explicit-target	A1D-objective	False		11
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	13193045_000007899446	围城  第2版	钱钟书著	北京：人民文学出版社	1980	0	not-explicit-target	A1D-objective	False		11
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	13195426_000008324570	围城	钱钟书原著；孙雄飞，屠传德，黄蜀芹编剧	北京：人民文学出版社	2013	0	derivative-or-translation	A1D-objective	False		12
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	13221028_000007911212	钱钟书集  围城  人·兽·鬼	钱钟书著	北京：生活·读书·新知三联书店	2011	0	not-explicit-target	A1D-objective	True	10	7
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	13295263_000007939550	围城	钱钟书著	桂林：漓江出版社	1997	3	target-1997-lijiang	A1D-objective	True	6	1
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	13324908_000012415181	人生边上，心城内外  钱钟书的围城人生	田梦著	北京：中国华侨出版社	2013	0	not-explicit-target	A1D-objective	False		9
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	13330603_000000054715	围城	钱钟书著	北京：人民文学出版社	2000	3	target-2000-pml	A1D-objective	False		13
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	13350034_000012442155	最忆当年初遇时  钱钟书和杨绛的百年围城	朱云乔编	北京：石油工业出版社	2013	0	not-explicit-target	A1D-objective	False		13
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	13653821_000030046433	十月围城  电视剧文学剧本  4	卞智弘，吴楠，周鹤洋著	北京：中国电影出版社	2014	0	not-explicit-target	A1D-objective	False		7
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	13653822_000030046434	十月围城  电视剧文学剧本  3	卞智弘，吴楠，周鹤洋著	北京：中国电影出版社	2014	0	not-explicit-target	A1D-objective	False		8
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	13653823_000030046478	十月围城  电视剧文学剧本  2	卞智弘，吴楠，周鹤洋著	北京：中国电影出版社	2014	0	not-explicit-target	A1D-objective	False		9
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	13653824_000030046485	十月围城  电视剧文学剧本  1	卞智弘，吴楠，周鹤洋著	北京：中国电影出版社	2014	0	not-explicit-target	A1D-objective	False		10
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	13782427_000015486135	细水流年里的围城故事  杨绛与钱钟书	李清秋著	武汉：华中科技大学出版社	2015	0	not-explicit-target	A1D-objective	False		14
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	13933685_000015797089	围城内外的变奏  五四文学婚恋伦理叙事	吴志凌著	长沙：湖南师范大学出版社	2015	0	not-explicit-target	A1D-objective	False		6
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	14350345_000017012040	小说逸语  钱钟书（围城）九段	栾贵明著	北京：新世界出版社	2018	0	not-explicit-target	A1D-objective	True	9	5
+edition-choice-02	钱钟书围城 漓江1997和人民文学2000有什么版本差别	14483230_000017441499	认知视角下的汉德身体部位类熟语理据对比研究  以钱钟书的小说《围城》及其德译本为例	陆巍著	北京/西安：世界图书出版公司	2018	0	not-explicit-target	A1D-objective	True	3	3
+edition-choice-03	想找《围城》较早的版本	10023151_000004641759	围城	钱钟书	北京市：人民文学出版社		1	direct-original-year-unknown	A1E-policy	False		15
+edition-choice-03	想找《围城》较早的版本	10176495_000000319289	“围城”内外  钱钟书的文学世界	陆文虎著	北京：解放军文艺出版社	1992	0	not-direct-work	A1D-objective	False		2
+edition-choice-03	想找《围城》较早的版本	10315902_000001012917	记钱钟书与《围城》	杨绛著；朱正责任编辑	长沙：湖南人民出版社	1986	0	not-direct-work	A1D-objective	False		6
+edition-choice-03	想找《围城》较早的版本	10322289_000004118418	钱钟书修改围城	张明亮著	太原：北岳文艺出版社	1996	0	not-direct-work	A1D-objective	False		8
+edition-choice-03	想找《围城》较早的版本	10804295_000001078788	围城	钱钟书著；晓愉缩写	贵阳：贵州人民出版社	1988	0	derivative	A1D-objective	False		14
+edition-choice-03	想找《围城》较早的版本	10877917_000000092460	钱钟书《围城》批判	汤溢泽编	长沙：湖南大学出版社	2000	0	not-direct-work	A1D-objective	False		3
+edition-choice-03	想找《围城》较早的版本	10896145_000001285877	我想再找一个  老年性婚姻访谈	艾如张，刘瑛编著	北京：新世界出版社	2002	0	not-direct-work	A1D-objective	True	7	7
+edition-choice-03	想找《围城》较早的版本	10975004_000000314674	钱钟书和他的《围城》  美国学者论钱钟书	张泉编	北京：中国和平出版社	1991	0	not-direct-work	A1D-objective	False		12
+edition-choice-03	想找《围城》较早的版本	11053125_000004025754	名作欣赏·钱钟书  围城  人·鬼·兽	林非主编	北京：当代世界出版社	2002	0	not-direct-work	A1D-objective	False		4
+edition-choice-03	想找《围城》较早的版本	11182511_000003140541	围城	钱钟书著；（美）Jeanne Kelly，（美）Nathan K.Mao译	北京：外语教学与研究出版社	2003	1	later-original-edition	A1D-objective	False		3
+edition-choice-03	想找《围城》较早的版本	11205685_000001258429	围城	钱钟书著	北京：生活·读书·新知三联书店	2002	1	later-original-edition	A1D-objective	False		4
+edition-choice-03	想找《围城》较早的版本	11342286_000005807983	围城	钱钟书著	北京：人民文学出版社	1980	3	early-1991-or-earlier	A1D-objective	False		5
+edition-choice-03	想找《围城》较早的版本	11414550_000003127110	围城内外  钱钟书的文学世界	陆文虎著	北京：解放军出版社	2004	0	not-direct-work	A1D-objective	False		1
+edition-choice-03	想找《围城》较早的版本	11447121_000002121165	好想找人来爱我  青春期的苦闷心事	苦苓著	北京：华艺出版社	1998	0	not-direct-work	A1D-objective	True	3	3
+edition-choice-03	想找《围城》较早的版本	11574608_000004680647	想成功就先替自己找一条捷径	杜？编著	台湾实业文化	2002	0	not-direct-work	A1D-objective	True	8	8
+edition-choice-03	想找《围城》较早的版本	11673516_161000038780	围城	钱钟书著	北京：人民文学出版社	1991	3	early-1991-or-earlier	A1D-objective	False		6
+edition-choice-03	想找《围城》较早的版本	11857276_000006261853	雪中找盐  释放潜在的财富创想	（日）多湖辉著；李彩云译	北京：科学出版社	2007	0	not-direct-work	A1D-objective	True	10	10
+edition-choice-03	想找《围城》较早的版本	11895022_161000119680	决定/你想找个好工作吗	（英）谢里尔·沃姆斯利著	北京：中国市场出版社	2007	0	not-direct-work	A1D-objective	True	4	4
+edition-choice-03	想找《围城》较早的版本	12035427_000006534314	围城	钱钟书原著	北京：华语教学出版社	2008	1	later-original-edition	A1D-objective	False		7
+edition-choice-03	想找《围城》较早的版本	12145118_161000141628	围城·人兽鬼：钱钟书精品文集	钱钟书著	贵阳：贵州人民出版社	2001	0	not-direct-work	A1D-objective	False		10
+edition-choice-03	想找《围城》较早的版本	12384129_000006643261	围城	钱钟书著	北京：人民文学出版社	2008	1	later-original-edition	A1D-objective	False		8
+edition-choice-03	想找《围城》较早的版本	12679719_000006658192	围城	钱钟书著	北京：人民文学出版社	2009	1	later-original-edition	A1D-objective	False		9
+edition-choice-03	想找《围城》较早的版本	12717539_000008031579	想在你领导的前面  在领导的思路里找机会	金刚心，文鑫著	北京：中国经济出版社	2011	0	not-direct-work	A1D-objective	True	9	9
+edition-choice-03	想找《围城》较早的版本	12746747_000005011567	围城	钱钟书著	北京：人民文学出版社	2004	1	later-original-edition	A1D-objective	False		10
+edition-choice-03	想找《围城》较早的版本	12767951_000003053680	围城里的智者  钱钟书	季进著	文史哲出版社	2002	0	not-direct-work	A1D-objective	False		11
+edition-choice-03	想找《围城》较早的版本	13046658_000008293039	想找真命天子，先当靠谱女孩	（美）崔维斯·斯托克，（美）莉亚·弗曼著；张美贞译	桂林：漓江出版社	2012	0	not-direct-work	A1D-objective	True	1	1
+edition-choice-03	想找《围城》较早的版本	13195426_000008324570	围城	钱钟书原著；孙雄飞，屠传德，黄蜀芹编剧	北京：人民文学出版社	2013	0	derivative	A1D-objective	False		13
+edition-choice-03	想找《围城》较早的版本	13221028_000007911212	钱钟书集  围城  人·兽·鬼	钱钟书著	北京：生活·读书·新知三联书店	2011	0	not-direct-work	A1D-objective	False		7
+edition-choice-03	想找《围城》较早的版本	13295263_000007939550	围城	钱钟书著	桂林：漓江出版社	1997	2	early-1992-2000	A1D-objective	False		1
+edition-choice-03	想找《围城》较早的版本	13324908_000012415181	人生边上，心城内外  钱钟书的围城人生	田梦著	北京：中国华侨出版社	2013	0	not-direct-work	A1D-objective	False		9
+edition-choice-03	想找《围城》较早的版本	13330603_000000054715	围城	钱钟书著	北京：人民文学出版社	2000	2	early-1992-2000	A1D-objective	False		2
+edition-choice-03	想找《围城》较早的版本	13350034_000012442155	最忆当年初遇时  钱钟书和杨绛的百年围城	朱云乔编	北京：石油工业出版社	2013	0	not-direct-work	A1D-objective	False		13
+edition-choice-03	想找《围城》较早的版本	13782427_000015486135	细水流年里的围城故事  杨绛与钱钟书	李清秋著	武汉：华中科技大学出版社	2015	0	not-direct-work	A1D-objective	False		14
+edition-choice-03	想找《围城》较早的版本	14215486_000016600424	想找的人不在  右耳的厨房	右耳著	北京时代华文书局	2017	0	not-direct-work	A1D-objective	True	2	2
+edition-choice-03	想找《围城》较早的版本	14252597_000030283773	围城	钱钟书著	北京：人民文学出版社	2017	1	later-original-edition	A1D-objective	False		11
+edition-choice-03	想找《围城》较早的版本	14350345_000017012040	小说逸语  钱钟书（围城）九段	栾贵明著	北京：新世界出版社	2018	0	not-direct-work	A1D-objective	False		5
+edition-choice-03	想找《围城》较早的版本	14427574_000017383499	朋友圈的人际高手  快速找到你想找的任何人	诸葛思远著	江苏凤凰文艺出版社	2018	0	not-direct-work	A1D-objective	True	6	6
+edition-choice-03	想找《围城》较早的版本	14483230_000017441499	认知视角下的汉德身体部位类熟语理据对比研究  以钱钟书的小说《围城》及其德译本为例	陆巍著	北京/西安：世界图书出版公司	2018	0	not-direct-work	A1D-objective	False		15
+edition-choice-03	想找《围城》较早的版本	14526553_000030406541	讲个故事就睡觉  好想找妈妈	（法）克里斯蒂娜·贝热尔文；（法）埃尔韦·勒戈夫图；李华译	北京联合出版公司	2018	0	not-direct-work	A1D-objective	True	5	5
+edition-choice-03	想找《围城》较早的版本	96032620_000006192886	围城	乔迎迎编	呼和浩特：远方出版社	2007	0	not-direct-work	A1D-objective	False		12
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	10401729_000000016193	现代人的呐喊  鲁迅的人生探求	邱存平著	北京：解放军出版社	2000	0	not-target-work	A1E-subjective-policy	False		8
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	10465124_000000536446	鲁迅全集  第1卷  热风  呐喊	鲁迅著	北京：人民文学出版社	1981	2	original-work-in-collection	A1E-subjective-policy	False		9
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	11033522_000001256203	鲁迅选集  第1卷  呐喊  彷徨  故事新编	鲁迅著	北京：中国文史出版社	2002	2	original-work-in-collection	A1E-subjective-policy	True	5	5
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	11084706_000003153921	呐喊	鲁迅原著；李新宇评点	长春：吉林文史出版社	2003	3	standalone-original	A1F1-cross-pool-exact-natural-02	False		9
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	11224230_000003151362	鲁迅自选集  插图本  野草·呐喊·彷徨·故事新编·朝花夕拾	鲁迅著	北京：文化艺术出版社	2004	2	original-work-in-collection	A1E-subjective-policy	True	6	6
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	11267153_000003153525	呐喊	鲁迅著；孙郁点评	沈阳：春风文艺出版社	2004	3	standalone-original	A1F1-cross-pool-exact-natural-02	False		10
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	11325208_000005808435	呐喊	鲁迅著	武汉：长江文艺出版社	2004	3	standalone-original	A1F1-cross-pool-exact-natural-02	False		11
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	11378227_000000262417	呐喊	鲁迅著	上海：上海文艺出版社	1990	3	standalone-original	A1F1-cross-pool-exact-natural-02	False		12
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	11542177_000004346043	鲁迅全集  第1卷  坟  热风  呐喊	鲁迅著	北京：人民文学出版社	2005	2	original-work-in-collection	A1E-subjective-policy	False		8
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	11556667_000005112918	鲁迅小说集  呐喊  彷徨  故事新编	鲁迅著	哈尔滨：黑龙江人民出版社	2004	2	original-work-in-collection	A1E-subjective-policy	True	2	2
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	11602360_000005745855	呐喊	鲁迅著	合肥：安徽人民出版社	2005	3	standalone-original	A1F1-cross-pool-exact-natural-02	False		13
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	11628013_000000137664	呐喊	鲁迅著	上海：上海书店出版社	2001	3	standalone-original	A1F1-cross-pool-exact-natural-02	False		14
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	11642652_000006032075	呐喊	鲁迅著	杭州：浙江少年儿童出版社	2006	3	standalone-original	A1F1-cross-pool-exact-natural-02	False		15
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	11802163_000004873673	为了忘却的纪念  鲁迅呐喊人生散文选	鲁迅著	乌鲁木齐：新疆大学出版社	1995	0	secondary-work	A1E-subjective-policy	True	8	8
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	12052788_000006312093	一个人的呐喊  鲁迅1881-1936	朱正编著	北京：北京十月文艺出版社	2007	0	not-target-work	A1E-subjective-policy	False		7
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	12824629_000008029112	呐喊  鲁迅小说精选	鲁迅著	长春：时代文艺出版社	2011	2	target-work-expanded-edition	A1E-subjective-policy	True	9	1
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	13043509_000007824894	找市场	刘国民主编	北京：中国农业出版社	2012	0	not-target-work	A1F1-cross-pool-exact-natural-02	False		3
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	13067271_000008055148	找工作要懂点心理学  国内第一本求职心理学书	刘毅著	北京：中国时代经济出版社	2011	0	not-target-work	A1F1-cross-pool-exact-natural-02	False		4
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	13083550_000008352090	找方法比找借口更重要	高一飞编著	北京：中国华侨出版社	2012	0	not-target-work	A1F1-cross-pool-exact-natural-02	False		5
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	13083554_000008337753	找个有缺点的人结婚	周小鹏编	广州：广东经济出版社	2012	0	not-target-work	A1F1-cross-pool-exact-natural-02	False		6
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	13091497_000008370937	找方法不找借口	唐逸编著	北京：新华出版社	2012	0	not-target-work	A1F1-cross-pool-exact-natural-02	False		7
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	13105006_000008032583	找心眼儿的小猪	张之路著	成都：四川少年儿童出版社	2011	0	not-target-work	A1F1-cross-pool-exact-natural-02	False		8
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	13174518_000007894964	找好工作用对人	ROBERT F WILSON著；郭轩盈译	雅书堂文化事业有限公司	2001	0	not-target-work	A1F1-cross-pool-exact-natural-02	False		9
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	13194969_000011689847	找对方法做对事  案例实用版	吴学刚编著	北京：中国铁道出版社	2013	0	not-target-work	A1F1-cross-pool-exact-natural-02	False		10
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	13197161_000007901996	呐喊	鲁迅著；陈漱渝校勘	桂林：漓江出版社	2003	3	standalone-original	A1F1-cross-pool-exact-natural-02	False		1
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	13207305_000007906311	鲁迅文集  导读本  第1卷  呐喊	鲁迅著	哈尔滨：黑龙江人民出版社	1995	2	original-work-in-collection	A1E-subjective-policy	False		11
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	13217104_000008224382	找对人说对话做对事大全集  超值金版	乔拉德编著	上海：立信会计出版社	2012	0	not-target-work	A1F1-cross-pool-exact-natural-02	False		1
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	13245251_000007916837	呐喊	鲁迅著	北京：中国大百科全书出版社	2003	3	standalone-original	A1F1-cross-pool-exact-natural-02	False		2
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	13254274_000011737935	黎明前的呐喊  鲁迅语录	鲁迅著	南京：江苏文艺出版社	2013	0	secondary-work	A1E-subjective-policy	False		4
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	13286316_000011761479	呐喊彷徨故事新编丁聪插图本	鲁迅著；丁聪绘	北京：人民文学出版社	2013	2	target-work-expanded-edition	A1E-subjective-policy	False		10
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	13298584_000007940491	鲁迅精选集  野草的呐喊	鲁迅著	北京：北京燕山出版社	2009	2	original-work-in-collection	A1E-subjective-policy	False		20
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	13337633_000002408757	铁屋中的呐喊  鲁迅研究	李欧梵（Leo Ou-fan Lee）著；尹慧珉译	北京：生活·读书·新知三联书店	1991	0	not-target-work	A1E-subjective-policy	False		6
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	13455840_000015020878	呐喊	鲁迅著	南京：译林出版社	2013	3	standalone-original	A1F1-cross-pool-exact-natural-02	False		3
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	13492184_000008147543	呐喊	鲁迅著	西安：陕西师范大学出版社	2011	3	standalone-original	A1F1-cross-pool-exact-natural-02	False		4
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	13530718_000015077494	呐喊	鲁迅著	南京：译林出版社	2014	3	standalone-original	A1F1-cross-pool-exact-natural-02	False		5
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	13587332_000000767436	呐喊	鲁迅著	北京：人民文学出版社	1958	3	standalone-original	A1F1-cross-pool-exact-natural-02	False		6
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	13606728_000015189934	呐喊  中国现代白话小说的开山之作	鲁迅著	南京：江苏人民出版社	2014	2	target-work-expanded-edition	A1E-subjective-policy	False		12
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	13651799_000015239495	呐喊·彷徨·故事新编  鲁迅小说经典	鲁迅著	南昌：二十一世纪出版社	2014	2	target-work-expanded-edition	A1E-subjective-policy	True	3	3
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	13813010_000011673335	呐喊	鲁迅编	北京：群众出版社	2012	3	standalone-original	A1F1-cross-pool-exact-natural-02	False		7
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	13824040_000015527408	“找不到”的小狮子  给4-8岁孩子的成长故事书	王美慧著；黄雄生绘	北京：中国人口出版社	2015	0	not-target-work	A1F1-cross-pool-exact-natural-02	False		2
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	13833198_000008130133	呐喊	鲁迅著	长沙：湖南文艺出版社	2011	3	standalone-original	A1F1-cross-pool-exact-natural-02	False		8
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	13921470_000015918762	朝花夕拾  呐喊  鲁迅专集  新课标经典文学名著金库  新课标名师精评版	鲁迅原著；闫仲渝主编	成都：天地出版社	2015	2	original-work-in-collection	A1E-subjective-policy	False		5
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	14002828_000030184225	呐喊  鲁迅作品集	鲁迅著	沈阳：万卷出版公司	2014	2	target-work-expanded-edition	A1E-subjective-policy	True	10	2
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	14088528_000015863489	果麦鲁迅短篇小说集  呐喊	鲁迅著	天津：天津人民出版社	2016	2	original-work-in-collection	A1E-subjective-policy	True	7	3
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	14125857_000016040980	呐喊  彷徨  故事新编  鲁迅经典小说	鲁迅著	成都：巴蜀书社	2016	2	target-work-expanded-edition	A1E-subjective-policy	True	4	4
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	14307197_000016701177	呐喊  鲁迅经典作品选	鲁迅著	北京：煤炭工业出版社	2017	2	target-work-expanded-edition	A1E-subjective-policy	False		3
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	14444696_000016957365	常春藤传记馆  古国的呐喊  鲁迅传	范阳阳著	长春：长春出版社	2018	0	not-target-work	A1E-subjective-policy	False		9
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	14554455_000012792267	鲁迅自编文集  呐喊	鲁迅著	南京：译林出版社	2013	2	original-work-in-collection	A1E-subjective-policy	False		18
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	14718532_000030458825	鲁迅作品集  5  呐喊	鲁迅著；湘一主编	北京：中国华侨出版社	2018	2	original-work-in-collection	A1E-subjective-policy	False		19
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	90080833_161000037699	鲁迅文集  壹  呐喊  彷徨  坟  小说  杂文  散文	鲁迅原著；丁华民，孟玉婷主编	长春：吉林文史出版社；吉林音像出版社	2006	2	original-work-in-collection	A1E-subjective-policy	True	1	1
+edition-choice-04	鲁迅《呐喊》哪个出版社版本比较适合阅读	96024424_000012797534	呐喊：鲁迅作品精选	萧枫主编	沈阳：辽海出版社	2009	0	not-target-work	A1E-subjective-policy	False		16
+edition-choice-05	《乡土中国》想找经典版本 不要教辅改写	10157606_000000983833	乡土中国	费孝通著	北京：生活·读书·新知三联书店	1985	3	standalone-original	A1E-subjective-policy	False		16
+edition-choice-05	《乡土中国》想找经典版本 不要教辅改写	10516721_000003257928	乡土中国	费孝通著	上海观察社	1948	3	standalone-original	A1E-subjective-policy	False		17
+edition-choice-05	《乡土中国》想找经典版本 不要教辅改写	11439988_000005114848	乡土中国	费孝通著	北京：北京出版社	2005	3	standalone-original	A1E-subjective-policy	True	4	4
+edition-choice-05	《乡土中国》想找经典版本 不要教辅改写	11616539_000006031079	乡土中国	费孝通著	上海：上海人民出版社	2006	3	standalone-original	A1E-subjective-policy	True	5	5
+edition-choice-05	《乡土中国》想找经典版本 不要教辅改写	11875702_161000065498	乡土中国	费孝通著	南京：江苏文艺出版社	2007	3	standalone-original	A1E-subjective-policy	True	6	6
+edition-choice-05	《乡土中国》想找经典版本 不要教辅改写	11902673_000004940402	乡土中国	费孝通著	上海：上海人民出版社；世纪出版集团	2007	3	standalone-original	A1E-subjective-policy	True	7	7
+edition-choice-05	《乡土中国》想找经典版本 不要教辅改写	12082660_000006619762	乡土中国	费孝通著	北京：人民出版社	2008	3	standalone-original	A1E-subjective-policy	True	8	8
+edition-choice-05	《乡土中国》想找经典版本 不要教辅改写	12430155_000006724368	乡土中国	费孝通著	北京：北京出版社	2009	3	standalone-original	A1E-subjective-policy	True	9	9
+edition-choice-05	《乡土中国》想找经典版本 不要教辅改写	12738607_000008040699	乡土中国	费孝通著	北京：北京出版社	2011	3	standalone-original	A1E-subjective-policy	True	10	10
+edition-choice-05	《乡土中国》想找经典版本 不要教辅改写	13009358_000008296100	乡土中国	费孝通著	北京：人民出版社	2012	3	standalone-original	A1E-subjective-policy	True	1	1
+edition-choice-05	《乡土中国》想找经典版本 不要教辅改写	13044212_000008333554	乡土中国  汉英对照	费孝通著；（美）韩格理，王政译	北京：外语教学与研究出版社	2012	2	original-work-in-expanded-edition	A1E-subjective-policy	False		4
+edition-choice-05	《乡土中国》想找经典版本 不要教辅改写	13123657_000007873928	乡土中国		观察社	1948	0	secondary-or-unrelated	A1E-subjective-policy	False		18
+edition-choice-05	《乡土中国》想找经典版本 不要教辅改写	13334653_000007952095	乡土中国	费孝通著；（美）韩格理，王政译	北京：外语教学与研究出版社	2013	2	bilingual-or-translated-original	A1E-subjective-policy	True	2	2
+edition-choice-05	《乡土中国》想找经典版本 不要教辅改写	13463904_000012826604	乡土中国  经典珍藏版	费孝通著	上海：上海人民出版社	2013	2	original-work-in-expanded-edition	A1E-subjective-policy	False		6
+edition-choice-05	《乡土中国》想找经典版本 不要教辅改写	13472983_000012823921	乡土中国  修订版	费孝通著；刘豪兴编	上海：上海人民出版社	2013	2	original-work-in-expanded-edition	A1E-subjective-policy	False		7
+edition-choice-05	《乡土中国》想找经典版本 不要教辅改写	13689862_000030056803	乡土中国	费孝通著	北京：生活·读书·新知三联书店	2013	3	standalone-original	A1E-subjective-policy	True	3	3
+edition-choice-05	《乡土中国》想找经典版本 不要教辅改写	14086417_000030219106	乡土中国  生育制度  乡土重建	费孝通著	北京：商务印书馆	2015	2	original-work-in-expanded-edition	A1E-subjective-policy	False		16
+edition-choice-05	《乡土中国》想找经典版本 不要教辅改写	14116356_000016250282	探寻一个好社会  费孝通说乡土中国	张冠生著	桂林：广西师范大学出版社	2016	0	secondary-or-unrelated	A1E-subjective-policy	False		2
+edition-choice-05	《乡土中国》想找经典版本 不要教辅改写	14145617_000016255291	乡土中国	费孝通著	北京：北京出版社	2016	3	standalone-original	A1E-subjective-policy	False		11
+edition-choice-05	《乡土中国》想找经典版本 不要教辅改写	14260404_000016587211	走出乡土  对话费孝通《乡土中国》	陈心想著	北京：生活·读书·新知三联书店	2017	0	secondary-or-unrelated	A1E-subjective-policy	False		1
+edition-choice-05	《乡土中国》想找经典版本 不要教辅改写	14404900_000016066102	乡土中国  乡土重建	费孝通著	北京：群言出版社	2016	2	original-work-in-expanded-edition	A1E-subjective-policy	False		18
+edition-choice-05	《乡土中国》想找经典版本 不要教辅改写	14410505_000017432538	乡土中国  乡土重建	费孝通著	北京联合出版公司	2018	2	original-work-in-expanded-edition	A1E-subjective-policy	False		19
+edition-choice-05	《乡土中国》想找经典版本 不要教辅改写	14514046_000017614111	乡土中国  生育制度  乡土重建	费孝通著	北京：商务印书馆	2017	2	original-work-in-expanded-edition	A1E-subjective-policy	False		20
+edition-choice-05	《乡土中国》想找经典版本 不要教辅改写	14641289_000015438799	乡土中国	费孝通著	北京：人民出版社	2015	3	standalone-original	A1E-subjective-policy	False		12
+edition-choice-05	《乡土中国》想找经典版本 不要教辅改写	14645368_000018055263	乡土中国	费孝通著	北京：中信出版社	2019	3	standalone-original	A1E-subjective-policy	False		13
+edition-choice-05	《乡土中国》想找经典版本 不要教辅改写	14652310_000018750782	乡土中国	费孝通著	北京：商务印书馆	2019	3	standalone-original	A1E-subjective-policy	False		14
+edition-choice-05	《乡土中国》想找经典版本 不要教辅改写	14665065_000017402480	乡土中国	费孝通	上海：华东师范大学出版社	2018	3	standalone-original	A1E-subjective-policy	False		15
+edition-choice-05	《乡土中国》想找经典版本 不要教辅改写	line_4714886	乡土中国	费孝通著	北京大学出版社		3	standalone-original	A1E-subjective-policy	False		19
+edition-choice-05	《乡土中国》想找经典版本 不要教辅改写	line_5027145	乡土中国	费孝通著		2013	3	standalone-original	A1E-subjective-policy	False		20
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	10013072_000000384335	第四次中国近代建筑史研究讨论会论文集	汪坦，张复合主编	北京：中国建筑工业出版社	1993	0	different-work	A1D-objective	False		2
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	10013073_000000615775	第五次中国近代建筑史研究讨论会论文集	汪坦，张复合主编	北京：中国建筑工业出版社	1998	0	different-work	A1D-objective	False		3
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	10200112_000003280595	中国建筑史	梁思成著	天津：百花文艺出版社	1998	3	exact-liang-work	A1D-objective	True	7	7
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	10234546_000000569796	梁思成与林徽因  一对探索中国建筑史的伴侣	（美）费慰梅著；曲莹璞等译	北京：中国文联出版公司	1997	0	different-work	A1D-objective	True	3	3
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	10449343_000000101867	图像中国建筑史  汉英双语版	梁思成英文原著；费慰梅编；梁从诫译	天津：百花文艺出版社	2001	0	different-work	A1D-objective	True	9	6
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	10462994_000000092957	水晶石杯学生建筑设计竞赛  2000年度  获奖作品集	世界建筑杂志社，水晶石电脑图像主编	北京：中国建筑工业出版社	2000	0	different-work	A1D-objective	False		7
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	10463369_000001242724	青年建筑师·中国  中英文本	世界建筑杂志社，水晶石电脑图像公司主编	北京：知识产权出版社	2001	0	different-work	A1D-objective	False		19
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	10991319_000000622526	建筑图像词典	（美）弗朗西斯·D.K.程（Francis D.K.Ching）著；高履泰等译	北京：中国建筑工业出版社	1998	0	different-work	A1D-objective	False		16
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	11083189_000000280576	第三次中国近代建筑史研究讨论会论文集	汪坦主编	北京：中国建筑工业出版社	1991	0	different-work	A1D-objective	False		1
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	11376663_000005335990	中国建筑史	梁思成著	天津：百花文艺出版社	2005	3	exact-liang-work	A1D-objective	True	4	4
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	11450798_000005245315	图像建筑  2005  第1辑	王明贤主编	知识产权出版社；中国水利水电出版社	2005	0	different-work	A1D-objective	False		20
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	11458931_000000309708	图像中国建筑史  汉英双语版	梁思成英文原著；费慰梅编；梁从诫译；孙增蕃校	北京：中国建筑工业出版社	1991	0	different-work	A1D-objective	True	8	5
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	11532719_000005739663	华夏营造  中国古代建筑史	王其钧著	北京：中国建筑工业出版社	2005	0	different-work	A1D-objective	False		9
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	11656170_000005966559	亚太嘉园建筑表现  中英文本	方小朋主编；南京亚太嘉园电脑图像开发有限公司，上海亚太嘉园数码科技开发有限公司编	北京：中国建筑工业出版社	2005	0	different-work	A1D-objective	False		18
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	11966215_000006334878	超越图像·中国新绘画  2007《艺术当代》架上艺术学术提名展	徐可，漆澜主编	上海：上海书画出版社	2008	0	different-work	A1D-objective	False		9
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	12022414_000006584807	烟雨楼台：北京大学图书馆藏西籍中的清代建筑图像	北京大学图书馆编	北京：中国人民大学出版社	2008	0	different-work	A1D-objective	False		8
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	12285190_000007474996	中国建筑史	梁思成著	天津：百花文艺出版社	2007	3	exact-liang-work	A1D-objective	True	5	5
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	12715264_000008025409	围龙屋建筑形态的图像学研究	吴卫光著	北京：中国建筑工业出版社	2010	0	different-work	A1D-objective	False		3
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	12738598_000008053987	图像中国建筑史  关于中国建筑结构体系的发展及其形制的研究	梁思成著	北京：生活·读书·新知三联书店	2011	0	different-work	A1D-objective	True	1	1
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	12744536_000006918524	华夏营造  中国古代建筑史	王其钧编著	北京：中国建筑工业出版社	2010	0	different-work	A1D-objective	False		10
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	12879042_000008053988	中国建筑史	梁思成著	北京：生活·读书·新知三联书店	2011	3	exact-liang-work	A1D-objective	True	6	6
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	13059134_000008278437	中国高等院校建筑学科系列教材  中国建筑史	沈福煦编	上海：上海人民美术出版社	2012	0	different-work	A1D-objective	False		11
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	13208006_000001295362	中国建筑史	乐嘉藻著	贵阳：贵州人民出版社	2002	0	different-work	A1D-objective	True	10	10
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	13292605_000000021826	水晶石建筑表现  1995-1999	水晶石电脑图像公司主编	北京：中国建筑工业出版社	1999	0	different-work	A1D-objective	False		17
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	13403452_000012447500	当代中国建筑史家十书  王贵祥中国古代建筑史论文集	王贵祥著	沈阳：辽宁美术出版社	2013	0	different-work	A1D-objective	False		4
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	13403454_000012447513	当代中国建筑史家十书  钟晓青中国古代建筑史论文集	钟晓青著	沈阳：辽宁美术出版社	2013	0	different-work	A1D-objective	False		5
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	13508183_000030003938	中国建筑史之研究	田中淡著；黄兰翔译	南天书局有限公司	2011	0	different-work	A1D-objective	True	2	2
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	13827373_000015583892	中国艺术学文库  图像与观者  论约翰·伯格的艺术理论及意义	王林生著	北京：中国文联出版社	2015	0	different-work	A1D-objective	False		15
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	13854893_000015483177	传统与现代接轨的中国音乐图像学  2013首届中国音乐图像学国际学术研讨会论文集	李荣有主编	上海：上海三联书店	2015	0	different-work	A1D-objective	False		1
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	13908512_000015758885	中国图像史学	蓝勇主编；西南大学历史地理研究所编	北京：科学出版社	2015	0	different-work	A1D-objective	False		10
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	13933784_000015847851	以图像为核心  中国古代皇陵早期调查与研究历史考辨  1840-1949	曹铁娃，曹铁铮著	北京：中国文史出版社	2016	0	different-work	A1D-objective	False		13
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	13960147_000015846343	民国名家史学典藏文库  中国建筑史	乐嘉藻著	北京：中国文史出版社	2016	0	different-work	A1D-objective	False		12
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	13986875_000030177293	叶大松亚洲建筑史研究  中国建筑史  上	叶大松著	花木兰文化出版社	2015	0	different-work	A1D-objective	False		13
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	13986884_000030177284	叶大松亚洲建筑史研究  中国建筑史  下	叶大松著	花木兰文化出版社	2015	0	different-work	A1D-objective	False		14
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	14029409_000030199823	中国近代建筑史  第2卷  多元探索  民国早期各地的现代及中国建筑科学的发展	赖德霖，伍江，徐苏斌主编	北京：中国建筑工业出版社	2016	0	different-work	A1D-objective	False		8
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	14059845_000016064685	神圣图像  李凇中国美术史文集	李凇著	北京：人民出版社	2016	0	different-work	A1D-objective	False		14
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	14149307_000016315528	大汉故里  观图论乐  中国音乐图像学学会第2届年会暨学术研讨会文集	李荣有，李爱真主编	北京：中国文联出版社	2016	0	different-work	A1D-objective	False		4
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	14275635_000016476711	中国图像史学  第1辑	蓝勇主编；西南大学历史地理研究所编	北京：科学出版社	2016	0	different-work	A1D-objective	False		11
+edition-choice-06	《中国建筑史》梁思成 想找完整版本	14525327_000017474511	中国图像科学技术简史	韩丛耀编著	北京：科学出版社	2018	0	different-work	A1D-objective	False		12
+edition-choice-07	《史记》想找点校本 不要学生版	10061423_000001013481	史记探源	崔适著；张烈点校	北京：中华书局	1986	0	not-point-collated-target	A1D-objective	False		1
+edition-choice-07	《史记》想找点校本 不要学生版	10119300_000000922761	司马迁和《史记》	谢介民编著	北京：中华书局	1980	0	not-point-collated-target	A1D-objective	False		6
+edition-choice-07	《史记》想找点校本 不要学生版	10220777_000004036096	史记  维吾尔文  司马迁	二十四史中亚资料汇编	乌鲁木齐：新疆人民出版社	1987	0	not-point-collated-target	A1D-objective	False		5
+edition-choice-07	《史记》想找点校本 不要学生版	10261566_000003248265	史记汉书诸表订补十种	（清）梁玉绳等撰；（吴树平等点校）	北京：中华书局	1982	0	not-point-collated-target	A1D-objective	False		2
+edition-choice-07	《史记》想找点校本 不要学生版	10289895_000005601146	“文史哲”丛刊第3辑  司马迁与史记	文史哲杂志编辑委员会编	北京：中华书局	1957	0	not-point-collated-target	A1D-objective	False		8
+edition-choice-07	《史记》想找点校本 不要学生版	10681528_000000589418	史记	（西汉）司马迁撰；郑强胜，季荣臣点校	北京：台海出版社	1997	2	explicit-collated-other	A1D-objective	False		5
+edition-choice-07	《史记》想找点校本 不要学生版	10839162_000000843572	司马迁和史记	胡佩韦著	北京：中华书局	1962	0	not-point-collated-target	A1D-objective	False		7
+edition-choice-07	《史记》想找点校本 不要学生版	11893979_000005289734	史记	（汉）司马迁著；卢苇，张赞煦点校	杭州：浙江古籍出版社	2000	2	explicit-collated-other	A1D-objective	False		4
+edition-choice-07	《史记》想找点校本 不要学生版	12021144_000003130001	中共党史人物传编撰研究  兼谈司马迁《史记》中的人物传记	陈志凌著	北京：中央文献出版社	1997	0	not-point-collated-target	A1D-objective	False		6
+edition-choice-07	《史记》想找点校本 不要学生版	12750059_000007649796	中华国学文库  史记  1	（汉）司马迁撰	北京：中华书局	2011	1	zhonghua-but-collation-unspecified	A1D-objective	False		1
+edition-choice-07	《史记》想找点校本 不要学生版	12750060_000007649797	中华国学文库  史记  2	（汉）司马迁撰	北京：中华书局	2011	1	zhonghua-but-collation-unspecified	A1D-objective	False		2
+edition-choice-07	《史记》想找点校本 不要学生版	12750061_000007649798	中华国学文库  史记  3	（汉）司马迁撰	北京：中华书局	2011	1	zhonghua-but-collation-unspecified	A1D-objective	False		3
+edition-choice-07	《史记》想找点校本 不要学生版	12750062_000007649799	中华国学文库  史记  4	（汉）司马迁撰	北京：中华书局	2011	1	zhonghua-but-collation-unspecified	A1D-objective	False		4
+edition-choice-07	《史记》想找点校本 不要学生版	13108073_000006985649	司马迁与《史记》	（西汉）司马迁著；叶香美导读	杭州：浙江文艺出版社	2010	0	not-point-collated-target	A1D-objective	False		7
+edition-choice-07	《史记》想找点校本 不要学生版	13133088_000002094214	司马迁与《史记》研究论著专题索引	徐兴海主编	西安：陕西人民教育出版社	1995	0	not-point-collated-target	A1D-objective	False		8
+edition-choice-07	《史记》想找点校本 不要学生版	13136786_000007877686	史记	（西汉）司马迁著；崔钟雷编译	杭州：浙江人民出版社	2013	0	excluded-adaptation	A1D-objective	True	2	2
+edition-choice-07	《史记》想找点校本 不要学生版	13152404_000011690127	史记	司马迁原著；郑小明等改编；书中精灵插图	南京：江苏美术出版社	2013	0	excluded-adaptation	A1D-objective	True	3	3
+edition-choice-07	《史记》想找点校本 不要学生版	13172994_000030002364	史记评注	（清）牛运震撰；魏耕原，张亚玲整理点校	西安：三秦出版社	2011	0	not-point-collated-target	A1D-objective	False		3
+edition-choice-07	《史记》想找点校本 不要学生版	13173285_000007894795	司马迁与《史记》研究年鉴  2010年卷	丁德科，梁建邦，党大恩主编	西安：陕西人民出版社；陕西出版集团	2011	0	not-point-collated-target	A1D-objective	False		9
+edition-choice-07	《史记》想找点校本 不要学生版	13209062_000007904103	史记解读	关想平编著	武汉：武汉出版社	2011	0	not-point-collated-target	A1D-objective	True	1	1
+edition-choice-07	《史记》想找点校本 不要学生版	13233368_161000043280	史记	司马迁原著；诸葛山人编译	延吉：延边人民出版社	2005	0	excluded-adaptation	A1D-objective	True	4	4
+edition-choice-07	《史记》想找点校本 不要学生版	13272902_000006760729	史记	（西汉）司马迁著	哈尔滨：北方文艺出版社	2007	0	not-point-collated-target	A1D-objective	True	5	5
+edition-choice-07	《史记》想找点校本 不要学生版	13345995_000012410791	史记	（汉）司马迁著；王晨编	北京：中国华侨出版社	2013	0	not-point-collated-target	A1D-objective	True	6	6
+edition-choice-07	《史记》想找点校本 不要学生版	13425401_000012410229	司马迁与《史记》研究年鉴  2011年卷	丁德科，梁建邦，党大恩主编	北京：商务印书馆	2013	0	not-point-collated-target	A1D-objective	False		10
+edition-choice-07	《史记》想找点校本 不要学生版	13445465_000013678990	《史记》选本丛书  史记精华	（汉）司马迁著；中华书局编纂；王麦巧整理	北京：商务印书馆	2013	0	not-point-collated-target	A1D-objective	False		5
+edition-choice-07	《史记》想找点校本 不要学生版	13484436_000008006115	史记  点校本二十四史精装版  第1册  卷1至卷7（纪）	（汉）司马迁撰	北京：中华书局	2013	3	zhonghua-explicit-collated	A1D-objective	False		9
+edition-choice-07	《史记》想找点校本 不要学生版	13484437_000008006116	史记  点校本二十四史精装版  第2册  卷8至卷15（纪表）	（汉）司马迁撰	北京：中华书局	2013	3	zhonghua-explicit-collated	A1D-objective	False		10
+edition-choice-07	《史记》想找点校本 不要学生版	13484438_000008006117	史记  点校本二十四史精装版  第3册  卷16至卷22（表）	（汉）司马迁撰	北京：中华书局	2013	3	zhonghua-explicit-collated	A1D-objective	False		11
+edition-choice-07	《史记》想找点校本 不要学生版	13492340_000011755736	史记	（西汉）司马迁著；孙广宇注译	北京：中国画报出版社	2013	0	not-point-collated-target	A1D-objective	True	7	7
+edition-choice-07	《史记》想找点校本 不要学生版	13533455_000030008916	中国历代经典宝库16  史记  司马迁的微小说	李永炽著	北京：中国友谊出版公司	2013	0	not-point-collated-target	A1D-objective	False		1
+edition-choice-07	《史记》想找点校本 不要学生版	13543306_000015075261	史记	司马迁著	北京：北京时代华文书局	2014	0	not-point-collated-target	A1D-objective	True	8	8
+edition-choice-07	《史记》想找点校本 不要学生版	13548409_000030012839	史记	陈佩雄主编	长春：吉林音像出版社；长春：吉林文史出版社	2006	0	not-point-collated-target	A1D-objective	True	9	9
+edition-choice-07	《史记》想找点校本 不要学生版	13565933_000030020645	史记	张强编著	南京：江苏少年儿童出版社	2014	0	not-point-collated-target	A1D-objective	True	10	10
+edition-choice-07	《史记》想找点校本 不要学生版	13612025_000015114640	史记人物全传  1  本纪	（西汉）司马迁撰；周殿富主编；尹小林点校	北京：北京时代华文书局	2014	0	not-point-collated-target	A1D-objective	False		6
+edition-choice-07	《史记》想找点校本 不要学生版	13612026_000030032820	史记人物全传  2  世家	（西汉）司马迁撰；周殿富主编；尹小林点校	北京时代华文书局	2014	0	not-point-collated-target	A1D-objective	False		7
+edition-choice-07	《史记》想找点校本 不要学生版	13612027_000030032821	史记人物全传  3  列传  上	（西汉）司马迁撰；周殿富主编；尹小林点校	北京时代华文书局	2014	0	not-point-collated-target	A1D-objective	False		8
+edition-choice-07	《史记》想找点校本 不要学生版	13612028_000030032822	史记人物全传  4  列传  下	（西汉）司马迁撰；周殿富主编；尹小林点校	北京时代华文书局	2014	0	not-point-collated-target	A1D-objective	False		9
+edition-choice-07	《史记》想找点校本 不要学生版	13965856_000015771266	史记论丛专辑  司马迁思想研究	薛建芳，刘德奉，陈曦主编	北京：中国文史出版社	2015	0	not-point-collated-target	A1D-objective	False		3
+edition-choice-07	《史记》想找点校本 不要学生版	14120667_000030231076	司马迁史记	李靖梵著	贵阳：贵州教育出版社	2017	0	not-point-collated-target	A1D-objective	False		4
+edition-choice-07	《史记》想找点校本 不要学生版	96080524_000030186188	秉笔直书著述《史记》的司马迁	崔丽娜编著	长春：吉林人民出版社	2011	0	not-point-collated-target	A1D-objective	False		2
+edition-choice-08	《红楼梦》想找人民文学出版社版本	10316112_000000898885	红楼梦研究参考资料选辑  第3辑	人民文学出版社编辑部编	北京：人民文学出版社	1976	0	not-work	A1D-objective	False		3
+edition-choice-08	《红楼梦》想找人民文学出版社版本	10316113_000000884122	红楼梦研究参考资料选辑  第2辑	人民文学出版社编辑部编	北京：人民文学出版社	1973	0	not-work	A1D-objective	False		4
+edition-choice-08	《红楼梦》想找人民文学出版社版本	10316114_000000884118	红楼梦研究参考资料选辑  第1辑	人民文学出版社编辑部编	北京：人民文学出版社	1973	0	not-work	A1D-objective	False		5
+edition-choice-08	《红楼梦》想找人民文学出版社版本	10983338_000001300934	梦想成真  《红楼梦》新理财故事	郭晓冰，丁海波著；李汉玉配画	北京：中国金融出版社	2002	0	not-work	A1D-objective	True	1	1
+edition-choice-08	《红楼梦》想找人民文学出版社版本	11124061_000000813730	红楼梦研究论文集	人民文学出版社编辑部编	北京：人民文学出版社	1959	0	not-work	A1D-objective	False		1
+edition-choice-08	《红楼梦》想找人民文学出版社版本	11429814_000005761645	红楼梦研究稀见资料汇编  上	吕启祥，林东海主编	北京：人民文学出版社	2001	0	not-work	A1D-objective	False		8
+edition-choice-08	《红楼梦》想找人民文学出版社版本	11429815_000005761660	红楼梦研究稀见资料汇编  下	吕启祥，林东海主编	北京：人民文学出版社	2001	0	not-work	A1D-objective	False		9
+edition-choice-08	《红楼梦》想找人民文学出版社版本	11803846_000006151871	做不完的红楼梦  曹雪芹在香山正白旗	李强著	北京：中国文联出版社	2007	0	not-work	A1D-objective	False		1
+edition-choice-08	《红楼梦》想找人民文学出版社版本	11987669_000006084464	《红楼梦》语言艺术研究	梁扬，解仁敏著	北京：人民文学出版社	2006	0	not-work	A1D-objective	False		10
+edition-choice-08	《红楼梦》想找人民文学出版社版本	13031434_000008064737	红楼梦	曹雪芹著；《世界名著》编委会编	延吉：延边大学出版社	2010	1	correct-work-wrong-publisher	A1D-objective	True	2	2
+edition-choice-08	《红楼梦》想找人民文学出版社版本	13031495_000006541023	红楼梦	和鸣，万友编写	中国少年儿童新闻出版总社；北京：中国少年儿童出版社	2007	0	not-work	A1D-objective	True	3	3
+edition-choice-08	《红楼梦》想找人民文学出版社版本	13054811_000006743309	红楼梦	曹雪芹，高鹗著；李伟注释	长沙：岳麓书社	2009	1	correct-work-wrong-publisher	A1D-objective	True	4	4
+edition-choice-08	《红楼梦》想找人民文学出版社版本	13056339_161000033189	红楼梦	曹雪芹，高鹗著；崔玉平改写；赵成伟绘图	长沙：岳麓书社	2005	1	correct-work-wrong-publisher	A1D-objective	True	5	5
+edition-choice-08	《红楼梦》想找人民文学出版社版本	13192662_000030322319	红楼梦	（清）曹雪芹著	北京：北京出版社	2006	1	correct-work-wrong-publisher	A1D-objective	True	6	6
+edition-choice-08	《红楼梦》想找人民文学出版社版本	13192786_000007899186	红楼梦	刘阳光编	延吉：延边人民出版社	2006	0	not-work	A1D-objective	True	7	7
+edition-choice-08	《红楼梦》想找人民文学出版社版本	13192818_000007899296	红楼梦	（清）曹雪芹著	西安：三秦出版社	2002	1	correct-work-wrong-publisher	A1D-objective	True	8	8
+edition-choice-08	《红楼梦》想找人民文学出版社版本	13192828_000006941504	红楼梦	（明）施耐庵等著	北京：北京燕山出版社	2002	0	not-work	A1D-objective	True	9	9
+edition-choice-08	《红楼梦》想找人民文学出版社版本	13207287_000006157763	红楼梦	（清）曹雪芹著	长春：北方妇女儿童出版社	2006	1	correct-work-wrong-publisher	A1D-objective	True	10	10
+edition-choice-08	《红楼梦》想找人民文学出版社版本	13333471_000005424035	红楼梦	（清）曹雪芹，（清）高鹗著；中国艺术研究院红楼梦研究所校注	北京：人民文学出版社	1996	3	pml-reading-or-collated	A1D-objective	False		5
+edition-choice-08	《红楼梦》想找人民文学出版社版本	13408658_000007984273	中国古典文学读本丛书  红楼梦  上	（前八十回）曹雪芹著；（后四十回）无名氏续；程伟元，高鹗整理；中国艺术研究院红楼梦研究所校注	北京：人民文学出版社	2008	3	pml-reading-or-collated	A1D-objective	False		1
+edition-choice-08	《红楼梦》想找人民文学出版社版本	13408659_000007984148	中国古典文学读本丛书  红楼梦  下	（前八十回）曹雪芹著；（后四十回）无名氏续；程伟元，高鹗整理；中国艺术研究院红楼梦研究所校注	北京：人民文学出版社	2008	3	pml-reading-or-collated	A1D-objective	False		2
+edition-choice-08	《红楼梦》想找人民文学出版社版本	13528841_000015057896	红楼梦断  曹雪芹家的故事  2  茂陵秋	高阳著	北京：北京联合出版公司	2014	0	not-work	A1D-objective	False		3
+edition-choice-08	《红楼梦》想找人民文学出版社版本	13531005_000008144420	世界经典文学名著博览  红楼梦	（清）曹雪芹著；张语改写	上海：上海人民美术出版社	2011	1	correct-work-wrong-publisher	A1D-objective	False		3
+edition-choice-08	《红楼梦》想找人民文学出版社版本	13531070_000015074899	红楼梦断  曹雪芹家的故事  秣陵春	高阳著	北京：北京联合出版公司	2014	0	not-work	A1D-objective	False		4
+edition-choice-08	《红楼梦》想找人民文学出版社版本	13565960_000015073210	红楼梦断  曹雪芹家的故事  3  五陵游	高阳著	北京：北京联合出版公司	2014	0	not-work	A1D-objective	False		5
+edition-choice-08	《红楼梦》想找人民文学出版社版本	13590991_000015097595	红楼梦断  曹雪芹家的故事  4  延陵剑	高阳著	北京：北京联合出版公司	2014	0	not-work	A1D-objective	False		6
+edition-choice-08	《红楼梦》想找人民文学出版社版本	13608898_000030030960	红楼梦  根据曹雪芹原著小说改编	徐进编剧	上海：上海文艺出版社	1962	0	not-work	A1D-objective	False		7
+edition-choice-08	《红楼梦》想找人民文学出版社版本	13653390_000015227157	红楼梦断  曹雪芹家的故事5o曹雪芹别传  上	高阳著	北京联合出版公司	2014	0	not-work	A1D-objective	False		8
+edition-choice-08	《红楼梦》想找人民文学出版社版本	13659075_000015239464	红楼梦断  曹雪芹家的故事  8  三春争及初春景  下	高阳著	北京：北京联合出版公司	2014	0	not-work	A1D-objective	False		9
+edition-choice-08	《红楼梦》想找人民文学出版社版本	13659190_000015239463	红楼梦断  曹雪芹家的故事  7  三春争及初春景  上	高阳著	北京：北京联合出版公司	2014	0	not-work	A1D-objective	False		10
+edition-choice-08	《红楼梦》想找人民文学出版社版本	13662190_000015227095	红楼梦断  曹雪芹家的故事6o曹雪芹别传  下	高阳著	北京联合出版公司	2014	0	not-work	A1D-objective	False		11
+edition-choice-08	《红楼梦》想找人民文学出版社版本	13736855_000030071381	红楼梦  汉法对照  1	（清）曹雪芹，高鹗著；（法）李治华，雅歌译	北京：人民文学出版社	2012	2	pml-bilingual	A1D-objective	False		6
+edition-choice-08	《红楼梦》想找人民文学出版社版本	13736856_000030071382	红楼梦  汉法对照  2	（清）曹雪芹，高鹗著；（法）李治华，雅歌译	北京：人民文学出版社	2012	2	pml-bilingual	A1D-objective	False		7
+edition-choice-08	《红楼梦》想找人民文学出版社版本	13736857_000030071383	红楼梦  汉法对照  3	（清）曹雪芹，高鹗著；（法）李治华，雅歌译	北京：人民文学出版社	2012	2	pml-bilingual	A1D-objective	False		8
+edition-choice-08	《红楼梦》想找人民文学出版社版本	13736858_000030071384	红楼梦  汉法对照  4	（清）曹雪芹，高鹗著；（法）李治华，雅歌译	北京：人民文学出版社	2012	2	pml-bilingual	A1D-objective	False		9
+edition-choice-08	《红楼梦》想找人民文学出版社版本	13736859_000030071385	红楼梦  汉法对照  5	（清）曹雪芹，高鹗著；（法）李治华，雅歌译	北京：人民文学出版社	2012	2	pml-bilingual	A1D-objective	False		10
+edition-choice-08	《红楼梦》想找人民文学出版社版本	13736860_000030071386	红楼梦  汉法对照  6	（清）曹雪芹，高鹗著；（法）李治华，雅歌译	北京：人民文学出版社	2012	2	pml-bilingual	A1D-objective	False		11
+edition-choice-08	《红楼梦》想找人民文学出版社版本	13757135_000000907648	红楼梦研究参考资料选辑  第4辑	人民文学出版社编辑部编	北京：人民文学出版社	1978	0	not-work	A1D-objective	False		2
+edition-choice-08	《红楼梦》想找人民文学出版社版本	14321035_000016589040	春雨经典·中外文学精品廊  红楼梦  青少年彩绘版	（清）曹雪芹，高鹗著；杨传兵改写	南京：江苏人民出版社	2017	1	correct-work-wrong-publisher	A1D-objective	False		4
+edition-choice-08	《红楼梦》想找人民文学出版社版本	line_4692099	做不完的红楼梦  曹雪芹在香山正白旗	李强著	中国文联出版社		0	not-work	A1D-objective	False		2
+edition-choice-09	《古文观止》想找注释比较完整的版本	10336863_000000451660	古文观止  注释本	（清）吴楚材，（清）吴调侯编；郭君等注释	沈阳：辽宁古籍出版社	1994	3	annotated-complete-record-proxy	A1E-subjective-policy	False		1
+edition-choice-09	《古文观止》想找注释比较完整的版本	11038806_000001365622	古文观止	（清）吴楚材，（清）吴调侯编	北京：西苑出版社	2003	1	original-text-annotation-unproven	A1E-subjective-policy	False		8
+edition-choice-09	《古文观止》想找注释比较完整的版本	11181927_000005027030	古文观止	纪江红主编	北京：京华出版社	2004	0	weak-target	A1E-subjective-policy	False		9
+edition-choice-09	《古文观止》想找注释比较完整的版本	11367846_000005247323	古文观止	（清）吴楚材，（清）吴调侯编著；田宇，孙佳宁译注	长春：吉林人民出版社	2005	3	annotated-complete-record-proxy	A1E-subjective-policy	False		10
+edition-choice-09	《古文观止》想找注释比较完整的版本	11483977_000000406418	古文观止	邓汉平等评点	北京：中国友谊出版公司	1993	3	annotated-complete-record-proxy	A1E-subjective-policy	False		11
+edition-choice-09	《古文观止》想找注释比较完整的版本	11508152_000005970832	古文观止	李敏主编；侯岩峰注评	长春：吉林文史出版社	2006	3	annotated-complete-record-proxy	A1E-subjective-policy	False		12
+edition-choice-09	《古文观止》想找注释比较完整的版本	11549299_000005392902	古文观止	（清）吴楚材，（清）吴调侯选编；张国风注释	北京：金盾出版社	2003	3	annotated-complete-record-proxy	A1E-subjective-policy	False		4
+edition-choice-09	《古文观止》想找注释比较完整的版本	11587269_000001330009	古文观止	（清）吴调侯，（清）吴楚材编；范佩伟注评	广州：暨南大学出版社	2003	3	annotated-complete-record-proxy	A1E-subjective-policy	False		13
+edition-choice-09	《古文观止》想找注释比较完整的版本	12231353_000000616730	古文观止注释	（清）吴楚材，（清）吴调侯编；郭君等注释	沈阳：辽海出版社	1998	3	annotated-complete-record-proxy	A1E-subjective-policy	False		3
+edition-choice-09	《古文观止》想找注释比较完整的版本	12342770_000003075225	续古文观止  注释本	王文濡选编	杭州：浙江古籍出版社	1998	0	different-work	A1E-subjective-policy	False		2
+edition-choice-09	《古文观止》想找注释比较完整的版本	13136927_000007878519	古文观止	（清）吴楚材，吴调侯选编；崔钟雷编译	杭州：浙江人民出版社	2013	1	original-text-annotation-unproven	A1E-subjective-policy	True	1	1
+edition-choice-09	《古文观止》想找注释比较完整的版本	13237377_000008331241	古文观止精粹	（清朝）吴楚材，吴调侯原编；陈才俊主编；安中玉注译	北京：海潮出版社	2012	3	annotated-complete-record-proxy	A1E-subjective-policy	False		2
+edition-choice-09	《古文观止》想找注释比较完整的版本	13407964_000008326771	古文观止	（清）吴楚材，（清）吴调侯编选	长沙：岳麓书社	2012	1	original-text-annotation-unproven	A1E-subjective-policy	True	2	1
+edition-choice-09	《古文观止》想找注释比较完整的版本	13482840_000008007551	古文观止  上	清·吴楚材，吴调侯编选；吴兆基编译	北京：长城出版社	2002	1	original-text-annotation-unproven	A1E-subjective-policy	False		3
+edition-choice-09	《古文观止》想找注释比较完整的版本	13516386_000012798007	古文观止新注	（清）吴楚材，吴调侯编选；殷义祥注	济南：山东文艺出版社	2013	3	annotated-complete-record-proxy	A1E-subjective-policy	False		4
+edition-choice-09	《古文观止》想找注释比较完整的版本	13531756_000015062136	古文观止	（清）吴楚材，（清）吴调侯著	沈阳：万卷出版公司	2014	1	original-text-annotation-unproven	A1E-subjective-policy	True	3	2
+edition-choice-09	《古文观止》想找注释比较完整的版本	13571585_000015092175	古文观止	黄坤尧导读，译注	北京：中信出版社	2014	3	annotated-complete-record-proxy	A1E-subjective-policy	True	4	4
+edition-choice-09	《古文观止》想找注释比较完整的版本	13637756_000008357346	古文观止	（清）吴楚材等	上海：上海古籍出版社	2002	1	original-text-annotation-unproven	A1E-subjective-policy	True	5	3
+edition-choice-09	《古文观止》想找注释比较完整的版本	13659586_000015256603	古文观止  精华本	（清）吴楚材，吴调侯编选；俞平柏，吴小如，袁行霈等赏析	武汉：长江文艺出版社	2014	1	original-text-annotation-unproven	A1E-subjective-policy	False		5
+edition-choice-09	《古文观止》想找注释比较完整的版本	13677974_000015231794	古文观止	（清）吴楚材，（清）吴调侯编选；钟基译	北京：中华书局	2014	1	original-text-annotation-unproven	A1E-subjective-policy	True	6	4
+edition-choice-09	《古文观止》想找注释比较完整的版本	13711802_000001261849	古文观止  言文对照	（清）吴楚材，吴调侯编；阙勋吾等译注；陈蒲清校订	长沙：岳麓书社	2001	3	annotated-complete-record-proxy	A1E-subjective-policy	False		6
+edition-choice-09	《古文观止》想找注释比较完整的版本	13736846_000015000222	古文观止  电纸两用版	（清）吴楚材，吴调侯，刘飞滨，解姗	成都：四川文艺出版社	2012	1	original-text-annotation-unproven	A1E-subjective-policy	False		7
+edition-choice-09	《古文观止》想找注释比较完整的版本	13742448_000030075006	古文观止	吴洋编著；杨克惠责任编辑	商务印书馆(香港)有限公司	2014	0	weak-target	A1E-subjective-policy	True	7	5
+edition-choice-09	《古文观止》想找注释比较完整的版本	13788184_000015499350	古文观止	（清）吴楚材，（清）吴调侯选编	北京：中国纺织出版社	2015	1	original-text-annotation-unproven	A1E-subjective-policy	True	8	8
+edition-choice-09	《古文观止》想找注释比较完整的版本	13805332_000030097676	古文观止  3	（清）吴楚材，（清）吴调侯选编；邓启铜，钟良注释	南京：南京大学出版社	2014	2	annotated-part-volume	A1E-subjective-policy	False		5
+edition-choice-09	《古文观止》想找注释比较完整的版本	13805337_000008381162	古文观止	（清）吴楚材，（清）吴凋侯选编；郭锐注译	武汉：崇文书局	2012	3	annotated-complete-record-proxy	A1E-subjective-policy	True	9	9
+edition-choice-09	《古文观止》想找注释比较完整的版本	13840761_000006928548	古文观止	吴楚材，吴调侯编著；朱杏英整理	沈阳：万卷出版公司	2010	1	original-text-annotation-unproven	A1E-subjective-policy	True	10	6
+edition-choice-09	《古文观止》想找注释比较完整的版本	13945686_000015270452	古文观止	吴楚材，吴调候编	昆明：晨光出版社	2014	1	original-text-annotation-unproven	A1E-subjective-policy	False		7
+edition-choice-09	《古文观止》想找注释比较完整的版本	13979215_000030171531	古文观止  1	（清）吴楚材，吴调侯编选；人民文学出版社编辑部注释	北京：人民文学出版社	2016	2	annotated-part-volume	A1E-subjective-policy	False		6
+edition-choice-09	《古文观止》想找注释比较完整的版本	13979216_000030171536	古文观止  2	（清）吴楚材，吴调侯编选；人民文学出版社编辑部注释	北京：人民文学出版社	2016	2	annotated-part-volume	A1E-subjective-policy	False		7
+edition-choice-09	《古文观止》想找注释比较完整的版本	13979217_000030171537	古文观止  3	（清）吴楚材，吴调侯编选；人民文学出版社编辑部注释	北京：人民文学出版社	2016	2	annotated-part-volume	A1E-subjective-policy	False		8
+edition-choice-09	《古文观止》想找注释比较完整的版本	13979218_000030171544	古文观止  4	（清）吴楚材，吴调侯编选；人民文学出版社编辑部注释	北京：人民文学出版社	2016	2	annotated-part-volume	A1E-subjective-policy	False		9
+edition-choice-09	《古文观止》想找注释比较完整的版本	13979219_000030171546	古文观止  5	（清）吴楚材，吴调侯编选；人民文学出版社编辑部注释	北京：人民文学出版社	2016	2	annotated-part-volume	A1E-subjective-policy	False		10
+edition-choice-09	《古文观止》想找注释比较完整的版本	13979220_000030171540	古文观止  6	（清）吴楚材，吴调侯编选；人民文学出版社编辑部注释	北京：人民文学出版社	2016	2	annotated-part-volume	A1E-subjective-policy	False		11
+edition-choice-09	《古文观止》想找注释比较完整的版本	13979221_000030171764	古文观止  7	（清）吴楚材，吴调侯编选；人民文学出版社编辑部注释	北京：人民文学出版社	2016	2	annotated-part-volume	A1E-subjective-policy	False		12
+edition-choice-09	《古文观止》想找注释比较完整的版本	13979222_000030171543	古文观止  8	（清）吴楚材，吴调侯编选；人民文学出版社编辑部注释	北京：人民文学出版社	2016	2	annotated-part-volume	A1E-subjective-policy	False		13
+edition-choice-09	《古文观止》想找注释比较完整的版本	13979224_000030171554	古文观止  9	（清）吴楚材，吴调侯编选；人民文学出版社编辑部注释	北京：人民文学出版社	2016	2	annotated-part-volume	A1E-subjective-policy	False		14
+edition-choice-09	《古文观止》想找注释比较完整的版本	13979225_000030171555	古文观止  10	（清）吴楚材，吴调侯编选；人民文学出版社编辑部注释	北京：人民文学出版社	2016	2	annotated-part-volume	A1E-subjective-policy	False		15
+edition-choice-09	《古文观止》想找注释比较完整的版本	13979229_000030171558	古文观止  11	（清）吴楚材，吴调侯编选；人民文学出版社编辑部注释	北京：人民文学出版社	2016	2	annotated-part-volume	A1E-subjective-policy	False		16
+edition-choice-09	《古文观止》想找注释比较完整的版本	13979230_000030171768	古文观止  12	（清）吴楚材，吴调侯编选；人民文学出版社编辑部注释	北京：人民文学出版社	2016	2	annotated-part-volume	A1E-subjective-policy	False		17
+exact-natural-01	帮我找钱钟书的《围城》	10023151_000004641759	围城	钱钟书	北京市：人民文学出版社		3	exact-work	A1D-objective	False		15
+exact-natural-01	帮我找钱钟书的《围城》	10176495_000000319289	“围城”内外  钱钟书的文学世界	陆文虎著	北京：解放军文艺出版社	1992	0	author-miss	A1D-objective	True	5	2
+exact-natural-01	帮我找钱钟书的《围城》	10315902_000001012917	记钱钟书与《围城》	杨绛著；朱正责任编辑	长沙：湖南人民出版社	1986	0	author-miss	A1D-objective	False		6
+exact-natural-01	帮我找钱钟书的《围城》	10322289_000004118418	钱钟书修改围城	张明亮著	太原：北岳文艺出版社	1996	0	author-miss	A1D-objective	False		8
+exact-natural-01	帮我找钱钟书的《围城》	10804295_000001078788	围城	钱钟书著；晓愉缩写	贵阳：贵州人民出版社	1988	2	exact-work-derived-record	A1D-objective	False		14
+exact-natural-01	帮我找钱钟书的《围城》	10877917_000000092460	钱钟书《围城》批判	汤溢泽编	长沙：湖南大学出版社	2000	0	author-miss	A1D-objective	False		3
+exact-natural-01	帮我找钱钟书的《围城》	10975004_000000314674	钱钟书和他的《围城》  美国学者论钱钟书	张泉编	北京：中国和平出版社	1991	0	author-miss	A1D-objective	True	3	3
+exact-natural-01	帮我找钱钟书的《围城》	11053125_000004025754	名作欣赏·钱钟书  围城  人·鬼·兽	林非主编	北京：当代世界出版社	2002	0	author-miss	A1D-objective	False		4
+exact-natural-01	帮我找钱钟书的《围城》	11182511_000003140541	围城	钱钟书著；（美）Jeanne Kelly，（美）Nathan K.Mao译	北京：外语教学与研究出版社	2003	3	exact-work	A1D-objective	False		3
+exact-natural-01	帮我找钱钟书的《围城》	11205685_000001258429	围城	钱钟书著	北京：生活·读书·新知三联书店	2002	3	exact-work	A1D-objective	False		4
+exact-natural-01	帮我找钱钟书的《围城》	11342286_000005807983	围城	钱钟书著	北京：人民文学出版社	1980	3	exact-work	A1D-objective	False		5
+exact-natural-01	帮我找钱钟书的《围城》	11385150_000005712370	围城	钱钟书作	晨光出版公司		3	exact-work	A1D-objective	False		16
+exact-natural-01	帮我找钱钟书的《围城》	11414550_000003127110	围城内外  钱钟书的文学世界	陆文虎著	北京：解放军出版社	2004	0	author-miss	A1D-objective	True	4	1
+exact-natural-01	帮我找钱钟书的《围城》	11673516_161000038780	围城	钱钟书著	北京：人民文学出版社	1991	3	exact-work	A1D-objective	False		6
+exact-natural-01	帮我找钱钟书的《围城》	12035427_000006534314	围城	钱钟书原著	北京：华语教学出版社	2008	3	exact-work	A1D-objective	False		7
+exact-natural-01	帮我找钱钟书的《围城》	12145118_161000141628	围城·人兽鬼：钱钟书精品文集	钱钟书著	贵阳：贵州人民出版社	2001	2	expanded-work	A1D-objective	False		10
+exact-natural-01	帮我找钱钟书的《围城》	12334198_161000103721	钱钟书的比喻艺术	李忠初著	长沙：岳麓书社	1994	0	title-miss	A1D-objective	True	9	9
+exact-natural-01	帮我找钱钟书的《围城》	12384129_000006643261	围城	钱钟书著	北京：人民文学出版社	2008	3	exact-work	A1D-objective	False		8
+exact-natural-01	帮我找钱钟书的《围城》	12679719_000006658192	围城	钱钟书著	北京：人民文学出版社	2009	3	exact-work	A1D-objective	False		9
+exact-natural-01	帮我找钱钟书的《围城》	12746747_000005011567	围城	钱钟书著	北京：人民文学出版社	2004	3	exact-work	A1D-objective	False		10
+exact-natural-01	帮我找钱钟书的《围城》	12767951_000003053680	围城里的智者  钱钟书	季进著	文史哲出版社	2002	0	author-miss	A1D-objective	True	7	7
+exact-natural-01	帮我找钱钟书的《围城》	13195426_000008324570	围城	钱钟书原著；孙雄飞，屠传德，黄蜀芹编剧	北京：人民文学出版社	2013	2	exact-work-derived-record	A1D-objective	False		13
+exact-natural-01	帮我找钱钟书的《围城》	13221028_000007911212	钱钟书集  围城  人·兽·鬼	钱钟书著	北京：生活·读书·新知三联书店	2011	1	collection-or-context	A1D-objective	False		7
+exact-natural-01	帮我找钱钟书的《围城》	13295263_000007939550	围城	钱钟书著	桂林：漓江出版社	1997	3	exact-work	A1D-objective	False		1
+exact-natural-01	帮我找钱钟书的《围城》	13324908_000012415181	人生边上，心城内外  钱钟书的围城人生	田梦著	北京：中国华侨出版社	2013	0	author-miss	A1D-objective	True	1	1
+exact-natural-01	帮我找钱钟书的《围城》	13330603_000000054715	围城	钱钟书著	北京：人民文学出版社	2000	3	exact-work	A1D-objective	False		2
+exact-natural-01	帮我找钱钟书的《围城》	13350034_000012442155	最忆当年初遇时  钱钟书和杨绛的百年围城	朱云乔编	北京：石油工业出版社	2013	0	author-miss	A1D-objective	True	8	8
+exact-natural-01	帮我找钱钟书的《围城》	13782427_000015486135	细水流年里的围城故事  杨绛与钱钟书	李清秋著	武汉：华中科技大学出版社	2015	0	author-miss	A1D-objective	True	6	6
+exact-natural-01	帮我找钱钟书的《围城》	14052487_000015862662	钱钟书的述学文体  以《管锥编·老子王弼注》为个案的研究	黎兰著	太原：三晋出版社	2015	0	title-miss	A1D-objective	True	10	10
+exact-natural-01	帮我找钱钟书的《围城》	14252597_000030283773	围城	钱钟书著	北京：人民文学出版社	2017	3	exact-work	A1D-objective	False		11
+exact-natural-01	帮我找钱钟书的《围城》	14350345_000017012040	小说逸语  钱钟书（围城）九段	栾贵明著	北京：新世界出版社	2018	0	author-miss	A1D-objective	False		5
+exact-natural-01	帮我找钱钟书的《围城》	14483230_000017441499	认知视角下的汉德身体部位类熟语理据对比研究  以钱钟书的小说《围城》及其德译本为例	陆巍著	北京/西安：世界图书出版公司	2018	0	author-miss	A1D-objective	True	2	2
+exact-natural-01	帮我找钱钟书的《围城》	96032620_000006192886	围城	乔迎迎编	呼和浩特：远方出版社	2007	0	author-miss	A1D-objective	False		12
+exact-natural-01	帮我找钱钟书的《围城》	line_4697581	围城	钱钟书著	四川文艺出版社		3	exact-work	A1D-objective	False		17
+exact-natural-01	帮我找钱钟书的《围城》	line_4711219	围城	钱钟书著	晨光出版公司		3	exact-work	A1D-objective	False		18
+exact-natural-01	帮我找钱钟书的《围城》	line_4716698	围城	钱钟书著	人民文学出版社		3	exact-work	A1D-objective	False		19
+exact-natural-01	帮我找钱钟书的《围城》	line_5020515	围城	钱钟书著		1991	3	exact-work	A1D-objective	False		20
+exact-natural-02	找鲁迅的《呐喊》	10401729_000000016193	现代人的呐喊  鲁迅的人生探求	邱存平著	北京：解放军出版社	2000	0	author-miss	A1D-objective	False		8
+exact-natural-02	找鲁迅的《呐喊》	11033522_000001256203	鲁迅选集  第1卷  呐喊  彷徨  故事新编	鲁迅著	北京：中国文史出版社	2002	1	collection-or-context	A1D-objective	False		14
+exact-natural-02	找鲁迅的《呐喊》	11084706_000003153921	呐喊	鲁迅原著；李新宇评点	长春：吉林文史出版社	2003	3	exact-work	A1D-objective	False		9
+exact-natural-02	找鲁迅的《呐喊》	11224230_000003151362	鲁迅自选集  插图本  野草·呐喊·彷徨·故事新编·朝花夕拾	鲁迅著	北京：文化艺术出版社	2004	1	collection-or-context	A1D-objective	False		15
+exact-natural-02	找鲁迅的《呐喊》	11267153_000003153525	呐喊	鲁迅著；孙郁点评	沈阳：春风文艺出版社	2004	3	exact-work	A1D-objective	False		10
+exact-natural-02	找鲁迅的《呐喊》	11325208_000005808435	呐喊	鲁迅著	武汉：长江文艺出版社	2004	3	exact-work	A1D-objective	False		11
+exact-natural-02	找鲁迅的《呐喊》	11378227_000000262417	呐喊	鲁迅著	上海：上海文艺出版社	1990	3	exact-work	A1D-objective	False		12
+exact-natural-02	找鲁迅的《呐喊》	11556667_000005112918	鲁迅小说集  呐喊  彷徨  故事新编	鲁迅著	哈尔滨：黑龙江人民出版社	2004	1	collection-or-context	A1D-objective	False		13
+exact-natural-02	找鲁迅的《呐喊》	11602360_000005745855	呐喊	鲁迅著	合肥：安徽人民出版社	2005	3	exact-work	A1D-objective	False		13
+exact-natural-02	找鲁迅的《呐喊》	11628013_000000137664	呐喊	鲁迅著	上海：上海书店出版社	2001	3	exact-work	A1D-objective	False		14
+exact-natural-02	找鲁迅的《呐喊》	11642652_000006032075	呐喊	鲁迅著	杭州：浙江少年儿童出版社	2006	3	exact-work	A1D-objective	False		15
+exact-natural-02	找鲁迅的《呐喊》	12052788_000006312093	一个人的呐喊  鲁迅1881-1936	朱正编著	北京：北京十月文艺出版社	2007	0	author-miss	A1D-objective	False		7
+exact-natural-02	找鲁迅的《呐喊》	12824629_000008029112	呐喊  鲁迅小说精选	鲁迅著	长春：时代文艺出版社	2011	2	expanded-work	A1D-objective	False		1
+exact-natural-02	找鲁迅的《呐喊》	13043509_000007824894	找市场	刘国民主编	北京：中国农业出版社	2012	0	title-miss	A1D-objective	True	3	3
+exact-natural-02	找鲁迅的《呐喊》	13067271_000008055148	找工作要懂点心理学  国内第一本求职心理学书	刘毅著	北京：中国时代经济出版社	2011	0	title-miss	A1D-objective	True	4	4
+exact-natural-02	找鲁迅的《呐喊》	13083550_000008352090	找方法比找借口更重要	高一飞编著	北京：中国华侨出版社	2012	0	title-miss	A1D-objective	True	5	5
+exact-natural-02	找鲁迅的《呐喊》	13083554_000008337753	找个有缺点的人结婚	周小鹏编	广州：广东经济出版社	2012	0	title-miss	A1D-objective	True	6	6
+exact-natural-02	找鲁迅的《呐喊》	13091497_000008370937	找方法不找借口	唐逸编著	北京：新华出版社	2012	0	title-miss	A1D-objective	True	7	7
+exact-natural-02	找鲁迅的《呐喊》	13105006_000008032583	找心眼儿的小猪	张之路著	成都：四川少年儿童出版社	2011	0	title-miss	A1D-objective	True	8	8
+exact-natural-02	找鲁迅的《呐喊》	13174518_000007894964	找好工作用对人	ROBERT F WILSON著；郭轩盈译	雅书堂文化事业有限公司	2001	0	title-miss	A1D-objective	True	9	9
+exact-natural-02	找鲁迅的《呐喊》	13194969_000011689847	找对方法做对事  案例实用版	吴学刚编著	北京：中国铁道出版社	2013	0	title-miss	A1D-objective	True	10	10
+exact-natural-02	找鲁迅的《呐喊》	13197161_000007901996	呐喊	鲁迅著；陈漱渝校勘	桂林：漓江出版社	2003	3	exact-work	A1D-objective	False		1
+exact-natural-02	找鲁迅的《呐喊》	13217104_000008224382	找对人说对话做对事大全集  超值金版	乔拉德编著	上海：立信会计出版社	2012	0	title-miss	A1D-objective	True	1	1
+exact-natural-02	找鲁迅的《呐喊》	13245251_000007916837	呐喊	鲁迅著	北京：中国大百科全书出版社	2003	3	exact-work	A1D-objective	False		2
+exact-natural-02	找鲁迅的《呐喊》	13254274_000011737935	黎明前的呐喊  鲁迅语录	鲁迅著	南京：江苏文艺出版社	2013	1	collection-or-context	A1D-objective	False		4
+exact-natural-02	找鲁迅的《呐喊》	13337633_000002408757	铁屋中的呐喊  鲁迅研究	李欧梵（Leo Ou-fan Lee）著；尹慧珉译	北京：生活·读书·新知三联书店	1991	0	author-miss	A1D-objective	False		6
+exact-natural-02	找鲁迅的《呐喊》	13455840_000015020878	呐喊	鲁迅著	南京：译林出版社	2013	3	exact-work	A1D-objective	False		3
+exact-natural-02	找鲁迅的《呐喊》	13492184_000008147543	呐喊	鲁迅著	西安：陕西师范大学出版社	2011	3	exact-work	A1D-objective	False		4
+exact-natural-02	找鲁迅的《呐喊》	13530718_000015077494	呐喊	鲁迅著	南京：译林出版社	2014	3	exact-work	A1D-objective	False		5
+exact-natural-02	找鲁迅的《呐喊》	13587332_000000767436	呐喊	鲁迅著	北京：人民文学出版社	1958	3	exact-work	A1D-objective	False		6
+exact-natural-02	找鲁迅的《呐喊》	13651799_000015239495	呐喊·彷徨·故事新编  鲁迅小说经典	鲁迅著	南昌：二十一世纪出版社	2014	2	expanded-work	A1D-objective	False		11
+exact-natural-02	找鲁迅的《呐喊》	13813010_000011673335	呐喊	鲁迅编	北京：群众出版社	2012	3	exact-work	A1D-objective	False		7
+exact-natural-02	找鲁迅的《呐喊》	13824040_000015527408	“找不到”的小狮子  给4-8岁孩子的成长故事书	王美慧著；黄雄生绘	北京：中国人口出版社	2015	0	title-miss	A1D-objective	True	2	2
+exact-natural-02	找鲁迅的《呐喊》	13833198_000008130133	呐喊	鲁迅著	长沙：湖南文艺出版社	2011	3	exact-work	A1D-objective	False		8
+exact-natural-02	找鲁迅的《呐喊》	13921470_000015918762	朝花夕拾  呐喊  鲁迅专集  新课标经典文学名著金库  新课标名师精评版	鲁迅原著；闫仲渝主编	成都：天地出版社	2015	1	collection-or-context	A1D-objective	False		5
+exact-natural-02	找鲁迅的《呐喊》	14002828_000030184225	呐喊  鲁迅作品集	鲁迅著	沈阳：万卷出版公司	2014	2	expanded-work	A1D-objective	False		2
+exact-natural-02	找鲁迅的《呐喊》	14125857_000016040980	呐喊  彷徨  故事新编  鲁迅经典小说	鲁迅著	成都：巴蜀书社	2016	2	expanded-work	A1D-objective	False		12
+exact-natural-02	找鲁迅的《呐喊》	14307197_000016701177	呐喊  鲁迅经典作品选	鲁迅著	北京：煤炭工业出版社	2017	2	expanded-work	A1D-objective	False		3
+exact-natural-02	找鲁迅的《呐喊》	14444696_000016957365	常春藤传记馆  古国的呐喊  鲁迅传	范阳阳著	长春：长春出版社	2018	0	author-miss	A1D-objective	False		9
+exact-natural-02	找鲁迅的《呐喊》	90080833_161000037699	鲁迅文集  壹  呐喊  彷徨  坟  小说  杂文  散文	鲁迅原著；丁华民，孟玉婷主编	长春：吉林文史出版社；吉林音像出版社	2006	1	collection-or-context	A1D-objective	False		10
+exact-natural-03	帮我找老舍写的《骆驼祥子》	10106916_000000941859	老舍选集  骆驼祥子  离婚  第1卷	老舍著	成都：四川人民出版社	1982	1	collection-or-context	A1D-objective	False		12
+exact-natural-03	帮我找老舍写的《骆驼祥子》	10119122_000000355480	老舍传  写家春秋	郎云，苏雷著	太原：北岳文艺出版社	1988	0	title-miss	A1D-objective	True	4	4
+exact-natural-03	帮我找老舍写的《骆驼祥子》	10495472_000004079711	百花青年小文库  老舍写北京	舒乙编；老舍著	天津：百花文艺出版社	1986	0	title-miss	A1D-objective	True	1	1
+exact-natural-03	帮我找老舍写的《骆驼祥子》	10659422_000001287097	老舍经典作品选  骆驼祥子  我这一辈子	老舍著	北京：当代世界出版社	2002	1	collection-or-context	A1D-objective	False		13
+exact-natural-03	帮我找老舍写的《骆驼祥子》	11081595_000000156108	写家漫语	老舍著	北京：大众文艺出版社	2001	0	title-miss	A1D-objective	True	8	8
+exact-natural-03	帮我找老舍写的《骆驼祥子》	11226093_000003118051	平民写家  老舍	老舍著；傅光明编	合肥：安徽文艺出版社	2003	0	title-miss	A1D-objective	True	5	5
+exact-natural-03	帮我找老舍写的《骆驼祥子》	11677438_000006046760	骆驼祥子	老舍著	北京：人民文学出版社	2006	3	exact-work	A1D-objective	False		6
+exact-natural-03	帮我找老舍写的《骆驼祥子》	11827691_000006056077	骆驼祥子画传  老舍名著的形象解读	孙之俊图；孙燕华文	北京：人民文学出版社	2006	0	author-miss	A1D-objective	False		3
+exact-natural-03	帮我找老舍写的《骆驼祥子》	11901281_000006049752	骆驼祥子  老舍精选集  插图本	老舍著	北京：北京燕山出版社	2006	2	expanded-work	A1D-objective	False		2
+exact-natural-03	帮我找老舍写的《骆驼祥子》	12043003_000007412538	骆驼祥子	中国现代文学馆编	北京：华夏出版社	2008	0	author-miss	A1D-objective	False		7
+exact-natural-03	帮我找老舍写的《骆驼祥子》	12105635_000007418734	骆驼祥子	老舍原著	北京：北京理工大学出版社	2008	3	exact-work	A1D-objective	False		8
+exact-natural-03	帮我找老舍写的《骆驼祥子》	12147581_161000039248	骆驼祥子	老舍著	北京：人民文学出版社	1962	3	exact-work	A1D-objective	False		9
+exact-natural-03	帮我找老舍写的《骆驼祥子》	12159009_000006041788	骆驼祥子	老舍著	北京：人民文学出版社	2005	3	exact-work	A1D-objective	False		10
+exact-natural-03	帮我找老舍写的《骆驼祥子》	12253259_000007465612	写家漫语  中	老舍著	北京：大众文艺出版社	2001	0	title-miss	A1D-objective	True	9	9
+exact-natural-03	帮我找老舍写的《骆驼祥子》	12463942_000007550600	写家漫语  上	老舍著	北京：大众文艺出版社	2006	0	title-miss	A1D-objective	True	10	10
+exact-natural-03	帮我找老舍写的《骆驼祥子》	12638966_000006884589	骆驼祥子	老舍著	海口：南海出版公司	2010	3	exact-work	A1D-objective	False		11
+exact-natural-03	帮我找老舍写的《骆驼祥子》	12680311_000006893240	骆驼祥子	舒乙编选	北京：华夏出版社	2010	0	author-miss	A1D-objective	False		12
+exact-natural-03	帮我找老舍写的《骆驼祥子》	12827937_000008174471	骆驼祥子  二马  老舍经典作品集	老舍著	西安：陕西师范大学出版社	2011	2	expanded-work	A1D-objective	False		4
+exact-natural-03	帮我找老舍写的《骆驼祥子》	13024086_000008300492	老舍小说全集  骆驼祥子·文博士	老舍著	武汉：长江文艺出版社	2012	1	collection-or-context	A1D-objective	False		6
+exact-natural-03	帮我找老舍写的《骆驼祥子》	13029801_000006935524	骆驼祥子	钱大伟主编；老舍著	长春：时代文艺出版社	2010	3	exact-work	A1D-objective	False		1
+exact-natural-03	帮我找老舍写的《骆驼祥子》	13091376_000008345835	老舍作品名家插图本系列  骆驼祥子  高荣生插图本	老舍编著	北京：人民文学出版社	2012	1	collection-or-context	A1D-objective	False		14
+exact-natural-03	帮我找老舍写的《骆驼祥子》	13091647_000008346030	老舍作品名家插图本系列  骆驼祥子  丁聪插图本	老舍编著	北京：人民文学出版社	2012	1	collection-or-context	A1D-objective	False		15
+exact-natural-03	帮我找老舍写的《骆驼祥子》	13193113_000006089793	骆驼祥子	老舍著；毛鑫，白云天编	北京：中国对外翻译出版公司	2006	3	exact-work	A1D-objective	False		2
+exact-natural-03	帮我找老舍写的《骆驼祥子》	13260633_000007922714	宝船	老舍写；陈永镇画	贵阳：贵州人民出版社	2010	0	title-miss	A1D-objective	True	2	2
+exact-natural-03	帮我找老舍写的《骆驼祥子》	13284366_000008288288	老舍作品集  我怎样写小说	老舍著；舒乙主编	南京：译林出版社	2012	0	title-miss	A1D-objective	True	6	6
+exact-natural-03	帮我找老舍写的《骆驼祥子》	13441247_000007994388	骆驼祥子	老舍著	长春：吉林大学出版社	2013	3	exact-work	A1D-objective	False		3
+exact-natural-03	帮我找老舍写的《骆驼祥子》	13491679_000006799670	写家漫语	老舍著	北京：大众文艺出版社	2009	0	title-miss	A1D-objective	True	7	7
+exact-natural-03	帮我找老舍写的《骆驼祥子》	13781053_000030090921	骆驼祥子  老舍作品中学生读本	老舍著；魏韶华注	长春：北方妇女儿童出版社	2014	2	expanded-work	A1D-objective	False		1
+exact-natural-03	帮我找老舍写的《骆驼祥子》	13832085_000015448698	骆驼祥子	李观政主编；老舍著；杨信插图	北京：北京师范大学出版社	2015	3	exact-work	A1D-objective	False		4
+exact-natural-03	帮我找老舍写的《骆驼祥子》	13836968_000015348577	骆驼祥子	老舍著	北京：团结出版社	2015	3	exact-work	A1D-objective	False		5
+exact-natural-03	帮我找老舍写的《骆驼祥子》	13959542_000016012032	骆驼祥子  不说谎的人  老舍小说精选	老舍著	成都：巴蜀书社	2016	2	expanded-work	A1D-objective	False		5
+exact-natural-03	帮我找老舍写的《骆驼祥子》	14002645_000015689839	骆驼祥子	老舍著	沈阳：春风文艺出版社	2015	3	exact-work	A1D-objective	False		13
+exact-natural-03	帮我找老舍写的《骆驼祥子》	14010553_000008286577	老舍作品集  骆驼祥子  狗之晨	老舍著；舒乙主编	南京：译林出版社	2012	1	collection-or-context	A1D-objective	False		7
+exact-natural-03	帮我找老舍写的《骆驼祥子》	14033729_000030201662	老舍精选集  骆驼祥子	老舍著	北京：中国文联出版社	2016	1	collection-or-context	A1D-objective	False		8
+exact-natural-03	帮我找老舍写的《骆驼祥子》	14112690_000016264625	骆驼祥子	老舍著；李晨森编	北京：煤炭工业出版社	2016	3	exact-work	A1D-objective	False		14
+exact-natural-03	帮我找老舍写的《骆驼祥子》	14127624_000006857824	骆驼祥子	老舍著	长春：吉林大学出版社	2010	3	exact-work	A1D-objective	False		15
+exact-natural-03	帮我找老舍写的《骆驼祥子》	14144516_000011759455	老舍专集  骆驼祥子  马裤先生	老舍著	北京：同心出版社	2013	1	collection-or-context	A1D-objective	False		9
+exact-natural-03	帮我找老舍写的《骆驼祥子》	14154409_000016493953	自传难写  老舍杂感集	老舍著	北京：中国文史出版社	2017	0	title-miss	A1D-objective	True	3	3
+exact-natural-03	帮我找老舍写的《骆驼祥子》	14251698_000016575121	老舍文集  骆驼祥子	老舍著	哈尔滨：黑龙江科学技术出版社	2017	1	collection-or-context	A1D-objective	False		10
+exact-natural-03	帮我找老舍写的《骆驼祥子》	14377281_000016793953	老舍作品菁华集  骆驼祥子	老舍著	北京：当代世界出版社	2017	1	collection-or-context	A1D-objective	False		11
+exact-natural-04	想找沈从文的《边城》	10162923_000000450462	边城圣手-沈从文	彭晓勇编著	北京：中国青年出版社	1994	0	author-miss	A1D-objective	False		10
+exact-natural-04	想找沈从文的《边城》	10896145_000001285877	我想再找一个  老年性婚姻访谈	艾如张，刘瑛编著	北京：新世界出版社	2002	0	title-miss	A1D-objective	True	7	7
+exact-natural-04	想找沈从文的《边城》	11436671_000005768191	解读沈从文经典  边城的田园牧歌  修订版	沈从文原著；旷新年主编	石家庄：花山文艺出版社	2005	1	collection-or-context	A1D-objective	False		12
+exact-natural-04	想找沈从文的《边城》	11447121_000002121165	好想找人来爱我  青春期的苦闷心事	苦苓著	北京：华艺出版社	1998	0	title-miss	A1D-objective	True	3	3
+exact-natural-04	想找沈从文的《边城》	11574608_000004680647	想成功就先替自己找一条捷径	杜？编著	台湾实业文化	2002	0	title-miss	A1D-objective	True	8	8
+exact-natural-04	想找沈从文的《边城》	11673515_000004786978	边城	沈从文著	北京：人民文学出版社	2000	3	exact-work	A1D-objective	False		7
+exact-natural-04	想找沈从文的《边城》	11733681_000004797913	边城	沈从文著	太原：北岳文艺出版社	2005	3	exact-work	A1D-objective	False		8
+exact-natural-04	想找沈从文的《边城》	11857276_000006261853	雪中找盐  释放潜在的财富创想	（日）多湖辉著；李彩云译	北京：科学出版社	2007	0	title-miss	A1D-objective	True	10	10
+exact-natural-04	想找沈从文的《边城》	11895022_161000119680	决定/你想找个好工作吗	（英）谢里尔·沃姆斯利著	北京：中国市场出版社	2007	0	title-miss	A1D-objective	True	4	4
+exact-natural-04	想找沈从文的《边城》	11901223_000006049726	边城  沈从文精选集  插图本	沈从文著	北京：北京燕山出版社	2006	2	expanded-work	A1D-objective	False		5
+exact-natural-04	想找沈从文的《边城》	11944056_000004915803	边城	沈从文原著	长沙：湖南美术出版社	2007	3	exact-work	A1D-objective	False		9
+exact-natural-04	想找沈从文的《边城》	12043136_000007411767	边城	中国现代文学馆编	北京：华夏出版社	2008	0	author-miss	A1D-objective	False		10
+exact-natural-04	想找沈从文的《边城》	12066967_000006579255	边城	沈从文著	北京：北京十月文艺出版社	2008	3	exact-work	A1D-objective	False		11
+exact-natural-04	想找沈从文的《边城》	12252989_000006049761	边城	沈从文著；毛鑫，梁秀花编	北京：中国对外翻译出版公司	2006	3	exact-work	A1D-objective	False		12
+exact-natural-04	想找沈从文的《边城》	12295748_000005606149	边城	沈从文著	延吉：延边人民出版社	2005	3	exact-work	A1D-objective	False		13
+exact-natural-04	想找沈从文的《边城》	12422052_000006750513	边城	沈从文著；金宏宇，曹春山汇校	武汉：长江文艺出版社	2009	3	exact-work	A1D-objective	False		14
+exact-natural-04	想找沈从文的《边城》	12455284_000006836505	边城	沈从文著	北京：中国青年出版社	2010	3	exact-work	A1D-objective	False		15
+exact-natural-04	想找沈从文的《边城》	12717539_000008031579	想在你领导的前面  在领导的思路里找机会	金刚心，文鑫著	北京：中国经济出版社	2011	0	title-miss	A1D-objective	True	9	9
+exact-natural-04	想找沈从文的《边城》	13007474_000006931214	边城  沈从文专集经典彩绘本	沈从文著	同心出版社北京日报报业集团	2010	2	expanded-work	A1D-objective	False		1
+exact-natural-04	想找沈从文的《边城》	13026396_000006843609	边城	沈从文著	长春：吉林大学出版社	2011	3	exact-work	A1D-objective	False		1
+exact-natural-04	想找沈从文的《边城》	13046658_000008293039	想找真命天子，先当靠谱女孩	（美）崔维斯·斯托克，（美）莉亚·弗曼著；张美贞译	桂林：漓江出版社	2012	0	title-miss	A1D-objective	True	1	1
+exact-natural-04	想找沈从文的《边城》	13256618_000008358252	边城	沈从文著	北京：人民文学出版社	2003	3	exact-work	A1D-objective	False		2
+exact-natural-04	想找沈从文的《边城》	13315409_000012414741	边城  沈从文小说菁华	沈从文编	长沙：湖南文艺出版社	2013	2	expanded-work	A1D-objective	False		2
+exact-natural-04	想找沈从文的《边城》	13387928_000008377626	边城魂  守护沈从文的那些日子	覃介吾等著	长沙：湖南人民出版社	2012	0	author-miss	A1D-objective	False		11
+exact-natural-04	想找沈从文的《边城》	13479715_000015026060	边城	沈从文著	南京：江苏人民出版社	2014	3	exact-work	A1D-objective	False		3
+exact-natural-04	想找沈从文的《边城》	13495033_000008316049	边城	沈从文编	武汉：长江文艺出版社	2012	3	exact-work	A1D-objective	False		4
+exact-natural-04	想找沈从文的《边城》	13568554_000015021058	边城	沈从文著；李晨绘	北京：中国青年出版社	2014	3	exact-work	A1D-objective	False		5
+exact-natural-04	想找沈从文的《边城》	13633625_000015212268	边城	李晨编绘	上海：上海人民美术出版社	2014	0	author-miss	A1D-objective	False		6
+exact-natural-04	想找沈从文的《边城》	13655957_000015234288	边城  沈从文小说全集  卷  9	沈从文著	武汉：长江文艺出版社	2014	2	expanded-work	A1D-objective	False		3
+exact-natural-04	想找沈从文的《边城》	13659480_000015239485	边城  沈从文小说经典	沈从文著	南昌：二十一世纪出版社	2014	2	expanded-work	A1D-objective	False		4
+exact-natural-04	想找沈从文的《边城》	13683657_000015101239	沈从文专集  边城	沈从文著	长春：吉林美术出版社	2014	1	collection-or-context	A1D-objective	False		13
+exact-natural-04	想找沈从文的《边城》	14000270_000030185475	中国现代文学丛书  沈从文小说  边城	王逸夫编选	南宁：广西民族出版社	1998	0	author-miss	A1D-objective	False		15
+exact-natural-04	想找沈从文的《边城》	14031797_000016116552	边城  沈从文小说菁华	沈从文著	杭州：浙江教育出版社	2016	2	expanded-work	A1D-objective	False		6
+exact-natural-04	想找沈从文的《边城》	14112641_000016255309	边城  沈从文作品精选集  价值典藏版	沈从文著	北京：商务印书馆	2016	2	expanded-work	A1D-objective	False		7
+exact-natural-04	想找沈从文的《边城》	14118768_000008029140	边城  沈从文小说精选	沈从文著	长春：时代文艺出版社	2011	2	expanded-work	A1D-objective	False		8
+exact-natural-04	想找沈从文的《边城》	14215486_000016600424	想找的人不在  右耳的厨房	右耳著	北京时代华文书局	2017	0	title-miss	A1D-objective	True	2	2
+exact-natural-04	想找沈从文的《边城》	14388231_000030356932	边城  沈从文著作精选集	沈从文著	北京联合出版公司	2016	2	expanded-work	A1D-objective	False		9
+exact-natural-04	想找沈从文的《边城》	14388497_000015380305	沈从文集  边城等  经典珍藏本	沈从文著	合肥：安徽文艺出版社	2015	1	collection-or-context	A1D-objective	False		14
+exact-natural-04	想找沈从文的《边城》	14427574_000017383499	朋友圈的人际高手  快速找到你想找的任何人	诸葛思远著	江苏凤凰文艺出版社	2018	0	title-miss	A1D-objective	True	6	6
+exact-natural-04	想找沈从文的《边城》	14526553_000030406541	讲个故事就睡觉  好想找妈妈	（法）克里斯蒂娜·贝热尔文；（法）埃尔韦·勒戈夫图；李华译	北京联合出版公司	2018	0	title-miss	A1D-objective	True	5	5
+exact-natural-05	找一本余华的《活着》	10023163_000000622014	活着	余华著	海口市：南海出版公司	1998	3	exact-work	A1D-objective	False		14
+exact-natural-05	找一本余华的《活着》	11204872_000003130702	活着	余华著	上海市：上海文艺出版社	2004	3	exact-work	A1D-objective	False		8
+exact-natural-05	找一本余华的《活着》	11416271_000000029855	先锋浪潮中的余华	邢建昌，鲁文忠著	北京：华夏出版社	2000	0	title-miss	A1D-objective	True	5	5
+exact-natural-05	找一本余华的《活着》	11673000_000006046678	给余华拔牙  盘点余华的“兄弟店”	杜士玮，许明芳主编	北京：同心出版社	2006	0	title-miss	A1D-objective	True	3	3
+exact-natural-05	找一本余华的《活着》	12007555_000006563514	活着	余华著	北京：作家出版社	2008	3	exact-work	A1D-objective	False		9
+exact-natural-05	找一本余华的《活着》	12066440_000006594883	20世纪人类全纪录  活着就是欢娱	（美）格伦农（Glennon，L）主编；余吉孝等译	北京：中国友谊出版公司	2008	0	author-miss	A1D-objective	False		19
+exact-natural-05	找一本余华的《活着》	12180778_000006678003	间奏  余华的音乐笔记	余华著	南京：江苏文艺出版社	2009	0	title-miss	A1D-objective	True	2	2
+exact-natural-05	找一本余华的《活着》	12552860_161000014943	尼罗河-活着离开你	余会军，关治著	兰州：甘肃文化出版社	2005	0	author-miss	A1D-objective	False		17
+exact-natural-05	找一本余华的《活着》	12594882_000002209605	活着	帅一朗主编	呼和浩特：远方出版社	2000	0	author-miss	A1D-objective	False		10
+exact-natural-05	找一本余华的《活着》	12610659_000000387335	活着	余华著	武汉：长江文艺出版社	1993	3	exact-work	A1D-objective	False		11
+exact-natural-05	找一本余华的《活着》	12692108_000006989174	活着	余华著	北京：作家出版社	2010	3	exact-work	A1D-objective	False		12
+exact-natural-05	找一本余华的《活着》	12713313_000007640894	余华文集·活着	余华著	海口：南海出版公司	2003	1	collection-or-context	A1D-objective	False		4
+exact-natural-05	找一本余华的《活着》	13055774_000008351043	余华作品  活着	余华编	北京：作家出版社	2012	1	collection-or-context	A1D-objective	False		2
+exact-natural-05	找一本余华的《活着》	13167913_000007893710	活着	哈洛·盖聂，莫妮卡·拉屏著；罗倩宜译	智富出版有限公司	2010	0	author-miss	A1D-objective	False		1
+exact-natural-05	找一本余华的《活着》	13262654_000016396271	活着	余华著	北京：作家出版社	2009	3	exact-work	A1D-objective	False		2
+exact-natural-05	找一本余华的《活着》	13307628_000010879523	余华作品  音乐影响了我的写作  第2版	余华著	北京：作家出版社	2012	0	title-miss	A1D-objective	True	10	10
+exact-natural-05	找一本余华的《活着》	13315437_000007945081	余华长篇小说  活着	余华著	北京：作家出版社	2013	1	collection-or-context	A1D-objective	False		3
+exact-natural-05	找一本余华的《活着》	13329980_000012416863	活着	李玉霄，王崴编著	北京：中信出版社	2013	0	author-miss	A1D-objective	False		3
+exact-natural-05	找一本余华的《活着》	13375991_000008186944	像雷锋一样活着  春蕾奶奶姜丽娟的慈善之路	余洪琴，张涛著	长春：吉林大学出版社	2011	0	author-miss	A1D-objective	False		15
+exact-natural-05	找一本余华的《活着》	13418468_000007985602	余华作品  在细雨中的呼喊	余华著	北京：作家出版社	2013	0	title-miss	A1D-objective	True	8	8
+exact-natural-05	找一本余华的《活着》	13418484_000013759079	活着	余华著	北京：作家出版社	2013	3	exact-work	A1D-objective	False		4
+exact-natural-05	找一本余华的《活着》	13418491_000007985613	余华作品  黄昏里的男孩	余华著	北京：作家出版社	2013	0	title-miss	A1D-objective	True	9	9
+exact-natural-05	找一本余华的《活着》	13443695_000012813328	间奏  余华的音乐笔记	余华著	南京：江苏文艺出版社	2013	0	title-miss	A1D-objective	True	1	1
+exact-natural-05	找一本余华的《活着》	13448602_000012828893	活着	余华著	北京：作家出版社	2012	3	exact-work	A1D-objective	False		5
+exact-natural-05	找一本余华的《活着》	13568328_000030019936	活着	余华著	北京：作家出版社	2014	3	exact-work	A1D-objective	False		6
+exact-natural-05	找一本余华的《活着》	13707361_000003130702	活着	余华著	上海：上海文艺出版社	2004	3	exact-work	A1D-objective	False		7
+exact-natural-05	找一本余华的《活着》	13710077_000015300588	如果恐龙还活着	余敏著；龙伟绘	北京：金盾出版社	2015	0	author-miss	A1D-objective	False		16
+exact-natural-05	找一本余华的《活着》	13998228_000016092675	历史与虚构  克洛德·西蒙和余华的小说写作	金桔芳著	天津：南开大学出版社	2016	0	title-miss	A1D-objective	True	4	4
+exact-natural-05	找一本余华的《活着》	14103041_000015669965	活着	一念著	北京：中国文联出版社	2015	0	author-miss	A1D-objective	False		13
+exact-natural-05	找一本余华的《活着》	14159996_000016382513	活着就很伟大	（加）凯文·布雷尔著；余莉译	北京联合出版公司	2016	0	author-miss	A1D-objective	False		18
+exact-natural-05	找一本余华的《活着》	14217655_000016657968	余华  活着	余华著	新经典发行有限公司	2017	1	collection-or-context	A1D-objective	False		1
+exact-natural-05	找一本余华的《活着》	14632428_000005032891	活着	王剑松著	北京：大众文艺出版社	2004	0	author-miss	A1D-objective	False		14
+exact-natural-05	找一本余华的《活着》	14681232_000018622164	活着	不着急,（中国）苏童,中信出版集团,2019,			0	author-miss	A1D-objective	False		18
+exact-natural-05	找一本余华的《活着》	14704623_000018585368	基于语料库的余华小说翻译风格学研究	周忠良	杭州：浙江大学出版社	2019	0	title-miss	A1D-objective	True	6	6
+exact-natural-05	找一本余华的《活着》	14723050_000018167509	活着	（日）谷川俊太郎，（日）冈本义朗著	北京：北京科学技术出版社	2019	0	author-miss	A1D-objective	False		15
+exact-natural-05	找一本余华的《活着》	96201522_000017612364	活着	黄红卫著	南昌：江西高校出版社	2017	0	author-miss	A1D-objective	False		17
+exact-natural-05	找一本余华的《活着》	96230227_000018531097	全球视野下的余华	高玉主编	上海：上海交通大学出版社	2019	0	title-miss	A1D-objective	True	7	7
+exact-natural-05	找一本余华的《活着》	line_4982719	活着	余华		1998	3	exact-work	A1D-objective	False		19
+exact-natural-05	找一本余华的《活着》	line_5013514	活着	余华著		2014	3	exact-work	A1D-objective	False		20
+exact-natural-06	有没有费孝通《乡土中国》	10157606_000000983833	乡土中国	费孝通著	北京：生活·读书·新知三联书店	1985	3	exact-work	A1D-objective	False		16
+exact-natural-06	有没有费孝通《乡土中国》	10516721_000003257928	乡土中国	费孝通著	上海观察社	1948	3	exact-work	A1D-objective	False		17
+exact-natural-06	有没有费孝通《乡土中国》	11439988_000005114848	乡土中国	费孝通著	北京：北京出版社	2005	3	exact-work	A1D-objective	True	9	4
+exact-natural-06	有没有费孝通《乡土中国》	11616539_000006031079	乡土中国	费孝通著	上海：上海人民出版社	2006	3	exact-work	A1D-objective	True	10	5
+exact-natural-06	有没有费孝通《乡土中国》	11875702_161000065498	乡土中国	费孝通著	南京：江苏文艺出版社	2007	3	exact-work	A1D-objective	False		6
+exact-natural-06	有没有费孝通《乡土中国》	11902673_000004940402	乡土中国	费孝通著	上海：上海人民出版社；世纪出版集团	2007	3	exact-work	A1D-objective	False		7
+exact-natural-06	有没有费孝通《乡土中国》	12082660_000006619762	乡土中国	费孝通著	北京：人民出版社	2008	3	exact-work	A1D-objective	False		8
+exact-natural-06	有没有费孝通《乡土中国》	12430155_000006724368	乡土中国	费孝通著	北京：北京出版社	2009	3	exact-work	A1D-objective	False		9
+exact-natural-06	有没有费孝通《乡土中国》	12738607_000008040699	乡土中国	费孝通著	北京：北京出版社	2011	3	exact-work	A1D-objective	False		10
+exact-natural-06	有没有费孝通《乡土中国》	13009358_000008296100	乡土中国	费孝通著	北京：人民出版社	2012	3	exact-work	A1D-objective	True	3	1
+exact-natural-06	有没有费孝通《乡土中国》	13044212_000008333554	乡土中国  汉英对照	费孝通著；（美）韩格理，王政译	北京：外语教学与研究出版社	2012	2	expanded-work	A1D-objective	True	4	4
+exact-natural-06	有没有费孝通《乡土中国》	13123657_000007873928	乡土中国		观察社	1948	0	author-miss	A1D-objective	False		18
+exact-natural-06	有没有费孝通《乡土中国》	13334653_000007952095	乡土中国	费孝通著；（美）韩格理，王政译	北京：外语教学与研究出版社	2013	3	exact-work	A1D-objective	True	5	2
+exact-natural-06	有没有费孝通《乡土中国》	13463904_000012826604	乡土中国  经典珍藏版	费孝通著	上海：上海人民出版社	2013	2	expanded-work	A1D-objective	True	6	6
+exact-natural-06	有没有费孝通《乡土中国》	13472983_000012823921	乡土中国  修订版	费孝通著；刘豪兴编	上海：上海人民出版社	2013	2	expanded-work	A1D-objective	True	7	7
+exact-natural-06	有没有费孝通《乡土中国》	13689862_000030056803	乡土中国	费孝通著	北京：生活·读书·新知三联书店	2013	3	exact-work	A1D-objective	True	8	3
+exact-natural-06	有没有费孝通《乡土中国》	14086417_000030219106	乡土中国  生育制度  乡土重建	费孝通著	北京：商务印书馆	2015	2	expanded-work	A1D-objective	False		16
+exact-natural-06	有没有费孝通《乡土中国》	14116356_000016250282	探寻一个好社会  费孝通说乡土中国	张冠生著	桂林：广西师范大学出版社	2016	0	author-miss	A1D-objective	True	2	2
+exact-natural-06	有没有费孝通《乡土中国》	14145617_000016255291	乡土中国	费孝通著	北京：北京出版社	2016	3	exact-work	A1D-objective	False		11
+exact-natural-06	有没有费孝通《乡土中国》	14260404_000016587211	走出乡土  对话费孝通《乡土中国》	陈心想著	北京：生活·读书·新知三联书店	2017	0	author-miss	A1D-objective	True	1	1
+exact-natural-06	有没有费孝通《乡土中国》	14404900_000016066102	乡土中国  乡土重建	费孝通著	北京：群言出版社	2016	2	expanded-work	A1D-objective	False		18
+exact-natural-06	有没有费孝通《乡土中国》	14410505_000017432538	乡土中国  乡土重建	费孝通著	北京联合出版公司	2018	2	expanded-work	A1D-objective	False		19
+exact-natural-06	有没有费孝通《乡土中国》	14514046_000017614111	乡土中国  生育制度  乡土重建	费孝通著	北京：商务印书馆	2017	2	expanded-work	A1D-objective	False		20
+exact-natural-06	有没有费孝通《乡土中国》	14641289_000015438799	乡土中国	费孝通著	北京：人民出版社	2015	3	exact-work	A1D-objective	False		12
+exact-natural-06	有没有费孝通《乡土中国》	14645368_000018055263	乡土中国	费孝通著	北京：中信出版社	2019	3	exact-work	A1D-objective	False		13
+exact-natural-06	有没有费孝通《乡土中国》	14652310_000018750782	乡土中国	费孝通著	北京：商务印书馆	2019	3	exact-work	A1D-objective	False		14
+exact-natural-06	有没有费孝通《乡土中国》	14665065_000017402480	乡土中国	费孝通	上海：华东师范大学出版社	2018	3	exact-work	A1D-objective	False		15
+exact-natural-06	有没有费孝通《乡土中国》	line_4714886	乡土中国	费孝通著	北京大学出版社		3	exact-work	A1D-objective	False		19
+exact-natural-06	有没有费孝通《乡土中国》	line_5027145	乡土中国	费孝通著		2013	3	exact-work	A1D-objective	False		20
+exact-natural-07	找梁思成《中国建筑史》	10013072_000000384335	第四次中国近代建筑史研究讨论会论文集	汪坦，张复合主编	北京：中国建筑工业出版社	1993	0	title-miss	A1D-objective	False		2
+exact-natural-07	找梁思成《中国建筑史》	10013073_000000615775	第五次中国近代建筑史研究讨论会论文集	汪坦，张复合主编	北京：中国建筑工业出版社	1998	0	title-miss	A1D-objective	False		3
+exact-natural-07	找梁思成《中国建筑史》	10200112_000003280595	中国建筑史	梁思成著	天津：百花文艺出版社	1998	3	exact-work	A1D-objective	False		18
+exact-natural-07	找梁思成《中国建筑史》	11037571_000005578523	中国建筑史	萧默著	北京：文津出版社	1994	0	author-miss	A1D-objective	False		6
+exact-natural-07	找梁思成《中国建筑史》	11083189_000000280576	第三次中国近代建筑史研究讨论会论文集	汪坦主编	北京：中国建筑工业出版社	1991	0	title-miss	A1D-objective	False		1
+exact-natural-07	找梁思成《中国建筑史》	11204359_000000948276	中国建筑史	《中国建筑史》编写组编著	北京：中国建筑工业出版社	1982	0	author-miss	A1D-objective	False		1
+exact-natural-07	找梁思成《中国建筑史》	11376663_000005335990	中国建筑史	梁思成著	天津：百花文艺出版社	2005	3	exact-work	A1D-objective	False		7
+exact-natural-07	找梁思成《中国建筑史》	11456553_000005129295	中国建筑史	乐嘉藻著	北京：团结出版社	2005	0	author-miss	A1D-objective	False		8
+exact-natural-07	找梁思成《中国建筑史》	11532719_000005739663	华夏营造  中国古代建筑史	王其钧著	北京：中国建筑工业出版社	2005	0	title-miss	A1D-objective	False		9
+exact-natural-07	找梁思成《中国建筑史》	11579049_000004699956	中国建筑史	李少林主编	呼和浩特：内蒙古人民出版社	2006	0	author-miss	A1D-objective	False		9
+exact-natural-07	找梁思成《中国建筑史》	11912804_000006327269	中国建筑史	毛心一，王璧文著	北京：东方出版社	2008	0	author-miss	A1D-objective	False		10
+exact-natural-07	找梁思成《中国建筑史》	12285190_000007474996	中国建筑史	梁思成著	天津：百花文艺出版社	2007	3	exact-work	A1D-objective	False		11
+exact-natural-07	找梁思成《中国建筑史》	12507524_000006779500	中国建筑史	潘谷西编著	北京：中国建筑工业出版社	2009	0	author-miss	A1D-objective	False		12
+exact-natural-07	找梁思成《中国建筑史》	12738598_000008053987	图像中国建筑史  关于中国建筑结构体系的发展及其形制的研究	梁思成著	北京：生活·读书·新知三联书店	2011	1	collection-or-context	A1D-objective	False		6
+exact-natural-07	找梁思成《中国建筑史》	12744536_000006918524	华夏营造  中国古代建筑史	王其钧编著	北京：中国建筑工业出版社	2010	0	title-miss	A1D-objective	False		10
+exact-natural-07	找梁思成《中国建筑史》	12879042_000008053988	中国建筑史	梁思成著	北京：生活·读书·新知三联书店	2011	3	exact-work	A1D-objective	False		13
+exact-natural-07	找梁思成《中国建筑史》	12931644_000008229726	中国建筑史	王其钧著	北京：中国电力出版社	2012	0	author-miss	A1D-objective	False		14
+exact-natural-07	找梁思成《中国建筑史》	13043509_000007824894	找市场	刘国民主编	北京：中国农业出版社	2012	0	title-miss	A1D-objective	True	5	5
+exact-natural-07	找梁思成《中国建筑史》	13059134_000008278437	中国高等院校建筑学科系列教材  中国建筑史	沈福煦编	上海：上海人民美术出版社	2012	0	author-miss	A1D-objective	False		11
+exact-natural-07	找梁思成《中国建筑史》	13067271_000008055148	找工作要懂点心理学  国内第一本求职心理学书	刘毅著	北京：中国时代经济出版社	2011	0	title-miss	A1D-objective	True	1	1
+exact-natural-07	找梁思成《中国建筑史》	13083550_000008352090	找方法比找借口更重要	高一飞编著	北京：中国华侨出版社	2012	0	title-miss	A1D-objective	True	6	6
+exact-natural-07	找梁思成《中国建筑史》	13083554_000008337753	找个有缺点的人结婚	周小鹏编	广州：广东经济出版社	2012	0	title-miss	A1D-objective	True	7	7
+exact-natural-07	找梁思成《中国建筑史》	13091497_000008370937	找方法不找借口	唐逸编著	北京：新华出版社	2012	0	title-miss	A1D-objective	True	8	8
+exact-natural-07	找梁思成《中国建筑史》	13105006_000008032583	找心眼儿的小猪	张之路著	成都：四川少年儿童出版社	2011	0	title-miss	A1D-objective	True	9	9
+exact-natural-07	找梁思成《中国建筑史》	13174518_000007894964	找好工作用对人	ROBERT F WILSON著；郭轩盈译	雅书堂文化事业有限公司	2001	0	title-miss	A1D-objective	True	10	10
+exact-natural-07	找梁思成《中国建筑史》	13208006_000001295362	中国建筑史	乐嘉藻著	贵阳：贵州人民出版社	2002	0	author-miss	A1D-objective	False		2
+exact-natural-07	找梁思成《中国建筑史》	13242784_000008323920	找对英语学习方法的第一本书	漏屋著	北京：光明日报出版社	2012	0	title-miss	A1D-objective	True	2	2
+exact-natural-07	找梁思成《中国建筑史》	13403452_000012447500	当代中国建筑史家十书  王贵祥中国古代建筑史论文集	王贵祥著	沈阳：辽宁美术出版社	2013	0	author-miss	A1D-objective	False		4
+exact-natural-07	找梁思成《中国建筑史》	13403454_000012447513	当代中国建筑史家十书  钟晓青中国古代建筑史论文集	钟晓青著	沈阳：辽宁美术出版社	2013	0	author-miss	A1D-objective	False		5
+exact-natural-07	找梁思成《中国建筑史》	13445108_000013734790	找对英语学习方法的第一本书  2	世界公民文化中心著	北京：光明日报出版社	2014	0	title-miss	A1D-objective	True	3	3
+exact-natural-07	找梁思成《中国建筑史》	13475909_000013757142	找工作，你不知道的那些事  大学生求职路线图	王光宏著	北京：中国经济出版社	2013	0	title-miss	A1D-objective	True	4	4
+exact-natural-07	找梁思成《中国建筑史》	13508183_000030003938	中国建筑史之研究	田中淡著；黄兰翔译	南天书局有限公司	2011	0	author-miss	A1D-objective	False		7
+exact-natural-07	找梁思成《中国建筑史》	13643603_000015093330	中国建筑史	乐嘉藻著	上海：上海三联书店	2014	0	author-miss	A1D-objective	False		3
+exact-natural-07	找梁思成《中国建筑史》	13707022_000015399851	中国建筑史	沈福煦编	上海：上海人民美术出版社	2015	0	author-miss	A1D-objective	False		4
+exact-natural-07	找梁思成《中国建筑史》	13772099_000015532747	中国建筑史	东南大学，潘谷西主编	北京：中国建筑工业出版社	2015	0	author-miss	A1D-objective	False		5
+exact-natural-07	找梁思成《中国建筑史》	13960147_000015846343	民国名家史学典藏文库  中国建筑史	乐嘉藻著	北京：中国文史出版社	2016	0	author-miss	A1D-objective	False		12
+exact-natural-07	找梁思成《中国建筑史》	13986875_000030177293	叶大松亚洲建筑史研究  中国建筑史  上	叶大松著	花木兰文化出版社	2015	0	author-miss	A1D-objective	False		13
+exact-natural-07	找梁思成《中国建筑史》	13986884_000030177284	叶大松亚洲建筑史研究  中国建筑史  下	叶大松著	花木兰文化出版社	2015	0	author-miss	A1D-objective	False		14
+exact-natural-07	找梁思成《中国建筑史》	14029409_000030199823	中国近代建筑史  第2卷  多元探索  民国早期各地的现代及中国建筑科学的发展	赖德霖，伍江，徐苏斌主编	北京：中国建筑工业出版社	2016	0	title-miss	A1D-objective	False		8
+exact-natural-07	找梁思成《中国建筑史》	14497785_000017338399	中国建筑史	乐嘉藻著	南昌：江西教育出版社	2018	0	author-miss	A1D-objective	False		15
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	10061516_000000761280	隋唐的均田制度	韩国磐著	上海：上海人民出版社	1957	0	title-miss	A1D-objective	False		19
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	10062599_000000849883	隋唐制度渊源略论稿	陈寅恪著	北京：中华书局	1963	3	exact-work	A1D-objective	False		2
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	10107504_000004044445	民国丛书  第一编  76  隋唐制度渊源略论稿	《民国丛书》编辑委员会编	上海：上海书店出版社	1989	0	author-miss	A1D-objective	False		17
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	10454020_000000129890	隋唐制度渊源略论稿  唐代政治史述论稿	陈寅恪著	北京：生活·读书·新知三联书店	2001	2	expanded-work	A1D-objective	False		7
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	10714000_000000949205	隋唐制度渊源畧论稿	陈寅恪著	上海：上海古籍出版社	1982	0	title-miss	A1D-objective	False		12
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	10792754_000004079343	隋唐制度渊源略论稿	陈寅恪著	北京：北京出版社	1943	3	exact-work	A1D-objective	False		5
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	11106547_000000643143	隋唐五代教育制度史资料	程舜英编著	北京：北京师范大学出版社	1998	0	title-miss	A1D-objective	False		16
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	11340409_000003157119	隋唐制度渊源略论稿  唐代政治史述论稿	陈寅恪著	北京：生活·读书·新知三联书店	2004	2	expanded-work	A1D-objective	False		4
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	11452612_000005738132	隋唐使职制度研究  农牧工商编	宁志新著	北京：中华书局	2005	0	title-miss	A1D-objective	False		17
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	11793703_000004865415	隋唐制度渊源略论稿	陈寅恪著	北京：生活·读书·新知三联书店	1954	3	exact-work	A1D-objective	False		4
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	12140194_000001334424	隋唐制度渊源略论稿  外二种	陈寅恪著	石家庄：河北教育出版社	2002	2	expanded-work	A1D-objective	False		5
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	12461450_000006842196	隋唐制度渊源略论稿	陈美延编	北京：生活·读书·新知三联书店	2009	0	author-miss	A1D-objective	False		1
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	12948497_000008248666	中华现代学术名著丛书  隋唐制度渊源略论稿  唐代政治史述论稿	陈寅恪著	北京：商务印书馆	2011	1	collection-or-context	A1D-objective	False		8
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	13007625_161000134445	陈寅恪中古史学探研：以《隋唐制度渊源略论稿》为例	宋德熹著	台湾：稻乡出版社	2004	0	author-miss	A1D-objective	False		3
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	13043509_000007824894	找市场	刘国民主编	北京：中国农业出版社	2012	0	title-miss	A1D-objective	True	1	1
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	13067271_000008055148	找工作要懂点心理学  国内第一本求职心理学书	刘毅著	北京：中国时代经济出版社	2011	0	title-miss	A1D-objective	True	2	2
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	13083550_000008352090	找方法比找借口更重要	高一飞编著	北京：中国华侨出版社	2012	0	title-miss	A1D-objective	True	3	3
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	13083554_000008337753	找个有缺点的人结婚	周小鹏编	广州：广东经济出版社	2012	0	title-miss	A1D-objective	True	4	4
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	13091497_000008370937	找方法不找借口	唐逸编著	北京：新华出版社	2012	0	title-miss	A1D-objective	True	5	5
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	13105006_000008032583	找心眼儿的小猪	张之路著	成都：四川少年儿童出版社	2011	0	title-miss	A1D-objective	True	6	6
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	13111560_000007814704	隋唐制度渊源略论稿、唐代政治史述论稿	陈寅恪著			2	expanded-work	A1D-objective	False		16
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	13151497_000007887891	隋唐制度渊源略论稿	陈寅恪著	商务印书馆	1946	3	exact-work	A1D-objective	False		3
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	13174518_000007894964	找好工作用对人	ROBERT F WILSON著；郭轩盈译	雅书堂文化事业有限公司	2001	0	title-miss	A1D-objective	True	7	7
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	13194969_000011689847	找对方法做对事  案例实用版	吴学刚编著	北京：中国铁道出版社	2013	0	title-miss	A1D-objective	True	8	8
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	13197708_000008176193	找对问题做对事	郭强编著	北京：中国致公出版社	2011	0	title-miss	A1D-objective	True	9	9
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	13217104_000008224382	找对人说对话做对事大全集  超值金版	乔拉德编著	上海：立信会计出版社	2012	0	title-miss	A1D-objective	True	10	10
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	13255826_000007923978	陈寅恪集  隋唐制度渊源略论稿  唐代政治史述论稿	陈寅恪著	北京：生活·读书·新知三联书店	2011	1	collection-or-context	A1D-objective	False		1
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	13277854_000007934005	民国丛书  第1编  76  历史地理类  中国古代社会研究  中国古代社会史  古代甄微  隋唐制度渊源略论稿  唐代政治史述论稿	郭沫若，侯外庐，陈寅恪著；蒙文通编	上海：上海书店	1989	1	collection-or-context	A1D-objective	False		10
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	13821549_000015581979	陈寅恪集  隋唐制度渊源略论稿、唐代政治史述论稿	陈寅恪著	北京：生活·读书·新知三联书店	2015	1	collection-or-context	A1D-objective	False		2
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	13875690_000015643837	中国科举制度通史  隋唐五代卷	金滢坤著；张希清，毛佩琦，李世愉主编	上海：上海人民出版社	2015	0	title-miss	A1D-objective	False		20
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	14124347_000016090797	魏晋隋唐政治制度史研究  以监察制与府兵制为中心	熊伟著	郑州：郑州大学出版社	2015	0	title-miss	A1D-objective	False		13
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	14266591_000016749050	中华现代学术名著丛书  隋唐制度渊源略论稿  唐代政治史述论稿	陈寅恪	北京：商务印书馆	2015	1	collection-or-context	A1D-objective	False		9
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	14316661_000030313452	魏晋隋唐职官制度专题研究	董劭伟著	沈阳：东北大学出版社	2016	0	title-miss	A1D-objective	False		14
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	14427630_000017401634	观念与制度  以考察北朝隋唐内侍制度为中心	徐成著	北京：社会科学文献出版社	2018	0	title-miss	A1D-objective	False		15
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	14549659_000030412388	隋唐门荫制度研究	孙俊著	大连：辽宁师范大学出版社	2015	0	title-miss	A1D-objective	False		18
+exact-natural-08	找陈寅恪《隋唐制度渊源略论稿》	line_5093931	隋唐制度渊源略论稿				0	author-miss	A1D-objective	False		6
+exact-natural-09	帮我找司马迁《史记》	10220777_000004036096	史记  维吾尔文  司马迁	二十四史中亚资料汇编	乌鲁木齐：新疆人民出版社	1987	0	author-miss	A1D-objective	False		5
+exact-natural-09	帮我找司马迁《史记》	11150629_000000192669	史记	杨钟贤校订	天津：天津古籍出版社	1998	0	author-miss	A1D-objective	False		15
+exact-natural-09	帮我找司马迁《史记》	11159641_000000668206	史记	韩兆琦著	沈阳：春风文艺出版社	1999	0	author-miss	A1D-objective	False		16
+exact-natural-09	帮我找司马迁《史记》	11190905_000004047318	史记	柏青主编；刘正平，刘起，何德张等译编	通辽：内蒙古少年儿童出版社	2002	0	author-miss	A1D-objective	False		17
+exact-natural-09	帮我找司马迁《史记》	11248430_000005223008	史记	（汉）司马迁著	西安：陕西旅游出版社	2003	3	exact-work	A1D-objective	False		18
+exact-natural-09	帮我找司马迁《史记》	11351128_000005691400	史记	司马迁著	世界书局	1994	3	exact-work	A1D-objective	False		19
+exact-natural-09	帮我找司马迁《史记》	11394784_000005095994	史记	（西汉）司马迁著；崔凡芝选注	太原：山西古籍出版社	2004	3	exact-work	A1D-objective	False		20
+exact-natural-09	帮我找司马迁《史记》	11685790_161000045598	司马迁与史记论集  第7辑	吕培成，徐卫民主编；陕西省司马迁研究会编	西安：陕西人民出版社	2006	1	collection-or-context	A1D-objective	True	10	10
+exact-natural-09	帮我找司马迁《史记》	11726871_000006096334	司马迁与史记学	张大可，田志勇著	西安：陕西人民教育出版社	2006	0	author-miss	A1D-objective	False		15
+exact-natural-09	帮我找司马迁《史记》	11814685_170100007445	司马迁与史记研究年鉴  2005	庞德谦主编	西安：陕西人民出版社	2006	0	author-miss	A1D-objective	False		16
+exact-natural-09	帮我找司马迁《史记》	12021144_000003130001	中共党史人物传编撰研究  兼谈司马迁《史记》中的人物传记	陈志凌著	北京：中央文献出版社	1997	0	author-miss	A1D-objective	True	1	1
+exact-natural-09	帮我找司马迁《史记》	12069217_000006627252	司马迁与史记论集  第8辑	吕培成，徐卫民主编	西安：陕西人民出版社	2008	0	author-miss	A1D-objective	False		17
+exact-natural-09	帮我找司马迁《史记》	12079572_000006638835	司马迁与《史记》研究年鉴  2006	庞德谦主编	西安：陕西人民出版社	2008	0	author-miss	A1D-objective	False		18
+exact-natural-09	帮我找司马迁《史记》	12141328_000005748935	司马迁与史记研究年鉴  2004	庞德谦主编	西安：陕西人民出版社	2005	0	author-miss	A1D-objective	False		19
+exact-natural-09	帮我找司马迁《史记》	12461926_000006716414	司马迁与《史记》研究年鉴  2007（总第4辑）	庞德谦主编	西安：陕西人民出版社	2008	0	author-miss	A1D-objective	False		20
+exact-natural-09	帮我找司马迁《史记》	13108073_000006985649	司马迁与《史记》	（西汉）司马迁著；叶香美导读	杭州：浙江文艺出版社	2010	1	collection-or-context	A1D-objective	True	3	3
+exact-natural-09	帮我找司马迁《史记》	13133088_000002094214	司马迁与《史记》研究论著专题索引	徐兴海主编	西安：陕西人民教育出版社	1995	0	author-miss	A1D-objective	True	4	4
+exact-natural-09	帮我找司马迁《史记》	13136786_000007877686	史记	（西汉）司马迁著；崔钟雷编译	杭州：浙江人民出版社	2013	3	exact-work	A1D-objective	False		1
+exact-natural-09	帮我找司马迁《史记》	13173285_000007894795	司马迁与《史记》研究年鉴  2010年卷	丁德科，梁建邦，党大恩主编	西安：陕西人民出版社；陕西出版集团	2011	0	author-miss	A1D-objective	True	5	5
+exact-natural-09	帮我找司马迁《史记》	13233368_161000043280	史记	司马迁原著；诸葛山人编译	延吉：延边人民出版社	2005	3	exact-work	A1D-objective	False		2
+exact-natural-09	帮我找司马迁《史记》	13272902_000006760729	史记	（西汉）司马迁著	哈尔滨：北方文艺出版社	2007	3	exact-work	A1D-objective	False		3
+exact-natural-09	帮我找司马迁《史记》	13345995_000012410791	史记	（汉）司马迁著；王晨编	北京：中国华侨出版社	2013	3	exact-work	A1D-objective	False		4
+exact-natural-09	帮我找司马迁《史记》	13425401_000012410229	司马迁与《史记》研究年鉴  2011年卷	丁德科，梁建邦，党大恩主编	北京：商务印书馆	2013	0	author-miss	A1D-objective	True	6	6
+exact-natural-09	帮我找司马迁《史记》	13492340_000011755736	史记	（西汉）司马迁著；孙广宇注译	北京：中国画报出版社	2013	3	exact-work	A1D-objective	False		5
+exact-natural-09	帮我找司马迁《史记》	13500175_000006883593	司马迁与《史记》研究年鉴  2008年卷  总第5辑	庞德谦主编	西安：陕西人民出版社	2009	0	author-miss	A1D-objective	True	7	7
+exact-natural-09	帮我找司马迁《史记》	13533455_000030008916	中国历代经典宝库16  史记  司马迁的微小说	李永炽著	北京：中国友谊出版公司	2013	0	author-miss	A1D-objective	False		1
+exact-natural-09	帮我找司马迁《史记》	13543306_000015075261	史记	司马迁著	北京：北京时代华文书局	2014	3	exact-work	A1D-objective	False		6
+exact-natural-09	帮我找司马迁《史记》	13548409_000030012839	史记	陈佩雄主编	长春：吉林音像出版社；长春：吉林文史出版社	2006	0	author-miss	A1D-objective	False		7
+exact-natural-09	帮我找司马迁《史记》	13565933_000030020645	史记	张强编著	南京：江苏少年儿童出版社	2014	0	author-miss	A1D-objective	False		8
+exact-natural-09	帮我找司马迁《史记》	13602175_000013762849	史记	（西汉）司马迁著；郑晨主编	北京：中国华侨出版社	2013	3	exact-work	A1D-objective	False		9
+exact-natural-09	帮我找司马迁《史记》	13615762_000015229582	史记	胡怀琛选注；卢福咸校订	武汉：崇文书局	2014	0	author-miss	A1D-objective	False		10
+exact-natural-09	帮我找司马迁《史记》	13811978_000015441393	史记	《微经典》编委会编著	南京：江苏美术出版社	2015	0	author-miss	A1D-objective	False		11
+exact-natural-09	帮我找司马迁《史记》	13812227_000005334039	史记	赵春香主编；（西汉）司马迁原著	北京：朝华出版社	2005	3	exact-work	A1D-objective	False		12
+exact-natural-09	帮我找司马迁《史记》	13836499_000015313447	史记	司马迁原著；刘琦译评	长春：吉林文史出版社	2014	3	exact-work	A1D-objective	False		13
+exact-natural-09	帮我找司马迁《史记》	13858269_000006935815	史记	（汉）司马迁原著；张新煜改写	北京：北京少年儿童出版社	2010	2	exact-work-derived-record	A1D-objective	False		14
+exact-natural-09	帮我找司马迁《史记》	13916776_000015489560	司马迁与《史记》研究年鉴  2012年卷	丁德科，梁建邦，党大恩主编	北京：商务印书馆	2015	0	author-miss	A1D-objective	True	8	8
+exact-natural-09	帮我找司马迁《史记》	13965856_000015771266	史记论丛专辑  司马迁思想研究	薛建芳，刘德奉，陈曦主编	北京：中国文史出版社	2015	0	author-miss	A1D-objective	False		3
+exact-natural-09	帮我找司马迁《史记》	13997809_000030181491	司马迁与《史记》研究年鉴  2009年卷  总第6辑	庞德谦主编	西安：陕西人民出版社	2010	0	author-miss	A1D-objective	True	9	9
+exact-natural-09	帮我找司马迁《史记》	14120667_000030231076	司马迁史记	李靖梵著	贵阳：贵州教育出版社	2017	0	author-miss	A1D-objective	True	2	2
+exact-natural-09	帮我找司马迁《史记》	96080524_000030186188	秉笔直书著述《史记》的司马迁	崔丽娜编著	长春：吉林人民出版社	2011	0	author-miss	A1D-objective	False		2
+exact-natural-10	找一本《汉语大词典》	11122126_000004631660	汉语大词典词目音序索引	梅维恒主编；汉语大词典编纂处编	上海：汉语大词典出版社	2003	0	secondary-work	A1D-objective	True	9	9
+exact-natural-10	找一本《汉语大词典》	11134235_000004601038	汉语大词典  最新版  共两册	《汉语大词典》编写委员会编	北京：商务印书馆国际有限公司	2003	3	dictionary-work	A1D-objective	True	7	7
+exact-natural-10	找一本《汉语大词典》	11601817_000006039630	汉语大词典论稿	周掌胜著	长春：吉林人民出版社	2006	0	secondary-work	A1D-objective	False		8
+exact-natural-10	找一本《汉语大词典》	12205711_000007451715	汉语大词典  第2卷  上	罗竹风主编	上海：上海辞书出版社	2008	2	dictionary-volume	A1D-objective	False		9
+exact-natural-10	找一本《汉语大词典》	12205712_000007451927	汉语大词典  第2卷  下	罗竹风主编	上海：上海辞书出版社	2008	2	dictionary-volume	A1D-objective	False		10
+exact-natural-10	找一本《汉语大词典》	12205713_000007451943	汉语大词典  第3卷  上	罗竹风主编	上海：上海辞书出版社	2008	2	dictionary-volume	A1D-objective	False		11
+exact-natural-10	找一本《汉语大词典》	12205714_000007451969	汉语大词典  第3卷  下	罗竹风主编	上海：上海辞书出版社	2008	2	dictionary-volume	A1D-objective	False		12
+exact-natural-10	找一本《汉语大词典》	12205715_000007451692	汉语大词典  第5卷  上	罗竹风主编	上海：上海辞书出版社	2008	2	dictionary-volume	A1D-objective	False		13
+exact-natural-10	找一本《汉语大词典》	12205716_000007451814	汉语大词典  第5卷  下	罗竹风主编	上海：上海辞书出版社	2008	2	dictionary-volume	A1D-objective	False		14
+exact-natural-10	找一本《汉语大词典》	12205717_000007451730	汉语大词典  第6卷  上	罗竹风主编	上海：上海辞书出版社	2008	2	dictionary-volume	A1D-objective	False		15
+exact-natural-10	找一本《汉语大词典》	12205718_000007451936	汉语大词典  第6卷  下	罗竹风主编	上海：上海辞书出版社	2008	2	dictionary-volume	A1D-objective	False		16
+exact-natural-10	找一本《汉语大词典》	12205719_000007451901	汉语大词典  第1卷  上	罗竹风主编	上海：上海辞书出版社	2008	2	dictionary-volume	A1D-objective	False		17
+exact-natural-10	找一本《汉语大词典》	12205720_000007452058	汉语大词典  第1卷  下	罗竹风主编	上海：上海辞书出版社	2008	2	dictionary-volume	A1D-objective	False		18
+exact-natural-10	找一本《汉语大词典》	12205721_000007451859	汉语大词典  第9卷  上	罗竹风主编	上海：上海辞书出版社	2008	2	dictionary-volume	A1D-objective	False		19
+exact-natural-10	找一本《汉语大词典》	12205722_000007451914	汉语大词典  第9卷  下	罗竹风主编	上海：上海辞书出版社	2008	2	dictionary-volume	A1D-objective	False		20
+exact-natural-10	找一本《汉语大词典》	12355538_000006368363	汉语大词典  附录·索引	罗竹风主编	上海：汉语大词典出版社	2001	0	secondary-work	A1D-objective	True	10	10
+exact-natural-10	找一本《汉语大词典》	13165269_000008286425	《汉语大词典》疏误与修订研究	曲文军编	济南：山东人民出版社	2012	0	secondary-work	A1D-objective	True	1	1
+exact-natural-10	找一本《汉语大词典》	13242746_000008286327	《汉语大词典》书证溯源	相宇剑著	合肥：黄山书社	2012	0	secondary-work	A1D-objective	True	2	2
+exact-natural-10	找一本《汉语大词典》	13347140_000012439987	汉语大词典札记	马固钢著	北京：高等教育出版社	2012	0	secondary-work	A1D-objective	False		3
+exact-natural-10	找一本《汉语大词典》	13366419_000007964128	《汉语大词典》借代词语研究	刘艳平著	青岛：中国海洋大学出版社	2013	0	secondary-work	A1D-objective	True	3	3
+exact-natural-10	找一本《汉语大词典》	13685975_000000595442	多功能汉语大词典索引	汉语大词典编纂处，日本·禅文化研究所编纂	上海：汉语大词典出版社	1997	0	secondary-work	A1D-objective	True	8	8
+exact-natural-10	找一本《汉语大词典》	13743820_000015406086	《汉语大词典》书证探源	相宇剑著	北京：中国社会科学出版社	2015	0	secondary-work	A1D-objective	True	4	4
+exact-natural-10	找一本《汉语大词典》	13772969_000015471837	《汉语大词典》词目补订	曲文军著	济南：山东人民出版社	2015	0	secondary-work	A1D-objective	True	5	5
+exact-natural-10	找一本《汉语大词典》	13891709_000015674683	《汉语大词典》研究	李申，王本灵著	北京：商务印书馆	2015	0	secondary-work	A1D-objective	True	6	6
