@@ -26,6 +26,7 @@ data/*.db
 *.tsv
 # Canonical S31 benchmark qrels is version-controlled source.
 !benchmarks/s31/v1/qrels.tsv
+!benchmarks/s31/v1.1/qrels.tsv
 *.db
 *.txt
 !data/sample-books.txt
