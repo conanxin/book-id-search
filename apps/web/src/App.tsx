@@ -27,6 +27,7 @@ import WereadBadge from "./WereadBadge";
 import { fetchWereadStatusesForBooks, fetchWereadStatus, getWereadToken, isWereadEnabled, type WereadStatus } from "./wereadPrivate";
 import WereadCenter from "./weread/WereadCenter";
 import SiteFooter from "./components/SiteFooter";
+import S32Principles from "./components/S32Principles";
 
 // ---------------------------------------------------------------------------
 // Storage: recent search history (last 5 unique queries)
@@ -1080,6 +1081,8 @@ function SearchPage() {
             </button>
           </nav>
         ) : null}
+
+        <S32Principles />
 
         <div className="status-footer" aria-live="polite">
           {stats ? (

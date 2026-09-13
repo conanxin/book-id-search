@@ -8108,3 +8108,159 @@ mark.hl {
     width: 100%;
   }
 }
+
+
+/* --------------------------------------------------------------------------
+ * S32 — public architecture principles
+ * Static public project documentation; no private reading data is rendered.
+ * -------------------------------------------------------------------------- */
+
+.s32-principles {
+  margin-top: 28px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(127, 127, 127, 0.22);
+}
+
+.s32-principles__details {
+  overflow: hidden;
+  border: 1px solid rgba(127, 127, 127, 0.22);
+  border-radius: 14px;
+  background: rgba(127, 127, 127, 0.035);
+}
+
+.s32-principles__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 15px 16px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.s32-principles__summary::-webkit-details-marker {
+  display: none;
+}
+
+.s32-principles__summary::after {
+  flex: 0 0 auto;
+  content: "＋";
+  font-size: 18px;
+  line-height: 1;
+  opacity: 0.62;
+}
+
+.s32-principles__details[open] > .s32-principles__summary::after {
+  content: "－";
+}
+
+.s32-principles__summary-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.s32-principles__summary-copy strong {
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.s32-principles__summary-copy > span {
+  font-size: 12px;
+  line-height: 1.5;
+  opacity: 0.62;
+}
+
+.s32-principles__body {
+  padding: 0 16px 18px;
+}
+
+.s32-principles__status {
+  margin: 0 0 10px;
+  padding: 9px 11px;
+  border-radius: 9px;
+  background: rgba(127, 127, 127, 0.09);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.s32-principles__intro {
+  max-width: 880px;
+  margin: 0 0 18px;
+  font-size: 13px;
+  line-height: 1.75;
+  opacity: 0.82;
+}
+
+.s32-principles__list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.s32-principles__item {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(127, 127, 127, 0.16);
+  border-radius: 10px;
+  background: rgba(127, 127, 127, 0.025);
+}
+
+.s32-principles__item-head {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.s32-principles__number {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  opacity: 0.5;
+}
+
+.s32-principles__plain {
+  margin: 7px 0 9px;
+  font-size: 12px;
+  line-height: 1.65;
+  opacity: 0.76;
+}
+
+.s32-principles__technical {
+  display: inline-block;
+  max-width: 100%;
+  padding: 4px 7px;
+  overflow-wrap: anywhere;
+  border-radius: 6px;
+  background: rgba(127, 127, 127, 0.10);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.s32-principles__footer {
+  margin: 16px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  opacity: 0.62;
+}
+
+@media (max-width: 720px) {
+  .s32-principles {
+    margin-top: 22px;
+  }
+
+  .s32-principles__summary {
+    align-items: flex-start;
+  }
+
+  .s32-principles__list {
+    grid-template-columns: 1fr;
+  }
+}
