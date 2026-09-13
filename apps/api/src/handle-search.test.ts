@@ -4,6 +4,19 @@ import { handleSearch } from "./index.js";
 import { normalizeQuery, fullWidthToAsciiDigits } from "./search/normalize.js";
 import { classifyHit, isExactMatchType } from "./search/match.js";
 import { rerank } from "./search/rerank.js";
+import { cleanNaturalLanguageQuery } from "./search/query-cleanup.js";
+import { detectIntentProfile } from "./search/intent-profile.js";
+
+// index.ts calls app.listen at import time. Use real Express apps, but no sockets.
+vi.mock("express", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("express")>();
+  const createApp = Object.assign(() => {
+    const app = actual.default();
+    app.listen = vi.fn() as typeof app.listen;
+    return app;
+  }, actual.default);
+  return { ...actual, default: createApp };
+});
 
 // ---------------------------------------------------------------------------
 // Test fixtures and helpers
@@ -640,5 +653,170 @@ describe("handleSearch — S24 cleanup + intent + rerank", () => {
     // Cleanup keeps "研究" since it's not in our operation list.
     expect(qi.cleaned).toContain("研究");
     expect(qi.intentType).toBe("academic_research");
+  });
+});
+
+// S31-B2: real handler/parser/cleanup/ranking, with injected search backends.
+describe("handleSearch — S31-B2 query interpretation", () => {
+  function backend(hits: any[] = []) {
+    return { search: vi.fn(async (_q: string, _opts: any) => ({
+      estimatedTotalHits: hits.length, hits,
+    })) };
+  }
+
+  async function lookup(q: string, pagination: Record<string, string> = {}, hits: any[] = []) {
+    const meili = backend(hits);
+    const exact = vi.fn(async () => [] as any[]);
+    const res = mockRes();
+    const req = { query: { q, ...pagination } } as unknown as Request;
+    await handleSearch(req, res, meili, exact, isExactLikeImpl);
+    return { meili, exact, res, body: (res as any).body };
+  }
+
+  it("S31_B2_known_item_reaches_backend_without_second_cleanup", async () => {
+    const query = "帮我找钱钟书的《围城》";
+    const book = { id: "s31-b2-work", title: "围城", author: "钱钟书", parseStatus: "ok" };
+    const { meili, exact, res, body } = await lookup(query, {}, [book]);
+    expect(meili.search).toHaveBeenCalledExactlyOnceWith("围城 钱钟书", { limit: 100, offset: 0 });
+    expect(exact).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(200);
+    expect(body.query).toBe(query);
+    expect(body.queryInfo).toMatchObject({
+      original: query, normalized: query, cleaned: "围城 钱钟书",
+      cleanupApplied: false, removedPhrases: [], cleanupConfidence: "none",
+      interpretation: {
+        status: "parsed", task: "known_item_lookup", originalQuery: query,
+        workTitle: "围城", author: "钱钟书", searchQuery: "围城 钱钟书",
+      },
+    });
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0].id).toBe(book.id);
+    expect(Number.isFinite(body.items[0].ranking.score)).toBe(true);
+    expect(Array.isArray(body.items[0].ranking.evidence)).toBe(true);
+  });
+
+  it.each([
+    ["找鲁迅的《呐喊》", "呐喊", "鲁迅"],
+    ["帮我找老舍写的《骆驼祥子》", "骆驼祥子", "老舍"],
+    ["想找沈从文的《边城》", "边城", "沈从文"],
+    ["请帮我找梁思成所著的《中国建筑史》", "中国建筑史", "梁思成"],
+    ["找一本《汉语大词典》", "汉语大词典", null],
+    ["《围城》", "围城", null],
+    ["帮我找赵青禾写的《未入书库的纸船》", "未入书库的纸船", "赵青禾"],
+    ["找余华写的《围城》", "围城", "余华"],
+  ] as Array<[string, string, string | null]>)("uses structured query for %s", async (query, title, author) => {
+    const { meili, body } = await lookup(query);
+    const searchQuery = author === null ? title : `${title} ${author}`;
+    expect(meili.search).toHaveBeenCalledExactlyOnceWith(searchQuery, { limit: 100, offset: 0 });
+    expect(body.queryInfo.interpretation).toMatchObject({ workTitle: title, author, searchQuery });
+    expect(body.queryInfo.cleaned).toBe(searchQuery);
+  });
+
+  it("preserves raw quoted title text, including spaces and full-width digits", async () => {
+    const title = "  关于\u3000资料和推荐的书 １９８４  ";
+    const query = `  请帮我找一本《${title}》？  `;
+    const { meili, body } = await lookup(query);
+    expect(meili.search).toHaveBeenCalledExactlyOnceWith(title, { limit: 100, offset: 0 });
+    expect(body.query).toBe(query);
+    expect(body.queryInfo.normalized).toBe(normalizeQuery(query).normalized);
+    expect(body.queryInfo.cleaned).toBe(title);
+    expect(body.queryInfo.interpretation.workTitle).toBe(title);
+    expect(body.queryInfo.cleanupApplied).toBe(false);
+  });
+
+  it.each([
+    "北京旅游", "查一下北京旅游的书", "围城 钱钟书",
+    "找《史记》不要学生版", "找《围城》1997年漓江出版社版",
+    "找《围城》和《边城》", "找梁思成《中国建筑史》",
+    "小时候看过一本蓝色封面的苏联航天书", "找关于鲁迅的《呐喊》",
+    "找列夫·托尔斯泰写的《战争与和平》",
+  ])("keeps the legacy path for %s", async (query) => {
+    const n = normalizeQuery(query);
+    const c = cleanNaturalLanguageQuery(n.normalized, n.detectedType);
+    const expected = c.cleaned.trim() || n.normalized;
+    const intent = detectIntentProfile(expected);
+    const { meili, body } = await lookup(query);
+    expect(meili.search).toHaveBeenCalledExactlyOnceWith(expected, { limit: 100, offset: 0 });
+    expect(body.queryInfo).toEqual({
+      original: n.original, normalized: n.normalized, cleaned: c.cleaned,
+      detectedType: n.detectedType, cleanupApplied: c.changed,
+      removedPhrases: c.removedPhrases, cleanupConfidence: c.cleanupConfidence,
+      intentType: intent.type, intentLabel: intent.label,
+    });
+  });
+
+  it.each([
+    "978-7-5384-5525-0", "ISBN 是 978-7-5384-5525-0 的书",
+    "SSID: 13000000", "DXID: 000008232537", "000008232537",
+    "ISBN ０８０４４２９５７X", "ISBN: 9787538455250 《围城》",
+  ])("prioritizes the exact identifier route for %s", async (query) => {
+    const n = normalizeQuery(query);
+    expect(["isbn", "ssid", "dxid"]).toContain(n.detectedType);
+    const meili = backend();
+    const exact = vi.fn(async () => [{
+      id: "s31-b2-id", title: "标识符目标", parseStatus: "ok", [n.detectedType]: n.normalized,
+    }]);
+    const res = mockRes();
+    await handleSearch(mockReq(query), res, meili, exact, isExactLikeImpl);
+    const body = (res as any).body;
+    expect(exact).toHaveBeenCalledExactlyOnceWith(n.normalized, 20);
+    expect(meili.search).not.toHaveBeenCalled();
+    expect(body.query).toBe(query);
+    expect(body.queryInfo.normalized).toBe(n.normalized);
+    expect(body.queryInfo.cleaned).toBe(n.normalized);
+    expect(body.queryInfo.cleanupApplied).toBe(false);
+    expect(body.queryInfo).not.toHaveProperty("interpretation");
+    expect(body.items[0].match.type).toBe(`exact_${n.detectedType}`);
+  });
+
+  it("keeps identifier miss fallback on the normalized identifier", async () => {
+    const { exact, meili, body } = await lookup("DXID: 000008232537");
+    expect(exact).toHaveBeenCalledExactlyOnceWith("000008232537", 20);
+    expect(meili.search).toHaveBeenCalledExactlyOnceWith("000008232537", { limit: 100, offset: 0 });
+    expect(body.queryInfo).not.toHaveProperty("interpretation");
+  });
+
+  it.each(["", "   "])("keeps the empty-query response for %s", async (query) => {
+    const { meili, exact, body } = await lookup(query);
+    expect(meili.search).not.toHaveBeenCalled();
+    expect(exact).not.toHaveBeenCalled();
+    expect(body.items).toEqual([]);
+    expect(body.total).toBe(0);
+    expect(body.queryInfo).not.toHaveProperty("interpretation");
+  });
+
+  it("retains pagination and over-fetch size on parsed queries", async () => {
+    const hits = Array.from({ length: 25 }, (_, i) => ({
+      id: `s31-b2-page-${i}`, title: "围城", author: "钱钟书", parseStatus: "ok",
+    }));
+    const { meili, body } = await lookup("找钱钟书的《围城》", { page: "2", limit: "5" }, hits);
+    expect(meili.search).toHaveBeenCalledExactlyOnceWith("围城 钱钟书", { limit: 25, offset: 5 });
+    expect(body.page).toBe(2);
+    expect(body.limit).toBe(5);
+    expect(body.items).toHaveLength(5);
+  });
+
+  it("returns empty parsed results without an extra raw-query search", async () => {
+    const { meili, body } = await lookup("找赵青禾的《未入书库的纸船》");
+    expect(meili.search).toHaveBeenCalledTimes(1);
+    expect(body.items).toEqual([]);
+    expect(body.total).toBe(0);
+    expect(body.queryInfo.interpretation.status).toBe("parsed");
+  });
+
+  it("keeps the existing friendly error response on parsed queries", async () => {
+    const meili = { search: vi.fn(async () => { throw new Error("synthetic search failure"); }) };
+    const exact = vi.fn(async () => []);
+    const res = mockRes();
+    await handleSearch(mockReq("找钱钟书的《围城》"), res, meili, exact, isExactLikeImpl);
+    expect(res.statusCode).toBe(500);
+    expect((res as any).body.error.message).toContain("搜索失败");
+    expect(meili.search).toHaveBeenCalledTimes(1);
+    expect(exact).not.toHaveBeenCalled();
+  });
+
+  it("does not leak interpretation metadata between requests", async () => {
+    expect((await lookup("《围城》")).body.queryInfo.interpretation.status).toBe("parsed");
+    expect((await lookup("北京旅游")).body.queryInfo).not.toHaveProperty("interpretation");
   });
 });

@@ -5,6 +5,7 @@ import { MeiliSearch } from "meilisearch";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { interpretBookQuery, type BookQueryInterpretation } from "./search/query-interpretation.js";
 import {
   AiDisabledError,
   isAiEnabled,
@@ -351,6 +352,8 @@ interface ExtendedQueryInfo {
   cleanupConfidence: CleanedQuery["cleanupConfidence"];
   intentType: IntentProfile["type"];
   intentLabel: string;
+  /** Present only when an explicit title query was structurally parsed. */
+  interpretation?: BookQueryInterpretation;
 }
 
 function buildQueryInfo(
@@ -518,6 +521,7 @@ export async function handleSearch(
   let cleanedQuery: CleanedQuery;
   let intent: IntentProfile;
   let searchQuery: string;
+  let interpretation: BookQueryInterpretation | undefined;
 
   if (isIdentifierType) {
     // Identifier: no cleanup, no intent.
@@ -537,15 +541,31 @@ export async function handleSearch(
     };
     searchQuery = normalized;
   } else {
-    // Natural language: cleanup + intent detection.
-    cleanedQuery = cleanNaturalLanguageQuery(normalized, detectedType);
-    // If cleanup produced an empty string (all removed), fall back to
-    // normalized.
-    searchQuery = cleanedQuery.cleaned.trim() || normalized;
+    // S31-B2: parse raw text so normalization cannot alter a quoted title.
+    // Identifiers have already taken the branch above.
+    const parsed = interpretBookQuery(rawQuery);
+    if (parsed.status === "parsed") {
+      interpretation = parsed;
+      searchQuery = parsed.searchQuery;
+      // No generic cleanup after parsing: it can truncate names such as 钱钟书.
+      // Keep cleanup metadata about cleanup, and expose parsing separately.
+      cleanedQuery = {
+        original: searchQuery,
+        cleaned: searchQuery,
+        removedPhrases: [],
+        changed: false,
+        cleanupConfidence: "none",
+      };
+    } else {
+      // Unsupported inputs retain the existing cleanup and search behavior.
+      cleanedQuery = cleanNaturalLanguageQuery(normalized, detectedType);
+      searchQuery = cleanedQuery.cleaned.trim() || normalized;
+    }
     intent = detectIntentProfile(searchQuery);
   }
 
   const queryInfo = buildQueryInfo(original, normalized, cleanedQuery, intent, detectedType);
+  if (interpretation) queryInfo.interpretation = interpretation;
 
   try {
     if (!normalized.trim()) {
