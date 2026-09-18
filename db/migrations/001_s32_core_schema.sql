@@ -150,9 +150,8 @@ CREATE TABLE core.note_revision_parents (
     PRIMARY KEY (note_id, child_revision_id, parent_revision_id),
     CONSTRAINT ck_nrp_order_positive CHECK (parent_order > 0),
     CONSTRAINT ck_nrp_no_self CHECK (child_revision_id <> parent_revision_id),
-    CONSTRAINT fk_nrp_note FOREIGN KEY (note_id) REFERENCES core.notes(id) ON DELETE RESTRICT,
-    CONSTRAINT fk_nrp_child FOREIGN KEY (child_revision_id) REFERENCES core.note_revisions(id) ON DELETE RESTRICT,
-    CONSTRAINT fk_nrp_parent FOREIGN KEY (parent_revision_id) REFERENCES core.note_revisions(id) ON DELETE RESTRICT
+    CONSTRAINT fk_nrp_child_same_note FOREIGN KEY (note_id, child_revision_id) REFERENCES core.note_revisions(note_id, id) ON DELETE RESTRICT,
+    CONSTRAINT fk_nrp_parent_same_note FOREIGN KEY (note_id, parent_revision_id) REFERENCES core.note_revisions(note_id, id) ON DELETE RESTRICT
 );
 
 -- ===== B4 (R3 frozen) =====

@@ -509,3 +509,14 @@ Caddy 是公网唯一入口。3001/5173/7700 全部绑定 `127.0.0.1`。
 - 不重新调用 annual-review API、不调用 AI / related-books、不写 `localStorage` / `sessionStorage` / `IndexedDB` / 服务器。
 - 不输出真实笔记正文 / 私有 ID / AI 摘要 / 心理推断词汇。
 - 详见 [docs/WEREAD_READING_EVOLUTION_TIMELINE_MARKDOWN.md](docs/WEREAD_READING_EVOLUTION_TIMELINE_MARKDOWN.md)。
+
+
+## S32 canonical research layer (M0)
+
+- Current live runtime: Express + React/Vite + Meilisearch (5,115,734 docs)
+- S32 M0: PostgreSQL schema/migration validated in disposable PG16 on PR #4 (`feat/s32-m0-schema`)
+  - 22 core tables / 4 ops tables / 0 concrete derived tables (`derived` schema reserved)
+  - NOT deployed to Production
+  - NOT connected to API
+  - NOT replacing Meilisearch (Meilisearch remains the live discovery layer)
+  - Runtime PG16 integration validation remains merge gate (pending separate `S32M0_PG16_IMAGE_AND_RUNTIME_GATE_R1` task)

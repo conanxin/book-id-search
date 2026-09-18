@@ -3,7 +3,53 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 const ROOT = resolve(__dirname, "..");
 const MIG = resolve(ROOT, "db/migrations/001_s32_core_schema.sql");
-describe("S32-M0 schema static contract", () => {
+const ASSERTIONS = resolve(ROOT, "db/tests/001_s32_schema_assertions.sql");
+const NEG = resolve(ROOT, "db/tests/002_s32_negative_invariants.sql");
+const HARNESS = resolve(ROOT, "scripts/s32-schema-check.ts");
+
+describe("S32-M0 schema static contract (frozen artifact chain D1+D2+P29-C+R2+R3)", () => {
+  // Phase 1 additions: verifier defect contract
+  it("note_revision_parents uses composite same-note FK (note_id, child_revision_id)→(note_id,id)", () => {
+    const s = readFileSync(MIG, "utf8");
+    expect(s).toMatch(/FOREIGN\s+KEY\s*\(\s*note_id\s*,\s*child_revision_id\s*\)\s*REFERENCES\s+core\.note_revisions\s*\(\s*note_id\s*,\s*id\s*\)/);
+  });
+  it("note_revision_parents uses composite same-note FK (note_id, parent_revision_id)→(note_id,id)", () => {
+    const s = readFileSync(MIG, "utf8");
+    expect(s).toMatch(/FOREIGN\s+KEY\s*\(\s*note_id\s*,\s*parent_revision_id\s*\)\s*REFERENCES\s+core\.note_revisions\s*\(\s*note_id\s*,\s*id\s*\)/);
+  });
+  it("schema assertions SQL uses fail-closed mechanism (RAISE EXCEPTION or deterministic failure)", () => {
+    expect(existsSync(ASSERTIONS)).toBe(true);
+    const s = readFileSync(ASSERTIONS, "utf8");
+    expect(s).toMatch(/RAISE\s+EXCEPTION/);
+    expect(s.toLowerCase()).toMatch(/assert|raise|exception/);
+  });
+  it("negative invariants SQL has explicit missing-rejection failure (EXPECTED_REJECTION_MISSING)", () => {
+    expect(existsSync(NEG)).toBe(true);
+    const s = readFileSync(NEG, "utf8");
+    expect(s).toMatch(/EXPECTED_REJECTION_MISSING/);
+  });
+  it("integration harness uses psql ON_ERROR_STOP=1", () => {
+    expect(existsSync(HARNESS)).toBe(true);
+    const s = readFileSync(HARNESS, "utf8");
+    expect(s).toMatch(/ON_ERROR_STOP\s*=\s*1/);
+  });
+  it("integration harness does NOT use docker(...).catch() (docker() is synchronous)", () => {
+    const s = readFileSync(HARNESS, "utf8");
+    expect(s).not.toMatch(/docker\([^)]*\)\.catch\(/);
+  });
+  it("integration harness does NOT use process.exit(2) inside test helpers (bypasses finally cleanup)", () => {
+    const s = readFileSync(HARNESS, "utf8");
+    expect(s).not.toMatch(/process\.exit\s*\(\s*2\s*\)/);
+  });
+  it("integration harness has readiness gate (after pg_isready loop, must throw if not ready)", () => {
+    const s = readFileSync(HARNESS, "utf8");
+    expect(s).toMatch(/PG_READY/);
+  });
+  it("integration harness uses deterministic UUID literals (no gen_random_uuid() in negative invariants)", () => {
+    const s = readFileSync(NEG, "utf8");
+    expect(s).not.toMatch(/gen_random_uuid\s*\(\s*\)/);
+  });
+  // Original 14 tests
   it("migration file exists", () => { expect(existsSync(MIG)).toBe(true); });
   it("declares core/ops/derived schemas", () => {
     const s = readFileSync(MIG, "utf8");
@@ -56,7 +102,7 @@ describe("S32-M0 schema static contract", () => {
   });
   it("contains D2 frozen indexes (9)", () => {
     const s = readFileSync(MIG, "utf8");
-    for (const ix of ["ix_editions_isbn","ix_source_assets_sha256","uq_external_identities_active_binding","ix_claim_relations_target_claim_id","ix_assessments_claim_time","ix_research_issue_claims_claim_id","ix_issue_resolutions_issue_time","ix_research_runs_issue_time","ix_evidence_manifests_sha256","ix_outbox_unpublished_dequeue","uq_projection_one_active"])
+    for (const ix of ["ix_editions_isbn","ix_source_assets_sha256","uq_external_identities_active_binding","ix_claim_relations_target_claim_id","ix_assessments_claim_time","ix_research_issue_claims_claim_id","ix_issue_resolutions_issue_time","ix_research_runs_issue_time","ix_evidence_manifests_sha256","ix_outbox_unpublished_dequeue","uq_projection_one_active","ix_integrity_recent_by_check","ix_integrity_recent_by_status"])
       expect(s).toMatch(new RegExp(`(INDEX|CREATE\\s+UNIQUE\\s+INDEX)\\s+${ix}\\b`, "i"));
   });
   it("contains 5 frozen trigger contracts", () => {
