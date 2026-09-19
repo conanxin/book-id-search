@@ -1,0 +1,48 @@
+name: PREF-EXP-1D3 Blind Semantic Review Package
+
+on:
+  push:
+    branches:
+      - research/pref-exp-1d3-blind-semantic-review
+  workflow_dispatch:
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate blind review package
+        env:
+          PREF_SMOKE_BASE_URL: https://books.conanxin.com
+        run: pnpm exec tsx scripts/preference/generate-blind-semantic-review.ts
+
+      - name: Upload blind review sheet
+        uses: actions/upload-artifact@v4
+        with:
+          name: pref-exp-1d3-blind-review
+          path: |
+            reports/preference-sovereignty/pref-exp-1d3-blind-review.json
+            reports/preference-sovereignty/pref-exp-1d3-blind-review.md
+
+      - name: Upload answer key separately
+        uses: actions/upload-artifact@v4
+        with:
+          name: pref-exp-1d3-answer-key
+          path: reports/preference-sovereignty/pref-exp-1d3-answer-key.json
