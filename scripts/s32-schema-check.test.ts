@@ -1,7 +1,8 @@
-import { describe, it, expect } from "vitest";
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from "node:fs";
+import { describe, it, expect, afterEach } from "vitest";
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync, existsSync, readFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { execFileSync } from "node:child_process";
 import {
   checkInputs,
   _resetCleanupForTest,
@@ -10,6 +11,7 @@ import {
   _setDockerRunnerForTest,
   _resetDockerRunnerForTest,
   _setContainerForTest,
+  _resetContainerForTest,
   cleanup,
   postCleanupDecision,
 } from "./s32-schema-check";
@@ -76,6 +78,13 @@ describe("S32 harness: checkInputs() pre-flight", () => {
       .toThrow(/REQUIRED_FILE_EMPTY/);
     rmSync(dir, { recursive: true, force: true });
   });
+});
+
+// Restore all mock-injected state between tests so no residue leaks.
+afterEach(() => {
+  _resetDockerRunnerForTest();
+  _resetCleanupForTest();
+  _resetContainerForTest();
 });
 
 describe("S32 harness: cleanup failure tracking (SIMULATED)", () => {
@@ -175,5 +184,83 @@ describe("S32 harness: cleanup failure tracking (SIMULATED)", () => {
 
     _resetDockerRunnerForTest();
     _resetCleanupForTest();
+  });
+});
+describe("S32 harness: import-only isolation (subprocess)", () => {
+  // This test verifies that merely importing the runner (e.g. via vitest or
+  // another module) does NOT start Docker, run SQL, or print SCHEMA_OK.
+  // A recording fake `docker` is prepended to PATH so that ANY docker call
+  // (including via sudo) is logged. The import script is then run in a
+  // child process via tsx. We assert:
+  //   - exit code 0
+  //   - stdout contains IMPORT_DONE marker
+  //   - stdout does NOT contain SCHEMA_OK
+  //   - the recording fake docker log shows 0 docker invocations
+  //     (proves no command ran, even transiently — "create then delete"
+  //      would still leave a recorded call)
+  it("importing the runner in a subprocess triggers 0 docker commands, no SCHEMA_OK, exits 0", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "s32-import-only-"));
+    const mockBin = join(tmpDir, "bin");
+    mkdirSync(mockBin, { recursive: true });
+
+    const dockerLog = join(tmpDir, "docker.log");
+    const dockerScript = join(mockBin, "docker");
+    writeFileSync(dockerScript,
+      "#!/bin/bash\necho \"DOCKER_CALLED:$@\" >> \"" + dockerLog + "\"\nexit 1\n");
+    chmodSync(dockerScript, 0o755);
+
+    const importScript = join(tmpDir, "import-only.mjs");
+    const runnerTs = resolve(process.cwd(), "scripts/s32-schema-check.ts");
+    writeFileSync(importScript,
+      "const runnerPath = " + JSON.stringify(runnerTs) + ";\n" +
+      "await import(runnerPath);\n" +
+      "await new Promise(function(r){ setTimeout(r, 200); });\n" +
+      "console.log(\"IMPORT_DONE\");\n");
+
+    const env = Object.assign({}, process.env, {
+      PATH: mockBin + ":" + (process.env.PATH || ""),
+    });
+    const tsx = resolve(process.cwd(), "node_modules/.bin/tsx");
+
+    let stdout = "";
+    let stderr = "";
+    let exitCode = 0;
+    try {
+      stdout = execFileSync(tsx, [importScript], {
+        encoding: "utf8",
+        env: env,
+        cwd: process.cwd(),
+        timeout: 30000,
+      });
+    } catch (e: any) {
+      stdout = (e.stdout ?? "") + (e.stderr ?? "");
+      stderr = e.stderr ?? "";
+      exitCode = e.status ?? -1;
+    }
+
+    // Assert exit code 0
+    if (exitCode !== 0) {
+      rmSync(tmpDir, { recursive: true, force: true });
+      throw new Error(`import-only subprocess exited ${exitCode}; stdout=${stdout}; stderr=${stderr}`);
+    }
+    // Assert import succeeded
+    expect(stdout).toContain("IMPORT_DONE");
+    // Assert no SCHEMA_OK
+    if (stdout.includes("SCHEMA_OK") || stderr.includes("SCHEMA_OK")) {
+      rmSync(tmpDir, { recursive: true, force: true });
+      throw new Error(`import-only subprocess printed SCHEMA_OK; stdout=${stdout}; stderr=${stderr}`);
+    }
+    // Assert 0 docker calls (the recording mock would have logged any)
+    let dockerCalls: string[] = [];
+    if (existsSync(dockerLog)) {
+      const logContent = readFileSync(dockerLog, "utf8").trim();
+      dockerCalls = logContent.length > 0 ? logContent.split("\n") : [];
+    }
+    if (dockerCalls.length > 0) {
+      rmSync(tmpDir, { recursive: true, force: true });
+      throw new Error(`import-only subprocess invoked docker ${dockerCalls.length} time(s): ${dockerCalls.join(" | ")}`);
+    }
+
+    rmSync(tmpDir, { recursive: true, force: true });
   });
 });

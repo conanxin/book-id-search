@@ -7,7 +7,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
 import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -84,6 +84,9 @@ export function _resetDockerRunnerForTest(): void {
 }
 export function _setContainerForTest(name: string): void {
   CONTAINER = name;
+}
+export function _resetContainerForTest(): void {
+  CONTAINER = `s32-m0-${Date.now()}`;
 }
 // Direct injection of lastCleanupError for tests that only want to verify the
 // exit-decision surface (not the cleanup detection path).
@@ -167,4 +170,18 @@ async function main() {
   }
   console.log("SCHEMA_OK");
 }
-main().catch((e) => { console.error("SCHEMA_CHECK_FAIL", e instanceof Error ? e.message : String(e)); process.exit(1); });
+// CLI entry guard: only run main() when this module is the program's entry
+// point. When imported (e.g., by vitest or another module), do NOT start
+// Docker, run SQL, or print SCHEMA_OK. Preserves exported functions and
+// normal CLI behavior. Does not rely on NODE_ENV / test env detection.
+function isMainEntry(): boolean {
+  if (!process.argv[1]) return false;
+  try {
+    return import.meta.url === pathToFileURL(process.argv[1]).href;
+  } catch {
+    return false;
+  }
+}
+if (isMainEntry()) {
+  main().catch((e) => { console.error("SCHEMA_CHECK_FAIL", e instanceof Error ? e.message : String(e)); process.exit(1); });
+}
