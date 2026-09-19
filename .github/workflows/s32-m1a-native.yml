@@ -1,0 +1,38 @@
+name: S32 M1A Native Validation
+
+on:
+  push:
+    branches:
+      - feat/s32-m1a-catalog-promotion
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Existing API typecheck
+        run: pnpm exec tsc -p apps/api/tsconfig.json --noEmit
+      - name: Existing S32 static contract
+        run: pnpm exec vitest run scripts/s32-schema-contract.test.ts scripts/s32-schema-check.test.ts
+      - name: Existing M0 PG16 gate
+        run: pnpm exec tsx scripts/s32-schema-check.ts
+      - name: S32 M1A tests when present
+        shell: bash
+        run: |
+          if find apps/api/src/s32 -type f \( -name '*.test.ts' -o -name '*.test.tsx' \) -print -quit 2>/dev/null | grep -q .; then
+            pnpm exec vitest run apps/api/src/s32
+          else
+            echo "NO_M1A_TESTS_YET"
+          fi
