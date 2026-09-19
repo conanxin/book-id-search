@@ -26,14 +26,15 @@ READY_FOR_DEPLOYMENT_PLAN means sufficient information to design the change. It 
 1. Current evidence: the user's pasted terminal output from the targeted inode, memory, container-inspect, and ordered-Compose-render command. These are user-supplied host observations, not a new ChatGPT SSH run.
 2. Earlier evidence: S32_PROD_PG_READINESS_R1 terminal attachment. Disk bytes, production checkout, health, and the existing PostgreSQL image below are carried forward explicitly from that observation; the current follow-up did not repeat those measurements.
 3. Repository reads in this review: main remained `630ae41e40ed6e0dbcae5cd57ac5594ea1c83f4d`; API Dockerfile read at that commit; Web Dockerfile/nginx.conf read at its reported running source revision `99a3702c64e5ae389800348dc7310f23eaed4a66`.
+4. Transcription correction: the supplied terminal says memory free=920 MiB and swap used=851 MiB, not the earlier draft's 930/852 MiB. The 5.1 GiB available-memory value and readiness decision are unchanged.
 
 ## Current host follow-up
 
 ### Inodes and memory
 
 - `/`, `/data`, and `/var/lib/docker`: `/dev/vda2`, 6,619,136 inodes total, 1,414,454 used, 5,204,682 free, 22% used.
-- Memory: 7.4 GiB total, 2.1 GiB used, 930 MiB free, 4.5 GiB buff/cache, 5.1 GiB available.
-- Swap: 4.0 GiB total, 852 MiB used, 3.2 GiB free.
+- Memory: 7.4 GiB total, 2.1 GiB used, 920 MiB free, 4.5 GiB buff/cache, 5.1 GiB available.
+- Swap: 4.0 GiB total, 851 MiB used, 3.2 GiB free.
 
 The snapshot does not show inode exhaustion or a current lack of available memory. Swap occupancy alone does not establish current swapping rate or sustained memory pressure. This is not a load test or a guarantee about future resource use.
 
