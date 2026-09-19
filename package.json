@@ -26,13 +26,14 @@
     "check:storage": "tsx scripts/check-storage-targets.ts",
     "benchmark:import": "tsx scripts/benchmark-import-configs.ts",
     "verify:deploy-package": "tsx scripts/verify-deploy-package.ts",
-    "verify": "tsx scripts/verify.ts",
-        "ai:quality": "tsx scripts/ai-quality-regression.ts",
-        "search:quality": "tsx scripts/search-quality-regression.ts",
-        "weread:validate": "tsx scripts/weread/validate-weread-snapshot.ts --dir samples/weread",
-            "weread:match": "tsx scripts/weread/match-weread-catalog.ts",
-            "weread:inspect": "tsx scripts/weread/inspect-weread-raw.ts --dir private-data/weread/raw/latest --out-json private-data/weread/audit/raw-inventory.latest.json --out-md private-data/weread/audit/raw-inventory.latest.md",
-    "weread:normalize": "tsx scripts/weread/normalize-weread-export.ts --raw-dir private-data/weread/raw/latest --out-dir private-data/weread/snapshots/latest"
+    "ai:quality": "tsx scripts/ai-quality-regression.ts",
+    "search:quality": "tsx scripts/search-quality-regression.ts",
+    "weread:validate": "tsx scripts/weread/validate-weread-snapshot.ts --dir samples/weread",
+    "weread:match": "tsx scripts/weread/match-weread-catalog.ts",
+    "weread:inspect": "tsx scripts/weread/inspect-weread-raw.ts --dir private-data/weread/raw/latest --out-json private-data/weread/audit/raw-inventory.latest.json --out-md private-data/weread/audit/raw-inventory.latest.md",
+    "weread:normalize": "tsx scripts/weread/normalize-weread-export.ts --raw-dir private-data/weread/raw/latest --out-dir private-data/weread/snapshots/latest",
+    "s32:schema:static": "vitest run scripts/s32-schema-contract.test.ts",
+    "s32:schema:check": "tsx scripts/s32-schema-check.ts"
   },
   "dependencies": {
     "dotenv": "^17.2.3",
