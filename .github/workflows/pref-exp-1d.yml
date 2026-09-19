@@ -1,0 +1,37 @@
+name: PREF-EXP-1D Read-only Retrieval Smoke
+
+on:
+  push:
+    branches:
+      - research/pref-exp-1d-readonly-smoke
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Synthetic gate
+        run: pnpm exec vitest run scripts/preference/harness.test.ts
+
+      - name: Live read-only retrieval smoke
+        env:
+          PREF_SMOKE_BASE_URL: https://books.conanxin.com
+        run: pnpm exec tsx scripts/preference/real-retrieval-smoke.ts
