@@ -56,7 +56,10 @@ async function invoke(args: {
     command,
   });
   const { res, state } = responseHarness();
-  await handler(request(args.body ?? { bookId: "book-1" }, args.token ?? "secret"), res);
+  const body = Object.prototype.hasOwnProperty.call(args, "body")
+    ? args.body
+    : { bookId: "book-1" };
+  await handler(request(body, args.token ?? "secret"), res);
   return { command, state };
 }
 
