@@ -12,12 +12,43 @@ SET client_min_messages = WARNING;
 -- ============================================================================
 -- SHA / TEXT allowlist
 -- ============================================================================
-\echo '=== TEST 1: INVALID_SHA_REJECTED ==='
-DO $$ DECLARE rejected boolean := false; BEGIN
+\echo '=== TEST 1: SOURCE_ASSET_SHA256_FORMAT_REJECTED ==='
+DO $$
+DECLARE
+    sid uuid;
+    good_id uuid := '11111111-1111-1111-1111-111111111101';
+    bad_id  uuid := '11111111-1111-1111-1111-111111111102';
+    inserted int;
+    caught_sqlstate text;
+    caught_constraint text;
+    rejected boolean := false;
+BEGIN
+    -- Positive control: legal SHA on otherwise-legal fields MUST insert
+    INSERT INTO core.sources (id, source_type, lifecycle_state)
+        VALUES ('11111111-1111-1111-1111-1111111110a1', 'PUBLICATION', 'ACTIVE');
+    SELECT id INTO sid FROM core.sources WHERE id = '11111111-1111-1111-1111-1111111110a1';
+    INSERT INTO core.source_assets (id, source_id, asset_type, asset_role, storage_mode, storage_key, sha256)
+        VALUES (good_id, sid, 'DOCUMENT', 'ORIGINAL', 'LOCAL', 'k',
+                'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
+    GET DIAGNOSTICS inserted = ROW_COUNT;
+    IF inserted <> 1 THEN
+        RAISE EXCEPTION 'TEST_FAIL:POSITIVE_CONTROL: legal SHA insert did not affect 1 row (got %)', inserted;
+    END IF;
+
+    -- Negative: illegal SHA on same legal fields MUST be rejected by ck_sa_sha256_format (SQLSTATE 23514)
     BEGIN
-        INSERT INTO core.external_identities (id, target_type, target_id, provider, namespace, external_id, binding_state)
-            VALUES ('11111111-1111-1111-1111-111111111101', 'WORK', '11111111-1111-1111-1111-111111111201', 't', 'n', 'INVALID_NOT_LOWERCASE_HEX', 'ACTIVE');
-    EXCEPTION WHEN check_violation THEN rejected := true; END;
+        INSERT INTO core.source_assets (id, source_id, asset_type, asset_role, storage_mode, storage_key, sha256)
+            VALUES (bad_id, sid, 'DOCUMENT', 'ORIGINAL', 'LOCAL', 'k', 'INVALID_NOT_LOWERCASE_HEX');
+    EXCEPTION WHEN SQLSTATE '23514' THEN
+        GET STACKED DIAGNOSTICS caught_sqlstate = RETURNED_SQLSTATE, caught_constraint = CONSTRAINT_NAME;
+        IF caught_sqlstate IS DISTINCT FROM '23514' THEN
+            RAISE EXCEPTION 'TEST_FAIL:SQLSTATE_MISMATCH: expected 23514, got %', caught_sqlstate;
+        END IF;
+        IF caught_constraint IS DISTINCT FROM 'ck_sa_sha256_format' THEN
+            RAISE EXCEPTION 'TEST_FAIL:CONSTRAINT_MISMATCH: expected ck_sa_sha256_format, got %', caught_constraint;
+        END IF;
+        rejected := true;
+    END;
     IF NOT rejected THEN RAISE EXCEPTION 'EXPECTED_REJECTION_MISSING:INVALID_SHA'; END IF;
 END $$;
 
@@ -64,7 +95,9 @@ END $$;
 -- ============================================================================
 \echo '=== TEST 5: NOTE_CURRENT_REVISION_OTHER_NOTE_REJECTED ==='
 DO $$
-DECLARE nid1 uuid; nid2 uuid; rid uuid; rejected boolean := false;
+DECLARE nid1 uuid; nid2 uuid; rid uuid;
+      caught_sqlstate text; caught_constraint text;
+      rejected boolean := false;
 BEGIN
     nid1 := '11111111-1111-1111-1111-111111111501';
     nid2 := '11111111-1111-1111-1111-111111111502';
@@ -75,7 +108,15 @@ BEGIN
     rid := '11111111-1111-1111-1111-111111111511';
     BEGIN
         UPDATE core.notes SET current_revision_id = rid WHERE id = nid2;
-    EXCEPTION WHEN foreign_key_violation OR check_violation THEN rejected := true; END;
+        SET CONSTRAINTS core.fk_notes_current_revision IMMEDIATE;
+    EXCEPTION WHEN SQLSTATE '23503' THEN
+        GET STACKED DIAGNOSTICS caught_sqlstate = RETURNED_SQLSTATE, caught_constraint = CONSTRAINT_NAME;
+        IF caught_constraint IS DISTINCT FROM 'fk_notes_current_revision' THEN
+            RAISE EXCEPTION 'TEST_FAIL:CONSTRAINT_MISMATCH: expected fk_notes_current_revision, got %', caught_constraint;
+        END IF;
+        rejected := true;
+    END;
+    SET CONSTRAINTS core.fk_notes_current_revision DEFERRED;
     IF NOT rejected THEN RAISE EXCEPTION 'EXPECTED_REJECTION_MISSING:NOTE_CURRENT_REVISION_OTHER_NOTE'; END IF;
 END $$;
 
@@ -142,7 +183,7 @@ END $$;
 -- ============================================================================
 \echo '=== TEST 9: NOTE_REVISION_UPDATE_REJECTED ==='
 DO $$
-DECLARE nid uuid; rid uuid; rejected boolean := false;
+DECLARE nid uuid; rid uuid; v_msg text; rejected boolean := false;
 BEGIN
     nid := '11111111-1111-1111-1111-111111111901';
     INSERT INTO core.notes (id, note_type) VALUES (nid, 'GENERAL');
@@ -151,13 +192,16 @@ BEGIN
     rid := '11111111-1111-1111-1111-111111111911';
     BEGIN
         UPDATE core.note_revisions SET title = 'new' WHERE id = rid;
-    EXCEPTION WHEN OTHERS THEN rejected := true; END;
+    EXCEPTION WHEN SQLSTATE '23001' THEN
+        GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
+        IF v_msg LIKE '%NOTE_REVISION_IMMUTABILITY%' THEN rejected := true; ELSE RAISE; END IF;
+    END;
     IF NOT rejected THEN RAISE EXCEPTION 'EXPECTED_REJECTION_MISSING:NOTE_REVISION_UPDATE'; END IF;
 END $$;
 
 \echo '=== TEST 10: NOTE_REVISION_DELETE_REJECTED ==='
 DO $$
-DECLARE nid uuid; rid uuid; rejected boolean := false;
+DECLARE nid uuid; rid uuid; v_msg text; rejected boolean := false;
 BEGIN
     nid := '11111111-1111-1111-1111-111111111a01';
     INSERT INTO core.notes (id, note_type) VALUES (nid, 'GENERAL');
@@ -166,7 +210,10 @@ BEGIN
     rid := '11111111-1111-1111-1111-111111111a11';
     BEGIN
         DELETE FROM core.note_revisions WHERE id = rid;
-    EXCEPTION WHEN OTHERS THEN rejected := true; END;
+    EXCEPTION WHEN SQLSTATE '23001' THEN
+        GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
+        IF v_msg LIKE '%NOTE_REVISION_IMMUTABILITY%' THEN rejected := true; ELSE RAISE; END IF;
+    END;
     IF NOT rejected THEN RAISE EXCEPTION 'EXPECTED_REJECTION_MISSING:NOTE_REVISION_DELETE'; END IF;
 END $$;
 
@@ -175,14 +222,17 @@ END $$;
 -- ============================================================================
 \echo '=== TEST 11: CLAIM_IMMUTABLE_FIELD_UPDATE_REJECTED ==='
 DO $$
-DECLARE cid uuid; rejected boolean := false;
+DECLARE cid uuid; v_msg text; rejected boolean := false;
 BEGIN
     INSERT INTO core.claims (id, claim_type, statement, lifecycle_state)
         VALUES ('11111111-1111-1111-1111-111111111b01', 'T', 'original statement', 'ACTIVE');
     cid := '11111111-1111-1111-1111-111111111b01';
     BEGIN
         UPDATE core.claims SET statement = 'changed statement' WHERE id = cid;
-    EXCEPTION WHEN OTHERS THEN rejected := true; END;
+    EXCEPTION WHEN SQLSTATE '23001' THEN
+        GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
+        IF v_msg LIKE '%CLAIM_STATEMENT_IMMUTABLE%' THEN rejected := true; ELSE RAISE; END IF;
+    END;
     IF NOT rejected THEN RAISE EXCEPTION 'EXPECTED_REJECTION_MISSING:CLAIM_IMMUTABLE_UPDATE'; END IF;
 END $$;
 
@@ -202,7 +252,7 @@ END $$;
 -- ============================================================================
 \echo '=== TEST 13: ASSESSMENT_UPDATE_REJECTED ==='
 DO $$
-DECLARE cl uuid; rejected boolean := false;
+DECLARE cl uuid; v_msg text; rejected boolean := false;
 BEGIN
     INSERT INTO core.claims (id, claim_type, statement, lifecycle_state)
         VALUES ('11111111-1111-1111-1111-111111111c01', 'T', 'orig', 'ACTIVE');
@@ -210,13 +260,16 @@ BEGIN
     INSERT INTO core.assessments (id, claim_id, stance) VALUES ('11111111-1111-1111-1111-111111111c11', cl, 'SUPPORTS');
     BEGIN
         UPDATE core.assessments SET stance = 'CONTRADICTS' WHERE id = '11111111-1111-1111-1111-111111111c11';
-    EXCEPTION WHEN OTHERS THEN rejected := true; END;
+    EXCEPTION WHEN SQLSTATE '23001' THEN
+        GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
+        IF v_msg LIKE '%ASSESSMENT_APPEND_ONLY%' THEN rejected := true; ELSE RAISE; END IF;
+    END;
     IF NOT rejected THEN RAISE EXCEPTION 'EXPECTED_REJECTION_MISSING:ASSESSMENT_UPDATE'; END IF;
 END $$;
 
 \echo '=== TEST 14: ASSESSMENT_DELETE_REJECTED ==='
 DO $$
-DECLARE cl uuid; rejected boolean := false;
+DECLARE cl uuid; v_msg text; rejected boolean := false;
 BEGIN
     INSERT INTO core.claims (id, claim_type, statement, lifecycle_state)
         VALUES ('11111111-1111-1111-1111-111111111c02', 'T', 'orig', 'ACTIVE');
@@ -224,7 +277,10 @@ BEGIN
     INSERT INTO core.assessments (id, claim_id, stance) VALUES ('11111111-1111-1111-1111-111111111c12', cl, 'SUPPORTS');
     BEGIN
         DELETE FROM core.assessments WHERE id = '11111111-1111-1111-1111-111111111c12';
-    EXCEPTION WHEN OTHERS THEN rejected := true; END;
+    EXCEPTION WHEN SQLSTATE '23001' THEN
+        GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
+        IF v_msg LIKE '%ASSESSMENT_APPEND_ONLY%' THEN rejected := true; ELSE RAISE; END IF;
+    END;
     IF NOT rejected THEN RAISE EXCEPTION 'EXPECTED_REJECTION_MISSING:ASSESSMENT_DELETE'; END IF;
 END $$;
 
@@ -233,33 +289,39 @@ END $$;
 -- ============================================================================
 \echo '=== TEST 15: MANIFEST_UPDATE_REJECTED ==='
 DO $$
-DECLARE mid uuid; rejected boolean := false;
+DECLARE mid uuid; v_msg text; rejected boolean := false;
 BEGIN
     INSERT INTO core.evidence_manifests (id, schema_version, purpose, manifest_sha256)
         VALUES ('11111111-1111-1111-1111-111111111d01', 1, 'p', 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
     mid := '11111111-1111-1111-1111-111111111d01';
     BEGIN
         UPDATE core.evidence_manifests SET purpose = 'changed' WHERE id = mid;
-    EXCEPTION WHEN OTHERS THEN rejected := true; END;
+    EXCEPTION WHEN SQLSTATE '23001' THEN
+        GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
+        IF v_msg LIKE '%MANIFEST_IMMUTABLE%' THEN rejected := true; ELSE RAISE; END IF;
+    END;
     IF NOT rejected THEN RAISE EXCEPTION 'EXPECTED_REJECTION_MISSING:MANIFEST_UPDATE'; END IF;
 END $$;
 
 \echo '=== TEST 16: MANIFEST_DELETE_REJECTED ==='
 DO $$
-DECLARE mid uuid; rejected boolean := false;
+DECLARE mid uuid; v_msg text; rejected boolean := false;
 BEGIN
     INSERT INTO core.evidence_manifests (id, schema_version, purpose, manifest_sha256)
         VALUES ('11111111-1111-1111-1111-111111111d02', 1, 'p', 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
     mid := '11111111-1111-1111-1111-111111111d02';
     BEGIN
         DELETE FROM core.evidence_manifests WHERE id = mid;
-    EXCEPTION WHEN OTHERS THEN rejected := true; END;
+    EXCEPTION WHEN SQLSTATE '23001' THEN
+        GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
+        IF v_msg LIKE '%MANIFEST_IMMUTABLE%' THEN rejected := true; ELSE RAISE; END IF;
+    END;
     IF NOT rejected THEN RAISE EXCEPTION 'EXPECTED_REJECTION_MISSING:MANIFEST_DELETE'; END IF;
 END $$;
 
 \echo '=== TEST 17: MANIFEST_ITEM_UPDATE_REJECTED ==='
 DO $$
-DECLARE mid uuid; rejected boolean := false;
+DECLARE mid uuid; v_msg text; rejected boolean := false;
 BEGIN
     INSERT INTO core.evidence_manifests (id, schema_version, purpose, manifest_sha256)
         VALUES ('11111111-1111-1111-1111-111111111d03', 1, 'p', 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
@@ -268,13 +330,16 @@ BEGIN
         VALUES ('11111111-1111-1111-1111-111111111d13', mid, 1, 'SUPPORTING', 'SOURCE', '11111111-1111-1111-1111-111111111dd1');
     BEGIN
         UPDATE core.evidence_manifest_items SET role = 'CONTRADICTORY' WHERE manifest_id = mid;
-    EXCEPTION WHEN OTHERS THEN rejected := true; END;
+    EXCEPTION WHEN SQLSTATE '23001' THEN
+        GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
+        IF v_msg LIKE '%MANIFEST_IMMUTABLE%' THEN rejected := true; ELSE RAISE; END IF;
+    END;
     IF NOT rejected THEN RAISE EXCEPTION 'EXPECTED_REJECTION_MISSING:MANIFEST_ITEM_UPDATE'; END IF;
 END $$;
 
 \echo '=== TEST 18: MANIFEST_ITEM_DELETE_REJECTED ==='
 DO $$
-DECLARE mid uuid; rejected boolean := false;
+DECLARE mid uuid; v_msg text; rejected boolean := false;
 BEGIN
     INSERT INTO core.evidence_manifests (id, schema_version, purpose, manifest_sha256)
         VALUES ('11111111-1111-1111-1111-111111111d04', 1, 'p', 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
@@ -283,7 +348,10 @@ BEGIN
         VALUES ('11111111-1111-1111-1111-111111111d14', mid, 1, 'SUPPORTING', 'SOURCE', '11111111-1111-1111-1111-111111111de1');
     BEGIN
         DELETE FROM core.evidence_manifest_items WHERE manifest_id = mid;
-    EXCEPTION WHEN OTHERS THEN rejected := true; END;
+    EXCEPTION WHEN SQLSTATE '23001' THEN
+        GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
+        IF v_msg LIKE '%MANIFEST_IMMUTABLE%' THEN rejected := true; ELSE RAISE; END IF;
+    END;
     IF NOT rejected THEN RAISE EXCEPTION 'EXPECTED_REJECTION_MISSING:MANIFEST_ITEM_DELETE'; END IF;
 END $$;
 
@@ -292,7 +360,9 @@ END $$;
 -- ============================================================================
 \echo '=== TEST 19: ISSUE_CURRENT_RESOLUTION_OTHER_ISSUE_REJECTED ==='
 DO $$
-DECLARE iid1 uuid; iid2 uuid; ires uuid; rejected boolean := false;
+DECLARE iid1 uuid; iid2 uuid; ires uuid;
+      caught_sqlstate text; caught_constraint text;
+      rejected boolean := false;
 BEGIN
     iid1 := '11111111-1111-1111-1111-111111111e01';
     iid2 := '11111111-1111-1111-1111-111111111e02';
@@ -302,7 +372,15 @@ BEGIN
     ires := '11111111-1111-1111-1111-111111111e11';
     BEGIN
         UPDATE core.research_issues SET current_resolution_id = ires WHERE id = iid2;
-    EXCEPTION WHEN foreign_key_violation OR check_violation THEN rejected := true; END;
+        SET CONSTRAINTS core.fk_ri_current_resolution IMMEDIATE;
+    EXCEPTION WHEN SQLSTATE '23503' THEN
+        GET STACKED DIAGNOSTICS caught_sqlstate = RETURNED_SQLSTATE, caught_constraint = CONSTRAINT_NAME;
+        IF caught_constraint IS DISTINCT FROM 'fk_ri_current_resolution' THEN
+            RAISE EXCEPTION 'TEST_FAIL:CONSTRAINT_MISMATCH: expected fk_ri_current_resolution, got %', caught_constraint;
+        END IF;
+        rejected := true;
+    END;
+    SET CONSTRAINTS core.fk_ri_current_resolution DEFERRED;
     IF NOT rejected THEN RAISE EXCEPTION 'EXPECTED_REJECTION_MISSING:ISSUE_CURRENT_RESOLUTION_OTHER_ISSUE'; END IF;
 END $$;
 
@@ -367,11 +445,29 @@ END $$;
 -- Projection
 -- ============================================================================
 \echo '=== TEST 24: TWO_ACTIVE_SAME_NAME_REJECTED ==='
-DO $$ DECLARE rejected boolean := false; BEGIN
-    INSERT INTO ops.projection_generations (id, projection_name, status) VALUES ('11111111-1111-1111-1111-111111112401', 'proj_24', 'ACTIVE');
+DO $$
+DECLARE inserted int;
+      caught_sqlstate text; caught_constraint text;
+      rejected boolean := false;
+BEGIN
+    -- First row: legal ACTIVE with full lifecycle timestamps; must succeed
+    INSERT INTO ops.projection_generations (id, projection_name, status, build_started_at, ready_at, activated_at)
+        VALUES ('11111111-1111-1111-1111-111111112401', 'proj_24', 'ACTIVE', now(), now(), now());
+    GET DIAGNOSTICS inserted = ROW_COUNT;
+    IF inserted <> 1 THEN
+        RAISE EXCEPTION 'TEST_FAIL:POSITIVE_CONTROL: legal ACTIVE insert did not affect 1 row (got %)', inserted;
+    END IF;
+    -- Second row: same projection_name + ACTIVE, full timestamps; must FAIL with uq_projection_one_active (SQLSTATE 23505)
     BEGIN
-        INSERT INTO ops.projection_generations (id, projection_name, status) VALUES ('11111111-1111-1111-1111-111111112402', 'proj_24', 'ACTIVE');
-    EXCEPTION WHEN unique_violation THEN rejected := true; END;
+        INSERT INTO ops.projection_generations (id, projection_name, status, build_started_at, ready_at, activated_at)
+            VALUES ('11111111-1111-1111-1111-111111112402', 'proj_24', 'ACTIVE', now(), now(), now());
+    EXCEPTION WHEN SQLSTATE '23505' THEN
+        GET STACKED DIAGNOSTICS caught_sqlstate = RETURNED_SQLSTATE, caught_constraint = CONSTRAINT_NAME;
+        IF caught_constraint IS DISTINCT FROM 'uq_projection_one_active' THEN
+            RAISE EXCEPTION 'TEST_FAIL:CONSTRAINT_MISMATCH: expected uq_projection_one_active, got %', caught_constraint;
+        END IF;
+        rejected := true;
+    END;
     IF NOT rejected THEN RAISE EXCEPTION 'EXPECTED_REJECTION_MISSING:TWO_ACTIVE_SAME_NAME'; END IF;
 END $$;
 
@@ -391,7 +487,7 @@ END $$;
 -- ============================================================================
 \echo '=== TEST 26: TERMINAL_RUN_UPDATE_REJECTED ==='
 DO $$
-DECLARE rid uuid; rejected boolean := false;
+DECLARE rid uuid; v_msg text; rejected boolean := false;
 BEGIN
     INSERT INTO core.evidence_manifests (id, schema_version, purpose, manifest_sha256)
         VALUES ('11111111-1111-1111-1111-111111112601', 1, 'p', 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
@@ -399,13 +495,16 @@ BEGIN
     rid := '11111111-1111-1111-1111-111111112611';
     BEGIN
         UPDATE core.research_runs SET output = '{"changed":true}'::jsonb WHERE id = rid;
-    EXCEPTION WHEN OTHERS THEN rejected := true; END;
+    EXCEPTION WHEN SQLSTATE '23001' THEN
+        GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
+        IF v_msg LIKE '%TERMINAL_RUN_IMMUTABILITY%' THEN rejected := true; ELSE RAISE; END IF;
+    END;
     IF NOT rejected THEN RAISE EXCEPTION 'EXPECTED_REJECTION_MISSING:TERMINAL_RUN_UPDATE'; END IF;
 END $$;
 
 \echo '=== TEST 27: TERMINAL_RUN_DELETE_REJECTED ==='
 DO $$
-DECLARE rid uuid; rejected boolean := false;
+DECLARE rid uuid; v_msg text; rejected boolean := false;
 BEGIN
     INSERT INTO core.evidence_manifests (id, schema_version, purpose, manifest_sha256)
         VALUES ('11111111-1111-1111-1111-111111112701', 1, 'p', 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
@@ -413,7 +512,10 @@ BEGIN
     rid := '11111111-1111-1111-1111-111111112711';
     BEGIN
         DELETE FROM core.research_runs WHERE id = rid;
-    EXCEPTION WHEN OTHERS THEN rejected := true; END;
+    EXCEPTION WHEN SQLSTATE '23001' THEN
+        GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
+        IF v_msg LIKE '%TERMINAL_RUN_IMMUTABILITY%' THEN rejected := true; ELSE RAISE; END IF;
+    END;
     IF NOT rejected THEN RAISE EXCEPTION 'EXPECTED_REJECTION_MISSING:TERMINAL_RUN_DELETE'; END IF;
 END $$;
 
