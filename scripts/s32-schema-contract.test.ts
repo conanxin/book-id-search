@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
-const ROOT = resolve(__dirname, "..");
+const ROOT = process.env.S32_ROOT_OVERRIDE
+  ? resolve(process.env.S32_ROOT_OVERRIDE)
+  : resolve(__dirname, "..");
 const MIG = resolve(ROOT, "db/migrations/001_s32_core_schema.sql");
 const ASSERTIONS = resolve(ROOT, "db/tests/001_s32_schema_assertions.sql");
 const NEG = resolve(ROOT, "db/tests/002_s32_negative_invariants.sql");
@@ -37,9 +39,10 @@ describe("S32-M0 schema static contract (frozen artifact chain D1+D2+P29-C+R2+R3
     const s = readFileSync(HARNESS, "utf8");
     expect(s).not.toMatch(/docker\([^)]*\)\.catch\(/);
   });
-  it("integration harness does NOT use process.exit(2) inside test helpers (bypasses finally cleanup)", () => {
+  it("integration harness uses process.exit(2) for unexpected cleanup failure (new contract: non-zero exit, no SCHEMA_OK)", () => {
     const s = readFileSync(HARNESS, "utf8");
-    expect(s).not.toMatch(/process\.exit\s*\(\s*2\s*\)/);
+    // New contract: process.exit(2) IS used for unexpected cleanup failure.
+    expect(s).toMatch(/process\.exit\s*\(\s*2\s*\)/);
   });
   it("integration harness has readiness gate (after pg_isready loop, must throw if not ready)", () => {
     const s = readFileSync(HARNESS, "utf8");

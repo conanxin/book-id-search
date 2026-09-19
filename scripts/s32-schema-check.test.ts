@@ -7,6 +7,11 @@ import {
   _resetCleanupForTest,
   _getCleanupErrorForTest,
   _simulateCleanupFailureForTest,
+  _setDockerRunnerForTest,
+  _resetDockerRunnerForTest,
+  _setContainerForTest,
+  cleanup,
+  postCleanupDecision,
 } from "./s32-schema-check";
 
 function makeTmpWithFiles(files: Record<string, string>): string {
@@ -105,5 +110,70 @@ describe("S32 harness: cleanup failure tracking (SIMULATED)", () => {
     expect(_getCleanupErrorForTest()).not.toBeNull();
     _resetCleanupForTest();
     expect(_getCleanupErrorForTest()).toBeNull();
+  });
+
+  // The real exit logic test: simulate the underlying docker rm failure
+  // (not just set lastCleanupError), let the real cleanup() function detect it,
+  // then call the real postCleanupDecision() to verify main() would take the
+  // exit-2 / no-SCHEMA_OK path. Marked SIMULATED — no real Docker call.
+  it("SIMULATED: injected docker rm unexpected failure -> real cleanup() sets lastCleanupError AND real postCleanupDecision() returns error (not 'OK'), proving main() would exit 2 and NOT print SCHEMA_OK", () => {
+    _resetCleanupForTest();
+    _resetDockerRunnerForTest();
+    expect(_getCleanupErrorForTest()).toBeNull();
+
+    // Inject a fake docker runner that simulates an unexpected rm failure
+    // (NOT "No such container" — that would be treated as OK).
+    _setDockerRunnerForTest(() => ({
+      stdout: "",
+      stderr: "Error: cannot remove container: container is running",
+      status: 1,
+    }));
+    _setContainerForTest("test-container-simulated");
+
+    // Invoke the REAL cleanup() function (not just _simulate...)
+    cleanup();
+
+    // The real cleanup() must have detected the injected failure
+    const err = _getCleanupErrorForTest();
+    expect(err).not.toBeNull();
+    expect(err).toMatch(/cannot remove container/);
+
+    // Invoke the REAL postCleanupDecision() function.
+    // If it returns "OK", main() would print SCHEMA_OK and exit 0 (WRONG).
+    // If it returns { error }, main() would exit 2 and NOT print SCHEMA_OK (CORRECT).
+    const decision = postCleanupDecision();
+    expect(decision).not.toBe("OK");
+    expect(typeof decision).toBe("object");
+    if (typeof decision === "object") {
+      expect(decision.error).toMatch(/cannot remove container/);
+    }
+
+    _resetDockerRunnerForTest();
+    _resetCleanupForTest();
+  });
+
+  it("SIMULATED: injected docker rm 'No such container' is treated as OK (clean exit, would print SCHEMA_OK)", () => {
+    _resetCleanupForTest();
+    _resetDockerRunnerForTest();
+
+    // Inject a fake docker runner that simulates "already removed"
+    _setDockerRunnerForTest(() => ({
+      stdout: "",
+      stderr: "Error: No such container: test-container-already-removed",
+      status: 1,
+    }));
+    _setContainerForTest("test-container-already-removed");
+
+    cleanup();
+
+    // "No such container" must NOT be treated as a failure
+    expect(_getCleanupErrorForTest()).toBeNull();
+
+    // postCleanupDecision() must return "OK" — main() would print SCHEMA_OK
+    const decision = postCleanupDecision();
+    expect(decision).toBe("OK");
+
+    _resetDockerRunnerForTest();
+    _resetCleanupForTest();
   });
 });
