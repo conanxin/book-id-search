@@ -1,0 +1,8 @@
+# BOOK-ID-SEARCH development
+
+- Develop and build in a local clone/worktree. Preserve existing rules and uncommitted work; one writer per worktree. Use Native execution, not another agent as a command relay.
+- Production access is `ssh tencent`. Read `/home/conanxin/codex-ops/tencent/AGENTS.md` when available. Before any explicitly authorized remote write, verify `whoami=ubuntu` and `hostname=VM-0-4-ubuntu`; otherwise stop. Try `sudo -n` only; stop if interaction is required.
+- Production changes require explicit authorization. Release preparation does not authorize changes to `/opt/book-id-search`, runtime overrides, `.env`, containers, persistent PG, cleanup, expansion, global proxies, merges or registry publication.
+- Use `pnpm install --frozen-lockfile`. API build: `pnpm --filter @book-id-search/api build`; targeted tests: `pnpm exec vitest run <affected tests>`. Release checks are documented in `docs/operations/S32_RELEASE_PREP.md`. Keep M0 migration and its two SQL test files unchanged during S32 release packaging; do not start M1-B.
+- Keep `docs/STATUS.md` short. Put checkpoints/logs and pending sync text in ignored `progress/` or `logs/`; never commit credentials or private data.
+- GitHub PR holds detailed implementation/test evidence; Issue #2 holds phase summaries. Update the existing Notion project overview and deployment readiness page using the same `task_id`, `tested_commit` and PR URL. Distinguish implemented/tested/committed/pushed/merged/deployed. Failed sync stays `PENDING`; verify writes before claiming success.
