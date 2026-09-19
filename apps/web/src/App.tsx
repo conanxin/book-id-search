@@ -26,6 +26,7 @@ import WereadPrivatePanel from "./WereadPrivatePanel";
 import WereadBadge from "./WereadBadge";
 import { fetchWereadStatusesForBooks, fetchWereadStatus, getWereadToken, isWereadEnabled, type WereadStatus } from "./wereadPrivate";
 import WereadCenter from "./weread/WereadCenter";
+import ProjectsPage, { researchEnabled } from "./research/ProjectsPage";
 import SiteFooter from "./components/SiteFooter";
 import S32Principles from "./components/S32Principles";
 
@@ -852,6 +853,7 @@ function SearchPage() {
         <p className="search-subtitle">
           输入书名、作者、ISBN 或 SSID / DXID，找到你真正想要的版本。
         </p>
+        {researchEnabled ? <p><Link to="/research/projects">我的研究项目</Link></p> : null}
         <form className="search-form" onSubmit={submit} role="search">
           <Search size={22} aria-hidden="true" />
           <input
@@ -1272,6 +1274,8 @@ export default function App() {
         <Route path="/" element={<SearchPage />} />
         <Route path="/weread" element={<WereadCenter />} />
         <Route path="/books/:id" element={<DetailPage />} />
+        <Route path="/research/projects" element={<ProjectsPage />} />
+        <Route path="/research/projects/:projectId" element={<ProjectsPage />} />
       </Routes>
       {/* POST-ICP-COMPLIANCE — single global site footer shared by every route. */}
       <SiteFooter />

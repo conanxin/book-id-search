@@ -1,0 +1,22 @@
+name: book-id-search-s32-local
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: s32local
+      POSTGRES_DB: s32local
+      POSTGRES_PASSWORD: ${S32_LOCAL_PG_PASSWORD:?Set S32_LOCAL_PG_PASSWORD in the ignored .env.s32.local}
+    ports:
+      - "127.0.0.1:15432:5432"
+    volumes:
+      - s32_local_pg:/var/lib/postgresql/data
+      - ./db/migrations/001_s32_core_schema.sql:/docker-entrypoint-initdb.d/001_s32.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U s32local -d s32local"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5m
+volumes:
+  s32_local_pg:
+    name: book-id-search-s32-local-pg
