@@ -31,5 +31,11 @@ jobs:
       - name: PREF-EXP-1C synthetic tests
         run: pnpm exec vitest run scripts/preference/harness.test.ts
 
-      - name: Build
-        run: pnpm build
+      - name: PREF-EXP-1C TypeScript check
+        run: pnpm exec tsc -p scripts/preference/tsconfig.json
+
+      - name: API build
+        run: pnpm --filter @book-id-search/api build
+
+      - name: Web build
+        run: pnpm --filter @book-id-search/web build
