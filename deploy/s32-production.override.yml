@@ -1,0 +1,43 @@
+# Template only. Append AFTER all four existing production Compose files.
+# No production application is authorized by this file. See S32_RELEASE_PREP.md.
+services:
+  postgres:
+    image: ${S32_POSTGRES_IMAGE:?Set the already-acquired PostgreSQL 16 image digest}
+    pull_policy: never
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${S32_POSTGRES_DB:?Set S32_POSTGRES_DB}
+      POSTGRES_USER: ${S32_POSTGRES_USER:?Set S32_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${S32_POSTGRES_PASSWORD:?Set S32_POSTGRES_PASSWORD}
+    ports: !reset []
+    volumes:
+      - type: bind
+        source: ${S32_PG_DATA_DIR:-/data/book-id-search/postgres_data}
+        target: /var/lib/postgresql/data
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "25m"
+        max-file: "3"
+
+  api:
+    image: ${S32_API_IMAGE:?Set the locally acquired and verified release image}
+    build: !reset null
+    pull_policy: never
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      S32_FEATURES_ENABLED: ${S32_FEATURES_ENABLED:-false}
+      S32_DATABASE_URL: ${S32_DATABASE_URL:-}
+      S32_PRIVATE_API_TOKEN: ${S32_PRIVATE_API_TOKEN:-}
+    # Inherit all three bind mounts and 127.0.0.1:3001 from the original chain.
+    # No Web/Meilisearch stanza: their images/configuration remain unchanged.

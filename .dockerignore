@@ -19,6 +19,8 @@
 
 # Reports / cache / temp output.
 reports
+logs
+progress
 .cache
 .tmp
 tmp
