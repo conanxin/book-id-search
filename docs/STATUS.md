@@ -1,14 +1,12 @@
 # BOOK-ID-SEARCH status
 
-- Phase/task: S32 release preparation / `S32_RELEASE_PREP_CODEX_R1`, **READY_FOR_REVIEW**, [PR #10](https://github.com/conanxin/book-id-search/pull/10).
-- Baseline: main `630ae41e40ed6e0dbcae5cd57ac5594ea1c83f4d` (M0/M1-A merged); planning branch read, not merged.
-- Built/tested code: `ce65f1a9bf105ca08b439595ffc3800f9efedbc8`. Later commits only record evidence/status; the image's source SHA remains this tested commit.
-- Worktree: `/home/conanxin/codex-projects/book-id-search`, branch `feat/s32-release-packaging`; reuses the clone at `/mnt/d/home/conanxin/workspace/book-id-search`.
-- Implemented/tested/committed/pushed: **YES**. Merged/deployed/production changed/M1-B started: **NO**.
-- Tests: local Docker build + API typecheck PASS; image dependency/frozen-lock/default-off/auth/missing-DB smoke PASS; 11 files / 166 unit tests PASS; Compose fixture and actual sanitized four-layer production baseline PASS. No full-suite or real-PG rerun this round; M0 migration/two SQL files and Web unchanged.
-- Image: `sha256:265e810e7fb120db01076171242b19d7c069548b9e51e67b8f001432573f0319`, 247,862,411 B; gzip archive 80,387,312 B. No registry publication/RepoDigest.
-- Latest production observation: **2026-09-19 13:22:59 UTC**, via `ssh tencent`, `ubuntu@VM-0-4-ubuntu`; checkout `9a18b2aa86c7cb1b27f6e99f9f5911e80b7b61ec`. Web `99a3702c…`, API `3add9a60…`, Meili `v1.48.3` running, unchanged. Root free **21,784,965,120 B / 20.2888 GiB**, used 79%.
-- Estimated new peak **1.9412 GiB**, resulting free **18.3476 GiB**; shortfall to keeping 20 GiB **1.6524 GiB**, to 21 GiB **2.6524 GiB**. Production execution remains **HOLD_CAPACITY_AND_AUTHORIZATION**. No cleanup, expansion or reserve waiver.
-- Evidence and reproducible steps: [S32 release report](operations/S32_RELEASE_PREP.md). Logs/archive: ignored `logs/s32-release-prep/`; checkpoint/sync receipts: ignored `progress/S32_RELEASE_PREP_CODEX_R1.md`.
-- Sync: [Issue #2](https://github.com/conanxin/book-id-search/issues/2), [Notion overview](https://www.notion.so/3dd34a28189a81d48f74ec74593dac5f), [Notion readiness](https://www.notion.so/3e034a28189a813591d5dc1da8412331). Final write receipts stay in the local checkpoint; do not infer synchronization from these links alone.
-- **Unique next step: review PR #10.** Merge/deployment require separate explicit authorization.
+- Task: `S32_M1B_PROJECTS_UI_R1` / local project create-list-detail, **READY_FOR_REVIEW**, [PR #11](https://github.com/conanxin/book-id-search/pull/11).
+- Baseline: actual main `19c0209acb9445b505f918f13bce9e2dc82f7917` (PR #10 merged). Worktree `/home/conanxin/codex-projects/book-id-search`, branch `feat/s32-m1b-projects-ui`; previous work preserved.
+- Implemented/tested: **YES**. 108 unit/static + 216 search/WeRead regression + 1 real PG16 integration PASS; API/Web builds PASS. Real browser create/detail/list/refresh and API/PG restart persistence PASS; desktop/mobile screenshots recorded. M0 migration and both SQL files unchanged.
+- Browser project: `36c19d98-85ad-48d6-8515-9698f563e89a` (“北京古道研究”). Name, purpose, UUID and both timestamps match before/after restart. Dev volume `book-id-search-s32-local-pg` retained; initialization skipped on restart; disposable test container removed.
+- Local page: `http://127.0.0.1:5173/research/projects`. Server credentials only in ignored `.env.s32.local`; enter S32 token via the page. [Local guide](operations/S32_M1B_LOCAL.md).
+- Additional root scripts typecheck: **FAILED**, six errors in unchanged AI/search/WeRead scripts. Full repository suite, M1-A real-PG rerun and M0 SQL assertion/negative rerun: **NOT_RUN**. Web build warns about existing large main bundle; browser favicon 404 remains, expected 403/503/404 probes observed; no uncaught application JS error observed.
+- tested_commit: `1b7eaacf0199edbfceb76ac24c9311ab0f2c5ad2`; committed/pushed: **YES**. Later status commits change only this receipt, not tested product code. Merged/deployed/production changed: **NO**. Latest production observation remains release-prep **2026-09-19 13:22:59 UTC**; free 20.2888 GiB, deployment HOLD_CAPACITY_AND_AUTHORIZATION. No production access this task.
+- Evidence: ignored `logs/s32-m1b/`, `progress/S32_M1B_PROJECTS_UI_R1.md`; screenshots `/home/conanxin/codex-artifacts/s32-m1b/`.
+- Sync **VERIFIED** with the same task_id/tested_commit/PR: [Issue #2 receipt](https://github.com/conanxin/book-id-search/issues/2#issuecomment-5743171309), [Notion overview](https://www.notion.so/3dd34a28189a81d48f74ec74593dac5f), [Notion M1-B](https://www.notion.so/3e034a28189a81aa920afaf70bd6201b).
+- Unique next step: review PR #11; do not merge or deploy automatically.

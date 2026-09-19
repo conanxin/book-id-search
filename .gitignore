@@ -73,6 +73,7 @@ reports/import-checkpoint-*.json
 
 # Local screenshots produced by browser smoke harnesses.
 reports/screenshots/
+.playwright-cli/
 
 # Local progress / scratch notes from sub-agent runs.
 progress/
