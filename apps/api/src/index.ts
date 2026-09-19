@@ -61,6 +61,7 @@ import {
 import {
   runPrivateAnnualReview,
 } from "./weread/private-annual-review.js";
+import { createS32Router } from "./s32/register.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(currentDir, "../../../");
@@ -124,6 +125,14 @@ const index = client.index<BookDocument>(indexName);
 
 app.use(cors());
 app.use(express.json({ limit: "256kb" }));
+
+app.use(
+  "/api/private/s32",
+  createS32Router({
+    env: process.env,
+    getCatalogDocument: (id) => index.getDocument(id),
+  }),
+);
 
 // ---------------------------------------------------------------------------
 // S27H: lightweight in-memory rate limiter for the private reading-map
