@@ -22,6 +22,12 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
+      - name: Upload resolved lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: s32-m1a-pnpm-lock
+          path: pnpm-lock.yaml
+          if-no-files-found: error
       - name: Existing API typecheck
         run: pnpm exec tsc -p apps/api/tsconfig.json --noEmit
       - name: Existing S32 static contract
