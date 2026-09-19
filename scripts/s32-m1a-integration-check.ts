@@ -16,7 +16,9 @@ function run(
   const result = spawnSync(command, args, {
     cwd: ROOT,
     encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: options.input !== undefined
+      ? ["pipe", "pipe", "pipe"]
+      : ["ignore", "pipe", "pipe"],
     ...options,
   });
   return {
@@ -94,6 +96,19 @@ async function main() {
     { input: migration },
   );
   requireOk("migration", applied);
+
+  const schemaReady = requireOk(
+    "schema readiness",
+    docker([
+      "exec", containerId,
+      "psql", "-X", "-U", "s32test", "-d", "postgres",
+      "-Atc", "SELECT to_regclass('core.external_identities')::text",
+    ]),
+  );
+  if (schemaReady.stdout !== "core.external_identities") {
+    throw new Error(`M1A_SCHEMA_READY=NO: ${schemaReady.stdout || "missing"}`);
+  }
+  console.log("M1A_SCHEMA_READY=YES");
 
   const portResult = requireOk(
     "docker port",
