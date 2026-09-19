@@ -59,3 +59,12 @@ jobs:
           else
             echo "NO_M1A_TESTS_YET"
           fi
+      - name: Existing search regression gate
+        run: |
+          pnpm exec vitest run \
+            apps/api/src/handle-search.test.ts \
+            apps/api/src/search/normalize.test.ts \
+            apps/api/src/search/query-cleanup.test.ts \
+            apps/api/src/search/query-interpretation.test.ts \
+            apps/api/src/search/intent-profile.test.ts \
+            apps/api/src/search/rerank.test.ts
