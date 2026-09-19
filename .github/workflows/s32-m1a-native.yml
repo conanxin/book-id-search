@@ -24,7 +24,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
       - name: Commit resolved lockfile if dependency resolution changed it
         shell: bash
         run: |
@@ -49,6 +49,8 @@ jobs:
         run: pnpm exec vitest run scripts/s32-schema-contract.test.ts scripts/s32-schema-check.test.ts
       - name: Existing M0 PG16 gate
         run: pnpm exec tsx scripts/s32-schema-check.ts
+      - name: M1A PG16 integration gate
+        run: pnpm exec tsx scripts/s32-m1a-integration-check.ts
       - name: S32 M1A tests when present
         shell: bash
         run: |
