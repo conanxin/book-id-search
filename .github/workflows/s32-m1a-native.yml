@@ -1,5 +1,8 @@
 name: S32 M1A Native Validation
 
+permissions:
+  contents: write
+
 on:
   push:
     branches:
@@ -22,6 +25,18 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
+      - name: Commit resolved lockfile if dependency resolution changed it
+        shell: bash
+        run: |
+          if ! git diff --quiet -- pnpm-lock.yaml; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add pnpm-lock.yaml
+            git commit -m "chore(s32): lock M1A PostgreSQL client"
+            git push origin HEAD:feat/s32-m1a-catalog-promotion
+          else
+            echo "LOCKFILE_UNCHANGED"
+          fi
       - name: Upload resolved lockfile
         uses: actions/upload-artifact@v4
         with:
