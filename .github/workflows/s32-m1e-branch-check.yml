@@ -23,3 +23,5 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: API S32 tests
         run: pnpm vitest run apps/api/src/s32
+      - name: M1E real PostgreSQL 16
+        run: pnpm s32:m1e:check
