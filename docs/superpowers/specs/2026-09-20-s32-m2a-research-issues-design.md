@@ -513,38 +513,45 @@ Conceptual flow:
 
 ```text
 BEGIN
-  validate/lock ACTIVE Project
-
   INSERT idempotency reservation
     or wait for/conflict with same scope+key
 
-  if existing COMPLETED:
+  if an existing row is found:
     require same request_hash
-    reload canonical Issue
-    verify ownership
-    return replay
+    require status = COMPLETED
+    require resource_type = RESEARCH_ISSUE
+    require non-null resource_id
+    reload canonical Issue + owner Project
+    verify exact single-owner invariant
+    return replay (200)
 
   if same key but different hash:
     409 IDEMPOTENCY_CONFLICT
 
-  INSERT research_issues(OPEN, current_resolution_id=NULL)
-  INSERT project_bindings(RESEARCH_ISSUE)
+  for a genuinely new reservation:
+    lock Project row
+    require Project lifecycle = ACTIVE
 
-  verify exact single-owner invariant
+    INSERT research_issues(OPEN, current_resolution_id=NULL)
+    INSERT project_bindings(RESEARCH_ISSUE)
 
-  UPDATE idempotency row:
-    status = COMPLETED
-    resource_type = RESEARCH_ISSUE
-    resource_id = issue.id
-    result_payload = minimal deterministic receipt
-    completed_at = now()
+    verify exact single-owner invariant
+
+    UPDATE idempotency row:
+      status = COMPLETED
+      resource_type = RESEARCH_ISSUE
+      resource_id = issue.id
+      result_payload = minimal deterministic receipt
+      completed_at = now()
 
 COMMIT
 ```
 
 The transaction must serialize two concurrent requests using the same key so both end with the same Issue and the database grows by exactly one Issue and one owner binding.
 
-M2-A does not require persisting a `FAILED` idempotency row for rolled-back creates.
+A completed replay represents an operation that already succeeded. Therefore a later Project lifecycle change to `ARCHIVED` must **not** convert that replay into `PROJECT_READ_ONLY`; the same key+hash replays the existing canonical Issue with HTTP 200. The ACTIVE check applies only when the key is a genuinely new create reservation.
+
+M2-A does not require persisting a `FAILED` idempotency row for rolled-back creates. For this M2-A scope, an existing same-scope row in `IN_PROGRESS` or `FAILED` after conflict resolution is not an expected durable state and must fail closed rather than silently create a second Issue.
 
 ### 9.5 Replay safety
 
@@ -620,6 +627,8 @@ The exact SQL may differ, but the query count must not grow with the number of I
 ### 11.3 List ownership integrity
 
 The list query begins from owner bindings for the requested Project, then validates global owner count for every returned `issue_id`.
+
+The projection must not use an inner join pattern that silently drops a `RESEARCH_ISSUE` binding whose `target_id` has no corresponding `core.research_issues` row. A dangling owner binding is canonical corruption and the whole list request returns generic 500.
 
 If a returned Issue has more than one global owner, the whole list request fails with generic 500; do not omit only the corrupt row.
 
@@ -879,6 +888,7 @@ Inject test corruption in disposable PostgreSQL:
 
 - Issue with zero owner bindings addressed via detail → generic 500;
 - Issue with two owner bindings → list/detail generic 500;
+- Project `RESEARCH_ISSUE` binding pointing at a missing Issue row → list generic 500;
 - non-null owner `binding_role` → generic 500;
 - malformed canonical title/question/lifecycle → generic 500.
 
