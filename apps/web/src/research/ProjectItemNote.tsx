@@ -4,14 +4,14 @@ import {
   ProjectApiError, type ProjectItemNote, type ProjectItemNoteRevision, type ProjectResearchItem,
 } from "./api";
 
-type Props = { token: string; projectId: string; item: ProjectResearchItem };
+type Props = { token: string; projectId: string; item: ProjectResearchItem; readOnly: boolean; buttonLabel?: string };
 type Mode = "closed" | "loading" | "failed" | "empty" | "reading" | "editing" | "history";
 
 export function ProjectItemNotePanel(props: Props) {
-  return <NotePanel key={JSON.stringify([props.token, props.projectId, props.item.bindingId])} {...props} />;
+  return <NotePanel key={JSON.stringify([props.token, props.projectId, props.item.bindingId, props.readOnly])} {...props} />;
 }
 
-function NotePanel({ token, projectId, item }: Props) {
+function NotePanel({ token, projectId, item, readOnly, buttonLabel = "研究笔记" }: Props) {
   const [mode, setMode] = useState<Mode>("closed");
   const [note, setNote] = useState<ProjectItemNote | null>(null);
   const [draft, setDraft] = useState("");
@@ -66,7 +66,7 @@ function NotePanel({ token, projectId, item }: Props) {
     } finally { finish(controller); }
   }
   function edit() {
-    if (!note || busy) return;
+    if (!note || busy || readOnly) return;
     setDraft(note.currentRevision.content); setStaleDraft(null); setLatestLoaded(false);
     setError(""); setSelected(null); setMode("editing");
   }
@@ -76,7 +76,7 @@ function NotePanel({ token, projectId, item }: Props) {
     setDraft(""); setStaleDraft(null); setLatestLoaded(false); setError(""); setMode("reading");
   }
   async function save() {
-    if (!draft.trim()) return;
+    if (!draft.trim() || readOnly) return;
     const controller = begin(); if (!controller) return;
     try {
       const data = note
@@ -105,7 +105,7 @@ function NotePanel({ token, projectId, item }: Props) {
 
   return <section className="research-note" aria-label="研究笔记">
     <div className="research-note-heading">
-      <button type="button" className="research-text-button" aria-expanded={mode !== "closed"} onClick={() => mode === "closed" ? open() : close()}>{mode === "closed" ? "研究笔记" : "收起笔记"}</button>
+      <button type="button" className="research-text-button" aria-expanded={mode !== "closed"} onClick={() => mode === "closed" ? open() : close()}>{mode === "closed" ? buttonLabel : "收起笔记"}</button>
       {mode !== "closed" ? <h4>研究笔记</h4> : null}
     </div>
     {mode !== "closed" ? <>
@@ -115,9 +115,10 @@ function NotePanel({ token, projectId, item }: Props) {
       {note && (mode === "reading" || (mode === "editing" && staleDraft !== null)) ? <section aria-label="当前笔记">
         <p className="research-muted">当前版本 v{note.currentRevision.revisionNo}</p>
         <pre className="research-note-content">{note.currentRevision.content}</pre>
-        {mode === "reading" ? <button type="button" className="research-text-button" disabled={busy} onClick={edit}>编辑</button> : null}
+        {mode === "reading" && !readOnly ? <button type="button" className="research-text-button" disabled={busy} onClick={edit}>编辑</button> : null}
       </section> : null}
-      {mode === "empty" || mode === "editing" ? <form className="research-note-editor" onSubmit={e => { e.preventDefault(); void save(); }}>
+      {mode === "empty" && readOnly ? <p className="research-muted">尚未写研究笔记</p> : null}
+      {(mode === "empty" || mode === "editing") && !readOnly ? <form className="research-note-editor" onSubmit={e => { e.preventDefault(); void save(); }}>
         <label htmlFor={textareaId}>笔记正文</label>
         <textarea id={textareaId} rows={8} value={draft} disabled={busy} onChange={e => setDraft(e.target.value)} />
         <p className="research-muted">保存时创建新版本。正文最多 65536 UTF-8 字节。</p>

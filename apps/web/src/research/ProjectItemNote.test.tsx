@@ -10,7 +10,7 @@ function note(version=1): ProjectItemNote {
   const summary = (n:number)=>({revisionId:`r${n}`,revisionNo:n,createdAt:"2026-09-20T00:00:00Z"});
   return {noteId:"note",projectId:"project",subjectBindingId:"binding",subjectId:"edition",createdAt:summary(1).createdAt,updatedAt:summary(1).createdAt,currentRevision:{...summary(version),contentFormat:"MARKDOWN",content:`  R${version}\n原始正文  `,contentSha256:"a".repeat(64)},revisions:Array.from({length:version},(_,i)=>summary(version-i))};
 }
-const view = (token="token",projectId="project",bindingId="binding")=><ProjectItemNotePanel token={token} projectId={projectId} item={{...item,bindingId}}/>;
+const view = (token="token",projectId="project",bindingId="binding",readOnly=false)=><ProjectItemNotePanel token={token} projectId={projectId} item={{...item,bindingId}} readOnly={readOnly}/>;
 const click = (name:string)=>userEvent.click(screen.getByRole("button",{name}));
 async function open() { await click("研究笔记"); }
 const draft = ()=>screen.getByRole("textbox",{name:"笔记正文"}) as HTMLTextAreaElement;
@@ -135,4 +135,26 @@ it("read-only history shows when the selected revision was saved",async()=>{
   vi.mocked(getProjectItemNote).mockResolvedValue({note:note(2)});render(view());await open();await screen.findByRole("button",{name:"v1"});await click("v1");
   const region=await screen.findByRole("region",{name:"历史版本 v1"});const time=region.querySelector("time");
   expect(time).not.toBeNull();expect(time?.getAttribute("datetime")).toBe(note().currentRevision.createdAt);expect(time?.textContent).toContain("2026");
+});
+
+describe("archived Project Note read-only mode",()=>{
+  it("loads current Note and immutable history but exposes no write controls",async()=>{
+    vi.mocked(getProjectItemNote).mockResolvedValue({note:note(2)});
+    render(view("token","project","binding",true));await open();await screen.findByRole("button",{name:"v1"});
+    expect(getProjectItemNote).toHaveBeenCalledWith("token","project","binding",expect.any(AbortSignal));
+    expect(screen.getByRole("region",{name:"当前笔记"}).textContent).toContain("R2");
+    expect(screen.queryByRole("button",{name:"编辑"})).toBeNull();
+    expect(screen.queryByRole("button",{name:"保存新版本"})).toBeNull();
+    await click("v1");expect((await screen.findByRole("region",{name:"历史版本 v1"})).textContent).toContain("R1");
+    expect(getProjectItemNoteRevision).toHaveBeenCalledOnce();
+    expect(createProjectItemNote).not.toHaveBeenCalled();expect(appendProjectItemNoteRevision).not.toHaveBeenCalled();
+  });
+
+  it("never offers a creation form when the archived item has no Note",async()=>{
+    render(view("token","project","binding",true));await open();
+    expect(await screen.findByText("尚未写研究笔记")).toBeTruthy();
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.queryByRole("button",{name:"创建笔记"})).toBeNull();
+    expect(createProjectItemNote).not.toHaveBeenCalled();expect(appendProjectItemNoteRevision).not.toHaveBeenCalled();
+  });
 });

@@ -1,8 +1,8 @@
 import { ProjectItems } from "./ProjectItems";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, FolderOpen, Plus } from "lucide-react";
-import { createProject, getProject, listProjects, type Project } from "./api";
+import { createProject, getProjectOverview, listProjects, type Project, type ProjectOverview } from "./api";
 import { saveS32Token, useS32Token } from "./access";
 import "./research.css";
 
@@ -18,20 +18,26 @@ export function ProjectCard({ project }: { project: Project }) {
   </Link>;
 }
 
-export function ProjectDetails({ project }: { project: Project }) {
+export function ProjectDetails({ project, summary }: { project: Project & { readOnly?: boolean }; summary?: ProjectOverview["summary"] }) {
   return <article className="research-panel research-detail">
-    <span className="research-eyebrow">研究项目</span>
+    <div className="research-detail-status"><span className="research-eyebrow">研究项目</span>{project.readOnly ? <span className="research-read-only">已归档 · 只读</span> : null}</div>
     <h1>{project.name}</h1>
+    {summary ? <dl className="research-overview-summary">
+      <div><dt>资料</dt><dd>{summary.itemCount}</dd></div>
+      <div><dt>笔记</dt><dd>{summary.noteCount}</dd></div>
+      <div><dt>最近活动</dt><dd>{summary.lastActivityAt ? dateLabel(summary.lastActivityAt) : "尚无研究活动"}</dd></div>
+    </dl> : null}
     <h2>研究目的</h2>
     <p className="research-purpose">{project.description || "尚未填写研究目的"}</p>
     <dl className="research-dates"><div><dt>创建时间</dt><dd>{dateLabel(project.createdAt)}</dd></div><div><dt>更新时间</dt><dd>{dateLabel(project.updatedAt)}</dd></div></dl>
   </article>;
 }
 
-function ProjectWorkspace({ token, projectId }: { token: string; projectId?: string }) {
+export function ProjectWorkspace({ token, projectId }: { token: string; projectId?: string }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [projects, setProjects] = useState<Project[]>([]);
-  const [project, setProject] = useState<Project | null>(null);
+  const [overview, setOverview] = useState<ProjectOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
@@ -43,8 +49,8 @@ function ProjectWorkspace({ token, projectId }: { token: string; projectId?: str
   useEffect(() => () => { submission.current?.abort(); }, []);
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true); setError(""); setProject(null); setProjects([]);
-    const load = projectId ? getProject(token, projectId, controller.signal).then((data) => { if (!controller.signal.aborted) setProject(data.project); })
+    setLoading(true); setError(""); setOverview(null); setProjects([]);
+    const load = projectId ? getProjectOverview(token, projectId, controller.signal).then((data) => { if (!controller.signal.aborted) setOverview(data); })
       : listProjects(token, controller.signal).then((data) => { if (!controller.signal.aborted) setProjects(data.projects); });
     void load.catch((err) => { if (!controller.signal.aborted) setError(errorLabel(err)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
@@ -73,7 +79,7 @@ function ProjectWorkspace({ token, projectId }: { token: string; projectId?: str
   if (projectId) return <>
     {loading ? <p role="status" className="research-panel">正在读取项目…</p> : null}
     {error ? <div role="alert" className="research-error">{error}<button onClick={() => setAttempt((n) => n + 1)}>重试读取</button></div> : null}
-    {project && !loading && !error ? <><ProjectDetails project={project} /><ProjectItems token={token} projectId={project.id} /></> : null}
+    {overview && !loading && !error ? <><ProjectDetails project={overview.project} summary={overview.summary} /><ProjectItems token={token} projectId={overview.project.id} items={overview.items} readOnly={overview.project.readOnly} focusedBindingId={searchParams.get("item")} onItemsChanged={() => setAttempt(n => n + 1)} /></> : null}
   </>;
   return <div className="research-grid">
     <section className="research-panel">

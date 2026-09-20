@@ -1,10 +1,12 @@
+// @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
-import { ProjectCard, ProjectDetails } from "./ProjectsPage";
+import { ProjectCard, ProjectDetails, ProjectWorkspace } from "./ProjectsPage";
 import { createProject, listProjects, addCatalogBookToProject, listProjectItems, removeProjectItem } from "./api";
 
-afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.resetModules(); });
 describe("S32 access and client", () => {
   it("falls back to memory and clears it when session storage is unavailable", async () => {
     vi.stubGlobal("sessionStorage", { getItem() { throw Error(); }, setItem() { throw Error(); }, removeItem() { throw Error(); } });
@@ -46,6 +48,35 @@ describe("project presentation", () => {
   it("shows purpose and dates, and handles an omitted description", () => {
     const html = renderToStaticMarkup(<ProjectDetails project={{ ...project, description: null }} />);
     expect(html).toContain("尚未填写研究目的"); expect(html).toContain("创建时间"); expect(html).toContain("更新时间");
+  });
+});
+
+describe("M1-E Project Workspace", () => {
+  const projectId = "11111111-1111-4111-8111-111111111111";
+  const overview = {
+    project: { id: projectId, name: "北京古道研究", description: "梳理路线", lifecycleState: "ACTIVE" as const, readOnly: false, createdAt: "2026-09-19T00:00:00Z", updatedAt: "2026-09-20T00:00:00Z" },
+    summary: { itemCount: 1, noteCount: 1, lastActivityAt: "2026-09-20T08:00:00Z" },
+    items: [{ bindingId: "22222222-2222-4222-8222-222222222222", workId: "33333333-3333-4333-8333-333333333333", editionId: "44444444-4444-4444-8444-444444444444", sourceId: "55555555-5555-4555-8555-555555555555", catalogBookId: "catalog", title: "北京古道考", publisher: null, publicationDate: null, publicationDatePrecision: "YEAR" as const, isbn: null, addedAt: "2026-09-20T00:00:00Z", activityAt: "2026-09-20T08:00:00Z", noteSummary: { noteId: "66666666-6666-4666-8666-666666666666", currentRevisionId: "77777777-7777-4777-8777-777777777777", currentRevisionNo: 2, excerpt: "R2", updatedAt: "2026-09-20T08:00:00Z" } }],
+  };
+
+  it("loads one direct Overview instead of separate Project and items requests", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(overview)));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<MemoryRouter initialEntries={[`/research/projects/${projectId}?item=${overview.items[0].bindingId}`]}><ProjectWorkspace token="token" projectId={projectId} /></MemoryRouter>);
+    expect(await screen.findByRole("heading", { name: "北京古道研究" })).toBeTruthy();
+    expect(document.querySelector(".research-overview-summary")?.textContent).toContain("资料1");
+    expect(document.querySelector(".research-overview-summary")?.textContent).toContain("笔记1");
+    expect(document.querySelector(".research-overview-summary")?.textContent).toContain("最近活动");
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledWith(`/api/private/s32/projects/${projectId}/overview`, expect.objectContaining({ cache: "no-store" }));
+  });
+
+  it("shows archived read-only identity from the Overview", async () => {
+    const archived = { ...overview, project: { ...overview.project, lifecycleState: "ARCHIVED" as const, readOnly: true } };
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(archived))));
+    render(<MemoryRouter><ProjectWorkspace token="token" projectId={projectId} /></MemoryRouter>);
+    expect(await screen.findByText("已归档 · 只读")).toBeTruthy();
+    await waitFor(() => expect(screen.getByText("研究笔记 · v2")).toBeTruthy());
   });
 });
 

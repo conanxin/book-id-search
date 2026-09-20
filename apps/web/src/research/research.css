@@ -36,6 +36,12 @@
 .research-eyebrow { color: var(--color-text-muted); font-size: 13px; }
 .research-detail h1 { margin: 10px 0 32px; font-size: clamp(24px, 4vw, 32px); overflow-wrap: anywhere; }
 .research-detail h2 { font-size: 17px; }
+.research-detail-status { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.research-read-only { padding: 5px 10px; border-radius: 999px; background: #f0f1f3; color: var(--color-text-muted); font-size: 13px; font-weight: 650; }
+.research-overview-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: -12px 0 28px; }
+.research-overview-summary > div { min-width: 0; padding: 14px; border-radius: var(--radius-sm); background: #f7f9fc; }
+.research-overview-summary dt { color: var(--color-text-muted); font-size: 12px; }
+.research-overview-summary dd { margin: 5px 0 0; font-weight: 650; overflow-wrap: anywhere; }
 .research-purpose { white-space: pre-wrap; overflow-wrap: anywhere; min-height: 100px; line-height: 1.8; }
 .research-dates { border-top: 1px solid var(--color-border); padding-top: 22px; display: flex; gap: 48px; color: var(--color-text-muted); font-size: 13px; }
 .research-dates dd { margin: 6px 0 0; }
@@ -44,6 +50,9 @@
   .research-access, .research-dates { flex-direction: column; align-items: flex-start; gap: 12px; }
   .research-access form { grid-template-columns: 1fr; }
   .research-nav { gap: 18px; }
+  .research-overview-summary { grid-template-columns: 1fr; }
+  .research-material-actions, .research-note-actions { align-items: flex-start; }
+  .research-membership-chip { max-width: 100%; }
 }
 .research-add { margin: 12px 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .research-add-panel { flex-basis: 100%; min-width: 0; padding: 16px; background: var(--color-bg-card); border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow-wrap: anywhere; }
@@ -63,6 +72,11 @@
 .research-material-fields dt { color: var(--color-text-muted); font-size: 13px; }
 .research-material-fields dd { margin: 6px 0 0; overflow-wrap: anywhere; }
 .research-material-actions { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+.research-note-preview { margin-top: 18px; padding: 14px; border-radius: var(--radius-sm); background: #f7f9fc; overflow-wrap: anywhere; }
+.research-note-preview .research-muted { margin: 6px 0; font-size: 12px; }
+.research-note-excerpt { margin: 8px 0 0; color: var(--color-text); line-height: 1.6; overflow-wrap: anywhere; }
+.research-material--focused { border-color: var(--color-primary); box-shadow: 0 0 0 4px rgba(47, 105, 209, .16); transition: border-color .2s, box-shadow .2s; }
+.research-missing-item { padding: 14px 16px; border-radius: var(--radius-sm); background: #fff5db; color: var(--color-text); }
 .research-note { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--color-border); min-width: 0; overflow-wrap: anywhere; }
 .research-note-heading, .research-note-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .research-note-heading h4, .research-note h5 { margin: 10px 0; font-size: 15px; }

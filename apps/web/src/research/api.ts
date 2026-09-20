@@ -14,6 +14,7 @@ const errorCodes: Record<string, { status: number; message: string }> = {
   PROJECT_ITEM_HAS_NOTE: { status: 409, message: "这项资料已有研究笔记，暂不能直接移出项目。" },
   NOTE_ALREADY_EXISTS: { status: 409, message: "这项资料已有研究笔记，请重新加载。" },
   NOTE_INVALID_INPUT: { status: 400, message: "笔记输入不正确，正文不能为空且不能超过 65536 UTF-8 字节。" },
+  PROJECT_READ_ONLY: { status: 409, message: "这个项目已归档，只能查看。" },
 };
 const statusMessages: Record<number, string> = {
   400: "请检查项目或书目输入。",
