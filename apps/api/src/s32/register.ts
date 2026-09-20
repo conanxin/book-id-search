@@ -17,6 +17,9 @@ import { createProjectRouter } from "./routes/project-routes.js";
 import { createProjectItemNotesService, type ProjectItemNotesService } from "./application/project-item-notes.js";
 import { createPostgresProjectItemNoteStore } from "./postgres/project-item-note-store.js";
 import { createProjectItemNoteRouter } from "./routes/project-item-note-routes.js";
+import { createResearchMembershipService, type ResearchMembershipService } from "./application/research-memberships.js";
+import { createPostgresResearchMembershipStore } from "./postgres/research-membership-store.js";
+import { createResearchMembershipRouter } from "./routes/research-membership-route.js";
 
 export function createS32Router(deps: {
   env: NodeJS.ProcessEnv;
@@ -29,11 +32,13 @@ export function createS32Router(deps: {
   let projects: ProjectsService | null = null;
   let projectItems: ProjectItemsService | null = null;
   let projectItemNotes: ProjectItemNotesService | null = null;
+  let researchMemberships: ResearchMembershipService | null = null;
   if (config.enabled && config.databaseUrl) {
     const pool = new Pool({ connectionString: config.databaseUrl, connectionTimeoutMillis: 3000, query_timeout: 5000 });
     pool.on("error", () => console.warn("[s32] idle database connection unavailable"));
     projects = createProjectsService(createPostgresProjectStore(pool));
     projectItemNotes = createProjectItemNotesService(createPostgresProjectItemNoteStore(pool));
+    researchMemberships = createResearchMembershipService(createPostgresResearchMembershipStore(pool));
     command = createPromoteCatalogBookCommand({
       reader: createMeiliCatalogBookReader(deps.getCatalogDocument),
       store: createPostgresCatalogPromotionStore(pool),
@@ -45,6 +50,7 @@ export function createS32Router(deps: {
     "/promotions/catalog-book",
     createCatalogPromotionHandler({ config, command }),
   );
+  router.use("/research-memberships", createResearchMembershipRouter(config, researchMemberships));
   router.use("/projects", createProjectItemNoteRouter(config, projectItemNotes));
   router.use("/projects", createProjectItemRouter(config, projectItems));
   router.use("/projects", createProjectRouter(config, projects));
