@@ -30,6 +30,20 @@ describe("createMeiliCatalogBookReader", () => {
     await expect(reader.getById("missing")).resolves.toBeNull();
   });
 
+  it("recognizes document_not_found in the current Meili SDK error cause", async () => {
+    const reader = createMeiliCatalogBookReader(async () => {
+      throw new Error("MeiliSearchApiError", { cause: { code: "document_not_found" } });
+    });
+    await expect(reader.getById("missing")).resolves.toBeNull();
+  });
+
+  it("does not treat an unavailable index as a missing book", async () => {
+    const reader = createMeiliCatalogBookReader(async () => {
+      throw new Error("MeiliSearchApiError", { cause: { code: "index_not_found" } });
+    });
+    await expect(reader.getById("missing")).rejects.toBeInstanceOf(CatalogReadUnavailableError);
+  });
+
   it("classifies other lookup failures as CatalogReadUnavailableError", async () => {
     const reader = createMeiliCatalogBookReader(async () => {
       throw new Error("upstream unavailable");
