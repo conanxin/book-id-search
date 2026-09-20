@@ -26,7 +26,7 @@ describe("Research Issue detail", () => {
     expect(screen.getByRole("heading", { name: "可能答案" })).toBeTruthy();
     expect(screen.getByText(/Claims 将在后续阶段加入/)).toBeTruthy();
     expect(screen.getByRole("link", { name: /北京古道研究/ }).getAttribute("href")).toBe(`/research/projects/${projectId}`);
-    expect(document.title).toBe(`${issue.title} · BOOK-ID-SEARCH`);
+    await waitFor(() => expect(document.title).toBe(`${issue.title} · BOOK-ID-SEARCH`));
   });
 
   it("keeps archived details readable", async () => {
