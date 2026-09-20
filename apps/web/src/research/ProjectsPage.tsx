@@ -5,6 +5,7 @@ import { ArrowLeft, FolderOpen, Plus } from "lucide-react";
 import { createProject, getProjectOverview, listProjects, type Project, type ProjectOverview } from "./api";
 import { saveS32Token, useS32Token } from "./access";
 import { ResearchIssuesSection, useProjectResearchIssues } from "./ResearchIssues";
+import { ResearchIssueDetail } from "./ResearchIssueDetail";
 import "./research.css";
 
 export const researchEnabled = import.meta.env.VITE_S32_ENABLED === "true";
@@ -114,17 +115,17 @@ export function ProjectWorkspace({ token, projectId }: { token: string; projectI
 }
 
 export default function ProjectsPage() {
-  const { projectId } = useParams();
+  const { projectId, issueId } = useParams();
   const token = useS32Token();
   const [input, setInput] = useState("");
   useEffect(() => {
     const previousTitle = document.title;
-    document.title = projectId ? "项目详情 · BOOK-ID-SEARCH" : "我的研究项目 · BOOK-ID-SEARCH";
+    document.title = issueId ? "研究问题 · BOOK-ID-SEARCH" : projectId ? "项目详情 · BOOK-ID-SEARCH" : "我的研究项目 · BOOK-ID-SEARCH";
     return () => { document.title = previousTitle; };
-  }, [projectId]);
+  }, [projectId, issueId]);
   return <main className="page research-page">
     <nav className="research-nav" aria-label="研究导航"><Link to="/">查书</Link><Link to="/weread">微信读书</Link><Link to="/research/projects" aria-current={projectId ? undefined : "page"}>我的研究项目</Link></nav>
-    {projectId ? <Link className="research-back" to="/research/projects"><ArrowLeft size={16} />返回项目列表</Link> : <header className="research-header"><div className="brand-row"><FolderOpen size={28} /><h1>我的研究项目</h1></div><p>为想深入了解的主题，留下一处起点。</p></header>}
+    {projectId && !issueId ? <Link className="research-back" to="/research/projects"><ArrowLeft size={16} />返回项目列表</Link> : !projectId ? <header className="research-header"><div className="brand-row"><FolderOpen size={28} /><h1>我的研究项目</h1></div><p>为想深入了解的主题，留下一处起点。</p></header> : null}
     {!researchEnabled ? <p className="research-panel" role="status">研究项目功能尚未开启。</p> : <>
       <section className="research-access" aria-label="研究项目访问">
         {token ? <><span>研究项目访问凭据已设置</span><button className="research-text-button" onClick={() => { saveS32Token(null); setInput(""); }}>清除访问凭据</button></> : <form onSubmit={(event) => { event.preventDefault(); saveS32Token(input); setInput(""); }}>
@@ -132,7 +133,7 @@ export default function ProjectsPage() {
           <small className="research-muted">凭据仅在当前浏览器会话中使用，与微信读书独立。</small>
         </form>}
       </section>
-      {token ? <ProjectWorkspace key={`${token}:${projectId ?? "list"}`} token={token} projectId={projectId} /> : null}
+      {token && projectId && issueId ? <ResearchIssueDetail key={`${token}:${projectId}:${issueId}`} token={token} projectId={projectId} issueId={issueId} /> : token ? <ProjectWorkspace key={`${token}:${projectId ?? "list"}`} token={token} projectId={projectId} /> : null}
     </>}
   </main>;
 }

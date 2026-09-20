@@ -56,6 +56,9 @@
 .research-issue-actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: flex-end; }
 .research-issue-notice { padding: 14px; border-radius: var(--radius-sm); background: #fff5d9; color: #654b00; overflow-wrap: anywhere; }
 .research-materials > h2 { font-size: 20px; }
+.research-issue-detail h1 { overflow-wrap: anywhere; }
+.research-issue-question { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; }
+.research-possible-answers { margin: 28px 0; padding-top: 20px; border-top: 1px solid var(--color-border); }
 @media (max-width: 700px) {
   .research-grid { grid-template-columns: 1fr; }
   .research-access, .research-dates { flex-direction: column; align-items: flex-start; gap: 12px; }
