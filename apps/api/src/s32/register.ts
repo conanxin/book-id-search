@@ -1,3 +1,6 @@
+import { createProjectItemsService, type ProjectItemsService } from "./application/project-items.js";
+import { createPostgresProjectBindingStore } from "./postgres/project-binding-store.js";
+import { createProjectItemRouter } from "./routes/project-item-routes.js";
 import { Router } from "express";
 import { Pool } from "pg";
 import { createPromoteCatalogBookCommand } from "./application/promote-catalog-book.js";
@@ -21,6 +24,7 @@ export function createS32Router(deps: {
 
   let command: ReturnType<typeof createPromoteCatalogBookCommand> | null = null;
   let projects: ProjectsService | null = null;
+  let projectItems: ProjectItemsService | null = null;
   if (config.enabled && config.databaseUrl) {
     const pool = new Pool({ connectionString: config.databaseUrl, connectionTimeoutMillis: 3000, query_timeout: 5000 });
     pool.on("error", () => console.warn("[s32] idle database connection unavailable"));
@@ -29,12 +33,14 @@ export function createS32Router(deps: {
       reader: createMeiliCatalogBookReader(deps.getCatalogDocument),
       store: createPostgresCatalogPromotionStore(pool),
     });
+    projectItems = createProjectItemsService({ projects, promotionCommand: command, bindings: createPostgresProjectBindingStore(pool) });
   }
 
   router.post(
     "/promotions/catalog-book",
     createCatalogPromotionHandler({ config, command }),
   );
+  router.use("/projects", createProjectItemRouter(config, projectItems));
   router.use("/projects", createProjectRouter(config, projects));
 
   return router;
