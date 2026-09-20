@@ -101,7 +101,7 @@ export function ProjectItems({ token, projectId, items, readOnly, focusedBinding
           {item.catalogBookId ? <Link to={`/books/${encodeURIComponent(item.catalogBookId)}`}>查看书目</Link> : null}
           {!readOnly ? <button type="button" className="research-text-button" disabled={!!removingId} onClick={() => void remove(item)}>{removingId === item.bindingId ? "正在移出…" : "移出项目"}</button> : null}
         </div>
-        {item.noteSummary || !readOnly ? <ProjectItemNotePanel token={token} projectId={projectId} item={noteItem} readOnly={readOnly} buttonLabel={item.noteSummary ? "打开笔记" : "写笔记"} /> : null}
+        {item.noteSummary || !readOnly ? <ProjectItemNotePanel token={token} projectId={projectId} item={noteItem} readOnly={readOnly} buttonLabel={item.noteSummary ? "打开笔记" : "写笔记"} onSaved={onItemsChanged} /> : null}
       </article>;
     })}</div>
   </section>;

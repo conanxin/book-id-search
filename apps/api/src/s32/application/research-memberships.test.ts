@@ -58,4 +58,13 @@ describe("research membership service", () => {
     await expect(service.lookup({ bookIds: [] })).resolves.toEqual({ memberships: {} });
     expect(lookup).not.toHaveBeenCalled();
   });
+
+  it("keeps __proto__ as an explicit serializable membership key", async () => {
+    const { service } = setup(new Map());
+    const result = await service.lookup({ bookIds: ["__proto__"] });
+
+    expect(Object.hasOwn(result.memberships, "__proto__")).toBe(true);
+    expect(result.memberships["__proto__"]).toEqual([]);
+    expect(JSON.parse(JSON.stringify(result)).memberships["__proto__"]).toEqual([]);
+  });
 });

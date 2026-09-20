@@ -4,14 +4,14 @@ import {
   ProjectApiError, type ProjectItemNote, type ProjectItemNoteRevision, type ProjectResearchItem,
 } from "./api";
 
-type Props = { token: string; projectId: string; item: ProjectResearchItem; readOnly: boolean; buttonLabel?: string };
+type Props = { token: string; projectId: string; item: ProjectResearchItem; readOnly: boolean; buttonLabel?: string; onSaved?: () => void };
 type Mode = "closed" | "loading" | "failed" | "empty" | "reading" | "editing" | "history";
 
 export function ProjectItemNotePanel(props: Props) {
   return <NotePanel key={JSON.stringify([props.token, props.projectId, props.item.bindingId, props.readOnly])} {...props} />;
 }
 
-function NotePanel({ token, projectId, item, readOnly, buttonLabel = "研究笔记" }: Props) {
+function NotePanel({ token, projectId, item, readOnly, buttonLabel = "研究笔记", onSaved }: Props) {
   const [mode, setMode] = useState<Mode>("closed");
   const [note, setNote] = useState<ProjectItemNote | null>(null);
   const [draft, setDraft] = useState("");
@@ -84,6 +84,7 @@ function NotePanel({ token, projectId, item, readOnly, buttonLabel = "研究笔�
         : await createProjectItemNote(token, projectId, item.bindingId, draft, controller.signal);
       if (!controller.signal.aborted) {
         setNote(data.note); setDraft(""); setStaleDraft(null); setLatestLoaded(false); setMode("reading");
+        onSaved?.();
       }
     } catch (err) {
       if (!controller.signal.aborted) {

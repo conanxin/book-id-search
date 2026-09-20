@@ -34,10 +34,10 @@ export function createResearchMembershipService(store: ResearchMembershipStore) 
   return {
     async lookup(input: unknown) {
       const bookIds = readMembershipBookIds(input);
-      if (bookIds.length === 0) return { memberships: {} as Record<string, CatalogBookMembership[]> };
+      const memberships = Object.create(null) as Record<string, CatalogBookMembership[]>;
+      if (bookIds.length === 0) return { memberships };
 
       const found = await store.lookup(bookIds);
-      const memberships: Record<string, CatalogBookMembership[]> = {};
       for (const bookId of bookIds) {
         memberships[bookId] = [...(found.get(bookId) ?? [])].sort(compareMemberships);
       }

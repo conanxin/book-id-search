@@ -10,7 +10,7 @@ function note(version=1): ProjectItemNote {
   const summary = (n:number)=>({revisionId:`r${n}`,revisionNo:n,createdAt:"2026-09-20T00:00:00Z"});
   return {noteId:"note",projectId:"project",subjectBindingId:"binding",subjectId:"edition",createdAt:summary(1).createdAt,updatedAt:summary(1).createdAt,currentRevision:{...summary(version),contentFormat:"MARKDOWN",content:`  R${version}\n原始正文  `,contentSha256:"a".repeat(64)},revisions:Array.from({length:version},(_,i)=>summary(version-i))};
 }
-const view = (token="token",projectId="project",bindingId="binding",readOnly=false)=><ProjectItemNotePanel token={token} projectId={projectId} item={{...item,bindingId}} readOnly={readOnly}/>;
+const view = (token="token",projectId="project",bindingId="binding",readOnly=false,onSaved?:()=>void)=><ProjectItemNotePanel token={token} projectId={projectId} item={{...item,bindingId}} readOnly={readOnly} onSaved={onSaved}/>;
 const click = (name:string)=>userEvent.click(screen.getByRole("button",{name}));
 async function open() { await click("研究笔记"); }
 const draft = ()=>screen.getByRole("textbox",{name:"笔记正文"}) as HTMLTextAreaElement;
@@ -30,6 +30,11 @@ describe("on-demand project item Note",()=>{
     await act(async()=>resolve({note:note()}));expect((await screen.findByRole("region",{name:"当前笔记"})).textContent).toContain(note().currentRevision.content);
     expect(screen.getByRole("button",{name:"v1 当前"})).toBeTruthy();expect(screen.queryByRole("textbox")).toBeNull();
   });
+  it("notifies the parent exactly once after a successful R1 create",async()=>{
+    const onSaved=vi.fn();render(view("token","project","binding",false,onSaved));await open();await screen.findByRole("textbox");
+    fireEvent.change(draft(),{target:{value:"第一版"}});await click("创建笔记");await screen.findByRole("button",{name:"v1 当前"});
+    expect(onSaved).toHaveBeenCalledOnce();
+  });
   it("loads existing content as plain text; edit prefills exactly; cancel makes no write",async()=>{
     const n=note();n.currentRevision.content="<script>secret()</script>\n  原文  ";vi.mocked(getProjectItemNote).mockResolvedValue({note:n});
     const rendered=render(view());await open();await screen.findByRole("region",{name:"当前笔记"});expect(rendered.container.querySelector("script")).toBeNull();
@@ -41,6 +46,11 @@ describe("on-demand project item Note",()=>{
     fireEvent.change(draft(),{target:{value:"第二版"}});await click("保存新版本");
     expect(appendProjectItemNoteRevision).toHaveBeenCalledWith("token","project","binding","r1","第二版",expect.any(AbortSignal));
     expect(await screen.findByRole("button",{name:"v2 当前"})).toBeTruthy();expect(screen.getByRole("button",{name:"v1"})).toBeTruthy();
+  });
+  it("notifies the parent exactly once after a successful R2 append",async()=>{
+    const onSaved=vi.fn();vi.mocked(getProjectItemNote).mockResolvedValue({note:note()});render(view("token","project","binding",false,onSaved));
+    await open();await screen.findByRole("button",{name:"编辑"});await click("编辑");fireEvent.change(draft(),{target:{value:"第二版"}});await click("保存新版本");
+    await screen.findByRole("button",{name:"v2 当前"});expect(onSaved).toHaveBeenCalledOnce();
   });
   it("stale409 retains draft; reload changes base, explicit re-edit alone replaces textarea",async()=>{
     vi.mocked(getProjectItemNote).mockResolvedValueOnce({note:note(2)}).mockResolvedValueOnce({note:note(3)});
@@ -65,6 +75,14 @@ describe("on-demand project item Note",()=>{
     render(view());await open();if(kind==="append"){await screen.findByRole("button",{name:"编辑"});await click("编辑");}else await screen.findByRole("textbox");
     fireEvent.change(draft(),{target:{value:"不能丢失"}});await click(kind==="append"?"保存新版本":"创建笔记");
     expect((await screen.findByRole("alert")).textContent).toContain("服务暂不可用");expect(draft().value).toBe("不能丢失");expect(screen.queryByRole("button",{name:"v2 当前"})).toBeNull();
+  });
+  it.each(["create","append"])("does not notify the parent after failed %s",async kind=>{
+    const onSaved=vi.fn();if(kind==="append")vi.mocked(getProjectItemNote).mockResolvedValue({note:note()});
+    const failure=kind==="append"?new ProjectApiError(409,"笔记已经发生变化","STALE_NOTE_REVISION"):new ProjectApiError(503,"服务暂不可用");
+    vi.mocked(createProjectItemNote).mockRejectedValue(failure);vi.mocked(appendProjectItemNoteRevision).mockRejectedValue(failure);
+    render(view("token","project","binding",false,onSaved));await open();if(kind==="append"){await screen.findByRole("button",{name:"编辑"});await click("编辑");}else await screen.findByRole("textbox");
+    fireEvent.change(draft(),{target:{value:"失败草稿"}});await click(kind==="append"?"保存新版本":"创建笔记");await screen.findByRole("alert");
+    expect(onSaved).not.toHaveBeenCalled();
   });
   it("GET503 is a retryable error, never no-Note create UI",async()=>{
     vi.mocked(getProjectItemNote).mockRejectedValueOnce(new ProjectApiError(503,"服务暂不可用"));render(view());await open();

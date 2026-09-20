@@ -4,13 +4,21 @@ import { act, cleanup, render, screen, waitFor, within } from "@testing-library/
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { ProjectItems } from "./ProjectItems";
-import { getProjectItemNote, removeProjectItem, ProjectApiError, type ProjectOverviewItem } from "./api";
+import { createProjectItemNote, getProjectItemNote, removeProjectItem, ProjectApiError, type ProjectItemNote, type ProjectOverviewItem } from "./api";
 
 vi.mock("./api", async importOriginal => ({
   ...await importOriginal<typeof import("./api")>(),
   removeProjectItem: vi.fn(),
   getProjectItemNote: vi.fn(),
+  createProjectItemNote: vi.fn(),
 }));
+
+const savedNote: ProjectItemNote = {
+  noteId: "note", projectId: "project", subjectBindingId: "binding", subjectId: "edition",
+  createdAt: "2026-09-20T09:00:00Z", updatedAt: "2026-09-20T09:00:00Z",
+  currentRevision: { revisionId: "r1", revisionNo: 1, createdAt: "2026-09-20T09:00:00Z", contentFormat: "MARKDOWN", content: "第一版", contentSha256: "a".repeat(64) },
+  revisions: [{ revisionId: "r1", revisionNo: 1, createdAt: "2026-09-20T09:00:00Z" }],
+};
 
 const item: ProjectOverviewItem = {
   bindingId: "binding",
@@ -46,6 +54,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(removeProjectItem).mockResolvedValue(undefined);
   vi.mocked(getProjectItemNote).mockResolvedValue({ note: null });
+  vi.mocked(createProjectItemNote).mockResolvedValue({ note: savedNote });
   vi.spyOn(window, "confirm").mockReturnValue(true);
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers(); });
@@ -71,6 +80,13 @@ describe("project rediscover materials", () => {
     expect(screen.getByText(/更新于/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "打开笔记" })).toBeTruthy();
     expect(getProjectItemNote).not.toHaveBeenCalled();
+  });
+
+  it("connects a successful Note save to the parent Overview reload callback", async () => {
+    const onItemsChanged=vi.fn();render(view({items:[{...item,noteSummary:null}],onItemsChanged}));
+    await userEvent.click(screen.getByRole("button",{name:"写笔记"}));await screen.findByRole("textbox",{name:"笔记正文"});
+    await userEvent.type(screen.getByRole("textbox",{name:"笔记正文"}),"第一版");await userEvent.click(screen.getByRole("button",{name:"创建笔记"}));
+    await screen.findByRole("button",{name:"v1 当前"});expect(onItemsChanged).toHaveBeenCalledOnce();
   });
 
   it("shows an honest no-Note and empty-activity state", () => {
