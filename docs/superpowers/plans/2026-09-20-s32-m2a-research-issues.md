@@ -451,6 +451,8 @@ Build `questionExcerpt` with Task 1 helper, never persistence.
 
 - [ ] **Step 5: Implement detail projection from Issue row to all owner bindings**
 
+For `get(projectId, issueId)`, read/validate the requested Project first inside the same repeatable-read snapshot. If Project is missing, return null without querying/disclosing the Issue. Only then query the Issue + all owner bindings.
+
 Use a LEFT JOIN so an orphan Issue produces one Issue row with null owner binding rather than disappearing:
 
 ```sql
@@ -885,7 +887,7 @@ Validators must reject:
 Pin the Web normalization to the server contract:
 - title trim/single-line/160 code points;
 - question CRLF/CR normalization/trim/4000 code points;
-- stable SHA-256 of fixed-order `{projectId,title,question}`;
+- stable SHA-256 of fixed-order `{projectId,title,question}` with `projectId` lowercased exactly as the server does;
 - supplementary-plane Unicode counts correctly.
 
 Receipt cases:
