@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import {
   ProjectItemInactiveError, ProjectItemNotFoundError, ProjectItemNoteAlreadyExistsError,
-  ProjectItemNoteNotFoundError, ProjectItemNoteRevisionNotFoundError, ProjectItemNoteStoreUnavailableError, StaleNoteRevisionError,
+  ProjectItemNoteNotFoundError, ProjectItemNoteRevisionNotFoundError, ProjectItemNoteStoreUnavailableError, ProjectReadOnlyError, StaleNoteRevisionError,
   type ProjectItemNoteStore,
 } from "../application/project-item-notes.js";
 import type { ProjectItemNote, ProjectItemNoteRevision, ProjectItemNoteRevisionSummary } from "../domain/note.js";
@@ -18,6 +18,7 @@ interface RevisionRow {
   content: string; content_sha256: string; created_at: Date;
 }
 type SubjectInput = { projectId: string; bindingId: string };
+type SubjectAccess = "READ" | "WRITE";
 
 function integrity(): never { throw new Error("Project item note integrity error."); }
 function revisionNumber(value: string | number): number {
@@ -53,7 +54,7 @@ async function transaction<T>(pool: Pool, readOnly: boolean, operation: (client:
     throw error;
   }
 }
-async function readSubject(client: PoolClient, input: SubjectInput, lock: boolean): Promise<Subject> {
+async function readSubject(client: PoolClient, input: SubjectInput, lock: boolean, access: SubjectAccess): Promise<Subject> {
   const result = await client.query<Subject>(`SELECT pb.id AS binding_id, pb.target_id AS edition_id,
     p.lifecycle_state AS project_state, e.lifecycle_state AS edition_state
     FROM core.project_bindings pb
@@ -63,7 +64,15 @@ async function readSubject(client: PoolClient, input: SubjectInput, lock: boolea
     ${lock ? "FOR UPDATE OF pb" : ""}`, [input.bindingId, input.projectId]);
   const subject = result.rows[0];
   if (!subject) throw new ProjectItemNotFoundError("PROJECT_ITEM_NOT_FOUND");
-  if (subject.project_state !== "ACTIVE" || subject.edition_state !== "ACTIVE") throw new ProjectItemInactiveError("PROJECT_ITEM_INACTIVE");
+  if (subject.edition_state !== "ACTIVE") throw new ProjectItemInactiveError("PROJECT_ITEM_INACTIVE");
+  if (access === "READ") {
+    if (subject.project_state !== "ACTIVE" && subject.project_state !== "ARCHIVED") {
+      throw new ProjectItemInactiveError("PROJECT_ITEM_INACTIVE");
+    }
+  } else {
+    if (subject.project_state === "ARCHIVED") throw new ProjectReadOnlyError("PROJECT_READ_ONLY");
+    if (subject.project_state !== "ACTIVE") throw new ProjectItemInactiveError("PROJECT_ITEM_INACTIVE");
+  }
   return subject;
 }
 async function noteBindings(client: PoolClient, projectId: string, bindingId: string): Promise<NoteBinding[]> {
@@ -119,14 +128,14 @@ export function createPostgresProjectItemNoteStore(pool: Pool): ProjectItemNoteS
   return {
     get(input) {
       return transaction(pool, true, async client => {
-        const subject = await readSubject(client, input, false);
+        const subject = await readSubject(client, input, false, "READ");
         const note = await ownedNote(client, input.projectId, subject);
         return note ? projectNote(client, input.projectId, subject, note) : null;
       });
     },
     create(input) {
       return transaction(pool, false, async client => {
-        const subject = await readSubject(client, input, true);
+        const subject = await readSubject(client, input, true, "WRITE");
         if ((await noteBindings(client, input.projectId, subject.binding_id)).length) throw new ProjectItemNoteAlreadyExistsError("NOTE_ALREADY_EXISTS");
         const noteId = randomUUID();
         await client.query(`INSERT INTO core.notes
@@ -145,7 +154,7 @@ export function createPostgresProjectItemNoteStore(pool: Pool): ProjectItemNoteS
     },
     appendRevision(input) {
       return transaction(pool, false, async client => {
-        const subject = await readSubject(client, input, false);
+        const subject = await readSubject(client, input, false, "WRITE");
         const note = await ownedNote(client, input.projectId, subject, true);
         if (!note) throw new ProjectItemNoteNotFoundError("NOTE_NOT_FOUND");
         if (input.baseRevisionId !== note.current_revision_id) throw new StaleNoteRevisionError("STALE_NOTE_REVISION");
@@ -162,7 +171,7 @@ export function createPostgresProjectItemNoteStore(pool: Pool): ProjectItemNoteS
     },
     getRevision(input) {
       return transaction(pool, true, async client => {
-        const subject = await readSubject(client, input, false);
+        const subject = await readSubject(client, input, false, "READ");
         const note = await ownedNote(client, input.projectId, subject);
         if (!note) throw new ProjectItemNoteNotFoundError("NOTE_NOT_FOUND");
         const result = await client.query<RevisionRow>(`SELECT r.id, r.note_id, r.revision_no, r.content_format, r.content, r.content_sha256, r.created_at
