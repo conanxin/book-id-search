@@ -334,7 +334,7 @@ For a genuinely new request, one transaction must:
 
 1. reserve the idempotency key;
 2. lock/read the Project;
-3. read/validate the exact Issue ownership;
+3. lock/read the exact Issue and validate its single Project ownership;
 4. confirm Project is ACTIVE;
 5. confirm Issue is OPEN;
 6. insert one `core.claims` row;
@@ -354,7 +354,7 @@ POST requires `Idempotency-Key`, using the same UUID contract as M2-A.
 Scope:
 
 ```text
-S32:M2B:ISSUE_CLAIM_CREATE:<issueId>
+S32:M2B:PROJECT_ISSUE_CLAIM_CREATE:<projectId>:<issueId>
 ```
 
 The server computes its own SHA-256 request hash from canonical values:
@@ -576,7 +576,7 @@ Implementation is not complete until the following are proven.
 1. statement normalization is deterministic across Unicode whitespace and CR/LF forms;
 2. NUL is rejected before PostgreSQL;
 3. same canonical input produces the same request hash;
-4. different Issue IDs produce different request hashes/scopes;
+4. different Project or Issue IDs produce different request hashes/scopes;
 5. Claim statement cannot be updated through an API path;
 6. Claim creation returns only ACTIVE canonical rows.
 
