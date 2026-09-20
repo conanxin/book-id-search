@@ -67,8 +67,21 @@ describe("M1-E Project Workspace", () => {
     expect(document.querySelector(".research-overview-summary")?.textContent).toContain("资料1");
     expect(document.querySelector(".research-overview-summary")?.textContent).toContain("笔记1");
     expect(document.querySelector(".research-overview-summary")?.textContent).toContain("最近活动");
+    expect(screen.getAllByRole("heading", { name: /^研究资料/ })).toHaveLength(1);
+    expect(document.querySelectorAll("section.research-materials")).toHaveLength(1);
+    expect(screen.getByRole("heading", { name: "研究资料（1）" })).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock).toHaveBeenCalledWith(`/api/private/s32/projects/${projectId}/overview`, expect.objectContaining({ cache: "no-store" }));
+  });
+
+  it("keeps Issues visible when Overview fails", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => url.endsWith("/issues")
+      ? new Response(JSON.stringify({ project: { id: projectId, name: "北京古道研究", lifecycleState: "ACTIVE", readOnly: false }, issues: [] }))
+      : new Response("unavailable", { status: 503 })));
+    render(<MemoryRouter><ProjectWorkspace token="token" projectId={projectId} /></MemoryRouter>);
+    expect(await screen.findByText("还没有研究问题")).toBeTruthy();
+    expect(await screen.findByText("研究资料暂不可用。")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "北京古道研究" })).toBeTruthy();
   });
 
   it("shows archived read-only identity from the Overview", async () => {

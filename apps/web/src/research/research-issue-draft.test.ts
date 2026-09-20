@@ -13,6 +13,7 @@ import {
 const projectId = "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA";
 
 beforeEach(() => {
+  vi.unstubAllGlobals();
   sessionStorage.clear();
   clearPendingResearchIssueReceipt();
   vi.restoreAllMocks();
@@ -59,9 +60,9 @@ describe("pending research issue receipt", () => {
       .toEqual(["createdAt", "idempotencyKey", "projectId", "requestHash"]);
     expect(JSON.stringify(receipt)).not.toMatch(/title|question/);
     sessionStorage.setItem(RESEARCH_ISSUE_PENDING_KEY, "{bad");
-    expect(loadPendingResearchIssueReceipt()).toBeNull();
+    expect(loadPendingResearchIssueReceipt()).toEqual(receipt);
     sessionStorage.setItem(RESEARCH_ISSUE_PENDING_KEY, JSON.stringify({ ...receipt, requestHash: "bad" }));
-    expect(loadPendingResearchIssueReceipt()).toBeNull();
+    expect(loadPendingResearchIssueReceipt()).toEqual(receipt);
   });
 
   it("falls back to memory when sessionStorage is unavailable", () => {
@@ -74,3 +75,22 @@ describe("pending research issue receipt", () => {
     expect(loadPendingResearchIssueReceipt()).toBeNull();
   });
 });
+
+ it("retains same-key retry when writes fail but reads return null", async () => {
+   vi.stubGlobal("sessionStorage", { setItem() { throw Error(); }, getItem() { return null; }, removeItem() {} });
+   const draft = { title: "title", question: "question" };
+   const receipt = await getOrCreateResearchIssueReceipt(projectId, draft);
+   savePendingResearchIssueReceipt(receipt);
+   expect(loadPendingResearchIssueReceipt()).toEqual(receipt);
+   expect((await getOrCreateResearchIssueReceipt(projectId, draft)).idempotencyKey).toBe(receipt.idempotencyKey);
+   clearPendingResearchIssueReceipt();
+   expect(loadPendingResearchIssueReceipt()).toBeNull();
+ });
+ it("matches server White_Space normalization and hash including NEL", async () => {
+   const { readResearchIssueInput, hashResearchIssueCreateRequest } = await import("../../../api/src/s32/domain/research-issue");
+   const raw = { title: "\u0085标题\u0085", question: "\u0085第一段\u0085第二段\u0085" };
+   const normalized = { title: "标题", question: "第一段\u0085第二段" };
+   expect(normalizeResearchIssueDraft(raw)).toEqual(normalized);
+   expect(readResearchIssueInput(raw)).toEqual(normalized);
+   expect(await hashResearchIssueDraft(projectId, raw)).toBe(hashResearchIssueCreateRequest(projectId, raw));
+ });

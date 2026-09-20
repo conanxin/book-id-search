@@ -105,9 +105,9 @@ export function ResearchIssuesSection({ token, projectId, result, retry }: {
       {showForm && !result.response.project.readOnly ? <form className="research-panel research-issue-form" onSubmit={submitForm}>
         <h3>新建研究问题</h3>
         <label htmlFor="issue-title">问题标题</label>
-        <input id="issue-title" value={title} onChange={(event) => setTitle(event.target.value)} disabled={state === "submitting"} />
+        <input id="issue-title" value={title} onChange={(event) => setTitle(event.target.value)} disabled={state === "submitting" || state === "unconfirmed"} />
         <label htmlFor="issue-question">研究问题</label>
-        <textarea id="issue-question" rows={6} value={question} onChange={(event) => setQuestion(event.target.value)} disabled={state === "submitting"} />
+        <textarea id="issue-question" rows={6} value={question} onChange={(event) => setQuestion(event.target.value)} disabled={state === "submitting" || state === "unconfirmed"} />
         {message ? <p className={state === "unconfirmed" || state === "idempotency-conflict" ? "research-issue-notice" : "research-error"} role="alert">{message}</p> : null}
         <div className="research-issue-actions">
           <button type="button" onClick={() => { setShowForm(false); setState("idle"); setMessage(""); }} disabled={state === "submitting"}>取消</button>

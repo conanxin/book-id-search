@@ -19,8 +19,8 @@ export function normalizeResearchIssueDraft(input: unknown): ResearchIssueDraft 
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("研究问题输入不正确。");
   const { title: rawTitle, question: rawQuestion } = input as Record<string, unknown>;
   if (typeof rawTitle !== "string" || typeof rawQuestion !== "string") throw new Error("研究问题输入不正确。");
-  const title = rawTitle.trim();
-  const question = rawQuestion.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+  const title = rawTitle.replace(/^\p{White_Space}+|\p{White_Space}+$/gu, "");
+  const question = rawQuestion.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/^\p{White_Space}+|\p{White_Space}+$/gu, "");
   if (!title || title.includes("\r") || title.includes("\n") || Array.from(title).length > 160) {
     throw new Error("标题必须是 1 至 160 个字符的单行文本。");
   }
@@ -52,12 +52,12 @@ export function loadPendingResearchIssueReceipt(): PendingResearchIssueReceipt |
   } catch {
     return memoryReceipt;
   }
-  if (!raw) return null;
+  if (!raw) return memoryReceipt;
   try {
     const parsed: unknown = JSON.parse(raw);
-    return isReceipt(parsed) ? parsed : null;
+    return isReceipt(parsed) ? parsed : memoryReceipt;
   } catch {
-    return null;
+    return memoryReceipt;
   }
 }
 

@@ -50,8 +50,8 @@ export function readResearchIssueInput(value: unknown): ResearchIssueInput {
     throw new InvalidResearchIssueInputError("标题和问题必须是文本。");
   }
 
-  const title = rawTitle.trim();
-  const question = rawQuestion.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+  const title = rawTitle.replace(/^\p{White_Space}+|\p{White_Space}+$/gu, "");
+  const question = rawQuestion.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/^\p{White_Space}+|\p{White_Space}+$/gu, "");
   if (!title || title.includes("\r") || title.includes("\n") || Array.from(title).length > 160) {
     throw new InvalidResearchIssueInputError("标题必须是 1 至 160 个字符的单行文本。");
   }
@@ -76,7 +76,7 @@ export function readIdempotencyKey(value: unknown): string {
 }
 
 export function buildResearchIssueQuestionExcerpt(question: string): string {
-  const compact = question.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\s+/gu, " ").trim();
+  const compact = question.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\p{White_Space}+/gu, " ").replace(/^\p{White_Space}+|\p{White_Space}+$/gu, "");
   const codePoints = Array.from(compact);
   return codePoints.length > 160 ? `${codePoints.slice(0, 160).join("")}…` : compact;
 }

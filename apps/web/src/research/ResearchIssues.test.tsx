@@ -19,6 +19,7 @@ const summaries = [
 ];
 
 beforeEach(() => {
+  vi.resetAllMocks();
   sessionStorage.clear(); clearPendingResearchIssueReceipt();
   vi.mocked(listResearchIssues).mockResolvedValue({ project, issues: summaries });
   vi.mocked(createResearchIssue).mockResolvedValue({ project, issue });
@@ -71,11 +72,20 @@ describe("Research Issues UI", () => {
     await userEvent.type(screen.getByRole("textbox", { name: "研究问题" }), "问题");
     await userEvent.click(screen.getByRole("button", { name: "创建研究问题" }));
     expect(await screen.findByText(/结果尚未确认/)).toBeTruthy();
+    const titleInput = screen.getByLabelText("问题标题") as HTMLInputElement;
+    const questionInput = screen.getByRole("textbox", { name: "研究问题" }) as HTMLTextAreaElement;
+    expect(titleInput.disabled).toBe(true);
+    expect(questionInput.disabled).toBe(true);
+    await userEvent.type(titleInput, "changed");
+    await userEvent.type(questionInput, "changed");
+    expect(titleInput.value).toBe("标题");
+    expect(questionInput.value).toBe("问题");
     const firstKey = vi.mocked(createResearchIssue).mock.calls[0][2];
     expect(loadPendingResearchIssueReceipt()?.idempotencyKey).toBe(firstKey);
     await userEvent.click(screen.getByRole("button", { name: "使用同一标识重试" }));
     await waitFor(() => expect(createResearchIssue).toHaveBeenCalledTimes(2));
     expect(vi.mocked(createResearchIssue).mock.calls[1][2]).toBe(firstKey);
+    expect(vi.mocked(createResearchIssue).mock.calls[1][3]).toEqual(vi.mocked(createResearchIssue).mock.calls[0][3]);
   });
 
   it("requires an explicit new submission after idempotency conflict", async () => {

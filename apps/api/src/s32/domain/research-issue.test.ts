@@ -74,3 +74,9 @@ describe("research issue domain", () => {
     expect(hashA).toMatch(/^[0-9a-f]{64}$/);
   });
 });
+
+it("uses Unicode White_Space for NEL edges and excerpts", () => {
+  expect(readResearchIssueInput({ title: "\u0085标题\u0085", question: "\u0085第一段\u0085第二段\u0085" }))
+    .toEqual({ title: "标题", question: "第一段\u0085第二段" });
+  expect(buildResearchIssueQuestionExcerpt("\u0085第一段\u0085第二段\u0085")).toBe("第一段 第二段");
+});
