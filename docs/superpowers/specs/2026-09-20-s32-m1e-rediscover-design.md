@@ -147,6 +147,8 @@ Project
 
 查出。
 
+查询必须保留并验证匹配 identity 的 `target_type`，要求它最终为 `SOURCE`。不能通过在 WHERE 中静默加 `target_type='SOURCE'` 来把“同一 CATALOG_DOCUMENT identity 错绑到非 SOURCE”的 corruption 伪装成“没有 membership”；匹配到非 SOURCE、缺失 Source、Source 缺失 Edition、Edition 缺失 Work 都属于 canonical integrity failure，应 fail closed。
+
 禁止把 M1-C `ProjectBinding.metadata.catalogBookId` 当 membership identity truth。该 metadata 仍只是 provenance/convenience。
 
 Note 状态可继续 LEFT JOIN：
@@ -384,6 +386,8 @@ GET /api/private/s32/projects/:projectId/overview
   ]
 }
 ```
+
+其中 `sourceId` / `catalogBookId` 是从现有 Edition ProjectBinding metadata 暴露的 provenance/convenience 字段，允许为 null；它们不参与 membership identity truth、Note 关联判断或 canonical integrity 决策。
 
 无 Note：
 
@@ -742,7 +746,7 @@ Overview：
 - membership stable sorting；
 - Note absent/present `hasNote/noteUpdatedAt`；
 - retired identity ignored；
-- corrupt identity/Source/Edition chain fail closed；
+- identity target_type 非 SOURCE、缺失 Source/Edition/Work 等 chain corruption fail closed；
 - corrupt NOTE relation fail closed；
 - query count constant with 1 vs many bookIds；
 - no writes to any table。
