@@ -14,7 +14,7 @@ function toHttpError(error: unknown): [number, string, string?] {
   if (error instanceof ProjectNotFoundError) return [404, "项目不存在。"];
   if (error instanceof ProjectBindingNotFoundError) return [404, "项目资料不存在。"];
   if (error instanceof CatalogBookNotFoundError) return [404, "书目不存在。"];
-  if (error instanceof ProjectNotActiveError) return [409, "项目当前不可用。"];
+  if (error instanceof ProjectNotActiveError) return [409, "项目已归档，只能查看研究资料和笔记。", "PROJECT_READ_ONLY"];
   if (error instanceof ProjectItemHasNoteError) return [409, "这项资料已有研究笔记，暂不能直接移出项目。", "PROJECT_ITEM_HAS_NOTE"];
   if (error instanceof EditionNotAvailableError || error instanceof IdentityConflictError) return [409, "书目版本不可用或身份冲突。"];
   if (error instanceof InvalidCatalogBookError) return [422, "书目元数据无法加入研究。"];
