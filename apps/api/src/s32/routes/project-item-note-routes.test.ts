@@ -3,7 +3,7 @@ import express from "express";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { createProjectItemNoteBodyParser, createProjectItemNoteRouter } from "./project-item-note-routes.js";
-import { createProjectItemNotesService, ProjectItemInactiveError, ProjectItemNotFoundError, ProjectItemNoteAlreadyExistsError, ProjectItemNoteNotFoundError, ProjectItemNoteRevisionNotFoundError, ProjectItemNoteStoreUnavailableError, StaleNoteRevisionError, type ProjectItemNoteStore } from "../application/project-item-notes.js";
+import { createProjectItemNotesService, ProjectItemInactiveError, ProjectItemNotFoundError, ProjectItemNoteAlreadyExistsError, ProjectItemNoteNotFoundError, ProjectItemNoteRevisionNotFoundError, ProjectItemNoteStoreUnavailableError, ProjectReadOnlyError, StaleNoteRevisionError, type ProjectItemNoteStore } from "../application/project-item-notes.js";
 import { InvalidNoteInputError, sha256NoteContent } from "../domain/note.js";
 import type { S32Config } from "../config.js";
 import { createS32Router } from "../register.js";
@@ -104,6 +104,19 @@ describe("M1-D private Note HTTP", () => {
     expect(await res.json()).toEqual({ error: { code: "NOTE_INVALID_INPUT", message: "笔记输入不正确，正文不能为空且不能超过 65536 UTF-8 字节。" } });
     Object.values(s.store).forEach(fn => expect(fn).not.toHaveBeenCalled());
   });
+  it("maps archived Project Note writes to dedicated 409 while reads stay reachable", async () => {
+    const s = await setup();
+    s.store.create.mockRejectedValue(new ProjectReadOnlyError("SECRET"));
+    s.store.appendRevision.mockRejectedValue(new ProjectReadOnlyError("SECRET"));
+    for (const [suffix, body] of [[path, { content: "first" }], [`${path}/revisions`, { baseRevisionId: rid, content: "next" }]] as const) {
+      const res = await s.request("POST", suffix, body);
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({ error: { code: "PROJECT_READ_ONLY", message: "项目已归档，只能查看研究资料和笔记。" } });
+    }
+    expect((await s.request("GET", path)).status).toBe(200);
+    expect((await s.request("GET", `${path}/revisions/${rid}`)).status).toBe(200);
+  });
+
   it.each([
     [InvalidNoteInputError, 400], [ProjectItemNotFoundError, 404], [ProjectItemNoteNotFoundError, 404], [ProjectItemNoteRevisionNotFoundError, 404],
     [ProjectItemInactiveError, 409], [ProjectItemNoteAlreadyExistsError, 409], [StaleNoteRevisionError, 409], [ProjectItemNoteStoreUnavailableError, 503], [Error, 500],
