@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { EditionNotAvailableError, ProjectBindingStoreUnavailableError, ProjectNotActiveError, ProjectNotFoundError, type ProjectBindingStore } from "../application/project-items.js";
 import type { ProjectResearchItem } from "../domain/project-item.js";
+import { ProjectItemHasNoteError } from "../application/project-item-notes.js";
 
 interface ItemRow {
   binding_id: string; project_id: string; work_id: string; edition_id: string;
@@ -71,8 +72,27 @@ export function createPostgresProjectBindingStore(pool: Pool): ProjectBindingSto
       return classify(async () => (await pool.query<ItemRow>(`${PROJECTION} ORDER BY pb.created_at DESC, pb.id DESC`, [projectId])).rows.map(toItem));
     },
     removeEdition({ projectId, bindingId }) {
-      return classify(async () => (await pool.query(`DELETE FROM core.project_bindings
-        WHERE id = $1 AND project_id = $2 AND target_type = 'EDITION' RETURNING id`, [bindingId, projectId])).rowCount === 1);
+      return classify(async () => {
+        const client = await pool.connect();
+        try {
+          await client.query("BEGIN");
+          // Lock the same Edition binding as first-Note creation, before checking NOTE references.
+          const binding = (await client.query<{ id: string }>(`SELECT id FROM core.project_bindings
+            WHERE id = $1 AND project_id = $2 AND target_type = 'EDITION' FOR UPDATE`, [bindingId, projectId])).rows[0];
+          if (!binding) { await client.query("COMMIT"); return false; }
+          const note = await client.query(`SELECT 1 FROM core.project_bindings
+            WHERE project_id = $1 AND target_type = 'NOTE'
+              AND metadata->>'subjectBindingId' = $2 LIMIT 1`, [projectId, binding.id]);
+          if (note.rows.length) throw new ProjectItemHasNoteError("PROJECT_ITEM_HAS_NOTE");
+          const removed = await client.query(`DELETE FROM core.project_bindings
+            WHERE id = $1 AND project_id = $2 AND target_type = 'EDITION' RETURNING id`, [binding.id, projectId]);
+          await client.query("COMMIT");
+          return removed.rowCount === 1;
+        } catch (error) {
+          await client.query("ROLLBACK").catch(() => {});
+          throw error;
+        } finally { client.release(); }
+      });
     },
   };
 }

@@ -6,6 +6,7 @@ import { createProjectItemRouter } from "./project-item-routes.js";
 import { createProjectRouter } from "./project-routes.js";
 import { createProjectItemsService, ProjectBindingStoreUnavailableError, EditionNotAvailableError } from "../application/project-items.js";
 import { ProjectStoreUnavailableError } from "../application/projects.js";
+import { ProjectItemHasNoteError } from "../application/project-item-notes.js";
 import { CatalogBookNotFoundError, CatalogReadUnavailableError, IdentityConflictError, CanonicalStoreUnavailableError } from "../application/promote-catalog-book.js";
 import { InvalidCatalogBookError } from "../domain/catalog-promotion.js";
 import type { S32Config } from "../config.js";
@@ -77,5 +78,11 @@ describe("M1-C private HTTP", () => {
   it("returns 404 for missing/unowned binding", async () => {
     const s = await setup(); s.bindings.removeEdition.mockResolvedValue(false);
     expect((await s.request("DELETE", `/${id}/items/${bid}`)).status).toBe(404);
+  });
+  it("returns dedicated safe 409 when the material already has a Note", async () => {
+    const s = await setup(); s.bindings.removeEdition.mockRejectedValue(new ProjectItemHasNoteError("SECRET"));
+    const res = await s.request("DELETE", `/${id}/items/${bid}`);
+    expect(res.status).toBe(409); expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(await res.json()).toEqual({ error: { code: "PROJECT_ITEM_HAS_NOTE", message: "这项资料已有研究笔记，暂不能直接移出项目。" } });
   });
 });

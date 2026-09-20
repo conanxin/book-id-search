@@ -4,8 +4,8 @@ import { act, cleanup, render, screen, waitFor, within } from "@testing-library/
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { ProjectItems } from "./ProjectItems";
-import { listProjectItems, removeProjectItem, ProjectApiError } from "./api";
-vi.mock("./api", async importOriginal => ({ ...await importOriginal<typeof import("./api")>(), listProjectItems: vi.fn(), removeProjectItem: vi.fn() }));
+import { listProjectItems, removeProjectItem, getProjectItemNote, ProjectApiError } from "./api";
+vi.mock("./api", async importOriginal => ({ ...await importOriginal<typeof import("./api")>(), listProjectItems: vi.fn(), removeProjectItem: vi.fn(), getProjectItemNote: vi.fn() }));
 const item = { bindingId: "binding", projectId: "project", workId: "work", editionId: "edition", sourceId: "source", catalogBookId: "book/id", title: "北京古道考", publisher: "测试出版社", publicationDate: "2001-01-01", publicationDatePrecision: "YEAR" as const, isbn: "9787538455250", addedAt: "2026-09-20T00:00:00Z" };
 const view = (token = "token", projectId = "project") => <MemoryRouter><ProjectItems token={token} projectId={projectId} /></MemoryRouter>;
 beforeEach(() => { vi.clearAllMocks(); vi.mocked(listProjectItems).mockResolvedValue({ items: [item] }); vi.mocked(removeProjectItem).mockResolvedValue(undefined); vi.spyOn(window, "confirm").mockReturnValue(true); });
@@ -67,4 +67,15 @@ describe("project materials", () => {
     vi.mocked(removeProjectItem).mockReturnValue(new Promise(() => {})); const rendered = render(view()); await screen.findByText(item.title);
     await userEvent.click(screen.getByRole("button", { name: "移出项目" })); const signal = vi.mocked(removeProjectItem).mock.calls[0][3]!; rendered.unmount(); expect(signal.aborted).toBe(true);
   });
+});
+
+it("does not prefetch Notes; removal409 retains both material and its open Note", async () => {
+  const revision = { revisionId: "r1", revisionNo: 1, contentFormat: "MARKDOWN" as const, content: "保留的研究笔记", contentSha256: "a".repeat(64), createdAt: item.addedAt };
+  vi.mocked(getProjectItemNote).mockResolvedValue({note: {noteId:"note",projectId:item.projectId,subjectBindingId:item.bindingId,subjectId:item.editionId,createdAt:item.addedAt,updatedAt:item.addedAt,currentRevision:revision,revisions:[revision]}});
+  vi.mocked(removeProjectItem).mockRejectedValue(new ProjectApiError(409,"这项资料已有研究笔记，暂不能直接移出项目。","PROJECT_ITEM_HAS_NOTE"));
+  render(view()); await screen.findByText(item.title); expect(getProjectItemNote).not.toHaveBeenCalled();
+  await userEvent.click(screen.getByRole("button",{name:"研究笔记"})); await screen.findByText("保留的研究笔记");
+  await userEvent.click(screen.getByRole("button",{name:"移出项目"}));
+  expect((await screen.findByRole("alert")).textContent).toBe("这项资料已有研究笔记，暂不能直接移出项目。");
+  expect(screen.getByText("保留的研究笔记")).toBeTruthy(); expect(screen.getByText(item.title)).toBeTruthy(); expect(getProjectItemNote).toHaveBeenCalledOnce();
 });

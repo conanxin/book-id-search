@@ -5,15 +5,17 @@ import { InvalidProjectInputError } from "../domain/project.js";
 import { InvalidProjectItemInputError } from "../domain/project-item.js";
 import { InvalidCatalogBookError } from "../domain/catalog-promotion.js";
 import { ProjectStoreUnavailableError } from "../application/projects.js";
+import { ProjectItemHasNoteError } from "../application/project-item-notes.js";
 import { CanonicalStoreUnavailableError, CatalogBookNotFoundError, CatalogReadUnavailableError, IdentityConflictError, InvalidPromotionRequestError } from "../application/promote-catalog-book.js";
 import { EditionNotAvailableError, ProjectBindingNotFoundError, ProjectBindingStoreUnavailableError, ProjectNotActiveError, ProjectNotFoundError, type ProjectItemsService } from "../application/project-items.js";
 
-function toHttpError(error: unknown): [number, string] {
+function toHttpError(error: unknown): [number, string, string?] {
   if (error instanceof InvalidProjectInputError || error instanceof InvalidProjectItemInputError || error instanceof InvalidPromotionRequestError) return [400, "项目资料输入不正确。"];
   if (error instanceof ProjectNotFoundError) return [404, "项目不存在。"];
   if (error instanceof ProjectBindingNotFoundError) return [404, "项目资料不存在。"];
   if (error instanceof CatalogBookNotFoundError) return [404, "书目不存在。"];
   if (error instanceof ProjectNotActiveError) return [409, "项目当前不可用。"];
+  if (error instanceof ProjectItemHasNoteError) return [409, "这项资料已有研究笔记，暂不能直接移出项目。", "PROJECT_ITEM_HAS_NOTE"];
   if (error instanceof EditionNotAvailableError || error instanceof IdentityConflictError) return [409, "书目版本不可用或身份冲突。"];
   if (error instanceof InvalidCatalogBookError) return [422, "书目元数据无法加入研究。"];
   if (error instanceof CatalogReadUnavailableError || error instanceof CanonicalStoreUnavailableError || error instanceof ProjectStoreUnavailableError || error instanceof ProjectBindingStoreUnavailableError) return [503, "项目资料服务暂不可用。"];
@@ -31,7 +33,7 @@ export function createProjectItemRouter(config: S32Config, projectItems: Project
   function handle(action: (req: Request, res: Response) => Promise<void>) {
     return async (req: Request, res: Response) => {
       try { await action(req, res); }
-      catch (error) { const [status, message] = toHttpError(error); res.status(status).json({ error: { message } }); }
+      catch (error) { const [status, message, code] = toHttpError(error); res.status(status).json({ error: { message, code } }); }
     };
   }
   router.post("/:projectId/catalog-books", handle(async (req, res) => {

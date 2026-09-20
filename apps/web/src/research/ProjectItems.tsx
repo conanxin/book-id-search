@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { listProjectItems, removeProjectItem, ProjectApiError, type ProjectResearchItem } from "./api";
+import { ProjectItemNotePanel } from "./ProjectItemNote";
 
 type Props = { token: string; projectId: string };
 export function ProjectItems(props: Props) {
@@ -54,6 +55,7 @@ function MaterialList({ token, projectId }: Props) {
       <dl className="research-material-fields"><div><dt>出版社</dt><dd>{item.publisher || "出版社未知"}</dd></div><div><dt>出版日期</dt><dd>{publicationLabel(item)}</dd></div><div><dt>ISBN</dt><dd>{item.isbn || "ISBN 缺失"}</dd></div></dl>
       <p className="research-muted">加入于 {new Date(item.addedAt).toLocaleString("zh-CN")}</p>
       <div className="research-material-actions">{item.catalogBookId ? <Link to={`/books/${encodeURIComponent(item.catalogBookId)}`}>查看书目</Link> : null}<button type="button" className="research-text-button" disabled={!!removingId} onClick={() => void remove(item)}>{removingId === item.bindingId ? "正在移出…" : "移出项目"}</button></div>
+      <ProjectItemNotePanel token={token} projectId={projectId} item={item} />
     </article>)}</div>
   </section>;
 }

@@ -1,17 +1,15 @@
 # BOOK-ID-SEARCH status
 
-- task_id: `S32_M1C_MONTH_PRECISION_FIX_R1`; **FIX_VERIFIED_AWAITING_PR_REVIEW**.
-- Worktree: `/home/conanxin/codex-projects/book-id-search-s32-m1c`; branch: `feat/s32-m1c-project-binding`; existing [PR #12](https://github.com/conanxin/book-id-search/pull/12).
-- Fix base: `6b04f960241cf671f83bb1b425888cbff5b9e04f`; original M1-C source_baseline: `7295af6e991e2a5b1575b8c2a0b5d3662c093b9f`.
-- Fix: MONTH `2001-02-01` displays `2001年2月`, never placeholder day `2001/2/1`; YEAR shows year, DAY full actual date, null `日期未知`. Only ProjectItems display and targeted tests changed.
-- Actual RED: MONTH assertion received `<dd>2001/2/1</dd>`; exit1, 1 failed / 11 passed. GREEN: ProjectItems **12/12 PASS**; research scoped **39/39 PASS (3 files)**; Web build **PASS**; all exit0. Existing >500KB bundle warning remains.
-- fix_tested_commit / tested_commit: `96aad3efb7f562282292e7fdfe254bcbe7da7628`; subsequent commit only updates this status document. Tested product source/tests are committed and pushed.
-- **NOT_RUN_THIS_FIX**: real PG, full browser add/remove acceptance, disk audit, M0/M1-A, API build, full repository suite. No historical PASS is a rerun of this fix.
-- Historical M1-C evidence at `9fb19d4bbac0fb30ab3f2c6e7eb9748b1f4ecefc`: 423 scoped PASS, real PG16 integration PASS, browser persistence/remove/390px PASS; whole-suite 15 legacy WeRead failures +1 CLI import error. Detailed original evidence remains in PR #12 and ignored `logs/s32-m1c/`.
-- Unchanged by this fix: API, PostgreSQL store, schema/frozen SQL, promotion, binding transaction, same-origin/VITE_API_BASE_URL contract, dependencies, trial project and persistent volume. No service or database operations.
-- Fix evidence/ledger: ignored `logs/s32-m1c-month-fix/`; [local runbook](operations/S32_M1C_LOCAL.md).
-- GitHub: [PR #12](https://github.com/conanxin/book-id-search/pull/12) remains OPEN/unmerged; [Issue #2 fix checkpoint](https://github.com/conanxin/book-id-search/issues/2#issuecomment-5746897920) read-back VERIFIED.
-- Notion read-back VERIFIED: [M1-C design](https://app.notion.com/p/3e134a28189a81e199bfdff18fc1b444), [Implementation Plan](https://app.notion.com/p/3e134a28189a815eb0abee796dc64063), [project overview](https://app.notion.com/p/3dd34a28189a81d48f74ec74593dac5f). Same fix task_id/tested_commit/PR and flags; earlier review's MONTH issue is fixed and awaits re-review.
-- IMPLEMENTED=YES; TESTED=PASS_FIX_SCOPED; COMMITTED=YES; PUSHED=YES; MERGED=NO; DEPLOYED=NO; PRODUCTION_CHANGED=NO; M1_D_STARTED=NO.
-- Last production observation remains historical release-prep 2026-09-19 13:22:59 UTC; HOLD_CAPACITY_AND_AUTHORIZATION. No production access in this fix.
-- Next: 复核 PR #12。Do not merge, deploy or start M1-D.
+- task_id: `S32_M1D_NUL_INPUT_FIX_R1`; **FIX_READY_FOR_REVIEW**; existing [PR #13](https://github.com/conanxin/book-id-search/pull/13).
+- Worktree: `/home/conanxin/codex-projects/book-id-search-s32-m1d`; branch: `feat/s32-m1d-note-revisions`; original source_baseline: `51c63b1dc45890bd5989d6bf6442d8ab7aaccc74`; fix_base: `4c5f5d2415439f72b074c286c3bfd582297794a9`.
+- NUL content is rejected after newline normalization, before hashing/store, using `InvalidNoteInputError`. Create and append share this domain validation and return HTTP400 / `NOTE_INVALID_INPUT` without store calls.
+- fix_tested_commit / tested_commit: `c3cd9af2119b47b272a04548ceb69daa249459e6`. Subsequent commit is status documentation only; final_head is the current PR head.
+- TDD: domain RED **1 failed / 19 passed**; HTTP RED **2 failed / 30 passed** (create/append reached test store). GREEN targeted **52/52 PASS** (domain20 + HTTP32); S32 scoped **264 PASS / 19 SKIP** (17 passed / 4 skipped files); API build and `git diff --check` **PASS**. All GREEN commands exit0; both RED commands exit1.
+- Product diff: `domain/note.ts` and two targeted tests only. Store, Note/Revision transactions, binding removal, schema/frozen SQL, frontend, JSON body limit and dependencies unchanged. No trial DB/volume or production operations.
+- **NOT_RUN_THIS_FIX**: real PG16, full browser acceptance, Web build, M0/M1-A/B/C runners, full repository suite. Skipped integrations are not PASS. Historical M1-D PG/browser/Web results and unrelated full-suite failures remain historical, detailed in PR; none are claimed as rerun.
+- Current evidence/ledger: ignored `logs/s32-m1d-nul-fix/`. Historical M1-D evidence: `logs/s32-m1d/`, `/home/conanxin/codex-artifacts/s32-m1d/`, original plan ledger; [local runbook](operations/S32_M1D_LOCAL.md).
+- GitHub **SYNCED / read-back verified**: [PR #13](https://github.com/conanxin/book-id-search/pull/13), [original NUL discussion reply](https://github.com/conanxin/book-id-search/pull/13#discussion_r4056329571), [Issue #2 checkpoint](https://github.com/conanxin/book-id-search/issues/2#issuecomment-5748198803).
+- Notion **SYNCED / read-back verified**: [design](https://app.notion.com/p/3e134a28189a811db24af230e365488a), [implementation plan](https://app.notion.com/p/3e134a28189a811d8d99d10ea485ee8e), [overview](https://app.notion.com/p/3dd34a28189a81d48f74ec74593dac5f); same task_id/tested_commit/PR/flags. No duplicate pages.
+- IMPLEMENTED=YES; TESTED=PASS_NUL_FIX_SCOPED; COMMITTED=YES; PUSHED=YES; MERGED=NO; DEPLOYED=NO; PRODUCTION_CHANGED=NO; M1_E_STARTED=NO.
+- Last production observation remains historical release-prep 2026-09-19 13:22:59 UTC. This fix performed no production access.
+- Next: review PR #13. No automatic merge/deploy/M1-E.
