@@ -1,10 +1,14 @@
 # BOOK-ID-SEARCH status
 
-- Current follow-up: `S32_M1B_DEV_ENTRY_COMPAT_R1`, **VERIFIED_PENDING_RECEIPT**, existing [PR #11](https://github.com/conanxin/book-id-search/pull/11), reviewed baseline `cb70a07fbf826ab875f7be86e67c892dcdf6b936`.
+- Current follow-up: `S32_M1B_DEV_ENTRY_COMPAT_R1`, **READY_FOR_REVIEW**, existing [PR #11](https://github.com/conanxin/book-id-search/pull/11), reviewed baseline `cb70a07fbf826ab875f7be86e67c892dcdf6b936`.
+- tested_commit: `de60d045d42ae874d5897bac6a80466c727b6f32`; implemented/tested/committed/pushed: **YES**. Only this status receipt follows that tested commit; product and check files are unchanged. Merged/deployed: **NO**.
 - Changed only API dev entry/script, dedicated startup checks and docs. No dependencies added. Dev defaults to 127.0.0.1 after dotenv; explicit API_HOST wins. Compiled production entry remains unchanged with default 0.0.0.0.
 - Fresh checks: WSL Node22.22.0 **5/5 PASS** + API build PASS; **native Windows 10 cmd.exe / Node24.13.1 5/5 PASS** + API build PASS, using identical sources/lock in an isolated Windows temporary copy. Tests observe real bound addresses and HTTP responses; no PG/Meili or trial credentials used.
 - Web same-origin contract unchanged; [original review-thread explanation](https://github.com/conanxin/book-id-search/pull/11#discussion_r4055325353) cites fixed ad3db3e spec section 5. UI/business/M0 SQL/lock untouched; no data cleanup, production operation, merge or M1-C.
 - Full feature/PG/browser/disk checks **NOT_RUN in this compatibility follow-up**; prior M1-B evidence below is retained, not represented as rerun. Logs/checkpoint: ignored logs/s32-dev-entry/ and progress/S32_M1B_DEV_ENTRY_COMPAT_R1.md.
+
+- Sync **VERIFIED** with the same task_id/tested_commit/PR: [Issue #2 receipt](https://github.com/conanxin/book-id-search/issues/2#issuecomment-5746346403), [Notion M1-B](https://www.notion.so/3e034a28189a81aa920afaf70bd6201b), [Notion overview](https://www.notion.so/3dd34a28189a81d48f74ec74593dac5f). [Windows review reply](https://github.com/conanxin/book-id-search/pull/11#discussion_r4055339096).
+- Unique next step: review the compatibility fix in existing PR #11; no automatic merge.
 
 Previous M1-B implementation evidence:
 
