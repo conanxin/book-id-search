@@ -45,6 +45,20 @@
 .research-purpose { white-space: pre-wrap; overflow-wrap: anywhere; min-height: 100px; line-height: 1.8; }
 .research-dates { border-top: 1px solid var(--color-border); padding-top: 22px; display: flex; gap: 48px; color: var(--color-text-muted); font-size: 13px; }
 .research-dates dd { margin: 6px 0 0; }
+.research-issues, .research-materials { margin-top: 24px; }
+.research-issue-list { display: grid; gap: 14px; }
+.research-issue-card h3 { margin-top: 10px; }
+.research-issue-card p { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--color-text-muted); }
+.research-issue-state { display: inline-flex; padding: 4px 9px; border-radius: 999px; background: #edf3ff; color: var(--color-primary-strong); font-size: 12px; font-weight: 700; }
+.research-issue-state--resolved, .research-issue-state--archived { background: #f0f1f3; color: var(--color-text-muted); }
+.research-issue-form { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+.research-issue-form input, .research-issue-form textarea { width: 100%; min-width: 0; border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 11px 12px; font: inherit; }
+.research-issue-actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: flex-end; }
+.research-issue-notice { padding: 14px; border-radius: var(--radius-sm); background: #fff5d9; color: #654b00; overflow-wrap: anywhere; }
+.research-materials > h2 { font-size: 20px; }
+.research-issue-detail h1 { overflow-wrap: anywhere; }
+.research-issue-question { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; }
+.research-possible-answers { margin: 28px 0; padding-top: 20px; border-top: 1px solid var(--color-border); }
 @media (max-width: 700px) {
   .research-grid { grid-template-columns: 1fr; }
   .research-access, .research-dates { flex-direction: column; align-items: flex-start; gap: 12px; }

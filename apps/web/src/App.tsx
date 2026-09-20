@@ -1296,6 +1296,7 @@ export default function App() {
         <Route path="/weread" element={<WereadCenter />} />
         <Route path="/books/:id" element={<DetailPage />} />
         <Route path="/research/projects" element={<ProjectsPage />} />
+        <Route path="/research/projects/:projectId/issues/:issueId" element={<ProjectsPage />} />
         <Route path="/research/projects/:projectId" element={<ProjectsPage />} />
       </Routes>
       {/* POST-ICP-COMPLIANCE — single global site footer shared by every route. */}

@@ -1,0 +1,130 @@
+// @vitest-environment jsdom
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  RESEARCH_ISSUE_PENDING_KEY,
+  clearPendingResearchIssueReceipt,
+  getOrCreateResearchIssueReceipt,
+  hashResearchIssueDraft,
+  loadPendingResearchIssueReceipt,
+  normalizeResearchIssueDraft,
+  savePendingResearchIssueReceipt,
+} from "./research-issue-draft";
+
+const projectId = "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA";
+
+describe("page-local receipt authority", () => {
+  it("retries B with its original key despite stale valid storage A and denied writes", async () => {
+    await getOrCreateResearchIssueReceipt(projectId, { title: "A", question: "A" });
+    const staleRaw = sessionStorage.getItem(RESEARCH_ISSUE_PENDING_KEY);
+    vi.stubGlobal("sessionStorage", { getItem: () => staleRaw, setItem() { throw Error("write denied"); }, removeItem() {} });
+    const draft = { title: "B", question: "B" };
+    const first = await getOrCreateResearchIssueReceipt(projectId, draft);
+    const retry = await getOrCreateResearchIssueReceipt(projectId, draft);
+    expect(retry.idempotencyKey).toBe(first.idempotencyKey);
+  });
+
+  it("keeps the clear tombstone when persistent removal fails", async () => {
+    await getOrCreateResearchIssueReceipt(projectId, { title: "A", question: "A" });
+    const staleRaw = sessionStorage.getItem(RESEARCH_ISSUE_PENDING_KEY);
+    vi.stubGlobal("sessionStorage", { getItem: () => staleRaw, setItem() {}, removeItem() { throw Error("remove denied"); } });
+    clearPendingResearchIssueReceipt();
+    expect(loadPendingResearchIssueReceipt()).toBeNull();
+  });
+
+  it("caches a receipt restored by a fresh module before later storage read failure", async () => {
+    const draft = { title: "restored", question: "question" };
+    const original = await getOrCreateResearchIssueReceipt(projectId, draft);
+    const persisted = sessionStorage.getItem(RESEARCH_ISSUE_PENDING_KEY)!;
+    vi.resetModules();
+    vi.unstubAllGlobals();
+    sessionStorage.setItem(RESEARCH_ISSUE_PENDING_KEY, persisted);
+    const fresh = await import("./research-issue-draft");
+    expect(fresh.loadPendingResearchIssueReceipt()).toEqual(original);
+    vi.stubGlobal("sessionStorage", { getItem() { throw Error("read denied"); }, setItem() {}, removeItem() {} });
+    const retry = await fresh.getOrCreateResearchIssueReceipt(projectId, draft);
+    expect(retry.idempotencyKey).toBe(original.idempotencyKey);
+  });
+});
+
+beforeEach(() => {
+  vi.unstubAllGlobals();
+  sessionStorage.clear();
+  clearPendingResearchIssueReceipt();
+  vi.restoreAllMocks();
+});
+
+describe("research issue draft normalization", () => {
+  it("matches server canonical normalization", () => {
+    expect(normalizeResearchIssueDraft({ title: "  刘祥店迁出时间  ", question: "  第一行\r\n第二行\r第三行  " }))
+      .toEqual({ title: "刘祥店迁出时间", question: "第一行\n第二行\n第三行" });
+  });
+
+  it("enforces single-line and Unicode code-point limits", () => {
+    expect(normalizeResearchIssueDraft({ title: "𠮷".repeat(160), question: "𠮷".repeat(4000) })).toBeTruthy();
+    expect(() => normalizeResearchIssueDraft({ title: "𠮷".repeat(161), question: "q" })).toThrow();
+    expect(() => normalizeResearchIssueDraft({ title: "a\nb", question: "q" })).toThrow();
+    expect(() => normalizeResearchIssueDraft({ title: "t", question: "𠮷".repeat(4001) })).toThrow();
+  });
+
+  it("hashes the lowercase Project and fixed-order canonical payload", async () => {
+    const normalized = normalizeResearchIssueDraft({ title: " 刘祥店迁出时间 ", question: " 第一行\r\n第二行 " });
+    const hash = await hashResearchIssueDraft(projectId, normalized);
+    expect(hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(hash).toBe(await hashResearchIssueDraft(projectId.toLowerCase(), { title: "刘祥店迁出时间", question: "第一行\n第二行" }));
+  });
+});
+
+describe("pending research issue receipt", () => {
+  it("reuses same Project and normalized payload but rotates for changed intent", async () => {
+    const a = normalizeResearchIssueDraft({ title: " title ", question: " q\r\n " });
+    const first = await getOrCreateResearchIssueReceipt(projectId, a);
+    const equivalent = await getOrCreateResearchIssueReceipt(projectId.toLowerCase(), normalizeResearchIssueDraft({ title: "title", question: "q" }));
+    expect(equivalent.idempotencyKey).toBe(first.idempotencyKey);
+    const changed = await getOrCreateResearchIssueReceipt(projectId, { title: "title 2", question: "q" });
+    expect(changed.idempotencyKey).not.toBe(first.idempotencyKey);
+    const otherProject = await getOrCreateResearchIssueReceipt("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", { title: "title 2", question: "q" });
+    expect(otherProject.idempotencyKey).not.toBe(changed.idempotencyKey);
+    const forced = await getOrCreateResearchIssueReceipt("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", { title: "title 2", question: "q" }, true);
+    expect(forced.idempotencyKey).not.toBe(otherProject.idempotencyKey);
+  });
+
+  it("stores only the four receipt fields and validates storage input", async () => {
+    const receipt = await getOrCreateResearchIssueReceipt(projectId, { title: "title", question: "question" });
+    expect(Object.keys(JSON.parse(sessionStorage.getItem(RESEARCH_ISSUE_PENDING_KEY)!)).sort())
+      .toEqual(["createdAt", "idempotencyKey", "projectId", "requestHash"]);
+    expect(JSON.stringify(receipt)).not.toMatch(/title|question/);
+    sessionStorage.setItem(RESEARCH_ISSUE_PENDING_KEY, "{bad");
+    expect(loadPendingResearchIssueReceipt()).toEqual(receipt);
+    sessionStorage.setItem(RESEARCH_ISSUE_PENDING_KEY, JSON.stringify({ ...receipt, requestHash: "bad" }));
+    expect(loadPendingResearchIssueReceipt()).toEqual(receipt);
+  });
+
+  it("falls back to memory when sessionStorage is unavailable", () => {
+    const broken = { getItem() { throw Error(); }, setItem() { throw Error(); }, removeItem() { throw Error(); } };
+    vi.stubGlobal("sessionStorage", broken);
+    const receipt = { projectId: projectId.toLowerCase(), requestHash: "a".repeat(64), idempotencyKey: "11111111-1111-4111-8111-111111111111", createdAt: new Date().toISOString() };
+    savePendingResearchIssueReceipt(receipt);
+    expect(loadPendingResearchIssueReceipt()).toEqual(receipt);
+    clearPendingResearchIssueReceipt();
+    expect(loadPendingResearchIssueReceipt()).toBeNull();
+  });
+});
+
+ it("retains same-key retry when writes fail but reads return null", async () => {
+   vi.stubGlobal("sessionStorage", { setItem() { throw Error(); }, getItem() { return null; }, removeItem() {} });
+   const draft = { title: "title", question: "question" };
+   const receipt = await getOrCreateResearchIssueReceipt(projectId, draft);
+   savePendingResearchIssueReceipt(receipt);
+   expect(loadPendingResearchIssueReceipt()).toEqual(receipt);
+   expect((await getOrCreateResearchIssueReceipt(projectId, draft)).idempotencyKey).toBe(receipt.idempotencyKey);
+   clearPendingResearchIssueReceipt();
+   expect(loadPendingResearchIssueReceipt()).toBeNull();
+ });
+ it("matches server White_Space normalization and hash including NEL", async () => {
+   const { readResearchIssueInput, hashResearchIssueCreateRequest } = await import("../../../api/src/s32/domain/research-issue");
+   const raw = { title: "\u0085标题\u0085", question: "\u0085第一段\u0085第二段\u0085" };
+   const normalized = { title: "标题", question: "第一段\u0085第二段" };
+   expect(normalizeResearchIssueDraft(raw)).toEqual(normalized);
+   expect(readResearchIssueInput(raw)).toEqual(normalized);
+   expect(await hashResearchIssueDraft(projectId, raw)).toBe(hashResearchIssueCreateRequest(projectId, raw));
+ });

@@ -60,20 +60,33 @@ describe("M1-E Project Workspace", () => {
   };
 
   it("loads one direct Overview instead of separate Project and items requests", async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify(overview)));
+    const fetchMock = vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith("/issues") ? { project: { id: projectId, name: "北京古道研究", lifecycleState: "ACTIVE", readOnly: false }, issues: [] } : overview)));
     vi.stubGlobal("fetch", fetchMock);
     render(<MemoryRouter initialEntries={[`/research/projects/${projectId}?item=${overview.items[0].bindingId}`]}><ProjectWorkspace token="token" projectId={projectId} /></MemoryRouter>);
     expect(await screen.findByRole("heading", { name: "北京古道研究" })).toBeTruthy();
     expect(document.querySelector(".research-overview-summary")?.textContent).toContain("资料1");
     expect(document.querySelector(".research-overview-summary")?.textContent).toContain("笔记1");
     expect(document.querySelector(".research-overview-summary")?.textContent).toContain("最近活动");
-    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(screen.getAllByRole("heading", { name: /^研究资料/ })).toHaveLength(1);
+    expect(document.querySelectorAll("section.research-materials")).toHaveLength(1);
+    expect(screen.getByRole("heading", { name: "研究资料（1）" })).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock).toHaveBeenCalledWith(`/api/private/s32/projects/${projectId}/overview`, expect.objectContaining({ cache: "no-store" }));
+  });
+
+  it("keeps Issues visible when Overview fails", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => url.endsWith("/issues")
+      ? new Response(JSON.stringify({ project: { id: projectId, name: "北京古道研究", lifecycleState: "ACTIVE", readOnly: false }, issues: [] }))
+      : new Response("unavailable", { status: 503 })));
+    render(<MemoryRouter><ProjectWorkspace token="token" projectId={projectId} /></MemoryRouter>);
+    expect(await screen.findByText("还没有研究问题")).toBeTruthy();
+    expect(await screen.findByText("研究资料暂不可用。")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "北京古道研究" })).toBeTruthy();
   });
 
   it("shows archived read-only identity from the Overview", async () => {
     const archived = { ...overview, project: { ...overview.project, lifecycleState: "ARCHIVED" as const, readOnly: true } };
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(archived))));
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith("/issues") ? { project: { id: projectId, name: "北京古道研究", lifecycleState: "ARCHIVED", readOnly: true }, issues: [] } : archived))));
     render(<MemoryRouter><ProjectWorkspace token="token" projectId={projectId} /></MemoryRouter>);
     expect(await screen.findByText("已归档 · 只读")).toBeTruthy();
     await waitFor(() => expect(screen.getByText("研究笔记 · v2")).toBeTruthy());

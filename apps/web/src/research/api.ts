@@ -15,6 +15,7 @@ const errorCodes: Record<string, { status: number; message: string }> = {
   NOTE_ALREADY_EXISTS: { status: 409, message: "这项资料已有研究笔记，请重新加载。" },
   NOTE_INVALID_INPUT: { status: 400, message: "笔记输入不正确，正文不能为空且不能超过 65536 UTF-8 字节。" },
   PROJECT_READ_ONLY: { status: 409, message: "这个项目已归档，只能查看。" },
+  IDEMPOTENCY_CONFLICT: { status: 409, message: "创建请求标识与当前研究问题内容不一致。" },
 };
 const statusMessages: Record<number, string> = {
   400: "请检查项目或书目输入。",
@@ -41,12 +42,16 @@ export interface ProjectResearchItem {
 }
 
 const S32_ROOT = "/api/private/s32";
-type RequestOptions = { method?: "GET" | "POST" | "DELETE"; input?: unknown; signal?: AbortSignal };
+type RequestOptions = { method?: "GET" | "POST" | "DELETE"; input?: unknown; signal?: AbortSignal; idempotencyKey?: string };
 async function request<T>(token: string, path: string, options: RequestOptions, valid: (body: any) => boolean): Promise<T> {
-  const { method = "GET", input, signal } = options;
+  const { method = "GET", input, signal, idempotencyKey } = options;
   const response = await fetch(`${S32_ROOT}${path}`, {
     method, cache: "no-store", signal,
-    headers: { Authorization: `Bearer ${token}`, ...(input !== undefined ? { "Content-Type": "application/json" } : {}) },
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(input !== undefined ? { "Content-Type": "application/json" } : {}),
+      ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
+    },
     ...(input !== undefined ? { body: JSON.stringify(input) } : {}),
   });
   if (!response.ok) {
@@ -251,3 +256,98 @@ export const getResearchMemberships = (token: string, bookIds: string[], signal?
 
 export const getProjectOverview = (token: string, projectId: string, signal?: AbortSignal) =>
   request<ProjectOverview>(token, `/projects/${encodeURIComponent(projectId)}/overview`, { signal }, isProjectOverview);
+
+export interface ResearchIssueProjectContext {
+  id: string;
+  name: string;
+  lifecycleState: "ACTIVE" | "ARCHIVED";
+  readOnly: boolean;
+}
+
+export interface ResearchIssue {
+  id: string;
+  projectId: string;
+  title: string;
+  question: string;
+  lifecycleState: "OPEN" | "RESOLVED" | "ARCHIVED";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ResearchIssueSummary {
+  id: string;
+  projectId: string;
+  title: string;
+  questionExcerpt: string;
+  lifecycleState: "OPEN" | "RESOLVED" | "ARCHIVED";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ResearchIssueListResponse {
+  project: ResearchIssueProjectContext;
+  issues: ResearchIssueSummary[];
+}
+
+export interface ResearchIssueDetailResponse {
+  project: ResearchIssueProjectContext;
+  issue: ResearchIssue;
+}
+
+function isResearchIssueProject(value: any): value is ResearchIssueProjectContext {
+  return !!value && typeof value === "object"
+    && isUuid(value.id)
+    && typeof value.name === "string" && value.name.length > 0
+    && ["ACTIVE", "ARCHIVED"].includes(value.lifecycleState)
+    && typeof value.readOnly === "boolean"
+    && value.readOnly === (value.lifecycleState === "ARCHIVED");
+}
+
+function isResearchIssueBase(value: any): boolean {
+  return !!value && typeof value === "object"
+    && isUuid(value.id)
+    && isUuid(value.projectId)
+    && typeof value.title === "string" && value.title.length > 0
+    && ["OPEN", "RESOLVED", "ARCHIVED"].includes(value.lifecycleState)
+    && isDate(value.createdAt)
+    && isDate(value.updatedAt);
+}
+
+function isResearchIssue(value: any): value is ResearchIssue {
+  return isResearchIssueBase(value) && typeof value.question === "string" && value.question.length > 0;
+}
+
+function isResearchIssueSummary(value: any): value is ResearchIssueSummary {
+  return isResearchIssueBase(value) && typeof value.questionExcerpt === "string";
+}
+
+function isResearchIssueListResponse(value: any): value is ResearchIssueListResponse {
+  return !!value && isResearchIssueProject(value.project)
+    && Array.isArray(value.issues)
+    && value.issues.every((issue: unknown) => isResearchIssueSummary(issue) && issue.projectId === value.project.id);
+}
+
+function isResearchIssueDetailResponse(value: any): value is ResearchIssueDetailResponse {
+  return !!value && isResearchIssueProject(value.project)
+    && isResearchIssue(value.issue)
+    && value.issue.projectId === value.project.id;
+}
+
+export const createResearchIssue = (
+  token: string,
+  projectId: string,
+  idempotencyKey: string,
+  input: { title: string; question: string },
+  signal?: AbortSignal,
+) => request<ResearchIssueDetailResponse>(
+  token,
+  `/projects/${encodeURIComponent(projectId)}/issues`,
+  { method: "POST", input: { title: input.title, question: input.question }, signal, idempotencyKey },
+  isResearchIssueDetailResponse,
+);
+
+export const listResearchIssues = (token: string, projectId: string, signal?: AbortSignal) =>
+  request<ResearchIssueListResponse>(token, `/projects/${encodeURIComponent(projectId)}/issues`, { signal }, isResearchIssueListResponse);
+
+export const getResearchIssue = (token: string, projectId: string, issueId: string, signal?: AbortSignal) =>
+  request<ResearchIssueDetailResponse>(token, `/projects/${encodeURIComponent(projectId)}/issues/${encodeURIComponent(issueId)}`, { signal }, isResearchIssueDetailResponse);
