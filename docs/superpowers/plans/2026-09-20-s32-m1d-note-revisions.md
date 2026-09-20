@@ -1269,7 +1269,7 @@ No uncovered spec requirement found.
 
 ### Placeholder scan
 
-No `TODO`, `TBD`, “implement later”, generic “handle errors”, or undefined downstream interfaces remain.
+Placeholder scan found no unresolved markers, generic error-handling steps, deferred implementation notes, or undefined downstream interfaces.
 
 ### Type consistency
 
