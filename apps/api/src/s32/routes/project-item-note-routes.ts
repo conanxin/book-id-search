@@ -7,7 +7,7 @@ import { InvalidProjectItemInputError } from "../domain/project-item.js";
 import {
   ProjectItemInactiveError, ProjectItemNotFoundError, ProjectItemNoteAlreadyExistsError,
   ProjectItemNoteNotFoundError, ProjectItemNoteRevisionNotFoundError,
-  ProjectItemNoteStoreUnavailableError, StaleNoteRevisionError, type ProjectItemNotesService,
+  ProjectItemNoteStoreUnavailableError, ProjectReadOnlyError, StaleNoteRevisionError, type ProjectItemNotesService,
 } from "../application/project-item-notes.js";
 
 const invalidInput = { code: "NOTE_INVALID_INPUT", message: "笔记输入不正确，正文不能为空且不能超过 65536 UTF-8 字节。" };
@@ -40,6 +40,7 @@ function toHttpError(error: unknown): [number, { message: string; code?: string 
   if (error instanceof ProjectItemNotFoundError) return [404, { message: "项目资料不存在。" }];
   if (error instanceof ProjectItemNoteNotFoundError) return [404, { message: "研究笔记不存在。" }];
   if (error instanceof ProjectItemNoteRevisionNotFoundError) return [404, { message: "笔记版本不存在。" }];
+  if (error instanceof ProjectReadOnlyError) return [409, { code: "PROJECT_READ_ONLY", message: "项目已归档，只能查看研究资料和笔记。" }];
   if (error instanceof ProjectItemInactiveError) return [409, { message: "项目资料或笔记当前不可用。" }];
   if (error instanceof ProjectItemNoteAlreadyExistsError) return [409, { code: "NOTE_ALREADY_EXISTS", message: "这项资料已有研究笔记，请重新加载。" }];
   if (error instanceof StaleNoteRevisionError) return [409, { code: "STALE_NOTE_REVISION", message: "笔记已经发生变化。请重新加载最新版本后，再决定如何处理当前草稿。" }];

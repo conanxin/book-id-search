@@ -14,6 +14,7 @@ const errorCodes: Record<string, { status: number; message: string }> = {
   PROJECT_ITEM_HAS_NOTE: { status: 409, message: "这项资料已有研究笔记，暂不能直接移出项目。" },
   NOTE_ALREADY_EXISTS: { status: 409, message: "这项资料已有研究笔记，请重新加载。" },
   NOTE_INVALID_INPUT: { status: 400, message: "笔记输入不正确，正文不能为空且不能超过 65536 UTF-8 字节。" },
+  PROJECT_READ_ONLY: { status: 409, message: "这个项目已归档，只能查看。" },
 };
 const statusMessages: Record<number, string> = {
   400: "请检查项目或书目输入。",
@@ -39,11 +40,11 @@ export interface ProjectResearchItem {
   addedAt: string;
 }
 
-const S32_PROJECTS_ROOT = "/api/private/s32/projects";
+const S32_ROOT = "/api/private/s32";
 type RequestOptions = { method?: "GET" | "POST" | "DELETE"; input?: unknown; signal?: AbortSignal };
 async function request<T>(token: string, path: string, options: RequestOptions, valid: (body: any) => boolean): Promise<T> {
   const { method = "GET", input, signal } = options;
-  const response = await fetch(`${S32_PROJECTS_ROOT}${path}`, {
+  const response = await fetch(`${S32_ROOT}${path}`, {
     method, cache: "no-store", signal,
     headers: { Authorization: `Bearer ${token}`, ...(input !== undefined ? { "Content-Type": "application/json" } : {}) },
     ...(input !== undefined ? { body: JSON.stringify(input) } : {}),
@@ -63,9 +64,9 @@ async function request<T>(token: string, path: string, options: RequestOptions, 
   if (!body || !valid(body)) throw new ProjectApiError(502, "项目服务响应异常，请稍后再试。");
   return body as T;
 }
-export const listProjects = (token: string, signal?: AbortSignal) => request<{ projects: Project[] }>(token, "", { signal }, b => Array.isArray(b.projects));
-export const getProject = (token: string, id: string, signal?: AbortSignal) => request<{ project: Project }>(token, `/${encodeURIComponent(id)}`, { signal }, b => !!b.project);
-export const createProject = (token: string, input: { name: string; description: string | null }, signal?: AbortSignal) => request<{ project: Project }>(token, "", { method: "POST", input: { name: input.name, description: input.description }, signal }, b => !!b.project);
+export const listProjects = (token: string, signal?: AbortSignal) => request<{ projects: Project[] }>(token, "/projects", { signal }, b => Array.isArray(b.projects));
+export const getProject = (token: string, id: string, signal?: AbortSignal) => request<{ project: Project }>(token, `/projects/${encodeURIComponent(id)}`, { signal }, b => !!b.project);
+export const createProject = (token: string, input: { name: string; description: string | null }, signal?: AbortSignal) => request<{ project: Project }>(token, "/projects", { method: "POST", input: { name: input.name, description: input.description }, signal }, b => !!b.project);
 
 export interface AddProjectItemResult {
   promotionStatus: "created" | "existing";
@@ -79,12 +80,12 @@ function isItem(value: any): value is ProjectResearchItem {
     && ["YEAR", "MONTH", "DAY"].includes(value.publicationDatePrecision);
 }
 export const addCatalogBookToProject = (token: string, projectId: string, bookId: string, signal?: AbortSignal) =>
-  request<AddProjectItemResult>(token, `/${encodeURIComponent(projectId)}/catalog-books`, { method: "POST", input: { bookId }, signal },
+  request<AddProjectItemResult>(token, `/projects/${encodeURIComponent(projectId)}/catalog-books`, { method: "POST", input: { bookId }, signal },
     b => ["created", "existing"].includes(b.promotionStatus) && ["created", "existing"].includes(b.bindingStatus) && isItem(b.item));
 export const listProjectItems = (token: string, projectId: string, signal?: AbortSignal) =>
-  request<{ items: ProjectResearchItem[] }>(token, `/${encodeURIComponent(projectId)}/items`, { signal }, b => Array.isArray(b.items) && b.items.every(isItem));
+  request<{ items: ProjectResearchItem[] }>(token, `/projects/${encodeURIComponent(projectId)}/items`, { signal }, b => Array.isArray(b.items) && b.items.every(isItem));
 export const removeProjectItem = (token: string, projectId: string, bindingId: string, signal?: AbortSignal) =>
-  request<void>(token, `/${encodeURIComponent(projectId)}/items/${encodeURIComponent(bindingId)}`, { method: "DELETE", signal }, () => false);
+  request<void>(token, `/projects/${encodeURIComponent(projectId)}/items/${encodeURIComponent(bindingId)}`, { method: "DELETE", signal }, () => false);
 
 export interface ProjectItemNoteRevisionSummary {
   revisionId: string;
@@ -123,7 +124,7 @@ function isNote(value: any): value is ProjectItemNote {
     && Array.isArray(value.revisions) && value.revisions.length > 0 && value.revisions.every(isRevisionSummary)
     && value.revisions[0].revisionId === value.currentRevision.revisionId && value.revisions[0].revisionNo === value.currentRevision.revisionNo;
 }
-const notePath = (projectId: string, bindingId: string) => `/${encodeURIComponent(projectId)}/items/${encodeURIComponent(bindingId)}/note`;
+const notePath = (projectId: string, bindingId: string) => `/projects/${encodeURIComponent(projectId)}/items/${encodeURIComponent(bindingId)}/note`;
 export const getProjectItemNote = (token: string, projectId: string, bindingId: string, signal?: AbortSignal) =>
   request<{ note: ProjectItemNote | null }>(token, notePath(projectId, bindingId), { signal }, b => b.note === null || isNote(b.note));
 export const createProjectItemNote = (token: string, projectId: string, bindingId: string, content: string, signal?: AbortSignal) =>
@@ -132,3 +133,121 @@ export const appendProjectItemNoteRevision = (token: string, projectId: string, 
   request<{ note: ProjectItemNote }>(token, `${notePath(projectId, bindingId)}/revisions`, { method: "POST", input: { baseRevisionId, content }, signal }, b => isNote(b.note));
 export const getProjectItemNoteRevision = (token: string, projectId: string, bindingId: string, revisionId: string, signal?: AbortSignal) =>
   request<{ revision: ProjectItemNoteRevision }>(token, `${notePath(projectId, bindingId)}/revisions/${encodeURIComponent(revisionId)}`, { signal }, b => isRevision(b.revision));
+
+export interface ResearchMembership {
+  projectId: string;
+  projectName: string;
+  projectLifecycleState: "ACTIVE" | "ARCHIVED";
+  bindingId: string;
+  hasNote: boolean;
+  noteUpdatedAt: string | null;
+}
+
+export type MembershipResponse = {
+  memberships: Record<string, ResearchMembership[]>;
+};
+
+export interface ProjectOverviewNoteSummary {
+  noteId: string;
+  currentRevisionId: string;
+  currentRevisionNo: number;
+  excerpt: string;
+  updatedAt: string;
+}
+
+export interface ProjectOverviewItem {
+  bindingId: string;
+  workId: string;
+  editionId: string;
+  sourceId: string | null;
+  catalogBookId: string | null;
+  title: string;
+  publisher: string | null;
+  publicationDate: string | null;
+  publicationDatePrecision: "YEAR" | "MONTH" | "DAY";
+  isbn: string | null;
+  addedAt: string;
+  activityAt: string;
+  noteSummary: ProjectOverviewNoteSummary | null;
+}
+
+export interface ProjectOverview {
+  project: Project & { readOnly: boolean };
+  summary: {
+    itemCount: number;
+    noteCount: number;
+    lastActivityAt: string | null;
+  };
+  items: ProjectOverviewItem[];
+}
+
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
+}
+
+function isMembership(value: any): value is ResearchMembership {
+  return !!value && typeof value === "object"
+    && isUuid(value.projectId)
+    && typeof value.projectName === "string" && value.projectName.length > 0
+    && ["ACTIVE", "ARCHIVED"].includes(value.projectLifecycleState)
+    && isUuid(value.bindingId)
+    && typeof value.hasNote === "boolean"
+    && (value.noteUpdatedAt === null || isDate(value.noteUpdatedAt));
+}
+
+function isMembershipResponse(value: any, bookIds: string[]): value is MembershipResponse {
+  if (!value || typeof value !== "object" || !value.memberships || typeof value.memberships !== "object" || Array.isArray(value.memberships)) return false;
+  return bookIds.every(bookId => Object.hasOwn(value.memberships, bookId)
+    && Array.isArray(value.memberships[bookId])
+    && value.memberships[bookId].every(isMembership));
+}
+
+function isProject(value: any): value is Project {
+  return !!value && typeof value === "object"
+    && isUuid(value.id)
+    && typeof value.name === "string" && value.name.length > 0
+    && isNullableString(value.description)
+    && ["ACTIVE", "ARCHIVED"].includes(value.lifecycleState)
+    && isDate(value.createdAt)
+    && isDate(value.updatedAt);
+}
+
+function isOverviewNoteSummary(value: any): value is ProjectOverviewNoteSummary {
+  return !!value && typeof value === "object"
+    && isUuid(value.noteId)
+    && isUuid(value.currentRevisionId)
+    && Number.isSafeInteger(value.currentRevisionNo) && value.currentRevisionNo > 0
+    && typeof value.excerpt === "string"
+    && isDate(value.updatedAt);
+}
+
+function isOverviewItem(value: any): value is ProjectOverviewItem {
+  return !!value && typeof value === "object"
+    && ["bindingId", "workId", "editionId"].every(key => isUuid(value[key]))
+    && (value.sourceId === null || isUuid(value.sourceId))
+    && isNullableString(value.catalogBookId)
+    && typeof value.title === "string" && value.title.length > 0
+    && ["publisher", "publicationDate", "isbn"].every(key => isNullableString(value[key]))
+    && ["YEAR", "MONTH", "DAY"].includes(value.publicationDatePrecision)
+    && isDate(value.addedAt)
+    && isDate(value.activityAt)
+    && (value.noteSummary === null || isOverviewNoteSummary(value.noteSummary));
+}
+
+function isProjectOverview(value: any): value is ProjectOverview {
+  if (!value || typeof value !== "object" || !isProject(value.project)) return false;
+  if (typeof value.project.readOnly !== "boolean"
+    || value.project.readOnly !== (value.project.lifecycleState === "ARCHIVED")) return false;
+  if (!value.summary || typeof value.summary !== "object"
+    || !Number.isSafeInteger(value.summary.itemCount) || value.summary.itemCount < 0
+    || !Number.isSafeInteger(value.summary.noteCount) || value.summary.noteCount < 0
+    || !(value.summary.lastActivityAt === null || isDate(value.summary.lastActivityAt))) return false;
+  return Array.isArray(value.items) && value.items.every(isOverviewItem);
+}
+
+export const getResearchMemberships = (token: string, bookIds: string[], signal?: AbortSignal) =>
+  request<MembershipResponse>(token, "/research-memberships/catalog-books", { method: "POST", input: { bookIds }, signal },
+    body => isMembershipResponse(body, bookIds));
+
+export const getProjectOverview = (token: string, projectId: string, signal?: AbortSignal) =>
+  request<ProjectOverview>(token, `/projects/${encodeURIComponent(projectId)}/overview`, { signal }, isProjectOverview);

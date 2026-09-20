@@ -58,6 +58,21 @@ describe("M1-C private HTTP", () => {
     for (const [method, path, body] of [["POST", `/${id}/catalog-books`, { bookId: " " }], ["GET", "/bad/items", undefined], ["DELETE", `/${id}/items/bad`, undefined]] as const) expect((await s.request(method, path, body)).status).toBe(400);
     expect(s.projects.get).not.toHaveBeenCalled();
   });
+  it("maps archived Project add/remove to dedicated PROJECT_READ_ONLY conflict", async () => {
+    const s = await setup();
+    s.projects.get.mockResolvedValue({ ...project, lifecycleState: "ARCHIVED" });
+    for (const [method, path, body] of [
+      ["POST", `/${id}/catalog-books`, { bookId: "book" }],
+      ["DELETE", `/${id}/items/${bid}`, undefined],
+    ] as const) {
+      const res = await s.request(method, path, body);
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({ error: { code: "PROJECT_READ_ONLY", message: "项目已归档，只能查看研究资料和笔记。" } });
+    }
+    expect(s.promotionCommand.execute).not.toHaveBeenCalled();
+    expect(s.bindings.removeEdition).not.toHaveBeenCalled();
+  });
+
   it.each([null, { ...project, lifecycleState: "ARCHIVED" }])("rejects missing/inactive project %j", async p => {
     const s = await setup(); s.projects.get.mockResolvedValue(p);
     expect((await s.request("POST", `/${id}/catalog-books`, { bookId: "book" })).status).toBe(p ? 409 : 404);
