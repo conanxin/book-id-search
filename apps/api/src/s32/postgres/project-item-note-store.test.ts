@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Pool } from "pg";
 import { createPostgresProjectItemNoteStore } from "./project-item-note-store.js";
-import { ProjectItemInactiveError, ProjectItemNotFoundError, ProjectItemNoteAlreadyExistsError, ProjectItemNoteNotFoundError, ProjectItemNoteRevisionNotFoundError, ProjectItemNoteStoreUnavailableError, StaleNoteRevisionError } from "../application/project-item-notes.js";
+import { ProjectItemInactiveError, ProjectItemNotFoundError, ProjectItemNoteAlreadyExistsError, ProjectItemNoteNotFoundError, ProjectItemNoteRevisionNotFoundError, ProjectItemNoteStoreUnavailableError, ProjectReadOnlyError, StaleNoteRevisionError } from "../application/project-item-notes.js";
 import { sha256NoteContent } from "../domain/note.js";
 
 const projectId = "11111111-1111-4111-8111-111111111111";
@@ -55,9 +55,24 @@ describe("Postgres project item note store", () => {
     expect(s.query).toHaveBeenCalledWith(expect.stringMatching(/REPEATABLE READ.*READ ONLY/));
     expect(s.query).toHaveBeenCalledWith("COMMIT"); expect(s.release).toHaveBeenCalledOnce();
   });
-  it.each([{ missingSubject: true }, { projectState: "ARCHIVED" }, { editionState: "ARCHIVED" }])("fails closed for missing/inactive subject %j", async options => {
+  it.each([{ missingSubject: true }, { editionState: "ARCHIVED" }])("fails closed for missing/inactive subject %j", async options => {
     const s = fake(options);
     await expect(s.store.get(ids)).rejects.toBeInstanceOf(options.missingSubject ? ProjectItemNotFoundError : ProjectItemInactiveError);
+  });
+  it("allows ARCHIVED Project reads but rejects Note writes before mutation", async () => {
+    const read = fake({ projectState: "ARCHIVED" });
+    await expect(read.store.get(ids)).resolves.toMatchObject({ noteId, projectId, subjectBindingId: bindingId });
+    await expect(read.store.getRevision({ ...ids, revisionId: r1 })).resolves.toMatchObject({ revisionId: r1, content: "original" });
+
+    const create = fake({ projectState: "ARCHIVED", exists: false });
+    await expect(create.store.create({ ...ids, content: "x", contentSha256: sha256NoteContent("x") }))
+      .rejects.toBeInstanceOf(ProjectReadOnlyError);
+    expect(create.query.mock.calls.some(([sql]) => /^(INSERT|UPDATE|DELETE)/.test(sql))).toBe(false);
+
+    const append = fake({ projectState: "ARCHIVED" });
+    await expect(append.store.appendRevision({ ...ids, baseRevisionId: r2, content: "new", contentSha256: sha256NoteContent("new") }))
+      .rejects.toBeInstanceOf(ProjectReadOnlyError);
+    expect(append.query.mock.calls.some(([sql]) => /^(INSERT|UPDATE|DELETE)/.test(sql))).toBe(false);
   });
   it("returns canonical current revision and newest-first summaries without old bodies", async () => {
     const s = fake(); const note = await s.store.get(ids);
