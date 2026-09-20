@@ -1,3 +1,4 @@
+import { AddToProject } from "./research/AddToProject";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Route, Routes, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
@@ -507,6 +508,7 @@ function BookCard({
             </button>
           </div>
         ) : null}
+      <AddToProject bookId={book.id} bookTitle={book.title || "未命名图书"} />
       {book.parseStatus !== "ok" && <TrustHint book={book} />}
       {book.parseStatus === "failed" ? (
         <div className="parse-hint parse-hint--failed">本条解析异常，请谨慎引用。</div>
