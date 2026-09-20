@@ -1,6 +1,6 @@
 # BOOK-ID-SEARCH status
 
-- task_id: `S32_M1D_NOTE_REVISIONS_R1`; **LOCAL_VERIFIED_REVIEW_FIXED_PENDING_PR**.
+- task_id: `S32_M1D_NOTE_REVISIONS_R1`; **PR_OPEN_READY_FOR_REVIEW**.
 - Worktree: `/home/conanxin/codex-projects/book-id-search-s32-m1d`; branch: `feat/s32-m1d-note-revisions`; source_baseline: `51c63b1dc45890bd5989d6bf6442d8ab7aaccc74`.
 - Implemented: one Note per Project EDITION binding; normalized ≤65536 UTF-8 bytes + SHA256; immutable revision append/history; stale-write conflict; Note-aware Edition removal guard; private same-origin API/shared Pool; on-demand Note UI with retained stale drafts.
 - tested_commit: `7e0c8ca2a48d665991b5fd63c5579d9584390274`. Later changes currently documentation only.
@@ -13,7 +13,7 @@
 - Full repository suite: **3710 PASS / 15 FAIL / 19 SKIP, 1 unhandled CLI-import error**; exit1. Failures are unchanged WeRead tests using `/opt/book-id-search` and `apply-match-review.ts` import-time `process.exit(1)`. They are not counted as M1-D PASS.
 - NOT_RUN: separate legacy M0/M1-A/M1-B/M1-C real-PG runners; production operations; real mobile device. M1-D real PG ran separately from the full-suite skipped integration cases.
 - Evidence: ignored `logs/s32-m1d/`, `/home/conanxin/codex-artifacts/s32-m1d/` (12 screenshots), per-plan `.superpowers/sdd/2026-09-20-s32-m1d-note-revisions/progress.md`; [runbook](operations/S32_M1D_LOCAL.md).
-- GitHub PR/Issue #2 and existing Notion design/plan/overview: **PENDING** until push and read-back verification.
-- IMPLEMENTED=YES; TESTED=PASS_SCOPED_PG_BROWSER; COMMITTED=YES; PUSHED=NO; MERGED=NO; DEPLOYED=NO; PRODUCTION_CHANGED=NO; M1_E_STARTED=NO.
+- GitHub **SYNCED / read-back verified**: [PR #13](https://github.com/conanxin/book-id-search/pull/13), [Issue #2 checkpoint](https://github.com/conanxin/book-id-search/issues/2#issuecomment-5748137130). Notion **SYNCED / read-back verified**: [design](https://app.notion.com/p/3e134a28189a811db24af230e365488a), [plan](https://app.notion.com/p/3e134a28189a811d8d99d10ea485ee8e), [overview](https://app.notion.com/p/3dd34a28189a81d48f74ec74593dac5f). Same task_id/source_baseline/tested_commit/PR/flags; final_head is the current remote PR head (later commits documentation only).
+- IMPLEMENTED=YES; TESTED=PASS_SCOPED_PG_BROWSER; COMMITTED=YES; PUSHED=YES; MERGED=NO; DEPLOYED=NO; PRODUCTION_CHANGED=NO; M1_E_STARTED=NO.
 - Last production observation remains historical release-prep 2026-09-19 13:22:59 UTC. This task performed no production access.
-- Next: open one M1-D PR for user review. No automatic merge/deploy/M1-E.
+- Next: review M1-D PR #13. No automatic merge/deploy/M1-E.
