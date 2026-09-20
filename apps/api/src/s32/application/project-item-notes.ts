@@ -10,6 +10,7 @@ export class ProjectItemNoteRevisionNotFoundError extends Error {}
 export class StaleNoteRevisionError extends Error {}
 export class ProjectItemNoteStoreUnavailableError extends Error {}
 export class ProjectItemHasNoteError extends Error {}
+export class ProjectReadOnlyError extends Error {}
 
 export interface ProjectItemNoteStore {
   get(input: { projectId: string; bindingId: string }): Promise<ProjectItemNote | null>;
