@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import {
   ProjectItemInactiveError, ProjectItemNotFoundError, ProjectItemNoteAlreadyExistsError,
-  ProjectItemNoteNotFoundError, ProjectItemNoteRevisionNotFoundError, ProjectItemNoteStoreUnavailableError,
+  ProjectItemNoteNotFoundError, ProjectItemNoteRevisionNotFoundError, ProjectItemNoteStoreUnavailableError, StaleNoteRevisionError,
   type ProjectItemNoteStore,
 } from "../application/project-item-notes.js";
 import type { ProjectItemNote, ProjectItemNoteRevision, ProjectItemNoteRevisionSummary } from "../domain/note.js";
@@ -143,8 +143,22 @@ export function createPostgresProjectItemNoteStore(pool: Pool): ProjectItemNoteS
         return projectNote(client, input.projectId, subject, note);
       });
     },
-    async appendRevision() {
-      throw new Error("Revision append is implemented in Task 3.");
+    appendRevision(input) {
+      return transaction(pool, false, async client => {
+        const subject = await readSubject(client, input, false);
+        const note = await ownedNote(client, input.projectId, subject, true);
+        if (!note) throw new ProjectItemNoteNotFoundError("NOTE_NOT_FOUND");
+        if (input.baseRevisionId !== note.current_revision_id) throw new StaleNoteRevisionError("STALE_NOTE_REVISION");
+        const revisionNo = revisionNumber(note.next_revision_no);
+        const revisionId = await insertRevision(client, note.id, revisionNo, input.content, input.contentSha256);
+        await client.query(`INSERT INTO core.note_revision_parents
+          (note_id, child_revision_id, parent_revision_id, parent_order)
+          VALUES ($1, $2, $3, 1)`, [note.id, revisionId, note.current_revision_id]);
+        await advanceNote(client, note.id, revisionId, revisionNo + 1);
+        const updated = await ownedNote(client, input.projectId, subject);
+        if (!updated) integrity();
+        return projectNote(client, input.projectId, subject, updated);
+      });
     },
     getRevision(input) {
       return transaction(pool, true, async client => {

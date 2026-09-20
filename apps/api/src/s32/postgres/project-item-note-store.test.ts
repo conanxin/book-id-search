@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Pool } from "pg";
 import { createPostgresProjectItemNoteStore } from "./project-item-note-store.js";
-import { ProjectItemInactiveError, ProjectItemNotFoundError, ProjectItemNoteAlreadyExistsError, ProjectItemNoteNotFoundError, ProjectItemNoteRevisionNotFoundError, ProjectItemNoteStoreUnavailableError } from "../application/project-item-notes.js";
+import { ProjectItemInactiveError, ProjectItemNotFoundError, ProjectItemNoteAlreadyExistsError, ProjectItemNoteNotFoundError, ProjectItemNoteRevisionNotFoundError, ProjectItemNoteStoreUnavailableError, StaleNoteRevisionError } from "../application/project-item-notes.js";
 import { sha256NoteContent } from "../domain/note.js";
 
 const projectId = "11111111-1111-4111-8111-111111111111";
@@ -13,12 +13,12 @@ const r2 = "66666666-6666-4666-8666-666666666666";
 const now = new Date("2026-09-20T00:00:00Z");
 const ids = { projectId, bindingId };
 const revision = (id = r1, no = 1, content = "original") => ({ id, note_id: noteId, revision_no: String(no), content_format: "MARKDOWN", content, content_sha256: sha256NoteContent(content), created_at: now });
-type Options = { exists?: boolean; missingSubject?: boolean; projectState?: string; editionState?: string; metadata?: unknown; role?: string; duplicateBindings?: boolean; missingNote?: boolean; noteState?: string; missingCurrent?: boolean; connectError?: unknown; fail?: RegExp; error?: Error };
+type Options = { exists?: boolean; firstRevision?: boolean; missingSubject?: boolean; projectState?: string; editionState?: string; metadata?: unknown; role?: string; duplicateBindings?: boolean; missingNote?: boolean; noteState?: string; missingCurrent?: boolean; connectError?: unknown; fail?: RegExp; error?: Error };
 function fake(options: Options = {}) {
   let exists = options.exists !== false;
   let metadata = Object.hasOwn(options, "metadata") ? options.metadata : { subjectBindingId: bindingId, subjectType: "EDITION", subjectId: editionId };
-  const note = { id: noteId, note_type: "PROJECT_ITEM_NOTE", lifecycle_state: options.noteState ?? "ACTIVE", current_revision_id: options.missingCurrent ? null : r2, next_revision_no: "3", created_at: now, updated_at: now };
-  let revisions = [revision(r2, 2, "second"), revision()];
+  const note = { id: noteId, note_type: "PROJECT_ITEM_NOTE", lifecycle_state: options.noteState ?? "ACTIVE", current_revision_id: options.missingCurrent ? null : options.firstRevision ? r1 : r2, next_revision_no: options.firstRevision ? "2" : "3", created_at: now, updated_at: now };
+  let revisions = options.firstRevision ? [revision()] : [revision(r2, 2, "second"), revision()];
   const query = vi.fn(async (sql: string, values: unknown[] = []) => {
     if (options.fail?.test(sql)) throw options.error ?? new Error("injected SQL failure");
     if (sql.includes("FROM core.project_bindings pb")) return { rows: options.missingSubject ? [] : [{ binding_id: bindingId, edition_id: editionId, project_state: options.projectState ?? "ACTIVE", edition_state: options.editionState ?? "ACTIVE" }] };
@@ -105,6 +105,39 @@ describe("Postgres project item note store", () => {
   it.each([/INSERT INTO core.notes/, /INSERT INTO core.note_revisions/, /UPDATE core.notes/, /INSERT INTO core.project_bindings/, /^COMMIT$/])("rolls back create failures at %s and releases the client", async fail => {
     const s = fake({ exists: false, fail });
     await expect(s.store.create({ ...ids, content: "x", contentSha256: sha256NoteContent("x") })).rejects.toThrow("injected");
+    expect(s.query).toHaveBeenCalledWith("ROLLBACK"); expect(s.release).toHaveBeenCalledOnce();
+  });
+  it("locks the current Note and rejects stale base before any insert", async () => {
+    const s = fake();
+    await expect(s.store.appendRevision({ ...ids, baseRevisionId: r1, content: "stale", contentSha256: sha256NoteContent("stale") })).rejects.toBeInstanceOf(StaleNoteRevisionError);
+    expect(s.query).toHaveBeenCalledWith(expect.stringMatching(/FROM core.notes n[\s\S]*FOR UPDATE OF n/), [noteId]);
+    expect(s.query.mock.calls.some(([sql]) => sql.startsWith("INSERT") || sql.startsWith("UPDATE"))).toBe(false);
+    expect(s.query).toHaveBeenCalledWith("ROLLBACK"); expect(s.release).toHaveBeenCalledOnce();
+  });
+  it("appends R2 and its single parent, advances the pointer, never updates old revisions", async () => {
+    const s = fake({ firstRevision: true }); const content = "second version";
+    const note = await s.store.appendRevision({ ...ids, baseRevisionId: r1, content, contentSha256: sha256NoteContent(content) });
+    expect(note.currentRevision).toMatchObject({ revisionNo: 2, content, contentSha256: sha256NoteContent(content) });
+    expect(note.revisions.map(r => r.revisionNo)).toEqual([2, 1]);
+    const calls = s.query.mock.calls;
+    expect(calls.filter(([sql]) => sql.startsWith("INSERT INTO core.note_revisions"))).toHaveLength(1);
+    expect(calls.filter(([sql]) => sql.startsWith("INSERT INTO core.note_revision_parents"))).toEqual([[expect.stringMatching(/parent_order[\s\S]*1\)/), [noteId, note.currentRevision.revisionId, r1]]]);
+    expect(s.query).toHaveBeenCalledWith(expect.stringMatching(/^UPDATE core.notes/), [noteId, note.currentRevision.revisionId, 3]);
+    expect(calls.some(([sql]) => /^(UPDATE|DELETE FROM) core.note_revisions/.test(sql))).toBe(false);
+    expect(calls.findIndex(([sql]) => sql.includes("FOR UPDATE OF n"))).toBeLessThan(calls.findIndex(([sql]) => sql.startsWith("INSERT")));
+    expect(calls.at(-1)![0]).toBe("COMMIT"); expect(s.release).toHaveBeenCalledOnce();
+  });
+  it.each([{ exists: false }, { noteState: "ARCHIVED" }, { missingCurrent: true }])("append rejects missing/inactive/inconsistent Note %j", async options => {
+    const s = fake(options);
+    const operation = s.store.appendRevision({ ...ids, baseRevisionId: r2, content: "new", contentSha256: sha256NoteContent("new") });
+    if (options.exists === false) await expect(operation).rejects.toBeInstanceOf(ProjectItemNoteNotFoundError);
+    else if (options.noteState) await expect(operation).rejects.toBeInstanceOf(ProjectItemInactiveError);
+    else await expect(operation).rejects.toThrow("integrity");
+    expect(s.query.mock.calls.some(([sql]) => sql.startsWith("INSERT") || sql.startsWith("UPDATE"))).toBe(false);
+  });
+  it.each([/INSERT INTO core.note_revisions/, /INSERT INTO core.note_revision_parents/, /UPDATE core.notes/, /^COMMIT$/])("rolls back append failure at %s", async fail => {
+    const s = fake({ fail });
+    await expect(s.store.appendRevision({ ...ids, baseRevisionId: r2, content: "new", contentSha256: sha256NoteContent("new") })).rejects.toThrow("injected");
     expect(s.query).toHaveBeenCalledWith("ROLLBACK"); expect(s.release).toHaveBeenCalledOnce();
   });
 });
