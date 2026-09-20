@@ -14,7 +14,7 @@ const view = (token="token",projectId="project",bindingId="binding")=><ProjectIt
 const click = (name:string)=>userEvent.click(screen.getByRole("button",{name}));
 async function open() { await click("研究笔记"); }
 const draft = ()=>screen.getByRole("textbox",{name:"笔记正文"}) as HTMLTextAreaElement;
-beforeEach(()=>{vi.clearAllMocks();vi.mocked(getProjectItemNote).mockResolvedValue({note:null});vi.mocked(createProjectItemNote).mockResolvedValue({note:note()});vi.mocked(appendProjectItemNoteRevision).mockResolvedValue({note:note(2)});vi.mocked(getProjectItemNoteRevision).mockResolvedValue({revision:note().currentRevision});});
+beforeEach(()=>{vi.resetAllMocks();vi.mocked(getProjectItemNote).mockResolvedValue({note:null});vi.mocked(createProjectItemNote).mockResolvedValue({note:note()});vi.mocked(appendProjectItemNoteRevision).mockResolvedValue({note:note(2)});vi.mocked(getProjectItemNoteRevision).mockResolvedValue({revision:note().currentRevision});});
 afterEach(()=>{cleanup();vi.restoreAllMocks();});
 describe("on-demand project item Note",()=>{
   it("starts closed with no fetch, then opens empty; blank creation disabled",async()=>{
@@ -97,4 +97,42 @@ describe("on-demand project item Note",()=>{
     render(view());await open();const signal=vi.mocked(getProjectItemNote).mock.calls[0][3]!;await click("收起笔记");expect(signal.aborted).toBe(true);await open();await screen.findByRole("textbox");
     await act(async()=>resolve({note:note()}));expect(screen.queryByRole("region",{name:"当前笔记"})).toBeNull();expect(draft().value).toBe("");
   });
+});
+
+it.each(["empty","editing"])("collapse preserves an unsaved %s draft without another GET",async mode=>{
+  if(mode==="editing")vi.mocked(getProjectItemNote).mockResolvedValue({note:note()});
+  render(view());await open();
+  if(mode==="editing"){await screen.findByRole("button",{name:"编辑"});await click("编辑");}else await screen.findByRole("textbox");
+  fireEvent.change(draft(),{target:{value:"  收起不能丢失\n未保存正文  "}});await click("收起笔记");
+  expect(screen.queryByRole("textbox")).toBeNull();await open();
+  expect((await screen.findByRole("textbox",{name:"笔记正文"}) as HTMLTextAreaElement).value).toBe("  收起不能丢失\n未保存正文  ");
+  expect(getProjectItemNote).toHaveBeenCalledOnce();expect(createProjectItemNote).not.toHaveBeenCalled();expect(appendProjectItemNoteRevision).not.toHaveBeenCalled();
+});
+it("collapse preserves stale draft/recovery; a token change still clears both",async()=>{
+  vi.mocked(getProjectItemNote).mockResolvedValue({note:note(2)});
+  vi.mocked(appendProjectItemNoteRevision).mockRejectedValue(new ProjectApiError(409,"笔记已经发生变化","STALE_NOTE_REVISION"));
+  const rendered=render(view());await open();await screen.findByRole("button",{name:"编辑"});await click("编辑");fireEvent.change(draft(),{target:{value:"保留冲突草稿"}});await click("保存新版本");await screen.findByRole("alert");
+  await click("收起笔记");await open();
+  expect((await screen.findByRole("textbox",{name:"笔记正文"}) as HTMLTextAreaElement).value).toBe("保留冲突草稿");
+  expect(screen.getByRole("region",{name:"保留的草稿"}).textContent).toContain("保留冲突草稿");expect(screen.getByRole("button",{name:"重新加载最新版本"})).toBeTruthy();
+  await click("收起笔记");rendered.rerender(view("other-token"));
+  expect(screen.queryByRole("region",{name:"保留的草稿"})).toBeNull();await open();await screen.findByRole("button",{name:"编辑"});expect(screen.queryByRole("textbox")).toBeNull();expect(screen.queryByText("保留冲突草稿")).toBeNull();
+});
+it("concurrent create conflict preserves draft and reloads into existing Note editing",async()=>{
+  vi.mocked(getProjectItemNote).mockResolvedValueOnce({note:null}).mockResolvedValueOnce({note:note()});
+  vi.mocked(createProjectItemNote).mockRejectedValue(new ProjectApiError(409,"这项资料已有研究笔记，请重新加载。","NOTE_ALREADY_EXISTS"));
+  render(view());await open();await screen.findByRole("textbox");fireEvent.change(draft(),{target:{value:"创建竞争中我的草稿"}});await click("创建笔记");await screen.findByRole("alert");
+  expect(draft().value).toBe("创建竞争中我的草稿");await click("重新加载最新版本");await screen.findByRole("button",{name:"v1 当前"});
+  expect(draft().value).toBe("创建竞争中我的草稿");expect(screen.queryByRole("button",{name:"创建笔记"})).toBeNull();
+  expect((screen.getByRole("button",{name:"v1 当前"}) as HTMLButtonElement).disabled).toBe(true);
+  await click("保存新版本");await screen.findByRole("button",{name:"v2 当前"});
+  expect(createProjectItemNote).toHaveBeenCalledOnce();expect(appendProjectItemNoteRevision).toHaveBeenCalledWith("token","project","binding","r1","创建竞争中我的草稿",expect.any(AbortSignal));
+});
+it("explicit cancel still discards a new draft",async()=>{
+  render(view());await open();await screen.findByRole("textbox");fireEvent.change(draft(),{target:{value:"明确取消"}});await click("取消");await open();await screen.findByRole("textbox");expect(draft().value).toBe("");expect(createProjectItemNote).not.toHaveBeenCalled();
+});
+it("read-only history shows when the selected revision was saved",async()=>{
+  vi.mocked(getProjectItemNote).mockResolvedValue({note:note(2)});render(view());await open();await screen.findByRole("button",{name:"v1"});await click("v1");
+  const region=await screen.findByRole("region",{name:"历史版本 v1"});const time=region.querySelector("time");
+  expect(time).not.toBeNull();expect(time?.getAttribute("datetime")).toBe(note().currentRevision.createdAt);expect(time?.textContent).toContain("2026");
 });

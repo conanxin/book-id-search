@@ -22,6 +22,7 @@ function NotePanel({ token, projectId, item }: Props) {
   const [busy, setBusy] = useState(false);
   const request = useRef<AbortController | null>(null);
   const inFlight = useRef(false);
+  const resumeMode = useRef<"empty" | "editing" | null>(null);
   const textareaId = useId();
   useEffect(() => () => request.current?.abort(), []);
 
@@ -38,10 +39,17 @@ function NotePanel({ token, projectId, item }: Props) {
   function message(err: unknown) {
     return err instanceof ProjectApiError ? err.message : "笔记请求未能确认，请稍后再试。";
   }
-  function close() {
+  function close(discardDraft = false) {
+    resumeMode.current = !discardDraft && (mode === "empty" || mode === "editing") ? mode : null;
     request.current?.abort(); inFlight.current = false;
-    setBusy(false); setMode("closed"); setNote(null); setDraft(""); setStaleDraft(null);
+    setBusy(false); setMode("closed");
+    if (resumeMode.current) return;
+    setNote(null); setDraft(""); setStaleDraft(null);
     setSelected(null); setError(""); setLatestLoaded(false);
+  }
+  function open() {
+    if (resumeMode.current) { setMode(resumeMode.current); resumeMode.current = null; }
+    else void load();
   }
   async function load(preserveDraft = false) {
     const controller = begin(); if (!controller) return;
@@ -51,7 +59,7 @@ function NotePanel({ token, projectId, item }: Props) {
       if (controller.signal.aborted) return;
       if (preserveDraft && !data.note) throw new ProjectApiError(404, "研究笔记已不可用，请保留当前草稿后重试。");
       setNote(data.note);
-      if (preserveDraft) { setStaleDraft(draft); setLatestLoaded(true); }
+      if (preserveDraft) { setStaleDraft(draft); setLatestLoaded(true); setMode("editing"); }
       else { setDraft(""); setMode(data.note ? "reading" : "empty"); }
     } catch (err) {
       if (!controller.signal.aborted) { setError(message(err)); if (!preserveDraft) setMode("failed"); }
@@ -64,7 +72,7 @@ function NotePanel({ token, projectId, item }: Props) {
   }
   function cancel() {
     if (busy) return;
-    if (!note) { close(); return; }
+    if (!note) { close(true); return; }
     setDraft(""); setStaleDraft(null); setLatestLoaded(false); setError(""); setMode("reading");
   }
   async function save() {
@@ -80,7 +88,7 @@ function NotePanel({ token, projectId, item }: Props) {
     } catch (err) {
       if (!controller.signal.aborted) {
         setError(message(err));
-        if (err instanceof ProjectApiError && err.code === "STALE_NOTE_REVISION") {
+        if (err instanceof ProjectApiError && (err.code === "STALE_NOTE_REVISION" || err.code === "NOTE_ALREADY_EXISTS")) {
           setStaleDraft(draft); setLatestLoaded(false);
         }
       }
@@ -97,7 +105,7 @@ function NotePanel({ token, projectId, item }: Props) {
 
   return <section className="research-note" aria-label="研究笔记">
     <div className="research-note-heading">
-      <button type="button" className="research-text-button" aria-expanded={mode !== "closed"} onClick={() => mode === "closed" ? void load() : close()}>{mode === "closed" ? "研究笔记" : "收起笔记"}</button>
+      <button type="button" className="research-text-button" aria-expanded={mode !== "closed"} onClick={() => mode === "closed" ? open() : close()}>{mode === "closed" ? "研究笔记" : "收起笔记"}</button>
       {mode !== "closed" ? <h4>研究笔记</h4> : null}
     </div>
     {mode !== "closed" ? <>
@@ -123,7 +131,9 @@ function NotePanel({ token, projectId, item }: Props) {
         </div>
       </section> : null}
       {mode === "history" && selected ? <section aria-label={`历史版本 v${selected.revisionNo}`}>
-        <h5>历史版本 v{selected.revisionNo} · 只读</h5><pre className="research-note-content">{selected.content}</pre>
+        <h5>历史版本 v{selected.revisionNo} · 只读</h5>
+        <p className="research-muted">保存于 <time dateTime={selected.createdAt}>{new Date(selected.createdAt).toLocaleString("zh-CN")}</time></p>
+        <pre className="research-note-content">{selected.content}</pre>
         <button type="button" className="research-text-button" disabled={busy} onClick={() => { setSelected(null); setError(""); setMode("reading"); }}>返回当前版本</button>
       </section> : null}
       {note ? <nav className="research-note-history" aria-label="笔记历史版本"><h5>历史版本</h5><div className="research-note-actions">{note.revisions.map(rev => <button type="button" className="research-text-button" key={rev.revisionId} disabled={busy || mode === "editing"} onClick={() => void history(rev.revisionId)}>v{rev.revisionNo}{rev.revisionId === note.currentRevision.revisionId ? " 当前" : ""}</button>)}</div></nav> : null}
