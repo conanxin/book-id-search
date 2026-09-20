@@ -1,24 +1,17 @@
 # BOOK-ID-SEARCH status
 
-- Current follow-up: `S32_M1B_DEV_ENTRY_COMPAT_R1`, **READY_FOR_REVIEW**, existing [PR #11](https://github.com/conanxin/book-id-search/pull/11), reviewed baseline `cb70a07fbf826ab875f7be86e67c892dcdf6b936`.
-- tested_commit: `de60d045d42ae874d5897bac6a80466c727b6f32`; implemented/tested/committed/pushed: **YES**. Only this status receipt follows that tested commit; product and check files are unchanged. Merged/deployed: **NO**.
-- Changed only API dev entry/script, dedicated startup checks and docs. No dependencies added. Dev defaults to 127.0.0.1 after dotenv; explicit API_HOST wins. Compiled production entry remains unchanged with default 0.0.0.0.
-- Fresh checks: WSL Node22.22.0 **5/5 PASS** + API build PASS; **native Windows 10 cmd.exe / Node24.13.1 5/5 PASS** + API build PASS, using identical sources/lock in an isolated Windows temporary copy. Tests observe real bound addresses and HTTP responses; no PG/Meili or trial credentials used.
-- Web same-origin contract unchanged; [original review-thread explanation](https://github.com/conanxin/book-id-search/pull/11#discussion_r4055325353) cites fixed ad3db3e spec section 5. UI/business/M0 SQL/lock untouched; no data cleanup, production operation, merge or M1-C.
-- Full feature/PG/browser/disk checks **NOT_RUN in this compatibility follow-up**; prior M1-B evidence below is retained, not represented as rerun. Logs/checkpoint: ignored logs/s32-dev-entry/ and progress/S32_M1B_DEV_ENTRY_COMPAT_R1.md.
-
-- Sync **VERIFIED** with the same task_id/tested_commit/PR: [Issue #2 receipt](https://github.com/conanxin/book-id-search/issues/2#issuecomment-5746346403), [Notion M1-B](https://www.notion.so/3e034a28189a81aa920afaf70bd6201b), [Notion overview](https://www.notion.so/3dd34a28189a81d48f74ec74593dac5f). [Windows review reply](https://github.com/conanxin/book-id-search/pull/11#discussion_r4055339096).
-- Unique next step: review the compatibility fix in existing PR #11; no automatic merge.
-
-Previous M1-B implementation evidence:
-
-- Task: `S32_M1B_PROJECTS_UI_R1` / local project create-list-detail, **READY_FOR_REVIEW**, [PR #11](https://github.com/conanxin/book-id-search/pull/11).
-- Baseline: actual main `19c0209acb9445b505f918f13bce9e2dc82f7917` (PR #10 merged). Worktree `/home/conanxin/codex-projects/book-id-search`, branch `feat/s32-m1b-projects-ui`; previous work preserved.
-- Implemented/tested: **YES**. 108 unit/static + 216 search/WeRead regression + 1 real PG16 integration PASS; API/Web builds PASS. Real browser create/detail/list/refresh and API/PG restart persistence PASS; desktop/mobile screenshots recorded. M0 migration and both SQL files unchanged.
-- Browser project: `36c19d98-85ad-48d6-8515-9698f563e89a` (“北京古道研究”). Name, purpose, UUID and both timestamps match before/after restart. Dev volume `book-id-search-s32-local-pg` retained; initialization skipped on restart; disposable test container removed.
-- Local page: `http://127.0.0.1:5173/research/projects`. Server credentials only in ignored `.env.s32.local`; enter S32 token via the page. [Local guide](operations/S32_M1B_LOCAL.md).
-- Additional root scripts typecheck: **FAILED**, six errors in unchanged AI/search/WeRead scripts. Full repository suite, M1-A real-PG rerun and M0 SQL assertion/negative rerun: **NOT_RUN**. Web build warns about existing large main bundle; browser favicon 404 remains, expected 403/503/404 probes observed; no uncaught application JS error observed.
-- tested_commit: `1b7eaacf0199edbfceb76ac24c9311ab0f2c5ad2`; committed/pushed: **YES**. That first feature test commit predates the compatibility follow-up above. Merged/deployed/production changed: **NO**. Latest production observation remains release-prep **2026-09-19 13:22:59 UTC**; free 20.2888 GiB, deployment HOLD_CAPACITY_AND_AUTHORIZATION. No production access this task.
-- Evidence: ignored `logs/s32-m1b/`, `progress/S32_M1B_PROJECTS_UI_R1.md`; screenshots `/home/conanxin/codex-artifacts/s32-m1b/`.
-- Sync **VERIFIED** with the same task_id/tested_commit/PR: [Issue #2 receipt](https://github.com/conanxin/book-id-search/issues/2#issuecomment-5743171309), [Notion overview](https://www.notion.so/3dd34a28189a81d48f74ec74593dac5f), [Notion M1-B](https://www.notion.so/3e034a28189a81aa920afaf70bd6201b).
-- Unique next step: review PR #11; do not merge or deploy automatically.
+- task_id: `S32_M1C_PROJECT_BINDING_R1`; **VERIFIED_PENDING_BRANCH_REVIEW**.
+- Worktree: `/home/conanxin/codex-projects/book-id-search-s32-m1c`; branch: `feat/s32-m1c-project-binding`.
+- source_baseline: `7295af6e991e2a5b1575b8c2a0b5d3662c093b9f` (actual remote main, includes PR #11).
+- Implemented: explicit search → M1-A promotion → one EDITION binding → canonical project materials → binding-only removal. Independent S32 auth, shared Pool, same-origin requests, no schema changes.
+- Verified: backend **170 tests PASS**, affected search/Web/WeRead **253 tests PASS**, disposable PG16 **1 integration PASS**, API/Web builds PASS. Frozen migration and both M0 SQL files unchanged; diff check PASS.
+- Browser PASS: real catalog “京西商旅古道” (`14624320_000030433335`) added to existing “北京古道研究”; first201, repeat200/same binding; detail/refresh and API/PG restart preserve identical item. Cancel remove and actual DB503 failed DELETE retain item; confirmed remove leaves Work1/Edition1/Source1/ExternalIdentity3. Original project UUID/purpose/timestamps and volume retained. 390px width checked, no overflow. Empty-project browser state used a temporary UI mock only; primary persistence flow used real API/Meili/PG.
+- Local pages: `http://127.0.0.1:5173/`, `/research/projects/36c19d98-85ad-48d6-8515-9698f563e89a`. Meili contains only 3 actual public catalog snapshots, no full index copy. [Runbook](operations/S32_M1C_LOCAL.md).
+- tested_commit: `9fb19d4bbac0fb30ab3f2c6e7eb9748b1f4ecefc`. Subsequent documentation commits do not change tested code.
+- Whole-suite additional check: **FAILED**, 15 failures in unchanged WeRead tests hardcoding `/opt/book-id-search`, plus one import-time CLI exit error; identical failures reproduced on old M1-B baseline. See local logs. No claim of whole-repository PASS. Existing Web bundle >500KB warning; favicon404 and intentional403/503/404 probes recorded.
+- NOT_RUN: M0 SQL assertion/negative execution and standalone historical M1-A/M1-B real-PG suites; Windows-native rerun in this M1-C phase (prior dev-entry compatibility evidence is historical).
+- Rulings: added missing dev-only Testing Library/jsdom26 and lock entries; app dependencies unchanged. Binding transaction rechecks/locks mutable parents. Fixed Meili0.52 nested error cause mapping via RED→GREEN; promotion semantics unchanged. Actual negative SQL path is `db/tests/002_s32_negative_invariants.sql`.
+- Evidence: ignored `.superpowers/sdd/2026-09-20-s32-m1c-project-binding/progress.md`, `logs/s32-m1c/`; screenshots `/home/conanxin/codex-artifacts/s32-m1c/`. No credentials/screenshots committed.
+- Implemented/tested/committed: **YES**. PR/push/GitHub/Notion: **PENDING**. MERGED=NO; DEPLOYED=NO; PRODUCTION_CHANGED=NO; M1_D_STARTED=NO.
+- Last production observation remains historical release-prep 2026-09-19 13:22:59 UTC; HOLD_CAPACITY_AND_AUTHORIZATION. No production/SSH access in M1-C.
+- Next: final branch review, then one M1-C PR and matching Issue #2 / existing Notion M1-C design/plan/overview receipts. Do not merge or deploy.
