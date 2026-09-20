@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import { ProjectCard, ProjectDetails } from "./ProjectsPage";
-import { createProject, listProjects } from "./api";
+import { createProject, listProjects, addCatalogBookToProject, listProjectItems, removeProjectItem } from "./api";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); });
 describe("S32 access and client", () => {
@@ -46,5 +46,42 @@ describe("project presentation", () => {
   it("shows purpose and dates, and handles an omitted description", () => {
     const html = renderToStaticMarkup(<ProjectDetails project={{ ...project, description: null }} />);
     expect(html).toContain("尚未填写研究目的"); expect(html).toContain("创建时间"); expect(html).toContain("更新时间");
+  });
+});
+
+describe("M1-C same-origin client", () => {
+  const item = { bindingId: "binding", projectId: "project", workId: "work", editionId: "edition", sourceId: "source", catalogBookId: "catalog", title: "北京古道考", publisher: null, publicationDate: null, publicationDatePrecision: "YEAR", isbn: null, addedAt: "2026-09-20T00:00:00Z" };
+  it("uses same-origin no-store add/list/remove and only sends bookId", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ promotionStatus: "created", bindingStatus: "created", item }), { status: 201 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [item] })))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await addCatalogBookToProject("token", "project", "catalog")).toMatchObject({ item });
+    expect(await listProjectItems("token", "project")).toEqual({ items: [item] });
+    await expect(removeProjectItem("token", "project", "binding")).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[0]).toMatchObject(["/api/private/s32/projects/project/catalog-books", { method: "POST", cache: "no-store", body: '{"bookId":"catalog"}', headers: { Authorization: "Bearer token" } }]);
+    expect(fetchMock.mock.calls[1]).toMatchObject(["/api/private/s32/projects/project/items", { method: "GET", cache: "no-store" }]);
+    expect(fetchMock.mock.calls[2]).toMatchObject(["/api/private/s32/projects/project/items/binding", { method: "DELETE", cache: "no-store" }]);
+  });
+  it.each([409,503])("does not retry or reflect server details on %s", async status => {
+    const f = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ error: { message: "SECRET" } }), { status })); vi.stubGlobal("fetch", f);
+    await expect(addCatalogBookToProject("token", "project", "catalog")).rejects.toThrow(status === 409 ? "冲突" : "服务暂不可用");
+    expect(f).toHaveBeenCalledOnce();
+    await expect(removeProjectItem("token", "project", "binding")).rejects.not.toThrow("SECRET"); expect(f).toHaveBeenCalledTimes(2);
+  });
+  it.each([{}, { items: {} }, { items: [null] }])("rejects malformed item lists %j", async body => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(body))));
+    await expect(listProjectItems("token", "project")).rejects.toThrow("响应异常");
+  });
+  it("rejects a fake successful add or delete response", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ item: {} }))));
+    await expect(addCatalogBookToProject("token", "project", "catalog")).rejects.toThrow("响应异常");
+    await expect(removeProjectItem("token", "project", "binding")).rejects.toThrow("响应异常");
+  });
+  it("encodes path segments and passes abort signals", async () => {
+    const f = vi.fn(async () => new Response(JSON.stringify({ items: [] }))); vi.stubGlobal("fetch", f);
+    const signal = new AbortController().signal; await listProjectItems("token", "a/b", signal);
+    expect(f).toHaveBeenCalledWith("/api/private/s32/projects/a%2Fb/items", expect.objectContaining({ signal }));
   });
 });

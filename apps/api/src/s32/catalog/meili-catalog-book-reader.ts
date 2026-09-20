@@ -26,14 +26,11 @@ export function createMeiliCatalogBookReader(getDocument: GetDocument): CatalogB
       try {
         raw = await getDocument(id);
       } catch (error) {
-        if (
-          error &&
-          typeof error === "object" &&
-          "code" in error &&
-          (error as { code?: unknown }).code === "document_not_found"
-        ) {
-          return null;
-        }
+        // Meili SDK 0.52 stores API error details in cause; retain older top-level errors too.
+        const details = error && typeof error === "object" ? error as { code?: unknown; cause?: unknown } : null;
+        const cause = details?.cause && typeof details.cause === "object"
+          ? details.cause as { code?: unknown } : null;
+        if (details?.code === "document_not_found" || cause?.code === "document_not_found") return null;
         throw new CatalogReadUnavailableError("CATALOG_READ_UNAVAILABLE");
       }
 

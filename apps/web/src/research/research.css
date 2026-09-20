@@ -45,3 +45,14 @@
   .research-access form { grid-template-columns: 1fr; }
   .research-nav { gap: 18px; }
 }
+.research-add { margin: 12px 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.research-add-panel { flex-basis: 100%; min-width: 0; padding: 16px; background: var(--color-bg-card); border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow-wrap: anywhere; }
+.research-project-choice { display: block; width: 100%; margin: 10px 0; padding: 12px; text-align: left; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: #edf3ff; color: var(--color-primary-strong); overflow-wrap: anywhere; }
+.research-add-success { color: #286043; font-size: 14px; overflow-wrap: anywhere; }
+.research-add :is(button, a):focus-visible { outline: 3px solid #b3ccff; outline-offset: 3px; }
+.research-materials { margin-top: 32px; }
+.research-material h3 { margin: 0 0 18px; font-size: 19px; overflow-wrap: anywhere; }
+.research-material-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; }
+.research-material-fields dt { color: var(--color-text-muted); font-size: 13px; }
+.research-material-fields dd { margin: 6px 0 0; overflow-wrap: anywhere; }
+.research-material-actions { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
