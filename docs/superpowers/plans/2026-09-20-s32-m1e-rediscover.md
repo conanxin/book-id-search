@@ -480,6 +480,7 @@ Map connection failures to `ProjectOverviewStoreUnavailableError`.
 
 Pin:
 - `GET /:projectId/overview`;
+- success body is the direct `{ project, summary, items }` object from the written spec, with no `overview` wrapper;
 - malformed UUID → 400;
 - missing Project → 404;
 - ACTIVE → 200 `readOnly:false`;
@@ -510,6 +511,8 @@ git commit -m "feat(s32): add project rediscover overview"
 ### Task 4: Split ARCHIVED read access from write access
 
 **Files:**
+- Modify: `apps/api/src/s32/application/project-item-notes.ts`
+- Modify: `apps/api/src/s32/application/project-item-notes.test.ts`
 - Modify: `apps/api/src/s32/postgres/project-item-note-store.ts`
 - Modify: `apps/api/src/s32/postgres/project-item-note-store.test.ts`
 - Modify: `apps/api/src/s32/routes/project-item-note-routes.ts`
@@ -520,6 +523,7 @@ git commit -m "feat(s32): add project rediscover overview"
 **Interfaces:**
 - Existing M1-D read APIs gain ARCHIVED Project read access.
 - Existing M1-C/M1-D write APIs remain ACTIVE-only.
+- Produces `ProjectReadOnlyError` from the Note write path.
 - Produces consistent 409 lifecycle code `PROJECT_READ_ONLY` for write attempts against an archived Project.
 
 - [ ] **Step 1: Add failing store tests for archived read/write split**
@@ -559,11 +563,18 @@ async function readSubject(
 ): Promise<Subject>
 ```
 
-Rules:
+First add the application error:
+
+```ts
+export class ProjectReadOnlyError extends Error {}
+```
+
+Rules in `readSubject`:
 - require the Edition binding and Edition to exist;
 - require Edition lifecycle ACTIVE;
 - for READ accept Project lifecycle ACTIVE or ARCHIVED;
-- for WRITE require Project lifecycle ACTIVE;
+- for WRITE + ARCHIVED throw `ProjectReadOnlyError("PROJECT_READ_ONLY")`;
+- for WRITE require Project lifecycle ACTIVE after the archived check;
 - do not weaken Note lifecycle validation.
 
 Call with READ from `get` and `getRevision`; WRITE from `create` and `appendRevision`.
@@ -572,7 +583,7 @@ Run the store test to GREEN.
 
 - [ ] **Step 3: Pin explicit archived-write HTTP semantics**
 
-Update route tests so archived write conflicts return:
+Import `ProjectReadOnlyError` in the Note route and update route tests so archived Note writes return:
 
 ```json
 {
@@ -585,7 +596,7 @@ Update route tests so archived write conflicts return:
 
 Keep other inactive/integrity paths generic and unchanged.
 
-For M1-C add/remove routes, map `ProjectNotActiveError` to the same 409 code/message because M0 Project lifecycle is ACTIVE/ARCHIVED only.
+For M1-C add/remove routes, map `ProjectNotActiveError` to the same 409 code/message because M0 Project lifecycle is ACTIVE/ARCHIVED only. Keep `ProjectItemInactiveError` for inactive Edition/Note states and do not relabel those as archived-project read-only conflicts.
 
 Run:
 
@@ -642,7 +653,7 @@ H. Overview empty Project → 0/0/null
 I. Overview item without Note → activityAt=addedAt
 J. Overview current Note → excerpt/current revision/activityAt
 K. Overview ordering recent activity then binding id
-L. archived GET Note/current revision/history succeeds
+L. archived Project remains readable through Project lookup, Overview, current Note, and revision history
 M. archived add/create/append/remove all return/throw lifecycle conflict and row counts stay unchanged
 N. no unrelated core/ops/derived writes
 ```
@@ -790,11 +801,11 @@ export const getProjectOverview = (
   token: string,
   projectId: string,
   signal?: AbortSignal,
-) => request<{ overview: ProjectOverview }>(
+) => request<ProjectOverview>(
   token,
   `/projects/${encodeURIComponent(projectId)}/overview`,
   { signal },
-  body => isProjectOverview(body.overview),
+  body => isProjectOverview(body),
 );
 ```
 
