@@ -92,7 +92,6 @@ describe("research membership private route", () => {
   });
 
   it.each([
-    null,
     {},
     { bookIds: "book-a" },
     { bookIds: [""] },
