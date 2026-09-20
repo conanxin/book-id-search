@@ -35,7 +35,8 @@
     "s32:schema:static": "vitest run scripts/s32-schema-contract.test.ts",
     "s32:schema:check": "tsx scripts/s32-schema-check.ts",
     "s32:m1a:check": "tsx scripts/s32-m1a-integration-check.ts",
-    "s32:m1b:check": "tsx scripts/s32-m1b-integration-check.ts"
+    "s32:m1b:check": "tsx scripts/s32-m1b-integration-check.ts",
+    "s32:m1c:check": "tsx scripts/s32-m1c-integration-check.ts"
   },
   "dependencies": {
     "dotenv": "^17.2.3",
