@@ -1,3 +1,4 @@
+import { ProjectItems } from "./ProjectItems";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, FolderOpen, Plus } from "lucide-react";
@@ -72,7 +73,7 @@ function ProjectWorkspace({ token, projectId }: { token: string; projectId?: str
   if (projectId) return <>
     {loading ? <p role="status" className="research-panel">正在读取项目…</p> : null}
     {error ? <div role="alert" className="research-error">{error}<button onClick={() => setAttempt((n) => n + 1)}>重试读取</button></div> : null}
-    {project && !loading && !error ? <ProjectDetails project={project} /> : null}
+    {project && !loading && !error ? <><ProjectDetails project={project} /><ProjectItems token={token} projectId={project.id} /></> : null}
   </>;
   return <div className="research-grid">
     <section className="research-panel">
