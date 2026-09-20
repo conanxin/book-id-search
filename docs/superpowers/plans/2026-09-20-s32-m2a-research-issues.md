@@ -726,8 +726,11 @@ Cover at least:
    - a new key on the archived Project throws `ProjectReadOnlyError`.
 
 5. rollback:
-   - inject a binding failure inside the store transaction using a deterministic fixture conflict or test-only SQL setup;
-   - prove no Issue and no idempotency reservation remains after rollback.
+   - choose a known `issueId` for the direct store call;
+   - before the call, insert a fixture `core.project_bindings` row with the same `(project_id, target_type='RESEARCH_ISSUE', target_id=issueId)` but no Issue row;
+   - the store inserts the Issue and then its owner binding insert hits `uq_pb_triple`;
+   - assert the transaction rolled back the newly inserted Issue and idempotency reservation while the pre-existing fixture binding is still the only binding;
+   - delete the corrupt fixture binding in test cleanup.
 
 6. ownership corruption:
    - orphan Issue detail → integrity error;
@@ -847,18 +850,24 @@ Pin:
 
 - [ ] **Step 2: Modify request helper to accept explicit safe headers**
 
-Extend `RequestOptions` with an optional header map used only by typed callers:
+Extend `RequestOptions` with the narrow M2-A field:
 
 ```ts
 type RequestOptions = {
   method?: "GET" | "POST" | "DELETE";
   input?: unknown;
   signal?: AbortSignal;
-  headers?: Record<string, string>;
+  idempotencyKey?: string;
 };
 ```
 
-Merge after Authorization/content-type but do not let callers override Authorization in M2-A; alternatively make the option specifically `idempotencyKey?: string`. Prefer the narrower `idempotencyKey` field if it keeps the helper simpler.
+When present, add exactly:
+
+```ts
+"Idempotency-Key": idempotencyKey
+```
+
+The option must not permit arbitrary caller headers or Authorization override.
 
 Add `IDEMPOTENCY_CONFLICT` to `errorCodes`.
 
@@ -1009,7 +1018,7 @@ Pin:
 - first submit gets/uses one receipt key;
 - double-click/submitting cannot send two browser POSTs;
 - confirmed 201/200 clears receipt and navigates exactly to `/research/projects/:projectId/issues/:issueId`;
-- 500/503/network failure enters unconfirmed state and keeps key;
+- 500/503/network failure, client-side malformed-success 502, and dispatched-request abort enter unconfirmed state and keep the key because commit outcome is not proven;
 - unchanged retry reuses same key;
 - abort after dispatch keeps key;
 - changing normalized payload causes a new key;
@@ -1249,7 +1258,7 @@ With browser/network interception or a local test proxy that does not modify com
 - verify navigation recovers the already-created Issue;
 - verify only one Issue + one owner binding exists.
 
-If browser tooling cannot drop only the response after server commit, prove the exact browser receipt reuse with automated Web tests and pair it with the real-PG completed replay test; report the limitation explicitly rather than inventing a browser PASS.
+This is a required M2-A acceptance gate. If the available browser tooling cannot produce a post-commit lost-response condition, stop before opening the PR and report `BLOCKED_ON_RESPONSE_UNKNOWN_BROWSER_ACCEPTANCE`; do not substitute unit tests for this browser requirement.
 
 - [ ] **Step 9: Browser ARCHIVED acceptance**
 
