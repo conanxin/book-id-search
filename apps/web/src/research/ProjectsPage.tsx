@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { ArrowLeft, FolderOpen, Plus } from "lucide-react";
 import { createProject, getProjectOverview, listProjects, type Project, type ProjectOverview } from "./api";
 import { saveS32Token, useS32Token } from "./access";
+import { ResearchIssuesSection, useProjectResearchIssues } from "./ResearchIssues";
 import "./research.css";
 
 export const researchEnabled = import.meta.env.VITE_S32_ENABLED === "true";
@@ -46,6 +47,7 @@ export function ProjectWorkspace({ token, projectId }: { token: string; projectI
   const [formError, setFormError] = useState("");
   const [creating, setCreating] = useState(false);
   const submission = useRef<AbortController | null>(null);
+  const researchIssues = useProjectResearchIssues(token, projectId ?? "");
   useEffect(() => () => { submission.current?.abort(); }, []);
   useEffect(() => {
     const controller = new AbortController();
@@ -76,11 +78,19 @@ export function ProjectWorkspace({ token, projectId }: { token: string; projectI
     }
   }
 
-  if (projectId) return <>
-    {loading ? <p role="status" className="research-panel">正在读取项目…</p> : null}
-    {error ? <div role="alert" className="research-error">{error}<button onClick={() => setAttempt((n) => n + 1)}>重试读取</button></div> : null}
-    {overview && !loading && !error ? <><ProjectDetails project={overview.project} summary={overview.summary} /><ProjectItems token={token} projectId={overview.project.id} items={overview.items} readOnly={overview.project.readOnly} focusedBindingId={searchParams.get("item")} onItemsChanged={() => setAttempt(n => n + 1)} /></> : null}
-  </>;
+  if (projectId) {
+    const issuesProject = researchIssues.result.state === "ready" ? researchIssues.result.response.project : null;
+    return <>
+      {overview && !loading && !error ? <ProjectDetails project={overview.project} summary={overview.summary} /> : issuesProject ? <article className="research-panel research-detail"><div className="research-detail-status"><span className="research-eyebrow">研究项目</span>{issuesProject.readOnly ? <span className="research-read-only">已归档 · 只读</span> : null}</div><h1>{issuesProject.name}</h1></article> : null}
+      <ResearchIssuesSection token={token} projectId={projectId} result={researchIssues.result} retry={researchIssues.retry} />
+      <section className="research-materials" aria-labelledby="research-materials-heading">
+        <h2 id="research-materials-heading">研究资料</h2>
+        {loading ? <p role="status" className="research-panel">正在读取研究资料…</p> : null}
+        {error ? <div role="alert" className="research-error">研究资料暂不可用。<button onClick={() => setAttempt((n) => n + 1)}>重试研究资料</button></div> : null}
+        {overview && !loading && !error ? <ProjectItems token={token} projectId={overview.project.id} items={overview.items} readOnly={overview.project.readOnly} focusedBindingId={searchParams.get("item")} onItemsChanged={() => setAttempt(n => n + 1)} /> : null}
+      </section>
+    </>;
+  }
   return <div className="research-grid">
     <section className="research-panel">
       <h2><Plus size={18} aria-hidden="true" />新建项目</h2>
