@@ -1,3 +1,6 @@
+import {createCandidateClaimsService,type CandidateClaimsService} from "./application/candidate-claims.js";
+import {createPostgresCandidateClaimStore} from "./postgres/candidate-claim-store.js";
+import {createCandidateClaimRouter} from "./routes/candidate-claim-routes.js";
 import { createProjectItemsService, type ProjectItemsService } from "./application/project-items.js";
 import { createPostgresProjectBindingStore } from "./postgres/project-binding-store.js";
 import { createProjectItemRouter } from "./routes/project-item-routes.js";
@@ -40,6 +43,7 @@ export function createS32Router(deps: {
   let projectItemNotes: ProjectItemNotesService | null = null;
   let researchMemberships: ResearchMembershipService | null = null;
   let projectOverview: ProjectOverviewService | null = null;
+  let candidateClaims: CandidateClaimsService | null = null;
   let researchIssues: ResearchIssuesService | null = null;
   if (config.enabled && config.databaseUrl) {
     const pool = new Pool({ connectionString: config.databaseUrl, connectionTimeoutMillis: 3000, query_timeout: 5000 });
@@ -48,6 +52,7 @@ export function createS32Router(deps: {
     projectItemNotes = createProjectItemNotesService(createPostgresProjectItemNoteStore(pool));
     researchMemberships = createResearchMembershipService(createPostgresResearchMembershipStore(pool));
     projectOverview = createProjectOverviewService(createPostgresProjectOverviewStore(pool));
+    candidateClaims = createCandidateClaimsService(createPostgresCandidateClaimStore(pool));
     researchIssues = createResearchIssuesService(createPostgresResearchIssueStore(pool));
     command = createPromoteCatalogBookCommand({
       reader: createMeiliCatalogBookReader(deps.getCatalogDocument),
@@ -62,6 +67,7 @@ export function createS32Router(deps: {
   );
   router.use("/research-memberships", createResearchMembershipRouter(config, researchMemberships));
   router.use("/projects", createProjectOverviewRouter(config, projectOverview));
+  router.use("/projects", createCandidateClaimRouter(config, candidateClaims));
   router.use("/projects", createResearchIssueRouter(config, researchIssues));
   router.use("/projects", createProjectItemNoteRouter(config, projectItemNotes));
   router.use("/projects", createProjectItemRouter(config, projectItems));
