@@ -12,6 +12,40 @@ import {
 
 const projectId = "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA";
 
+describe("page-local receipt authority", () => {
+  it("retries B with its original key despite stale valid storage A and denied writes", async () => {
+    await getOrCreateResearchIssueReceipt(projectId, { title: "A", question: "A" });
+    const staleRaw = sessionStorage.getItem(RESEARCH_ISSUE_PENDING_KEY);
+    vi.stubGlobal("sessionStorage", { getItem: () => staleRaw, setItem() { throw Error("write denied"); }, removeItem() {} });
+    const draft = { title: "B", question: "B" };
+    const first = await getOrCreateResearchIssueReceipt(projectId, draft);
+    const retry = await getOrCreateResearchIssueReceipt(projectId, draft);
+    expect(retry.idempotencyKey).toBe(first.idempotencyKey);
+  });
+
+  it("keeps the clear tombstone when persistent removal fails", async () => {
+    await getOrCreateResearchIssueReceipt(projectId, { title: "A", question: "A" });
+    const staleRaw = sessionStorage.getItem(RESEARCH_ISSUE_PENDING_KEY);
+    vi.stubGlobal("sessionStorage", { getItem: () => staleRaw, setItem() {}, removeItem() { throw Error("remove denied"); } });
+    clearPendingResearchIssueReceipt();
+    expect(loadPendingResearchIssueReceipt()).toBeNull();
+  });
+
+  it("caches a receipt restored by a fresh module before later storage read failure", async () => {
+    const draft = { title: "restored", question: "question" };
+    const original = await getOrCreateResearchIssueReceipt(projectId, draft);
+    const persisted = sessionStorage.getItem(RESEARCH_ISSUE_PENDING_KEY)!;
+    vi.resetModules();
+    vi.unstubAllGlobals();
+    sessionStorage.setItem(RESEARCH_ISSUE_PENDING_KEY, persisted);
+    const fresh = await import("./research-issue-draft");
+    expect(fresh.loadPendingResearchIssueReceipt()).toEqual(original);
+    vi.stubGlobal("sessionStorage", { getItem() { throw Error("read denied"); }, setItem() {}, removeItem() {} });
+    const retry = await fresh.getOrCreateResearchIssueReceipt(projectId, draft);
+    expect(retry.idempotencyKey).toBe(original.idempotencyKey);
+  });
+});
+
 beforeEach(() => {
   vi.unstubAllGlobals();
   sessionStorage.clear();

@@ -12,7 +12,8 @@ export interface PendingResearchIssueReceipt {
   createdAt: string;
 }
 
-let memoryReceipt: PendingResearchIssueReceipt | null = null;
+// undefined allows restoration; null is an explicit page-local clear tombstone.
+let memoryReceipt: PendingResearchIssueReceipt | null | undefined;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function normalizeResearchIssueDraft(input: unknown): ResearchIssueDraft {
@@ -46,18 +47,16 @@ function isReceipt(value: unknown): value is PendingResearchIssueReceipt {
 }
 
 export function loadPendingResearchIssueReceipt(): PendingResearchIssueReceipt | null {
-  let raw: string | null;
+  if (memoryReceipt !== undefined) return memoryReceipt;
   try {
-    raw = sessionStorage.getItem(RESEARCH_ISSUE_PENDING_KEY);
-  } catch {
-    return memoryReceipt;
-  }
-  if (!raw) return memoryReceipt;
-  try {
+    const raw = sessionStorage.getItem(RESEARCH_ISSUE_PENDING_KEY);
+    if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
-    return isReceipt(parsed) ? parsed : memoryReceipt;
-  } catch {
+    if (!isReceipt(parsed)) return null;
+    memoryReceipt = parsed;
     return memoryReceipt;
+  } catch {
+    return null;
   }
 }
 
