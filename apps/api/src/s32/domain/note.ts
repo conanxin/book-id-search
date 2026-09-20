@@ -28,6 +28,9 @@ export interface ProjectItemNote {
 export function normalizeNoteContent(value: unknown): string {
   if (typeof value !== "string") throw new InvalidNoteInputError("content must be text.");
   const normalized = value.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
+  if (normalized.includes("\0")) {
+    throw new InvalidNoteInputError("content must not contain NUL.");
+  }
   if (!normalized.trim()) throw new InvalidNoteInputError("content must not be blank.");
   if (Buffer.byteLength(normalized, "utf8") > MAX_NOTE_BYTES) {
     throw new InvalidNoteInputError("content exceeds 65536 UTF-8 bytes.");

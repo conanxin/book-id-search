@@ -81,6 +81,17 @@ describe("M1-D private Note HTTP", () => {
     const s = await setup(); expect((await s.request(method as string, suffix as string, body)).status).toBe(400);
     Object.values(s.store).forEach(fn => expect(fn).not.toHaveBeenCalled());
   });
+  it.each([
+    [path, '{"content":"text\\u0000more"}'],
+    [`${path}/revisions`, `{"baseRevisionId":"${rid}","content":"text\\u0000more"}`],
+  ])("rejects escaped NUL as safe400 before store: POST %s", async (suffix, raw) => {
+    const s = await setup();
+    const res = await s.request("POST", suffix, undefined, "test-token", raw);
+    expect.soft(res.status).toBe(400);
+    expect.soft(await res.json()).toMatchObject({ error: { code: "NOTE_INVALID_INPUT" } });
+    expect.soft(s.store.create).not.toHaveBeenCalled();
+    expect.soft(s.store.appendRevision).not.toHaveBeenCalled();
+  });
   it("accepts legal normalized 64KiB content even when escaped JSON exceeds the old 256KiB parser", async () => {
     const s = await setup(); const content = "\u0001".repeat(65536);
     expect(Buffer.byteLength(JSON.stringify({ content }))).toBeGreaterThan(256 * 1024);

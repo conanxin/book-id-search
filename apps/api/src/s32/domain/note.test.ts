@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { normalizeNoteContent, readRevisionId, sha256NoteContent } from "./note.js";
+import { InvalidNoteInputError, normalizeNoteContent, readRevisionId, sha256NoteContent } from "./note.js";
 
 describe("note content", () => {
   it("normalizes CRLF and bare CR without trimming user whitespace", () => {
     expect(normalizeNoteContent("  第一行\r\n第二行\r第三行  \n")).toBe("  第一行\n第二行\n第三行  \n");
+  });
+  it("rejects NUL content as invalid input before it can be hashed or stored", () => {
+    expect(() => normalizeNoteContent("text\u0000more")).toThrow(InvalidNoteInputError);
   });
   it.each([undefined, null, "", " \r\n \t ", 7, [], {}])("rejects blank or non-string %j", value => {
     expect(() => normalizeNoteContent(value)).toThrow("content");
