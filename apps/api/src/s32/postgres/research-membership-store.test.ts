@@ -116,7 +116,7 @@ describe("Postgres research membership store", () => {
     [{ ...validIdentity(), edition_id: null }, "edition"],
     [{ ...validIdentity(), work_id: null }, "work"],
   ] as const)("fails closed for a broken canonical %s chain", async (identity) => {
-    await expect(fake({ identities: [identity[0]], memberships: [] }).store.lookup(["book-a"]))
+    await expect(fake({ identities: [identity], memberships: [] }).store.lookup(["book-a"]))
       .rejects.toBeInstanceOf(ResearchMembershipIntegrityError);
   });
 
