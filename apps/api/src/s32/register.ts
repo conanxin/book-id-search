@@ -23,6 +23,9 @@ import { createResearchMembershipRouter } from "./routes/research-membership-rou
 import { createProjectOverviewService, type ProjectOverviewService } from "./application/project-overview.js";
 import { createPostgresProjectOverviewStore } from "./postgres/project-overview-store.js";
 import { createProjectOverviewRouter } from "./routes/project-overview-route.js";
+import { createResearchIssuesService, type ResearchIssuesService } from "./application/research-issues.js";
+import { createPostgresResearchIssueStore } from "./postgres/research-issue-store.js";
+import { createResearchIssueRouter } from "./routes/research-issue-routes.js";
 
 export function createS32Router(deps: {
   env: NodeJS.ProcessEnv;
@@ -37,6 +40,7 @@ export function createS32Router(deps: {
   let projectItemNotes: ProjectItemNotesService | null = null;
   let researchMemberships: ResearchMembershipService | null = null;
   let projectOverview: ProjectOverviewService | null = null;
+  let researchIssues: ResearchIssuesService | null = null;
   if (config.enabled && config.databaseUrl) {
     const pool = new Pool({ connectionString: config.databaseUrl, connectionTimeoutMillis: 3000, query_timeout: 5000 });
     pool.on("error", () => console.warn("[s32] idle database connection unavailable"));
@@ -44,6 +48,7 @@ export function createS32Router(deps: {
     projectItemNotes = createProjectItemNotesService(createPostgresProjectItemNoteStore(pool));
     researchMemberships = createResearchMembershipService(createPostgresResearchMembershipStore(pool));
     projectOverview = createProjectOverviewService(createPostgresProjectOverviewStore(pool));
+    researchIssues = createResearchIssuesService(createPostgresResearchIssueStore(pool));
     command = createPromoteCatalogBookCommand({
       reader: createMeiliCatalogBookReader(deps.getCatalogDocument),
       store: createPostgresCatalogPromotionStore(pool),
@@ -57,6 +62,7 @@ export function createS32Router(deps: {
   );
   router.use("/research-memberships", createResearchMembershipRouter(config, researchMemberships));
   router.use("/projects", createProjectOverviewRouter(config, projectOverview));
+  router.use("/projects", createResearchIssueRouter(config, researchIssues));
   router.use("/projects", createProjectItemNoteRouter(config, projectItemNotes));
   router.use("/projects", createProjectItemRouter(config, projectItems));
   router.use("/projects", createProjectRouter(config, projects));
