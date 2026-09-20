@@ -1,5 +1,16 @@
 # BOOK-ID-SEARCH status
 
+## PR #15 review fixes — current checkpoint
+
+- task_id: `S32_M2A_PR15_REVIEW_FIX_R1`; FIX_BASE: `84fbb58a585de1c60dc0cd2a24f71719d4a491d3`; FIX_TESTED_COMMIT: `5c145811f8b88d660ff5fb7123127714b45a6103`; [PR #15](https://github.com/conanxin/book-id-search/pull/15) awaits rereview.
+- Fixed unconfirmed draft locking, memory receipt fallback, duplicate Materials section, and literal Unicode White_Space normalization with matching server/Web hashes. Targeted RED demonstrated the defects before implementation.
+- Targeted API 67 PASS; targeted Web 51 PASS; API S32 400 PASS / 32 SKIP; Web research 155 PASS; Web broad 2750 PASS. API/Web builds and schema static 23 PASS. PG16 7 PASS, container removed. Frozen SQL unchanged; diff check PASS.
+- Real browser dropped the response after a committed 201, confirmed both fields disabled, then replayed identical payload/key with 200 and the same Issue. SQL confirmed one Issue and one owner binding. Ready Materials has one heading/section. Evidence: `logs/s32-m2a-review-fix/` and `/home/conanxin/codex-artifacts/s32-m2a/pr15-fix-*.png`.
+- Full suite: 3923 PASS / 32 SKIP / 15 known unrelated FAIL plus the known CLI-import error, unchanged from baseline. Initial parallel suites hit three resource-contention timeouts; sequential `--maxWorkers=1` reruns passed without product changes.
+- MERGED=NO; DEPLOYED=NO; PRODUCTION_CHANGED=NO; M2_B_STARTED=NO. Next: rereview PR #15.
+
+## Original implementation evidence (historical)
+
 - task_id: `S32_M2A_RESEARCH_ISSUES_NATIVE_R1`; implementation is complete on branch `feat/s32-m2a-research-issues` in `/home/conanxin/codex-projects/book-id-search-s32-m2a`.
 - source_baseline: `4204815f8a550ad8ce9fa0ab7bdf4afe486f1e56`; spec: `35f3b422ad46972d0af8fcbd95e0d8d7d26b508e`; plan: `b8f966209ec2cbcfd55d60f464edcbe236f3f392`; tested_commit: `35c9daac6e558e0be6a5136510645454d04de23e`.
 - Implemented Project-owned Research Issues with OPEN-only idempotent creation, canonical single-owner integrity checks, independent list/detail reads, archived read-only behavior, pending browser receipts, Project Issues UI, and a dedicated Issue Detail route. M2-B was not started.
