@@ -482,6 +482,9 @@ Success:
 Safe errors:
 
 ```text
+InvalidProjectInputError            -> 400
+InvalidResearchIssueInputError      -> 400
+InvalidIdempotencyKeyError          -> 400
 InvalidCandidateClaimInputError     -> 400 CLAIM_INVALID_INPUT
 ProjectReadOnlyError                -> 409 PROJECT_READ_ONLY
 ResearchIssueReadOnlyError          -> 409 RESEARCH_ISSUE_READ_ONLY
@@ -813,7 +816,7 @@ Pin:
 5. network/500 unknown freezes statement and exposes same-key retry;
 6. retry reuses same statement+key;
 7. unconfirmed statement cannot be edited;
-8. IDEMPOTENCY_CONFLICT requires explicit “作为新的可能答案重新提交” and force-new key;
+8. IDEMPOTENCY_CONFLICT sets Claim-specific copy “创建请求标识与当前可能答案内容不一致。” and requires explicit “作为新的可能答案重新提交”; it must not surface M2-A's “研究问题内容不一致” copy;
 9. 400/PROJECT_READ_ONLY/RESEARCH_ISSUE_READ_ONLY clear pending receipt;
 10. Claim list retry does not reload/hide Issue Detail.
 
