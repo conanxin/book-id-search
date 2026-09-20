@@ -1,6 +1,6 @@
 # BOOK-ID-SEARCH status
 
-- task_id: `S32_M1E_REDISCOVER_NATIVE_R1`; **COMPLETE_ON_BRANCH**; PR link pending final push.
+- task_id: `S32_M1E_REDISCOVER_NATIVE_R1`; **COMPLETE_ON_BRANCH**; [PR #14](https://github.com/conanxin/book-id-search/pull/14) is open for review.
 - Worktree: `/home/conanxin/codex-projects/book-id-search-s32-m1e`; branch: `feat/s32-m1e-rediscover`; source_baseline: `414ee84f260d2bfae703956cbb879fbe76ab9c27`; tested_commit: `c51249e115189ab573bba1aa9abfbeeb2b5603c9`.
 - Implemented canonical batch Search memberships, direct Project Overview projections, exact `bindingId` deep links, archived read-only behavior, and same-origin typed Web clients. M0 frozen SQL is unchanged.
 - API S32 scoped: **332 PASS / 25 SKIP** (24 passed / 5 skipped files). Web research: **115 PASS** (7 files). Web broad: **2710 PASS** (63 files). API and Web builds, `s32:schema:static` (**23 PASS**), frozen SQL diff, and `git diff --check` all PASS. Web build retains its existing non-fatal chunk-size warning.
@@ -8,6 +8,7 @@
 - Browser ACTIVE acceptance: real catalog Search → add to `北京古道研究` → automatic membership → exact deep link/focus without opening Note → R1/R2 and immutable R1 history → API/PG restart with the development volume preserved → membership/Overview/Note/history recovered. Browser ARCHIVED acceptance: history remained readable, UI writes disappeared, and direct add/create/append/remove each returned `409 PROJECT_READ_ONLY` with unchanged binding/Note/revision counts and hashes. The local Project was restored to ACTIVE afterward.
 - Mobile acceptance: real Firefox at 390×844 reported `innerWidth=clientWidth=scrollWidth=390`, with no horizontal overflow. Evidence is ignored under `logs/s32-m1e/` and `/home/conanxin/codex-artifacts/s32-m1e/`.
 - Full repository test: **3815 PASS / 25 SKIP / 15 FAIL**, 121 passed / 5 skipped / 3 failed files, plus 1 unhandled CLI-import error. These exactly match the known unrelated WeRead failures (`/opt/book-id-search` cwd `/bin/sh` ENOENT) and `apply-match-review.ts` import-time `process.exit`; no new or changed scoped failure.
-- GitHub/Notion sync: **PENDING** until the PR is opened. IMPLEMENTED=YES; TESTED=PASS_WITH_KNOWN_UNRELATED_FULL_SUITE_FAILURES; COMMITTED=PENDING_DOCS; PUSHED=NO; MERGED=NO; DEPLOYED=NO; PRODUCTION_CHANGED=NO; PRODUCTION_DEPLOYED=NO; M2_STARTED=NO.
+- GitHub **SYNCED / read-back verified**: [PR #14](https://github.com/conanxin/book-id-search/pull/14) and [Issue #2 checkpoint](https://github.com/conanxin/book-id-search/issues/2#issuecomment-5749185224). Notion **SYNCED / read-back verified**: [M1-E Design](https://app.notion.com/p/3e134a28189a8184a294c2112e797238), [M1-E Implementation Plan](https://app.notion.com/p/3e134a28189a8102a568f98a5a505bd2), [M1 overview](https://app.notion.com/p/3e034a28189a816cbec4d050ed01ae5e), and [project overview](https://app.notion.com/p/3dd34a28189a81d48f74ec74593dac5f). All use the same task_id/source_baseline/tested_commit/PR and MERGED/DEPLOYED/M2 flags.
+- IMPLEMENTED=YES; TESTED=PASS_WITH_KNOWN_UNRELATED_FULL_SUITE_FAILURES; COMMITTED=YES; PUSHED=YES; MERGED=NO; DEPLOYED=NO; PRODUCTION_CHANGED=NO; PRODUCTION_DEPLOYED=NO; M2_STARTED=NO.
 - Last production observation remains historical release-prep evidence. M1-E performed no Tencent/production access or change.
-- Next: push, open and review the M1-E PR. Do not merge, deploy, or start M2.
+- Next: review PR #14. Do not merge, deploy, or start M2.
