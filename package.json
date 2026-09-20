@@ -37,7 +37,8 @@
     "s32:m1a:check": "tsx scripts/s32-m1a-integration-check.ts",
     "s32:m1b:check": "tsx scripts/s32-m1b-integration-check.ts",
     "s32:m1c:check": "tsx scripts/s32-m1c-integration-check.ts",
-    "s32:m1d:check": "tsx scripts/s32-m1d-integration-check.ts"
+    "s32:m1d:check": "tsx scripts/s32-m1d-integration-check.ts",
+    "s32:m1e:check": "tsx scripts/s32-m1e-integration-check.ts"
   },
   "dependencies": {
     "dotenv": "^17.2.3",
