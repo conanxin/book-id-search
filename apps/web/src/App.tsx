@@ -30,6 +30,8 @@ import WereadCenter from "./weread/WereadCenter";
 import ProjectsPage, { researchEnabled } from "./research/ProjectsPage";
 import SiteFooter from "./components/SiteFooter";
 import S32Principles from "./components/S32Principles";
+import { ResearchMembershipChips, useSearchMemberships, type MembershipLoadState } from "./research/SearchMemberships";
+import type { ResearchMembership } from "./research/api";
 
 // ---------------------------------------------------------------------------
 // Storage: recent search history (last 5 unique queries)
@@ -460,12 +462,18 @@ function BookCard({
   weread,
   compareSelected = false,
   onToggleCompare,
+  memberships = [],
+  membershipState = "no-token",
+  onMembershipRefresh,
 }: {
   book: Book;
   query: string;
   weread?: WereadStatus | null;
   compareSelected?: boolean;
   onToggleCompare?: (book: Book) => void;
+  memberships?: ResearchMembership[];
+  membershipState?: MembershipLoadState;
+  onMembershipRefresh?: () => void;
 }) {
   const exact = isExactMatch(book.match);
   return (
@@ -508,7 +516,14 @@ function BookCard({
             </button>
           </div>
         ) : null}
-      <AddToProject bookId={book.id} bookTitle={book.title || "未命名图书"} />
+      <ResearchMembershipChips state={membershipState} memberships={memberships} />
+      <AddToProject
+        bookId={book.id}
+        bookTitle={book.title || "未命名图书"}
+        memberships={membershipState === "ready" ? memberships : undefined}
+        membershipState={membershipState}
+        onMembershipInvalidated={onMembershipRefresh}
+      />
       {book.parseStatus !== "ok" && <TrustHint book={book} />}
       {book.parseStatus === "failed" ? (
         <div className="parse-hint parse-hint--failed">本条解析异常，请谨慎引用。</div>
@@ -564,6 +579,7 @@ function SearchPage() {
   // results__bar so it always renders against the query that produced `data`,
   // not whatever is in the input field at the moment.
   const currentQ = useMemo(() => debouncedQ.trim(), [debouncedQ]);
+  const researchMemberships = useSearchMemberships(data?.items.map(book => book.id) ?? []);
 
   // Version comparison belongs to the active search query.
   // Pagination preserves selections; a different query resets them.
@@ -1055,6 +1071,9 @@ function SearchPage() {
                   (item) => item.id === book.id
                 )}
                 onToggleCompare={toggleCompareBook}
+                memberships={researchMemberships.memberships[book.id] ?? []}
+                membershipState={researchMemberships.state}
+                onMembershipRefresh={researchMemberships.refresh}
               />
           ))}
         </div>

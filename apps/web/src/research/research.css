@@ -50,6 +50,13 @@
 .research-project-choice { display: block; width: 100%; margin: 10px 0; padding: 12px; text-align: left; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: #edf3ff; color: var(--color-primary-strong); overflow-wrap: anywhere; }
 .research-add-success { color: #286043; font-size: 14px; overflow-wrap: anywhere; }
 .research-add :is(button, a):focus-visible { outline: 3px solid #b3ccff; outline-offset: 3px; }
+.research-memberships { margin: 14px 0 4px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; }
+.research-membership-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--color-text-muted); }
+.research-membership-chip { max-width: min(260px, 100%); padding: 5px 9px; border: 1px solid #abc6f8; border-radius: 999px; background: #edf3ff; color: var(--color-primary-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.research-membership-chip--archived { border-color: var(--color-border); background: var(--color-bg-card); color: var(--color-text-muted); }
+.research-membership-more { padding: 4px 8px; border: 1px solid var(--color-border); border-radius: 999px; background: transparent; color: var(--color-primary-strong); }
+.research-membership-status { margin: 12px 0 4px; color: var(--color-text-muted); font-size: 13px; }
+.research-membership-status--error { color: var(--color-error-text); }
 .research-materials { margin-top: 32px; }
 .research-material h3 { margin: 0 0 18px; font-size: 19px; overflow-wrap: anywhere; }
 .research-material-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; }
