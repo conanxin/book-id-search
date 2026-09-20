@@ -9,6 +9,9 @@ export function ProjectItems(props: Props) {
 function publicationLabel(item: ProjectResearchItem) {
   if (!item.publicationDate) return "日期未知";
   if (item.publicationDatePrecision === "YEAR") return item.publicationDate.slice(0, 4);
+  if (item.publicationDatePrecision === "MONTH") {
+    return `${item.publicationDate.slice(0, 4)}年${Number(item.publicationDate.slice(5, 7))}月`;
+  }
   return new Date(`${item.publicationDate}T00:00:00Z`).toLocaleDateString("zh-CN", { timeZone: "UTC" });
 }
 function MaterialList({ token, projectId }: Props) {

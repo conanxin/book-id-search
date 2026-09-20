@@ -21,6 +21,17 @@ describe("project materials", () => {
     vi.mocked(listProjectItems).mockResolvedValue({ items: [] }); render(view());
     await screen.findByText("还没有研究资料"); expect(screen.getByRole("heading", { name: "研究资料（0）" })).toBeTruthy();
   });
+  it("shows MONTH precision without inventing the placeholder day", async () => {
+    vi.mocked(listProjectItems).mockResolvedValue({ items: [{ ...item, publicationDate: "2001-02-01", publicationDatePrecision: "MONTH" }] });
+    render(view()); await screen.findByText(item.title);
+    expect.soft(screen.queryByText("2001/2/1", { exact: true })).toBeNull();
+    expect(screen.getByText("2001年2月", { exact: true })).toBeTruthy();
+  });
+  it("shows the complete actual date for DAY precision", async () => {
+    vi.mocked(listProjectItems).mockResolvedValue({ items: [{ ...item, publicationDate: "2001-02-17", publicationDatePrecision: "DAY" }] });
+    render(view()); await screen.findByText(item.title);
+    expect(screen.getByText("2001/2/17", { exact: true })).toBeTruthy();
+  });
   it("legacy missing catalog/date has no fake link", async () => {
     vi.mocked(listProjectItems).mockResolvedValue({ items: [{ ...item, catalogBookId: null, sourceId: null, publicationDate: null }] }); render(view());
     await screen.findByText(item.title); expect(screen.queryByRole("link", { name: "查看书目" })).toBeNull(); expect(screen.getByText("日期未知")).toBeTruthy();
