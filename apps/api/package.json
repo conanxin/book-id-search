@@ -4,8 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "API_HOST=127.0.0.1 tsx watch src/index.ts",
+    "dev": "tsx watch src/dev.ts",
     "build": "tsc -p tsconfig.json",
+    "test:dev-entry": "node --test --test-concurrency=1 dev-entry.check.mjs",
     "start": "node dist/index.js"
   },
   "dependencies": {

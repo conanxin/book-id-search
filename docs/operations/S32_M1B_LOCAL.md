@@ -44,6 +44,12 @@ separate sessionStorage key with an in-memory fallback; clearing it also clears 
 API/Web/PG listen on loopback. Vite proxies same-origin `/api` requests to port 3001.
 Projects do not require Meili; existing search still requires its own Meili service.
 
+For watch mode, `pnpm --filter @book-id-search/api dev` works in native Windows and POSIX
+shells. Its TypeScript development entry loads the existing root/CWD `.env` configuration,
+preserves an explicit `API_HOST`, and otherwise defaults to `127.0.0.1`. It adds no dependency
+or global shell setting. The compiled production entry `node dist/index.js` still defaults
+to `0.0.0.0` when no host is configured; keep the explicit local host in `.env.s32.local` above.
+
 The named volume `book-id-search-s32-local-pg` persists trial data. The original migration
 is mounted read-only and runs only when PG initializes an empty volume. For a restart:
 
@@ -64,6 +70,19 @@ corepack pnpm exec vitest run --maxWorkers=1 apps/api/src/search apps/api/src/ha
 corepack pnpm --filter @book-id-search/api build
 corepack pnpm --filter @book-id-search/web build
 ```
+
+Development-entry compatibility can be checked independently, without PG or Meili:
+
+```sh
+pnpm --filter @book-id-search/api build
+pnpm --filter @book-id-search/api test:dev-entry
+```
+
+The five checks launch the real package dev script or compiled API from temporary copies
+with the same dependencies, observe the actual TCP address and send an HTTP request. They
+cover development default/explicit/dotenv hosts and production default/explicit hosts. They
+do not read trial credentials or modify data; S32 is disabled and temporary processes are
+removed. Run with native Windows Node/pnpm for Windows evidence; WSL alone does not prove it.
 
 The M1-B runner uses a unique disposable PG16 container, a random loopback port and tmpfs.
 It applies the unchanged migration once, runs real HTTP/SQL assertions, and removes only its
