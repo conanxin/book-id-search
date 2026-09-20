@@ -1,0 +1,50 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
+import { MemoryRouter } from "react-router-dom";
+import { ProjectCard, ProjectDetails } from "./ProjectsPage";
+import { createProject, listProjects } from "./api";
+
+afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); });
+describe("S32 access and client", () => {
+  it("falls back to memory and clears it when session storage is unavailable", async () => {
+    vi.stubGlobal("sessionStorage", { getItem() { throw Error(); }, setItem() { throw Error(); }, removeItem() { throw Error(); } });
+    const access = await import("./access");
+    expect(access.getS32Token()).toBeNull();
+    access.saveS32Token(" independent-token "); expect(access.getS32Token()).toBe("independent-token");
+    access.saveS32Token(null); expect(access.getS32Token()).toBeNull();
+  });
+  it("uses an independent storage key and does not clear WeRead", async () => {
+    const values = new Map([["book-id-search:weread-private-token", "weread"]]);
+    vi.stubGlobal("sessionStorage", { getItem: (k: string) => values.get(k), setItem: (k: string, v: string) => values.set(k, v), removeItem: (k: string) => values.delete(k) });
+    const access = await import("./access");
+    expect(access.getS32Token()).toBeNull(); access.saveS32Token("s32");
+    expect(values.get(access.S32_TOKEN_KEY)).toBe("s32"); access.saveS32Token(null);
+    expect(values.get("book-id-search:weread-private-token")).toBe("weread");
+  });
+  it("uses same-origin, no-store private requests without automatically retrying POST", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { message: "secret internal URL" } }), { status: 503 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(createProject("private", { name: "项目", description: null })).rejects.toThrow("服务暂不可用");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]).toMatchObject(["/api/private/s32/projects", { cache: "no-store", method: "POST", headers: { Authorization: "Bearer private" } }]);
+  });
+  it("never turns failed/malformed list responses into an empty list", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("unavailable", { status: 503 })));
+    await expect(listProjects("token")).rejects.toThrow();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 200 })));
+    await expect(listProjects("token")).rejects.toThrow("响应异常");
+  });
+});
+describe("project presentation", () => {
+  const project = { id: "unique-id", name: "北京古道研究", description: "<script>alert(1)</script>\n梳理历史地图", lifecycleState: "ACTIVE" as const, createdAt: "2026-09-19T00:00:00Z", updatedAt: "2026-09-19T00:00:00Z" };
+  it("links cards by identity and displays plain text, without pretend actions/counts", () => {
+    const html = renderToStaticMarkup(<MemoryRouter><ProjectCard project={project} /></MemoryRouter>);
+    expect(html).toContain("/research/projects/unique-id"); expect(html).toContain("北京古道研究");
+    expect(html).toContain("&lt;script&gt;"); expect(html).not.toContain("<script>");
+    expect(html).not.toMatch(/笔记数|资料数|加入书目|写笔记/);
+  });
+  it("shows purpose and dates, and handles an omitted description", () => {
+    const html = renderToStaticMarkup(<ProjectDetails project={{ ...project, description: null }} />);
+    expect(html).toContain("尚未填写研究目的"); expect(html).toContain("创建时间"); expect(html).toContain("更新时间");
+  });
+});

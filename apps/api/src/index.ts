@@ -1321,6 +1321,6 @@ const verboseRequested = String(req.query.verbose ?? "") === "1";
   }
 });
 
-app.listen(port, "0.0.0.0", () => {
+app.listen(port, process.env.API_HOST ?? "0.0.0.0", () => {
   console.log(`[api] listening on http://localhost:${port}`);
 });

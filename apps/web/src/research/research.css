@@ -1,0 +1,47 @@
+.research-nav { display: flex; gap: 24px; padding-bottom: 24px; flex-wrap: wrap; }
+.research-nav [aria-current="page"] { color: var(--color-text); font-weight: 650; }
+.research-header { margin: 12px 0 28px; }
+.research-header .brand-row { margin-bottom: 12px; }
+.research-header > p, .research-muted { color: var(--color-text-muted); }
+.research-back { display: inline-flex; align-items: center; gap: 8px; margin: 8px 0 24px; }
+.research-panel, .research-card { background: var(--color-bg-card); border: 1px solid var(--color-border); border-radius: var(--radius); padding: 24px; }
+.research-panel > h2, .research-list-heading h2 { margin: 0; font-size: 20px; display: flex; align-items: center; gap: 8px; }
+.research-grid { display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); gap: 28px; align-items: start; }
+.research-form { display: flex; flex-direction: column; gap: 10px; margin-top: 24px; }
+.research-form label { font-weight: 600; }
+.research-form label:not(:first-child) { margin-top: 10px; }
+.research-form input, .research-form textarea, .research-access input { width: 100%; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: #fff; padding: 11px 12px; font: inherit; color: var(--color-text); }
+.research-form textarea { resize: vertical; }
+.research-page :is(input, textarea, button, a):focus-visible { outline: 3px solid #b3ccff; outline-offset: 3px; }
+.research-primary { background: var(--color-primary); color: #fff; border-radius: var(--radius-sm); padding: 11px 18px; font-weight: 600; }
+.research-primary:hover:not(:disabled) { background: var(--color-primary-strong); }
+.research-form .research-primary { margin-top: 12px; }
+.research-access { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 16px 20px; margin-bottom: 24px; background: #edf3ff; border-radius: var(--radius); font-size: 14px; }
+.research-access form { width: 100%; display: grid; grid-template-columns: auto minmax(100px, 1fr) auto; align-items: center; gap: 12px; }
+.research-access small { grid-column: 1 / -1; }
+.research-text-button { padding: 6px 0; background: transparent; color: var(--color-primary-strong); }
+.research-list-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.research-list { display: grid; gap: 14px; }
+.research-card { display: block; color: var(--color-text); transition: border-color .15s; overflow-wrap: anywhere; }
+.research-card:hover { border-color: var(--color-primary); }
+.research-card-title { display: flex; align-items: start; gap: 10px; }
+.research-card-title svg { color: var(--color-primary); flex-shrink: 0; margin-top: 4px; }
+.research-card h3 { margin: 0; font-size: 18px; }
+.research-card .research-muted { font-size: 12px; }
+.research-excerpt { color: var(--color-text-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; }
+.research-empty { text-align: center; color: var(--color-text-muted); padding: 48px 24px; }
+.research-empty h3 { color: var(--color-text); font-size: 17px; }
+.research-error { background: var(--color-error-bg); color: var(--color-error-text); padding: 16px; border-radius: var(--radius-sm); }
+.research-error button { display: block; margin-top: 10px; background: transparent; text-decoration: underline; }
+.research-eyebrow { color: var(--color-text-muted); font-size: 13px; }
+.research-detail h1 { margin: 10px 0 32px; font-size: clamp(24px, 4vw, 32px); overflow-wrap: anywhere; }
+.research-detail h2 { font-size: 17px; }
+.research-purpose { white-space: pre-wrap; overflow-wrap: anywhere; min-height: 100px; line-height: 1.8; }
+.research-dates { border-top: 1px solid var(--color-border); padding-top: 22px; display: flex; gap: 48px; color: var(--color-text-muted); font-size: 13px; }
+.research-dates dd { margin: 6px 0 0; }
+@media (max-width: 700px) {
+  .research-grid { grid-template-columns: 1fr; }
+  .research-access, .research-dates { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .research-access form { grid-template-columns: 1fr; }
+  .research-nav { gap: 18px; }
+}

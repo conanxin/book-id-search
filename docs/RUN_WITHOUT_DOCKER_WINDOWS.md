@@ -16,6 +16,10 @@ C:\tools\meilisearch\meilisearch.exe
 
 ## 配置环境
 
+API 的 `pnpm --filter @book-id-search/api dev` 使用跨平台 TypeScript 开发入口，默认监听
+`127.0.0.1`，并保留进程环境或 `.env` 中显式设置的 `API_HOST`。无需 POSIX 环境赋值语法、
+新依赖或全局 shell 配置。编译后的生产入口未配置 `API_HOST` 时仍监听 `0.0.0.0`。
+
 ```powershell
 Copy-Item .env.example .env
 ```
