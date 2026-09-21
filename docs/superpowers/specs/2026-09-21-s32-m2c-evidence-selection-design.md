@@ -350,7 +350,17 @@ type EvidenceCandidate =
       targetId: string;
       materialBindingId: string;
       materialTitle: string;
-      sourceType: string;
+      sourceType:
+        | "PUBLICATION"
+        | "WEB_PAGE"
+        | "ARCHIVAL_RECORD"
+        | "DATABASE_RECORD"
+        | "MUSEUM_OBJECT"
+        | "EXHIBITION_LABEL"
+        | "EMAIL"
+        | "FIELD_OBSERVATION"
+        | "INTERVIEW"
+        | "OTHER";
       sourceLifecycleState: "ACTIVE" | "ARCHIVED";
       observedAt: string;
     }
@@ -360,7 +370,15 @@ type EvidenceCandidate =
       materialBindingId: string;
       materialTitle: string;
       sourceId: string;
-      assetType: string;
+      assetType:
+        | "DOCUMENT"
+        | "IMAGE"
+        | "AUDIO"
+        | "VIDEO"
+        | "WEB_SNAPSHOT"
+        | "TEXT"
+        | "DATA"
+        | "OTHER";
       assetRole: "ORIGINAL" | "DERIVED";
       storageMode: "LOCAL" | "REMOTE" | "HYBRID";
       createdAt: string;
