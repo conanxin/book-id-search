@@ -1,0 +1,27 @@
+name: S32 M2-D native verification
+
+on:
+  push:
+    branches:
+      - feat/s32-m2d-assessment
+  workflow_dispatch:
+
+jobs:
+  focused:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: API S32 tests
+        run: pnpm vitest run apps/api/src/s32
+      - name: Web research tests
+        run: pnpm vitest run apps/web/src/research
