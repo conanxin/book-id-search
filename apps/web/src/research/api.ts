@@ -22,6 +22,11 @@ const errorCodes: Record<string, { status: number; message: string }> = {
   EVIDENCE_DRAFT_INVALID: { status: 400, message: "证据草稿输入不正确。" },
   PROJECT_ISSUE_OR_CLAIM_NOT_FOUND: { status: 404, message: "研究问题或可能答案不存在。" },
   EVIDENCE_TARGET_NOT_AVAILABLE: { status: 404, message: "所选证据不可用于当前研究项目。" },
+  ASSESSMENT_INVALID: { status: 400, message: "评价输入不正确。" },
+  ASSESSMENT_CURSOR_INVALID: { status: 400, message: "评价历史游标不正确。" },
+  ASSESSMENT_NOT_FOUND: { status: 404, message: "该评价当前不可用。" },
+  EVIDENCE_PREVIEW_STALE: { status: 409, message: "证据集自上次预览后已发生变化，请重新预览。" },
+  ASSESSMENT_STORE_UNAVAILABLE: { status: 503, message: "评价服务暂不可用。" },
 };
 const statusMessages: Record<number, string> = {
   400: "请检查项目或书目输入。",
@@ -541,4 +546,280 @@ export async function previewEvidenceManifest(
     }
     throw error;
   }
+}
+
+
+// ===== S32 M2-D Assessment =====
+export type AssessmentStance = "SUPPORTS" | "CONTRADICTS" | "INCONCLUSIVE";
+export type AssessmentConfidenceLevel = "LOW" | "MEDIUM" | "HIGH";
+
+export interface AssessmentRecord {
+  id: string;
+  claimId: string;
+  stance: AssessmentStance;
+  confidenceLevel: AssessmentConfidenceLevel | null;
+  actorId: string | null;
+  numericScore: number | null;
+  scoreKind: string | null;
+  reasoning: string | null;
+  createdAt: string;
+}
+
+export interface AssessmentManifestSummary {
+  id: string;
+  schemaVersion: 1;
+  purpose: "CLAIM_ASSESSMENT";
+  manifestSha256: string;
+  itemCount: number;
+}
+
+export interface AssessmentSummary {
+  id: string;
+  stance: AssessmentStance;
+  confidenceLevel: AssessmentConfidenceLevel | null;
+  actorId: string | null;
+  numericScore: number | null;
+  scoreKind: string | null;
+  reasoningExcerpt: string | null;
+  createdAt: string;
+  evidenceManifest: AssessmentManifestSummary;
+}
+
+export interface AssessmentHistoryResponse {
+  claim: EvidenceClaimContext;
+  assessments: AssessmentSummary[];
+  nextCursor: string | null;
+}
+
+export interface AssessmentDetailResponse {
+  claim: EvidenceClaimContext;
+  assessment: AssessmentRecord;
+  evidenceManifest: {
+    id: string;
+    schemaVersion: 1;
+    purpose: "CLAIM_ASSESSMENT";
+    manifestSha256: string;
+    createdAt: string;
+    items: Array<{
+      ordinal: number;
+      role: EvidenceRole;
+      targetType: EvidenceTargetType;
+      targetId: string;
+      locatorType: null;
+      locator: null;
+      excerpt: null;
+      note: string | null;
+    }>;
+  };
+}
+
+export interface CreateAssessmentInput {
+  stance: AssessmentStance;
+  confidenceLevel: AssessmentConfidenceLevel | null;
+  reasoning: string;
+  expectedManifestSha256: string;
+  items: Array<{
+    role: EvidenceRole;
+    targetType: EvidenceTargetType;
+    targetId: string;
+    note: string | null;
+  }>;
+}
+
+export type AssessmentCreateResponse =
+  | {
+      status: "created" | "replayed";
+      visible: true;
+      assessment: AssessmentRecord;
+      evidenceManifest: AssessmentManifestSummary;
+    }
+  | {
+      status: "replayed";
+      visible: false;
+      assessmentId: string;
+    };
+
+const assessmentStances: ReadonlySet<string> = new Set(["SUPPORTS", "CONTRADICTS", "INCONCLUSIVE"]);
+const assessmentConfidences: ReadonlySet<string> = new Set(["LOW", "MEDIUM", "HIGH"]);
+
+function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  const actual = Object.keys(value).sort();
+  const expected = [...keys].sort();
+  return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
+}
+
+function isAssessmentScorePair(numericScore: unknown, scoreKind: unknown): boolean {
+  if (numericScore === null && scoreKind === null) return true;
+  return typeof numericScore === "number"
+    && Number.isFinite(numericScore)
+    && numericScore >= 0
+    && numericScore <= 1
+    && typeof scoreKind === "string"
+    && scoreKind.trim().length > 0;
+}
+
+function isAssessmentRecord(value: unknown): value is AssessmentRecord {
+  if (!isPlainObject(value) || !exactKeys(value, [
+    "id", "claimId", "stance", "confidenceLevel", "actorId",
+    "numericScore", "scoreKind", "reasoning", "createdAt",
+  ])) return false;
+  return isUuid(value.id)
+    && isUuid(value.claimId)
+    && assessmentStances.has(value.stance as string)
+    && (value.confidenceLevel === null || assessmentConfidences.has(value.confidenceLevel as string))
+    && (value.actorId === null || isUuid(value.actorId))
+    && isAssessmentScorePair(value.numericScore, value.scoreKind)
+    && (value.reasoning === null || typeof value.reasoning === "string")
+    && validTimestamp(value.createdAt);
+}
+
+function isAssessmentManifestSummary(value: unknown): value is AssessmentManifestSummary {
+  if (!isPlainObject(value) || !exactKeys(value, [
+    "id", "schemaVersion", "purpose", "manifestSha256", "itemCount",
+  ])) return false;
+  return isUuid(value.id)
+    && value.schemaVersion === 1
+    && value.purpose === "CLAIM_ASSESSMENT"
+    && typeof value.manifestSha256 === "string"
+    && /^[0-9a-f]{64}$/.test(value.manifestSha256)
+    && Number.isSafeInteger(value.itemCount)
+    && (value.itemCount as number) >= 1
+    && (value.itemCount as number) <= 100;
+}
+
+function isAssessmentSummary(value: unknown): value is AssessmentSummary {
+  if (!isPlainObject(value) || !exactKeys(value, [
+    "id", "stance", "confidenceLevel", "actorId", "numericScore", "scoreKind",
+    "reasoningExcerpt", "createdAt", "evidenceManifest",
+  ])) return false;
+  return isUuid(value.id)
+    && assessmentStances.has(value.stance as string)
+    && (value.confidenceLevel === null || assessmentConfidences.has(value.confidenceLevel as string))
+    && (value.actorId === null || isUuid(value.actorId))
+    && isAssessmentScorePair(value.numericScore, value.scoreKind)
+    && (value.reasoningExcerpt === null || typeof value.reasoningExcerpt === "string")
+    && validTimestamp(value.createdAt)
+    && isAssessmentManifestSummary(value.evidenceManifest);
+}
+
+function isAssessmentHistoryResponse(value: unknown): value is AssessmentHistoryResponse {
+  if (!isPlainObject(value) || !exactKeys(value, ["claim", "assessments", "nextCursor"])) return false;
+  return isEvidenceClaimContext(value.claim)
+    && Array.isArray(value.assessments)
+    && value.assessments.every(isAssessmentSummary)
+    && (value.nextCursor === null || typeof value.nextCursor === "string");
+}
+
+function isAssessmentManifestItem(value: unknown, index: number): boolean {
+  if (!isPlainObject(value) || !exactKeys(value, [
+    "ordinal", "role", "targetType", "targetId",
+    "locatorType", "locator", "excerpt", "note",
+  ])) return false;
+  return value.ordinal === index + 1
+    && evidenceRoles.has(value.role as string)
+    && evidenceTargetTypes.has(value.targetType as string)
+    && isUuid(value.targetId)
+    && value.locatorType === null
+    && value.locator === null
+    && value.excerpt === null
+    && (value.note === null || typeof value.note === "string");
+}
+
+function isAssessmentDetailResponse(value: unknown): value is AssessmentDetailResponse {
+  if (!isPlainObject(value) || !exactKeys(value, ["claim", "assessment", "evidenceManifest"])) return false;
+  if (!isEvidenceClaimContext(value.claim) || !isAssessmentRecord(value.assessment)) return false;
+  const manifest = value.evidenceManifest;
+  if (!isPlainObject(manifest) || !exactKeys(manifest, [
+    "id", "schemaVersion", "purpose", "manifestSha256", "createdAt", "items",
+  ])) return false;
+  if (!isUuid(manifest.id)
+    || manifest.schemaVersion !== 1
+    || manifest.purpose !== "CLAIM_ASSESSMENT"
+    || typeof manifest.manifestSha256 !== "string"
+    || !/^[0-9a-f]{64}$/.test(manifest.manifestSha256)
+    || !validTimestamp(manifest.createdAt)
+    || !Array.isArray(manifest.items)
+    || manifest.items.length < 1
+    || manifest.items.length > 100) return false;
+  return manifest.items.every((item, index) => isAssessmentManifestItem(item, index));
+}
+
+function isAssessmentCreateResponse(value: unknown): value is AssessmentCreateResponse {
+  if (!isPlainObject(value)) return false;
+  if (value.visible === false) {
+    return exactKeys(value, ["status", "visible", "assessmentId"])
+      && value.status === "replayed"
+      && isUuid(value.assessmentId);
+  }
+  if (value.visible === true) {
+    return exactKeys(value, ["status", "visible", "assessment", "evidenceManifest"])
+      && ["created", "replayed"].includes(value.status as string)
+      && isAssessmentRecord(value.assessment)
+      && isAssessmentManifestSummary(value.evidenceManifest);
+  }
+  return false;
+}
+
+function assessmentPath(projectId: string, issueId: string, claimId: string): string {
+  return `/projects/${encodeURIComponent(projectId)}/issues/${encodeURIComponent(issueId)}/claims/${encodeURIComponent(claimId)}/assessments`;
+}
+
+export async function createAssessment(
+  token: string,
+  projectId: string,
+  issueId: string,
+  claimId: string,
+  idempotencyKey: string,
+  input: CreateAssessmentInput,
+  signal?: AbortSignal,
+): Promise<AssessmentCreateResponse> {
+  try {
+    return await request<AssessmentCreateResponse>(
+      token,
+      assessmentPath(projectId, issueId, claimId),
+      { method: "POST", input, signal, idempotencyKey },
+      isAssessmentCreateResponse,
+    );
+  } catch (error) {
+    if (error instanceof ProjectApiError && error.status === 409 && error.code === "IDEMPOTENCY_CONFLICT") {
+      throw new ProjectApiError(409, "提交标识与当前评价内容不一致。", error.code);
+    }
+    throw error;
+  }
+}
+
+export function listAssessments(
+  token: string,
+  projectId: string,
+  issueId: string,
+  claimId: string,
+  query: { limit?: number; cursor?: string | null } = {},
+  signal?: AbortSignal,
+): Promise<AssessmentHistoryResponse> {
+  const params = new URLSearchParams();
+  if (query.limit !== undefined) params.set("limit", String(query.limit));
+  if (query.cursor) params.set("cursor", query.cursor);
+  const suffix = params.size ? `?${params.toString()}` : "";
+  return request<AssessmentHistoryResponse>(
+    token,
+    assessmentPath(projectId, issueId, claimId) + suffix,
+    { signal },
+    isAssessmentHistoryResponse,
+  );
+}
+
+export function getAssessment(
+  token: string,
+  projectId: string,
+  issueId: string,
+  claimId: string,
+  assessmentId: string,
+  signal?: AbortSignal,
+): Promise<AssessmentDetailResponse> {
+  return request<AssessmentDetailResponse>(
+    token,
+    assessmentPath(projectId, issueId, claimId) + `/${encodeURIComponent(assessmentId)}`,
+    { signal },
+    isAssessmentDetailResponse,
+  );
 }
