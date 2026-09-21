@@ -210,7 +210,14 @@ export function decodeAssessmentCursor(value: string): AssessmentCursor {
     ) {
       throw new Error("shape");
     }
-    return { createdAt: record.createdAt, id: record.id.toLowerCase() };
+    const canonical = {
+      v: 1,
+      createdAt: record.createdAt,
+      id: record.id.toLowerCase(),
+    };
+    const canonicalToken = Buffer.from(JSON.stringify(canonical), "utf8").toString("base64url");
+    if (canonicalToken !== value) throw new Error("noncanonical");
+    return { createdAt: canonical.createdAt, id: canonical.id };
   } catch {
     throw new InvalidAssessmentCursorError("评价历史游标不正确。");
   }
