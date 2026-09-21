@@ -6,6 +6,7 @@ import {
   type CandidateClaim,
   type EvidenceCandidate,
   type EvidenceRole,
+  type EvidenceTargetType,
 } from "./api";
 
 type CandidateLoadState = "collapsed" | "loading" | "ready" | "unavailable";
@@ -20,6 +21,26 @@ type LocalEvidenceItem = {
   candidate: EvidenceCandidate;
   note: string;
 };
+
+export interface CurrentEvidencePreview {
+  draftVersion: number;
+  manifestSha256: string;
+  items: Array<{
+    role: EvidenceRole;
+    targetType: EvidenceTargetType;
+    targetId: string;
+    note: string | null;
+  }>;
+}
+
+export interface EvidenceEditorProps {
+  token: string;
+  projectId: string;
+  issueId: string;
+  claim: CandidateClaim;
+  onPreviewChange?: (preview: CurrentEvidencePreview | null) => void;
+  disabled?: boolean;
+}
 
 const roleLabels: Record<EvidenceRole, string> = {
   SUPPORTING: "作为支持证据",
@@ -38,8 +59,8 @@ function candidateLabel(candidate: EvidenceCandidate): string {
   return `项目笔记 · 第 ${candidate.revisionNo} 版`;
 }
 
-export function EvidenceEditor(props: { token: string; projectId: string; issueId: string; claim: CandidateClaim }) {
-  const { token, projectId, issueId, claim } = props;
+export function EvidenceEditor(props: EvidenceEditorProps) {
+  const { token, projectId, issueId, claim, onPreviewChange, disabled = false } = props;
   const [load, setLoad] = useState<CandidateLoadState>("collapsed");
   const [candidates, setCandidates] = useState<EvidenceCandidate[]>([]);
   const [draft, setDraft] = useState<LocalEvidenceItem[]>([]);
@@ -56,11 +77,13 @@ export function EvidenceEditor(props: { token: string; projectId: string; issueI
   }, []);
 
   function mutateDraft(update: (previous: LocalEvidenceItem[]) => LocalEvidenceItem[]) {
+    if (disabled) return;
     setDraft(previous => update(previous));
     draftVersion.current += 1;
     previewRequest.current?.abort();
     previewRequest.current = null;
     setPreview({ state: "idle" });
+    onPreviewChange?.(null);
   }
 
   async function loadCandidates(retry = false) {
@@ -81,7 +104,7 @@ export function EvidenceEditor(props: { token: string; projectId: string; issueI
   }
 
   async function runPreview() {
-    if (!draft.length) return;
+    if (!draft.length || disabled) return;
     previewRequest.current?.abort();
     const controller = new AbortController();
     previewRequest.current = controller;
@@ -95,6 +118,16 @@ export function EvidenceEditor(props: { token: string; projectId: string; issueI
       );
       if (controller.signal.aborted || version !== draftVersion.current) return;
       setPreview({ state: "ready", response });
+      onPreviewChange?.({
+        draftVersion: version,
+        manifestSha256: response.draft.manifestSha256,
+        items: response.draft.items.map(item => ({
+          role: item.role,
+          targetType: item.targetType,
+          targetId: item.targetId,
+          note: item.note,
+        })),
+      });
     } catch (error) {
       if (controller.signal.aborted || version !== draftVersion.current) return;
       if (error instanceof ProjectApiError) {
@@ -120,15 +153,17 @@ export function EvidenceEditor(props: { token: string; projectId: string; issueI
       {candidates.length ? <ul className="evidence-candidates">
         {candidates.map(candidate => {
           const selected = draft.some(item => item.candidate.targetType === candidate.targetType && item.candidate.targetId === candidate.targetId);
+          const atLimit = draft.length >= 100;
           return <li key={`${candidate.targetType}:${candidate.targetId}`} data-testid={`candidate-${candidate.targetId}`}>
             <span>{candidateLabel(candidate)}</span>
             {selected ? <small>已选</small> : <span className="evidence-role-actions">
               {(Object.keys(roleLabels) as EvidenceRole[]).map(role => (
-                <button key={role} type="button" onClick={() => mutateDraft(previous => [...previous, { role, candidate, note: "" }])}>{roleLabels[role]}</button>
+                <button key={role} type="button" disabled={disabled || atLimit} onClick={() => mutateDraft(previous => [...previous, { role, candidate, note: "" }])}>{roleLabels[role]}</button>
               ))}
             </span>}
           </li>;
         })}
+        {draft.length >= 100 ? <p className="research-muted">最多选择 100 项证据。</p> : null}
       </ul> : <p>本项目暂无可用证据候选。</p>}
       {draft.length ? <div className="evidence-draft">
         <h4>已选证据（{draft.length} 项）</h4>
@@ -137,22 +172,22 @@ export function EvidenceEditor(props: { token: string; projectId: string; issueI
             <li key={`${item.candidate.targetType}:${item.candidate.targetId}`} data-testid={`selected-${item.candidate.targetId}`}>
               <span>{candidateLabel(item.candidate)}</span>
               <label>证据角色
-                <select value={item.role} onChange={e => mutateDraft(previous => previous.map((row, i) => i === index ? { ...row, role: e.target.value as EvidenceRole } : row))}>
+                <select value={item.role} disabled={disabled} onChange={e => mutateDraft(previous => previous.map((row, i) => i === index ? { ...row, role: e.target.value as EvidenceRole } : row))}>
                   {(Object.keys(roleNames) as EvidenceRole[]).map(role => <option key={role} value={role}>{roleNames[role]} · {role}</option>)}
                 </select>
               </label>
               <label>证据说明
-                <textarea rows={2} value={item.note} onChange={e => mutateDraft(previous => previous.map((row, i) => i === index ? { ...row, note: e.target.value } : row))} />
+                <textarea rows={2} value={item.note} disabled={disabled} onChange={e => mutateDraft(previous => previous.map((row, i) => i === index ? { ...row, note: e.target.value } : row))} />
               </label>
               <span className="evidence-order-actions">
-                <button type="button" disabled={index === 0} onClick={() => mutateDraft(previous => { const next = [...previous]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; return next; })}>上移</button>
-                <button type="button" disabled={index === draft.length - 1} onClick={() => mutateDraft(previous => { const next = [...previous]; [next[index + 1], next[index]] = [next[index], next[index + 1]]; return next; })}>下移</button>
-                <button type="button" onClick={() => mutateDraft(previous => previous.filter((_, i) => i !== index))}>移除</button>
+                <button type="button" disabled={disabled || index === 0} onClick={() => mutateDraft(previous => { const next = [...previous]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; return next; })}>上移</button>
+                <button type="button" disabled={disabled || index === draft.length - 1} onClick={() => mutateDraft(previous => { const next = [...previous]; [next[index + 1], next[index]] = [next[index], next[index + 1]]; return next; })}>下移</button>
+                <button type="button" disabled={disabled} onClick={() => mutateDraft(previous => previous.filter((_, i) => i !== index))}>移除</button>
               </span>
             </li>
           ))}
         </ol>
-        <button type="button" className="research-primary" disabled={!draft.length || preview.state === "loading"} onClick={() => void runPreview()}>预览 EvidenceManifest</button>
+        <button type="button" className="research-primary" disabled={disabled || !draft.length || preview.state === "loading"} onClick={() => void runPreview()}>预览 EvidenceManifest</button>
       </div> : null}
       {preview.state === "loading" ? <p role="status">正在生成预览…</p> : null}
       {preview.state === "ready" ? <div className="evidence-preview" role="status">
