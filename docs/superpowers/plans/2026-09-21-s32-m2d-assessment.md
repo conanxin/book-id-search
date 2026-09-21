@@ -439,22 +439,66 @@ export function encodeAssessmentCursor(cursor: AssessmentCursor): string;
 Application produces:
 
 ```ts
-export interface AssessmentCommandStore {
-  create(input: AssessmentCreateCommand): Promise<AssessmentCreateResult>;
+export interface AssessmentCreateCommand extends NormalizedAssessmentInput {
+  projectId: string;
+  issueId: string;
+  claimId: string;
+  assessmentId: string;
+  manifestId: string;
+  manifestItemIds: string[];
+  idempotencyKey: string;
+  requestHash: string;
 }
 
-export interface AssessmentReadStore {
-  list(input: AssessmentListCommand): Promise<AssessmentHistoryResponse | null>;
-  get(input: AssessmentGetCommand): Promise<AssessmentDetailResponse | null>;
+export type AssessmentCommandResult =
+  | {
+      status: "created";
+      assessment: AssessmentRecord;
+      evidenceManifest: AssessmentManifestSummary;
+    }
+  | {
+      status: "replayed";
+      assessmentId: string;
+    };
+
+export interface AssessmentCommandStore {
+  create(input: AssessmentCreateCommand): Promise<AssessmentCommandResult>;
 }
+
+export type AssessmentHistoryLookup =
+  | { kind: "scope-missing" }
+  | { kind: "ok"; value: AssessmentHistoryResponse };
+
+export type AssessmentDetailLookup =
+  | { kind: "scope-missing" }
+  | { kind: "not-visible" }
+  | { kind: "ok"; value: AssessmentDetailResponse };
+
+export interface AssessmentReadStore {
+  list(input: AssessmentListCommand): Promise<AssessmentHistoryLookup>;
+  get(input: AssessmentGetCommand): Promise<AssessmentDetailLookup>;
+}
+
+export type AssessmentCreateResult =
+  | {
+      status: "created" | "replayed";
+      visible: true;
+      assessment: AssessmentRecord;
+      evidenceManifest: AssessmentManifestSummary;
+    }
+  | {
+      status: "replayed";
+      visible: false;
+      assessmentId: string;
+    };
 
 export function createAssessmentsService(
   commandStore: AssessmentCommandStore,
   readStore: AssessmentReadStore,
 ): {
   create(project: unknown, issue: unknown, claim: unknown, key: unknown, body: unknown): Promise<AssessmentCreateResult>;
-  list(project: unknown, issue: unknown, claim: unknown, query: unknown): Promise<AssessmentHistoryResponse | null>;
-  get(project: unknown, issue: unknown, claim: unknown, assessment: unknown): Promise<AssessmentDetailResponse | null>;
+  list(project: unknown, issue: unknown, claim: unknown, query: unknown): Promise<AssessmentHistoryResponse>;
+  get(project: unknown, issue: unknown, claim: unknown, assessment: unknown): Promise<AssessmentDetailResponse>;
 };
 ```
 
@@ -532,8 +576,11 @@ In `application/assessments.test.ts`:
 
 ```ts
 it("generates all canonical IDs once and passes one normalized command to the store", async () => {
-  const commandStore = { create: vi.fn(async input => CREATED_RESULT) };
-  const readStore = { list: vi.fn(), get: vi.fn() };
+  const commandStore = { create: vi.fn(async input => CREATED_COMMAND_RESULT) };
+  const readStore = {
+    list: vi.fn(),
+    get: vi.fn(async () => ({ kind: "ok" as const, value: DETAIL })),
+  };
   const service = createAssessmentsService(commandStore, readStore);
   await service.create(P, I, C, KEY, BASE_BODY);
   const sent = vi.mocked(commandStore.create).mock.calls[0][0];
@@ -547,8 +594,8 @@ it("delegates history/detail with normalized IDs and parsed cursor/limit", async
   const cursor = encodeAssessmentCursor({ createdAt: "2026-09-21T00:00:00.000Z", id: A });
   const commandStore = { create: vi.fn() };
   const readStore = {
-    list: vi.fn(async () => HISTORY),
-    get: vi.fn(async () => DETAIL),
+    list: vi.fn(async () => ({ kind: "ok" as const, value: HISTORY })),
+    get: vi.fn(async () => ({ kind: "ok" as const, value: DETAIL })),
   };
   const service = createAssessmentsService(commandStore, readStore);
   await service.list(P.toUpperCase(), I.toUpperCase(), C.toUpperCase(), { limit: "20", cursor });
@@ -560,6 +607,28 @@ it("delegates history/detail with normalized IDs and parsed cursor/limit", async
     cursor: { createdAt: "2026-09-21T00:00:00.000Z", id: A },
   });
   await service.get(P.toUpperCase(), I.toUpperCase(), C.toUpperCase(), A.toUpperCase());
+  expect(readStore.get).toHaveBeenCalledWith({
+    projectId: P,
+    issueId: I,
+    claimId: C,
+    assessmentId: A,
+  });
+});
+
+it("maps completed replay visibility through the read store instead of duplicating read privacy in the command store", async () => {
+  const commandStore = {
+    create: vi.fn(async () => ({ status: "replayed" as const, assessmentId: A })),
+  };
+  const readStore = {
+    list: vi.fn(),
+    get: vi.fn(async () => ({ kind: "not-visible" as const })),
+  };
+  const service = createAssessmentsService(commandStore, readStore);
+  await expect(service.create(P, I, C, KEY, BASE_BODY)).resolves.toEqual({
+    status: "replayed",
+    visible: false,
+    assessmentId: A,
+  });
   expect(readStore.get).toHaveBeenCalledWith({
     projectId: P,
     issueId: I,
@@ -582,11 +651,13 @@ Expected: FAIL because `createAssessmentsService` does not exist.
 Define errors used later by route/store layers:
 
 ```ts
-export class AssessmentInvalidError extends Error {}
+export class InvalidAssessmentInputError extends Error {}
+export class InvalidAssessmentCursorError extends Error {}
 export class AssessmentScopeNotFoundError extends Error {}
 export class AssessmentNotFoundError extends Error {}
 export class AssessmentIntegrityError extends Error {}
 export class AssessmentStoreUnavailableError extends Error {}
+export class AssessmentEvidenceTargetNotAvailableError extends Error {}
 export class EvidencePreviewStaleError extends Error {}
 export class ProjectReadOnlyForAssessmentError extends Error {}
 export class ResearchIssueReadOnlyForAssessmentError extends Error {}
@@ -637,11 +708,10 @@ it("creates one Manifest, N Items, Assessment, then completes receipt after cano
     .toBeLessThan(orderOf(sql, "status='COMPLETED'"));
 });
 
-it("replays the exact completed resource before current write-lifecycle gates", async () => {
-  // receipt COMPLETED, Project now ARCHIVED
+it("returns the original assessmentId from a completed receipt before current write-lifecycle gates", async () => {
+  // receipt COMPLETED, Project now ARCHIVED; command store proves prior completion only.
   const result = await store.create(COMMAND);
-  expect(result.status).toBe("replayed");
-  expect(result.assessment.id).toBe(ASSESSMENT_ID);
+  expect(result).toEqual({ status: "replayed", assessmentId: ASSESSMENT_ID });
   expect(sql).not.toContain("INSERT INTO core.assessments");
 });
 
@@ -709,10 +779,11 @@ Conflict path:
 - lock/read existing receipt;
 - request hash mismatch → `AssessmentIdempotencyConflictError`;
 - `COMPLETED` must have `resource_type='ASSESSMENT'` and canonical resource ID;
+- the referenced Assessment row must exist and have `claim_id=input.claimId`; this proves receipt/resource identity without applying current Project/Issue visibility;
 - durable `IN_PROGRESS` or `FAILED` → `AssessmentStoreUnavailableError`;
 - malformed completed receipt/resource → `AssessmentIntegrityError`.
 
-Do not run new-write lifecycle gates for a canonical completed replay.
+Return `{status:"replayed",assessmentId}` from the command store. Do not run new-write lifecycle gates and do not duplicate Project-scoped read visibility here. The application service resolves replay visibility by calling `AssessmentReadStore.get`; `scope-missing` or `not-visible` maps to the spec's `visible:false` acknowledgement.
 
 - [ ] **Step 5: Implement new-write scope locks and evidence confirmation**
 
@@ -808,6 +879,8 @@ git commit -m "feat(s32): add atomic assessment command store"
 **Interfaces:**
 - Consumes: shared Project scope/evidence authorization, Assessment domain cursor/DTO types.
 - Produces: `createPostgresAssessmentReadStore(pool: Pool): AssessmentReadStore`.
+- `list()` returns `{kind:"scope-missing"}` or `{kind:"ok",value}`.
+- `get()` returns `{kind:"scope-missing"}`, `{kind:"not-visible"}`, or `{kind:"ok",value}`. Normal detail requests let the application map these to `PROJECT_ISSUE_OR_CLAIM_NOT_FOUND` vs `ASSESSMENT_NOT_FOUND`; replay uses both non-ok variants as `visible:false`.
 
 - [ ] **Step 1: Write RED visibility matrix tests**
 
@@ -829,8 +902,12 @@ it("hides the whole Assessment if any frozen item is not currently authorized", 
 });
 
 it("manifestless Assessment is omitted from list and safe-404 in detail", async () => {
-  expect((await store.list(LIST)).assessments).toEqual([]);
-  expect(await store.get({ ...SCOPE, assessmentId: MANIFESTLESS })).toBeNull();
+  expect(await store.list(LIST)).toEqual({
+    kind: "ok",
+    value: expect.objectContaining({ assessments: [] }),
+  });
+  expect(await store.get({ ...SCOPE, assessmentId: MANIFESTLESS }))
+    .toEqual({ kind: "not-visible" });
 });
 ```
 
@@ -839,8 +916,12 @@ it("manifestless Assessment is omitted from list and safe-404 in detail", async 
 ```ts
 it("does not leak hidden malformed target_type as an integrity 500", async () => {
   // Assessment is not independently visible and item target_type is unsupported.
-  await expect(store.list(LIST)).resolves.toMatchObject({ assessments: [] });
-  await expect(store.get({ ...SCOPE, assessmentId: HIDDEN_BAD_TYPE })).resolves.toBeNull();
+  await expect(store.list(LIST)).resolves.toMatchObject({
+    kind: "ok",
+    value: { assessments: [], nextCursor: null },
+  });
+  await expect(store.get({ ...SCOPE, assessmentId: HIDDEN_BAD_TYPE }))
+    .resolves.toEqual({ kind: "not-visible" });
 });
 
 it("returns integrity error after visibility is established and the visible Manifest hash is wrong", async () => {
@@ -856,7 +937,9 @@ Also pin visible role/ordinal/purpose/schema/metadata/locator/excerpt/>100 corru
 ```ts
 it("reads a schema-valid Actor/score Assessment with null reasoning when Manifest is visible", async () => {
   const detail = await store.get({ ...SCOPE, assessmentId: FUTURE_STYLE });
-  expect(detail?.assessment).toMatchObject({
+  expect(detail).toMatchObject({ kind: "ok" });
+  if (detail.kind !== "ok") throw new Error("expected visible detail");
+  expect(detail.value.assessment).toMatchObject({
     actorId: ACTOR_ID,
     numericScore: 0.82,
     scoreKind: "CALIBRATED_PROBABILITY",
@@ -874,14 +957,22 @@ Use at least 60 global rows in the fake query result model, with newest 15 hidde
 ```ts
 it("filters visibility before limit so hidden newest rows do not shorten the page", async () => {
   const page = await store.list({ ...LIST, limit: 20 });
-  expect(page.assessments).toHaveLength(20);
-  expect(page.nextCursor).not.toBeNull();
+  expect(page.kind).toBe("ok");
+  if (page.kind !== "ok") throw new Error("expected readable scope");
+  expect(page.value.assessments).toHaveLength(20);
+  expect(page.value.nextCursor).not.toBeNull();
 });
 
 it("uses created_at DESC,id DESC without duplicate/skip across pages", async () => {
   const first = await store.list({ ...LIST, limit: 20 });
-  const second = await store.list({ ...LIST, limit: 20, cursor: decode(first.nextCursor!) });
-  expect(intersection(ids(first), ids(second))).toEqual([]);
+  if (first.kind !== "ok" || !first.value.nextCursor) throw new Error("expected first page cursor");
+  const second = await store.list({
+    ...LIST,
+    limit: 20,
+    cursor: decodeAssessmentCursor(first.value.nextCursor),
+  });
+  if (second.kind !== "ok") throw new Error("expected second readable page");
+  expect(intersection(ids(first.value), ids(second.value))).toEqual([]);
 });
 ```
 
@@ -971,9 +1062,10 @@ Create table-driven tests:
 ```ts
 it.each([
   [new InvalidAssessmentInputError("x"), 400, "ASSESSMENT_INVALID"],
+  [new InvalidAssessmentCursorError("x"), 400, "ASSESSMENT_CURSOR_INVALID"],
   [new InvalidEvidenceDraftError("x"), 400, "EVIDENCE_DRAFT_INVALID"],
   [new AssessmentScopeNotFoundError("x"), 404, "PROJECT_ISSUE_OR_CLAIM_NOT_FOUND"],
-  [new EvidenceTargetNotAvailableError("x"), 404, "EVIDENCE_TARGET_NOT_AVAILABLE"],
+  [new AssessmentEvidenceTargetNotAvailableError("x"), 404, "EVIDENCE_TARGET_NOT_AVAILABLE"],
   [new AssessmentNotFoundError("x"), 404, "ASSESSMENT_NOT_FOUND"],
   [new ProjectReadOnlyForAssessmentError("x"), 409, "PROJECT_READ_ONLY"],
   [new ResearchIssueReadOnlyForAssessmentError("x"), 409, "RESEARCH_ISSUE_READ_ONLY"],
