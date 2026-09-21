@@ -160,8 +160,9 @@ describe("assessment POST", () => {
     const base = await start(s);
     const res = await post(base);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ status: "replayed", visible: false, assessmentId: A });
-    expect(await res.text()).toBe("");
+    const raw = await res.text();
+    expect(JSON.parse(raw)).toEqual({ status: "replayed", visible: false, assessmentId: A });
+    expect(raw).not.toMatch(/stance|confidence|reasoning|manifest/i);
   });
 });
 
