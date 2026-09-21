@@ -216,13 +216,12 @@ export async function getOrCreateAssessmentReceipt(
   const requestHash = await hashAssessmentCommand(canonical, command);
   const existing = loadPendingAssessmentReceipt();
 
-  if (
-    existing &&
-    existing.projectId === canonical.projectId &&
-    existing.issueId === canonical.issueId &&
-    existing.claimId === canonical.claimId
-  ) {
-    if (existing.requestHash === requestHash) return existing;
+  if (existing) {
+    const sameScope =
+      existing.projectId === canonical.projectId &&
+      existing.issueId === canonical.issueId &&
+      existing.claimId === canonical.claimId;
+    if (sameScope && existing.requestHash === requestHash) return existing;
     throw new PendingAssessmentIntentConflictError();
   }
 
