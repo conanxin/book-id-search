@@ -133,6 +133,34 @@
     claim: EvidenceClaimContext;
   }
 
+  export interface ProjectMaterialGroup {
+    bindingId: string;
+    createdAt: Date;
+    workTitle: string;
+    declaredSourceId: string | null;
+    source: {
+      id: string;
+      type: EvidenceSourceType;
+      lifecycle: "ACTIVE" | "ARCHIVED";
+      observedAt: Date;
+    } | null;
+    assets: Array<{
+      id: string;
+      type: EvidenceAssetType;
+      role: "ORIGINAL" | "DERIVED";
+      storageMode: "LOCAL" | "REMOTE" | "HYBRID";
+      createdAt: Date;
+    }>;
+    note: {
+      bindingId: string;
+      noteId: string;
+      revisionId: string;
+      revisionNo: number;
+      contentFormat: "MARKDOWN" | "PLAIN_TEXT";
+      createdAt: Date;
+    } | null;
+  }
+
   export interface ProjectEvidenceAuthorization {
     groups: ProjectMaterialGroup[];
     sourceIds: ReadonlySet<string>;
@@ -474,6 +502,21 @@ export type AssessmentDetailLookup =
   | { kind: "scope-missing" }
   | { kind: "not-visible" }
   | { kind: "ok"; value: AssessmentDetailResponse };
+
+export interface AssessmentListCommand {
+  projectId: string;
+  issueId: string;
+  claimId: string;
+  limit: number;
+  cursor: AssessmentCursor | null;
+}
+
+export interface AssessmentGetCommand {
+  projectId: string;
+  issueId: string;
+  claimId: string;
+  assessmentId: string;
+}
 
 export interface AssessmentReadStore {
   list(input: AssessmentListCommand): Promise<AssessmentHistoryLookup>;
@@ -1434,6 +1477,19 @@ git commit -m "feat(web): add assessment API client contracts"
   ```ts
   export const ASSESSMENT_PENDING_KEY = "book-id-search:s32-m2d-assessment-create-v1";
 
+  export interface NormalizedAssessmentBrowserCommand {
+    stance: "SUPPORTS" | "CONTRADICTS" | "INCONCLUSIVE";
+    confidenceLevel: "LOW" | "MEDIUM" | "HIGH" | null;
+    reasoning: string;
+    expectedManifestSha256: string;
+    items: Array<{
+      role: EvidenceRole;
+      targetType: EvidenceTargetType;
+      targetId: string;
+      note: string | null;
+    }>;
+  }
+
   export interface PendingAssessmentReceipt {
     projectId: string;
     issueId: string;
@@ -1444,7 +1500,10 @@ git commit -m "feat(web): add assessment API client contracts"
     command: NormalizedAssessmentBrowserCommand;
   }
 
-  export async function hashAssessmentCommand(...): Promise<string>;
+  export async function hashAssessmentCommand(
+    scope: { projectId: string; issueId: string; claimId: string },
+    command: NormalizedAssessmentBrowserCommand,
+  ): Promise<string>;
   export function loadPendingAssessmentReceipt(): PendingAssessmentReceipt | null;
   export function clearPendingAssessmentReceipt(): void;
   export async function getOrCreateAssessmentReceipt(
@@ -1532,14 +1591,22 @@ git commit -m "feat(web): persist pending assessment intent safely"
   export interface CurrentEvidencePreview {
     draftVersion: number;
     manifestSha256: string;
-    items: Array<{ role; targetType; targetId; note }>;
+    items: Array<{
+      role: EvidenceRole;
+      targetType: EvidenceTargetType;
+      targetId: string;
+      note: string | null;
+    }>;
   }
 
-  type EvidenceEditorProps = {
-    ...existing;
+  export interface EvidenceEditorProps {
+    token: string;
+    projectId: string;
+    issueId: string;
+    claim: CandidateClaim;
     onPreviewChange?: (preview: CurrentEvidencePreview | null) => void;
     disabled?: boolean;
-  };
+  }
   ```
 - AssessmentComposer consumes only `CurrentEvidencePreview`; it never computes the Manifest SHA itself.
 
@@ -1760,6 +1827,30 @@ git commit -m "feat(web): add assessment composer and retry flow"
 - Modify: `apps/web/src/research/research.css`
 
 **Interfaces:**
+- Produces:
+
+```ts
+export function AssessmentHistory(props: {
+  token: string;
+  projectId: string;
+  issueId: string;
+  claimId: string;
+  refreshVersion: number;
+  onIntegrityBlocked: (blocked: boolean) => void;
+  onOpenDetail: (assessmentId: string) => void;
+}): JSX.Element;
+
+export function AssessmentDetail(props: {
+  token: string;
+  projectId: string;
+  issueId: string;
+  claimId: string;
+  assessmentId: string;
+  onClose: () => void;
+  onRefreshHistory: () => void;
+}): JSX.Element;
+```
+
 - `AssessmentHistory` owns pages, cursor, load-more, refresh, and integrity-block signal.
 - `AssessmentDetail` owns selected ID/detail state.
 - `CandidateClaims` coordinates per-Claim Evidence preview + Composer + History but never collapses the Claim card because an Assessment read fails.
