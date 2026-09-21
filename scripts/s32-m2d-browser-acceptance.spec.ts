@@ -128,7 +128,7 @@ test("M2-D real Firefox acceptance: create, recover, audit, privacy, lifecycle, 
   await expect(primary.getByText("最近一次评价")).toBeVisible();
   await primary.getByRole("button", { name: "查看完整评价" }).first().click();
   await expect(primary.getByRole("heading", { name: "完整评价" })).toBeVisible();
-  await expect(primary.getByText("第一行\n第二行  保持")).toBeVisible();
+  await expect(primary.locator(".assessment-reasoning")).toHaveText("第一行\n第二行  保持");
   await expect(primary.locator(".assessment-detail-items > li")).toHaveCount(2);
   await primary.getByRole("button", { name: "关闭" }).click();
 
