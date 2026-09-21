@@ -349,7 +349,7 @@ describe("M2-D preview handoff", () => {
     });
     render(<EvidenceEditor token="t" projectId={p} issueId={i} claim={claim} />);
     await userEvent.click(screen.getByRole("button", { name: "构建证据集" }));
-    await screen.findByText("资料 101");
+    await screen.findByText(/资料 101/);
 
     for (let n = 0; n < 100; n += 1) {
       await userEvent.click(
