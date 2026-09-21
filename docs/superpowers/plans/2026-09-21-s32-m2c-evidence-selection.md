@@ -279,7 +279,46 @@ export interface EvidenceClaimContext {
   lifecycleState: "ACTIVE" | "ARCHIVED";
 }
 
-export type EvidenceCandidate = /* exact discriminated union from spec */;
+export type EvidenceSourceType =
+  | "PUBLICATION" | "WEB_PAGE" | "ARCHIVAL_RECORD" | "DATABASE_RECORD"
+  | "MUSEUM_OBJECT" | "EXHIBITION_LABEL" | "EMAIL"
+  | "FIELD_OBSERVATION" | "INTERVIEW" | "OTHER";
+
+export type EvidenceAssetType =
+  | "DOCUMENT" | "IMAGE" | "AUDIO" | "VIDEO"
+  | "WEB_SNAPSHOT" | "TEXT" | "DATA" | "OTHER";
+
+export type EvidenceCandidate =
+  | {
+      targetType: "SOURCE";
+      targetId: string;
+      materialBindingId: string;
+      materialTitle: string;
+      sourceType: EvidenceSourceType;
+      sourceLifecycleState: "ACTIVE" | "ARCHIVED";
+      observedAt: string;
+    }
+  | {
+      targetType: "SOURCE_ASSET";
+      targetId: string;
+      materialBindingId: string;
+      materialTitle: string;
+      sourceId: string;
+      assetType: EvidenceAssetType;
+      assetRole: "ORIGINAL" | "DERIVED";
+      storageMode: "LOCAL" | "REMOTE" | "HYBRID";
+      createdAt: string;
+    }
+  | {
+      targetType: "NOTE_REVISION";
+      targetId: string;
+      materialBindingId: string;
+      materialTitle: string;
+      noteId: string;
+      revisionNo: number;
+      contentFormat: "MARKDOWN" | "PLAIN_TEXT";
+      createdAt: string;
+    };
 
 export interface EvidenceSelectionStore {
   candidates(input: {
@@ -801,8 +840,63 @@ Add exact Web types mirroring the spec:
 ```ts
 export type EvidenceRole = "SUPPORTING" | "CONTRADICTORY" | "CONTEXTUAL";
 export type EvidenceTargetType = "SOURCE" | "SOURCE_ASSET" | "NOTE_REVISION";
-export type EvidenceCandidate = /* discriminated union */;
-export interface EvidenceManifestDraftPreview { /* schemaVersion/purpose/hash/items */ }
+
+export type EvidenceSourceType =
+  | "PUBLICATION" | "WEB_PAGE" | "ARCHIVAL_RECORD" | "DATABASE_RECORD"
+  | "MUSEUM_OBJECT" | "EXHIBITION_LABEL" | "EMAIL"
+  | "FIELD_OBSERVATION" | "INTERVIEW" | "OTHER";
+
+export type EvidenceAssetType =
+  | "DOCUMENT" | "IMAGE" | "AUDIO" | "VIDEO"
+  | "WEB_SNAPSHOT" | "TEXT" | "DATA" | "OTHER";
+
+export type EvidenceCandidate =
+  | {
+      targetType: "SOURCE";
+      targetId: string;
+      materialBindingId: string;
+      materialTitle: string;
+      sourceType: EvidenceSourceType;
+      sourceLifecycleState: "ACTIVE" | "ARCHIVED";
+      observedAt: string;
+    }
+  | {
+      targetType: "SOURCE_ASSET";
+      targetId: string;
+      materialBindingId: string;
+      materialTitle: string;
+      sourceId: string;
+      assetType: EvidenceAssetType;
+      assetRole: "ORIGINAL" | "DERIVED";
+      storageMode: "LOCAL" | "REMOTE" | "HYBRID";
+      createdAt: string;
+    }
+  | {
+      targetType: "NOTE_REVISION";
+      targetId: string;
+      materialBindingId: string;
+      materialTitle: string;
+      noteId: string;
+      revisionNo: number;
+      contentFormat: "MARKDOWN" | "PLAIN_TEXT";
+      createdAt: string;
+    };
+
+export interface EvidenceManifestDraftPreview {
+  schemaVersion: 1;
+  purpose: "CLAIM_ASSESSMENT";
+  manifestSha256: string;
+  items: Array<{
+    ordinal: number;
+    role: EvidenceRole;
+    targetType: EvidenceTargetType;
+    targetId: string;
+    locatorType: null;
+    locator: null;
+    excerpt: null;
+    note: string | null;
+  }>;
+}
 
 export function listEvidenceCandidates(
   token: string,
@@ -1123,7 +1217,7 @@ Create acceptance data through existing/local S32 paths or exact local SQL fixtu
 
 - ACTIVE Project with one Issue and one Claim;
 - one Project Edition binding with valid Source;
-- one SourceAsset under that Source if needed for asset acceptance;
+- one SourceAsset under that Source, required for asset acceptance;
 - one Project annotation Note with two immutable revisions, revision 2 current;
 - a second Project with foreign Source/Asset/NoteRevision for privacy rejection.
 
