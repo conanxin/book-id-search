@@ -137,7 +137,12 @@ export function AssessmentHistory({
       {assessments.map((assessment, index) => (
         <li key={assessment.id} className="assessment-history-item">
           {index === 0 ? <strong>最近一次评价</strong> : null}
-          <div>{assessment.stance} · {confidenceLabel(assessment.confidenceLevel)}</div>
+          {index === 0
+            ? <div>{assessment.stance} · {confidenceLabel(assessment.confidenceLevel)}</div>
+            : <>
+                <div>{assessment.stance}</div>
+                <small>信心：{confidenceLabel(assessment.confidenceLevel)}</small>
+              </>}
           <div>{assessment.evidenceManifest.itemCount} 条证据</div>
           <small>{new Date(assessment.createdAt).toLocaleString("zh-CN")}</small>
           <p>{assessment.reasoningExcerpt ?? "未记录判断理由"}</p>
