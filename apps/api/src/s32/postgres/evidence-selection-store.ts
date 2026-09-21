@@ -210,7 +210,12 @@ function groupMaterials(rows: MaterialRow[]): MaterialGroup[] {
       }
     }
     if (row.note_binding_id) {
-      if (current.note) integrity('DUPLICATE_NOTE_BINDING');
+      // The material graph LEFT JOIN fans out one row per asset, so the same note
+      // binding legitimately appears on multiple rows of the SAME edition binding.
+      // Only a genuinely different note binding is corruption.
+      if (current.note) {
+        if (current.note.bindingId !== row.note_binding_id) integrity('DUPLICATE_NOTE_BINDING');
+      } else {
       if (row.note_binding_role !== 'ANNOTATION') integrity('NOTE_BINDING_ROLE_INVALID');
       const meta = row.note_binding_metadata;
       if (!meta || typeof meta !== 'object' || Array.isArray(meta)) integrity('NOTE_BINDING_METADATA_INVALID');
@@ -235,6 +240,7 @@ function groupMaterials(rows: MaterialRow[]): MaterialGroup[] {
         contentFormat: row.revision_content_format as string,
         createdAt: row.revision_created_at as Date,
       };
+      }
     }
   }
   // fail closed: declared sourceId must resolve to an actual Source row
