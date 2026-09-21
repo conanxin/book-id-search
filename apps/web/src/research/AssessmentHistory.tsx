@@ -145,7 +145,11 @@ export function AssessmentHistory({
               </>}
           <div>{assessment.evidenceManifest.itemCount} 条证据</div>
           <small>{new Date(assessment.createdAt).toLocaleString("zh-CN")}</small>
-          <p>{assessment.reasoningExcerpt ?? "未记录判断理由"}</p>
+          <p>{assessment.reasoningExcerpt === null
+            ? "未记录判断理由"
+            : index === 0
+              ? assessment.reasoningExcerpt
+              : `理由：${assessment.reasoningExcerpt}`}</p>
           <code className="assessment-hash">{assessment.evidenceManifest.manifestSha256}</code>
           <button type="button" onClick={() => onOpenDetail(assessment.id)}>查看完整评价</button>
         </li>
