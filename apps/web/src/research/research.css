@@ -100,3 +100,7 @@
 .research-note-editor .research-muted { margin: 0; font-size: 12px; }
 .research-note-stale { margin-top: 16px; padding: 16px; background: #fff5db; border-radius: var(--radius-sm); }
 .research-note-history { margin-top: 20px; }
+
+.research-candidate-claims, .research-claim-list, .research-claim-list .research-card { min-width: 0; overflow-wrap: anywhere; }
+.research-candidate-claims textarea { box-sizing: border-box; width: 100%; max-width: 100%; }
+.research-claim-list { display: grid; gap: 1rem; }

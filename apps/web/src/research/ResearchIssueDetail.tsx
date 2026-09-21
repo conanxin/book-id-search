@@ -1,3 +1,4 @@
+import { CandidateClaims } from "./CandidateClaims";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getResearchIssue, ProjectApiError, type ResearchIssueDetailResponse } from "./api";
@@ -36,7 +37,7 @@ export function ResearchIssueDetail({ token, projectId, issueId }: { token: stri
     <h1>{response.issue.title}</h1>
     <p className="research-issue-question">{response.issue.question}</p>
     <dl className="research-dates"><div><dt>创建时间</dt><dd>{new Date(response.issue.createdAt).toLocaleString("zh-CN")}</dd></div><div><dt>更新时间</dt><dd>{new Date(response.issue.updatedAt).toLocaleString("zh-CN")}</dd></div></dl>
-    <section className="research-possible-answers"><h2>可能答案</h2><p>还没有可能答案。Claims 将在后续阶段加入。</p></section>
+    <CandidateClaims token={token} project={response.project} issue={response.issue} />
     <Link to={`/research/projects/${response.project.id}`}>返回项目资料</Link>
   </article>;
 }

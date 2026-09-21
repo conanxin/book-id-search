@@ -1,3 +1,4 @@
+import { normalizeCandidateClaimDraft } from "./candidate-claim-draft";
 export interface Project {
   id: string;
   name: string;
@@ -10,6 +11,8 @@ export class ProjectApiError extends Error {
   constructor(public status: number, message: string, public code?: string) { super(message); }
 }
 const errorCodes: Record<string, { status: number; message: string }> = {
+  CLAIM_INVALID_INPUT: { status: 400, message: "可能答案输入不正确。" },
+  RESEARCH_ISSUE_READ_ONLY: { status: 409, message: "这个研究问题已经只读，不能添加新的可能答案。" },
   STALE_NOTE_REVISION: { status: 409, message: "笔记已经发生变化。请重新加载最新版本后，再决定如何处理当前草稿。" },
   PROJECT_ITEM_HAS_NOTE: { status: 409, message: "这项资料已有研究笔记，暂不能直接移出项目。" },
   NOTE_ALREADY_EXISTS: { status: 409, message: "这项资料已有研究笔记，请重新加载。" },
@@ -351,3 +354,27 @@ export const listResearchIssues = (token: string, projectId: string, signal?: Ab
 
 export const getResearchIssue = (token: string, projectId: string, issueId: string, signal?: AbortSignal) =>
   request<ResearchIssueDetailResponse>(token, `/projects/${encodeURIComponent(projectId)}/issues/${encodeURIComponent(issueId)}`, { signal }, isResearchIssueDetailResponse);
+
+export interface CandidateClaim {
+  id: string;
+  statement: string;
+  lifecycleState: "ACTIVE" | "ARCHIVED";
+  createdAt: string;
+  updatedAt: string;
+}
+function isCandidateClaim(value: any): value is CandidateClaim {
+  if (!value || typeof value !== "object" || typeof value.id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.id)) return false;
+  try { if (normalizeCandidateClaimDraft(value.statement) !== value.statement) return false; } catch { return false; }
+  return ["ACTIVE", "ARCHIVED"].includes(value.lifecycleState)
+    && [value.createdAt, value.updatedAt].every(v => typeof v === "string" && Number.isFinite(Date.parse(v)));
+}
+export const listCandidateClaims = (token: string, projectId: string, issueId: string, signal?: AbortSignal) =>
+  request<{ claims: CandidateClaim[] }>(token, `/projects/${encodeURIComponent(projectId)}/issues/${encodeURIComponent(issueId)}/claims`, { signal }, b => Array.isArray(b.claims) && b.claims.every(isCandidateClaim));
+export async function createCandidateClaim(token: string, projectId: string, issueId: string, idempotencyKey: string, statement: string, signal?: AbortSignal): Promise<{ claim: CandidateClaim }> {
+  try {
+    return await request<{ claim: CandidateClaim }>(token, `/projects/${encodeURIComponent(projectId)}/issues/${encodeURIComponent(issueId)}/claims`, { method: "POST", input: { statement }, signal, idempotencyKey }, b => isCandidateClaim(b.claim));
+  } catch (error) {
+    if (error instanceof ProjectApiError && error.status === 409 && error.code === "IDEMPOTENCY_CONFLICT") throw new ProjectApiError(409, "创建请求标识与当前可能答案内容不一致。", error.code);
+    throw error;
+  }
+}

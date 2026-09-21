@@ -1,5 +1,14 @@
 # BOOK-ID-SEARCH status
 
+## M2-B Candidate Claims — current checkpoint
+
+- task_id: `S32_M2B_CANDIDATE_CLAIMS_EXECUTION_R1`; branch `feat/s32-m2b-candidate-claims`; tested_commit `495c75f5cffdcbffa5d3b6bb5173f039d0f0da64`; baseline `beb3888600c6c9520624093da00619d74a15d68f`; spec `98e521c1962ef9c6152badef541ac3ab1fa1bd99`; plan `eb334d756d07b06a7cb6703d0cf56aa7922b9a8f`.
+- Implemented Claim domain (normalize/hash, 1-4000 chars), application service, atomic Postgres store (idempotency-scoped create/replay, lifecycle gates, fail-closed dangling checks), private routes on the shared Pool, Web client with three-state pending-receipt authority, and a separately degradable claims section in Issue Detail.
+- Gates: targeted API 55 PASS; API S32 scoped 455 PASS/44 skipped; targeted Web 49 PASS; Web research 202 PASS; Web broad 2797 PASS; API/Web builds PASS; schema static 23 PASS; real PG16 12 PASS (disposable container removed); frozen SQL unchanged; diff check clean.
+- Real Firefox 146.0.1 hard acceptance (external runner, no repo dependency changes): normal create PASS; response-unknown PASS (same idempotency key replay 201→200, same claim id, 1 claim/1 relation, statement frozen); read-only replay PASS (archived project + resolved/archived issue: list 200, new key 409, completed key 200 same claim); independent degradation PASS; mobile 390×844 no overflow PASS; API+PG restart persistence PASS; acceptance temp data cleaned, dev fixture preserved.
+- Final whole-branch review PASS (lifecycle drift replay, cross-Project privacy/idempotency namespace, historical Claim compatibility, dangling fail-closed, storage asymmetry). Full suite fresh recount: 4025 PASS / 15 known unrelated weread FAIL (3 files, spawnSync cwd assumption, first-commit 2026-07-03) / 1 known weread unhandled rejection.
+- MERGED=NO; DEPLOYED=NO; PRODUCTION_CHANGED=NO; M2_C_STARTED=NO. Next: PR review.
+
 ## PR #15 review fixes — current checkpoint
 
 - task_id: `S32_M2A_PR15_REVIEW_FIX_R1`; FIX_BASE: `84fbb58a585de1c60dc0cd2a24f71719d4a491d3`; FIX_TESTED_COMMIT: `5c145811f8b88d660ff5fb7123127714b45a6103`; [PR #15](https://github.com/conanxin/book-id-search/pull/15) awaits rereview.
