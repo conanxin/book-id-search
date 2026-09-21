@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - feat/s32-m2d-assessment
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
@@ -25,3 +28,5 @@ jobs:
         run: pnpm vitest run apps/api/src/s32
       - name: Web research tests
         run: pnpm vitest run apps/web/src/research
+      - name: M2-D real PostgreSQL gate
+        run: pnpm s32:m2d:check
