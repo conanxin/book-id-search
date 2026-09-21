@@ -19,6 +19,9 @@ const errorCodes: Record<string, { status: number; message: string }> = {
   NOTE_INVALID_INPUT: { status: 400, message: "笔记输入不正确，正文不能为空且不能超过 65536 UTF-8 字节。" },
   PROJECT_READ_ONLY: { status: 409, message: "这个项目已归档，只能查看。" },
   IDEMPOTENCY_CONFLICT: { status: 409, message: "创建请求标识与当前研究问题内容不一致。" },
+  EVIDENCE_DRAFT_INVALID: { status: 400, message: "证据草稿输入不正确。" },
+  PROJECT_ISSUE_OR_CLAIM_NOT_FOUND: { status: 404, message: "研究问题或可能答案不存在。" },
+  EVIDENCE_TARGET_NOT_AVAILABLE: { status: 404, message: "所选证据不可用于当前研究项目。" },
 };
 const statusMessages: Record<number, string> = {
   400: "请检查项目或书目输入。",
@@ -375,6 +378,167 @@ export async function createCandidateClaim(token: string, projectId: string, iss
     return await request<{ claim: CandidateClaim }>(token, `/projects/${encodeURIComponent(projectId)}/issues/${encodeURIComponent(issueId)}/claims`, { method: "POST", input: { statement }, signal, idempotencyKey }, b => isCandidateClaim(b.claim));
   } catch (error) {
     if (error instanceof ProjectApiError && error.status === 409 && error.code === "IDEMPOTENCY_CONFLICT") throw new ProjectApiError(409, "创建请求标识与当前可能答案内容不一致。", error.code);
+    throw error;
+  }
+}
+
+// ===== S32 M2-C Evidence Selection =====
+export type EvidenceRole = "SUPPORTING" | "CONTRADICTORY" | "CONTEXTUAL";
+export type EvidenceTargetType = "SOURCE" | "SOURCE_ASSET" | "NOTE_REVISION";
+export type EvidenceSourceType =
+  | "PUBLICATION" | "WEB_PAGE" | "ARCHIVAL_RECORD" | "DATABASE_RECORD"
+  | "MUSEUM_OBJECT" | "EXHIBITION_LABEL" | "EMAIL"
+  | "FIELD_OBSERVATION" | "INTERVIEW" | "OTHER";
+export type EvidenceAssetType =
+  | "DOCUMENT" | "IMAGE" | "AUDIO" | "VIDEO"
+  | "WEB_SNAPSHOT" | "TEXT" | "DATA" | "OTHER";
+export type EvidenceCandidate =
+  | {
+      targetType: "SOURCE";
+      targetId: string;
+      materialBindingId: string;
+      materialTitle: string;
+      sourceType: EvidenceSourceType;
+      sourceLifecycleState: "ACTIVE" | "ARCHIVED";
+      observedAt: string;
+    }
+  | {
+      targetType: "SOURCE_ASSET";
+      targetId: string;
+      materialBindingId: string;
+      materialTitle: string;
+      sourceId: string;
+      assetType: EvidenceAssetType;
+      assetRole: "ORIGINAL" | "DERIVED";
+      storageMode: "LOCAL" | "REMOTE" | "HYBRID";
+      createdAt: string;
+    }
+  | {
+      targetType: "NOTE_REVISION";
+      targetId: string;
+      materialBindingId: string;
+      materialTitle: string;
+      noteId: string;
+      revisionNo: number;
+      contentFormat: "MARKDOWN" | "PLAIN_TEXT";
+      createdAt: string;
+    };
+export interface EvidenceClaimContext {
+  id: string;
+  statement: string;
+  lifecycleState: "ACTIVE" | "ARCHIVED";
+}
+export interface EvidenceManifestDraftPreview {
+  schemaVersion: 1;
+  purpose: "CLAIM_ASSESSMENT";
+  manifestSha256: string;
+  items: Array<{
+    ordinal: number;
+    role: EvidenceRole;
+    targetType: EvidenceTargetType;
+    targetId: string;
+    locatorType: null;
+    locator: null;
+    excerpt: null;
+    note: string | null;
+  }>;
+}
+export interface EvidencePreviewResponse {
+  claim: { id: string; statement: string };
+  draft: EvidenceManifestDraftPreview;
+  persisted: false;
+}
+const evidenceRoles: ReadonlySet<string> = new Set(["SUPPORTING", "CONTRADICTORY", "CONTEXTUAL"]);
+const evidenceTargetTypes: ReadonlySet<string> = new Set(["SOURCE", "SOURCE_ASSET", "NOTE_REVISION"]);
+const evidenceSourceTypes: ReadonlySet<string> = new Set(["PUBLICATION", "WEB_PAGE", "ARCHIVAL_RECORD", "DATABASE_RECORD", "MUSEUM_OBJECT", "EXHIBITION_LABEL", "EMAIL", "FIELD_OBSERVATION", "INTERVIEW", "OTHER"]);
+const evidenceAssetTypes: ReadonlySet<string> = new Set(["DOCUMENT", "IMAGE", "AUDIO", "VIDEO", "WEB_SNAPSHOT", "TEXT", "DATA", "OTHER"]);
+const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+function validTimestamp(value: unknown): boolean {
+  return typeof value === "string" && Number.isFinite(Date.parse(value));
+}
+function isEvidenceClaimContext(value: unknown): value is EvidenceClaimContext {
+  return isPlainObject(value) && typeof value.id === "string" && uuidRe.test(value.id)
+    && typeof value.statement === "string" && value.statement.length > 0
+    && ["ACTIVE", "ARCHIVED"].includes(value.lifecycleState as string);
+}
+function isEvidenceCandidate(value: unknown): value is EvidenceCandidate {
+  if (!isPlainObject(value)) return false;
+  if (typeof value.targetId !== "string" || !uuidRe.test(value.targetId)) return false;
+  if (typeof value.materialBindingId !== "string" || !uuidRe.test(value.materialBindingId)) return false;
+  if (typeof value.materialTitle !== "string") return false;
+  if (value.targetType === "SOURCE") {
+    return evidenceSourceTypes.has(value.sourceType as string)
+      && ["ACTIVE", "ARCHIVED"].includes(value.sourceLifecycleState as string)
+      && validTimestamp(value.observedAt);
+  }
+  if (value.targetType === "SOURCE_ASSET") {
+    return typeof value.sourceId === "string" && uuidRe.test(value.sourceId)
+      && evidenceAssetTypes.has(value.assetType as string)
+      && ["ORIGINAL", "DERIVED"].includes(value.assetRole as string)
+      && ["LOCAL", "REMOTE", "HYBRID"].includes(value.storageMode as string)
+      && validTimestamp(value.createdAt);
+  }
+  if (value.targetType === "NOTE_REVISION") {
+    return typeof value.noteId === "string" && uuidRe.test(value.noteId)
+      && typeof value.revisionNo === "number" && Number.isInteger(value.revisionNo) && value.revisionNo > 0
+      && ["MARKDOWN", "PLAIN_TEXT"].includes(value.contentFormat as string)
+      && validTimestamp(value.createdAt);
+  }
+  return false;
+}
+function isEvidenceDraft(value: unknown): value is EvidenceManifestDraftPreview {
+  if (!isPlainObject(value)) return false;
+  if (value.schemaVersion !== 1 || value.purpose !== "CLAIM_ASSESSMENT") return false;
+  if (typeof value.manifestSha256 !== "string" || !/^[0-9a-f]{64}$/.test(value.manifestSha256)) return false;
+  if (!Array.isArray(value.items) || value.items.length === 0) return false;
+  const seen = new Set<string>();
+  for (let index = 0; index < value.items.length; index += 1) {
+    const item = value.items[index];
+    if (!isPlainObject(item)) return false;
+    if (item.ordinal !== index + 1) return false;
+    if (!evidenceRoles.has(item.role as string)) return false;
+    if (!evidenceTargetTypes.has(item.targetType as string)) return false;
+    if (typeof item.targetId !== "string" || !uuidRe.test(item.targetId)) return false;
+    if (item.locatorType !== null || item.locator !== null || item.excerpt !== null) return false;
+    if (item.note !== null && typeof item.note !== "string") return false;
+    const pair = `${item.targetType}:${item.targetId}`;
+    if (seen.has(pair)) return false;
+    seen.add(pair);
+  }
+  return true;
+}
+export const listEvidenceCandidates = (token: string, projectId: string, issueId: string, claimId: string, signal?: AbortSignal) =>
+  request<{ claim: EvidenceClaimContext; candidates: EvidenceCandidate[] }>(
+    token,
+    `/projects/${encodeURIComponent(projectId)}/issues/${encodeURIComponent(issueId)}/claims/${encodeURIComponent(claimId)}/evidence-candidates`,
+    { signal },
+    b => isPlainObject(b) && isEvidenceClaimContext(b.claim) && Array.isArray(b.candidates) && b.candidates.every(isEvidenceCandidate),
+  );
+export async function previewEvidenceManifest(
+  token: string,
+  projectId: string,
+  issueId: string,
+  claimId: string,
+  items: Array<{ role: EvidenceRole; targetType: EvidenceTargetType; targetId: string; note: string | null }>,
+  signal?: AbortSignal,
+): Promise<EvidencePreviewResponse> {
+  try {
+    return await request<EvidencePreviewResponse>(
+      token,
+      `/projects/${encodeURIComponent(projectId)}/issues/${encodeURIComponent(issueId)}/claims/${encodeURIComponent(claimId)}/evidence-manifest-preview`,
+      { method: "POST", input: { items }, signal },
+      b => isPlainObject(b) && Object.keys(b).length === 3 && isPlainObject(b.claim) && typeof b.claim.id === "string" && uuidRe.test(b.claim.id) && typeof b.claim.statement === "string"
+        && b.persisted === false && isEvidenceDraft(b.draft),
+    );
+  } catch (error) {
+    if (error instanceof ProjectApiError) {
+      if (error.status === 400 && error.code === "EVIDENCE_DRAFT_INVALID") throw new ProjectApiError(400, "证据草稿输入不正确。", error.code);
+      if (error.status === 404 && error.code === "PROJECT_ISSUE_OR_CLAIM_NOT_FOUND") throw new ProjectApiError(404, "研究问题或可能答案不存在。", error.code);
+      if (error.status === 404 && error.code === "EVIDENCE_TARGET_NOT_AVAILABLE") throw new ProjectApiError(404, "所选证据不可用于当前研究项目。", error.code);
+    }
     throw error;
   }
 }
