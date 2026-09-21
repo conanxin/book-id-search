@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { Pool } from "pg";
 import { createPostgresEvidenceSelectionStore } from "./evidence-selection-store.js";
 import {
@@ -140,7 +140,153 @@ d("postgres evidence selection integration", () => {
         (SELECT count(*) FROM ops.idempotency_keys) AS idempotency`);
     return rows[0];
   }
+  const extraEditions: { editionId: string; bindingId: string; sourceId?: string; noteBindingId?: string }[] = [];
 
+  afterEach(async () => {
+    for (const e of extraEditions.splice(0)) {
+      await pool.query(`DELETE FROM core.project_bindings WHERE id=$1`, [e.bindingId]).catch(() => {});
+      if (e.noteBindingId) await pool.query(`DELETE FROM core.project_bindings WHERE id=$1`, [e.noteBindingId]).catch(() => {});
+      if (e.sourceId) {
+        await pool.query(`DELETE FROM core.source_assets WHERE source_id=$1`, [e.sourceId]).catch(() => {});
+        await pool.query(`DELETE FROM core.sources WHERE id=$1`, [e.sourceId]).catch(() => {});
+      }
+      await pool.query(`DELETE FROM core.project_bindings WHERE target_type='EDITION' AND target_id=$1`, [e.editionId]).catch(() => {});
+      await pool.query(`DELETE FROM core.editions WHERE id=$1`, [e.editionId]).catch(() => {});
+    }
+  });
+
+  function uniqueId(prefix: string): string {
+    // Deterministic UUID v4 with a variant `8` 4th-group so PG accepts it as a
+    // canonical uuid column value. 1st group = 8 chars (prefix padded to 8),
+    // 5th group = 12 hex chars (counter zero-padded).
+    counter = (counter + 1) & 0xffff;
+    const tail = counter.toString(16).padStart(12, "0");
+    const head = (prefix + "00000000").slice(0, 8);
+    return `${head}-0000-4000-8000-${tail}`;
+  }
+
+  let counter = 0;
+
+  async function injectExtraEdition(): Promise<{ editionId: string; bindingId: string }> {
+    const editionId = uniqueId("eeee");
+    const bindingId = uniqueId("bbbb");
+    await pool.query(
+      `INSERT INTO core.editions (id, work_id, edition_type, publication_date_precision, lifecycle_state) VALUES ($1, $2, 'PRINT', 'YEAR', 'ACTIVE')`,
+      [editionId, WORK],
+    );
+    await pool.query(
+      `INSERT INTO core.project_bindings (id, project_id, target_type, target_id, metadata) VALUES ($1, $2, 'EDITION', $3, '{}')`,
+      [bindingId, P1, editionId],
+    );
+    extraEditions.push({ editionId, bindingId });
+    return { editionId, bindingId };
+  }
+
+  // ===== Finding 1A: preview rejects source whose edition does not match the bound edition =====
+  it("real PG: preview rejects source whose edition_id does not match the project edition binding", async () => {
+    const { editionId, bindingId } = await injectExtraEdition();
+    const foreignSourceId = uniqueId("cccc");
+    // Source belongs to a different edition (ED1), but binding declares it as the sourceId.
+    await pool.query(
+      `INSERT INTO core.sources (id, source_type, edition_id, lifecycle_state, observed_at) VALUES ($1, 'DATABASE_RECORD', $2, 'ACTIVE', now())`,
+      [foreignSourceId, ED1],
+    );
+    await pool.query(
+      `UPDATE core.project_bindings SET metadata = $1::jsonb WHERE id = $2`,
+      [JSON.stringify({ sourceId: foreignSourceId }), bindingId],
+    );
+    extraEditions[extraEditions.length - 1].sourceId = foreignSourceId;
+    const items = normalizeEvidencePreviewInput({ items: [{ role: "SUPPORTING", targetType: "SOURCE", targetId: foreignSourceId, note: null }] });
+    await expect(store.authorizePreview({ projectId: P1, issueId: ISSUE1, claimId: CLAIM1, items }))
+      .rejects.toBeInstanceOf(EvidenceSelectionIntegrityError);
+  });
+
+  // ===== Finding 1B: preview rejects malformed note subject metadata =====
+  it("real PG: preview rejects note binding whose subjectType is not EDITION", async () => {
+    const { editionId, bindingId } = await injectExtraEdition();
+    const noteId = uniqueId("9999");
+    const revisionId = uniqueId("8888");
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `INSERT INTO core.notes (id, note_type, lifecycle_state, next_revision_no) VALUES ($1, 'PROJECT_ITEM_NOTE', 'ACTIVE', 2)`,
+        [noteId],
+      );
+      await client.query(
+        `INSERT INTO core.note_revisions (id, note_id, revision_no, content_format, content, content_sha256) VALUES ($1, $2, 1, 'MARKDOWN', 'extra', $3)`,
+        [revisionId, noteId, "7".repeat(64)],
+      );
+      await client.query(
+        `UPDATE core.notes SET current_revision_id = $1 WHERE id = $2`,
+        [revisionId, noteId],
+      );
+      await client.query("COMMIT");
+    } finally { client.release(); }
+    const noteBindingId = uniqueId("dddd");
+    await pool.query(
+      `INSERT INTO core.project_bindings (id, project_id, target_type, target_id, binding_role, metadata) VALUES ($1, $2, 'NOTE', $3, 'ANNOTATION', $4::jsonb)`,
+      [noteBindingId, P1, noteId, JSON.stringify({ subjectBindingId: bindingId, subjectType: "WORK", subjectId: editionId })],
+    );
+    extraEditions[extraEditions.length - 1].noteBindingId = noteBindingId;
+    const items = normalizeEvidencePreviewInput({ items: [{ role: "SUPPORTING", targetType: "NOTE_REVISION", targetId: revisionId, note: null }] });
+    await expect(store.authorizePreview({ projectId: P1, issueId: ISSUE1, claimId: CLAIM1, items }))
+      .rejects.toBeInstanceOf(EvidenceSelectionIntegrityError);
+  });
+
+  it("real PG: preview rejects note binding whose subjectId is not the bound edition", async () => {
+    const { editionId, bindingId } = await injectExtraEdition();
+    const noteId = uniqueId("9999");
+    const revisionId = uniqueId("8888");
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `INSERT INTO core.notes (id, note_type, lifecycle_state, next_revision_no) VALUES ($1, 'PROJECT_ITEM_NOTE', 'ACTIVE', 2)`,
+        [noteId],
+      );
+      await client.query(
+        `INSERT INTO core.note_revisions (id, note_id, revision_no, content_format, content, content_sha256) VALUES ($1, $2, 1, 'MARKDOWN', 'extra', $3)`,
+        [revisionId, noteId, "9".repeat(64)],
+      );
+      await client.query(
+        `UPDATE core.notes SET current_revision_id = $1 WHERE id = $2`,
+        [revisionId, noteId],
+      );
+      await client.query("COMMIT");
+    } finally { client.release(); }
+    const noteBindingId = uniqueId("dddd");
+    await pool.query(
+      `INSERT INTO core.project_bindings (id, project_id, target_type, target_id, binding_role, metadata) VALUES ($1, $2, 'NOTE', $3, 'ANNOTATION', $4::jsonb)`,
+      [noteBindingId, P1, noteId, JSON.stringify({ subjectBindingId: bindingId, subjectType: "EDITION", subjectId: ED1 /* wrong edition */ })],
+    );
+    extraEditions[extraEditions.length - 1].noteBindingId = noteBindingId;
+    const items = normalizeEvidencePreviewInput({ items: [{ role: "SUPPORTING", targetType: "NOTE_REVISION", targetId: revisionId, note: null }] });
+    await expect(store.authorizePreview({ projectId: P1, issueId: ISSUE1, claimId: CLAIM1, items }))
+      .rejects.toBeInstanceOf(EvidenceSelectionIntegrityError);
+  });
+
+  // ===== Finding 2: malformed declared sourceId must surface as integrity =====
+  it("real PG: declared sourceId malformed string is integrity, not store-unavailable", async () => {
+    const { bindingId } = await injectExtraEdition();
+    await pool.query(
+      `UPDATE core.project_bindings SET metadata = $1::jsonb WHERE id = $2`,
+      [JSON.stringify({ sourceId: "not-a-uuid" }), bindingId],
+    );
+    await expect(store.candidates({ projectId: P1, issueId: ISSUE1, claimId: CLAIM1 }))
+      .rejects.toBeInstanceOf(EvidenceSelectionIntegrityError);
+  });
+
+  it("real PG: malformed declared sourceId is integrity in preview path too", async () => {
+    const { bindingId } = await injectExtraEdition();
+    await pool.query(
+      `UPDATE core.project_bindings SET metadata = $1::jsonb WHERE id = $2`,
+      [JSON.stringify({ sourceId: "not-a-uuid" }), bindingId],
+    );
+    const items = normalizeEvidencePreviewInput({ items: [{ role: "SUPPORTING", targetType: "SOURCE", targetId: SRC1, note: null }] });
+    await expect(store.authorizePreview({ projectId: P1, issueId: ISSUE1, claimId: CLAIM1, items }))
+      .rejects.toBeInstanceOf(EvidenceSelectionIntegrityError);
+  });
   it("lists SOURCE, SOURCE_ASSET and current NOTE_REVISION candidates in canonical order", async () => {
     const result = await store.candidates({ projectId: P1, issueId: ISSUE1, claimId: CLAIM1 });
     expect(result).not.toBeNull();

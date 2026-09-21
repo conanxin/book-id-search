@@ -45,10 +45,21 @@ export function EvidenceEditor(props: { token: string; projectId: string; issueI
   const [draft, setDraft] = useState<LocalEvidenceItem[]>([]);
   const [preview, setPreview] = useState<PreviewState>({ state: "idle" });
   const active = useRef<AbortController | null>(null);
-  useEffect(() => () => active.current?.abort(), []);
+  // In-flight preview request + draft generation counter. A new draft mutation
+  // bumps the generation and aborts any in-flight preview request so a stale
+  // response never overwrites a more recent idle/loading state.
+  const previewRequest = useRef<AbortController | null>(null);
+  const draftVersion = useRef(0);
+  useEffect(() => () => {
+    active.current?.abort();
+    previewRequest.current?.abort();
+  }, []);
 
   function mutateDraft(update: (previous: LocalEvidenceItem[]) => LocalEvidenceItem[]) {
     setDraft(previous => update(previous));
+    draftVersion.current += 1;
+    previewRequest.current?.abort();
+    previewRequest.current = null;
     setPreview({ state: "idle" });
   }
 
@@ -71,18 +82,29 @@ export function EvidenceEditor(props: { token: string; projectId: string; issueI
 
   async function runPreview() {
     if (!draft.length) return;
+    previewRequest.current?.abort();
+    const controller = new AbortController();
+    previewRequest.current = controller;
+    const version = draftVersion.current;
     setPreview({ state: "loading" });
     try {
       const response = await previewEvidenceManifest(
         token, projectId, issueId, claim.id,
         draft.map(item => ({ role: item.role, targetType: item.candidate.targetType, targetId: item.candidate.targetId, note: item.note })),
+        controller.signal,
       );
+      if (controller.signal.aborted || version !== draftVersion.current) return;
       setPreview({ state: "ready", response });
     } catch (error) {
+      if (controller.signal.aborted || version !== draftVersion.current) return;
       if (error instanceof ProjectApiError) {
         setPreview({ state: "unavailable", message: error.message });
       } else {
         setPreview({ state: "unavailable", message: "证据预览暂不可用。" });
+      }
+    } finally {
+      if (previewRequest.current === controller) {
+        previewRequest.current = null;
       }
     }
   }

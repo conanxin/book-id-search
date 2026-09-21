@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event";
 import { EvidenceEditor } from "./EvidenceEditor";
 import { listEvidenceCandidates, previewEvidenceManifest, ProjectApiError } from "./api";
@@ -166,7 +166,7 @@ describe("preview and invalidation", () => {
     expect(screen.getByText(/^a{64}$/)).toBeTruthy();
     expect(vi.mocked(previewEvidenceManifest)).toHaveBeenCalledWith("t", p, i, claim.id, [
       { role: "SUPPORTING", targetType: "SOURCE", targetId: source.targetId, note: "" },
-    ]);
+    ], expect.anything());
     expect(screen.queryByText(/manifestId/i)).toBeNull();
     expect(document.body.textContent).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}.*manifest/i);
   });
@@ -246,3 +246,56 @@ describe("no persistence", () => {
   });
 });
 
+
+describe("in-flight preview stale response guard (Finding 3)", () => {
+  it("does not restore stale preview hash after draft changes while request is in flight", async () => {
+    show();
+    await userEvent.click(screen.getByRole("button", { name: "构建证据集" }));
+    await screen.findAllByText(/北京古道志/);
+    await userEvent.click(within(screen.getByTestId(`candidate-${source.targetId}`)).getByRole("button", { name: "作为支持证据" }));
+
+    let resolveOld!: (value: typeof previewResponse) => void;
+    const oldHash = "1".repeat(64);
+    const oldResponse = { ...previewResponse, draft: { ...previewResponse.draft, manifestSha256: oldHash } };
+    vi.mocked(previewEvidenceManifest).mockReturnValueOnce(new Promise(resolve => { resolveOld = resolve; }));
+
+    await userEvent.click(screen.getByRole("button", { name: "预览 EvidenceManifest" }));
+    expect(await screen.findByText("正在生成预览…")).toBeTruthy();
+
+    // Mutate draft while old request is still pending.
+    await userEvent.type(screen.getByLabelText("证据说明"), "stale guard");
+
+    // Now resolve the OLD request — its hash must NOT be displayed and 尚未提交 must not appear.
+    resolveOld!(oldResponse);
+    // flush microtasks + React effects
+    await waitFor(() => {
+      expect(screen.queryByText(new RegExp(`^${oldHash}$`))).toBeNull();
+      expect(screen.queryByText("尚未提交。")).toBeNull();
+    });
+  });
+
+  it("does not surface stale preview error after draft changes while request is in flight", async () => {
+    show();
+    await userEvent.click(screen.getByRole("button", { name: "构建证据集" }));
+    await screen.findAllByText(/北京古道志/);
+    await userEvent.click(within(screen.getByTestId(`candidate-${source.targetId}`)).getByRole("button", { name: "作为支持证据" }));
+
+    let rejectOld!: (reason: unknown) => void;
+    vi.mocked(previewEvidenceManifest).mockReturnValueOnce(new Promise((_, reject) => { rejectOld = reject; }));
+
+    await userEvent.click(screen.getByRole("button", { name: "预览 EvidenceManifest" }));
+    expect(await screen.findByText("正在生成预览…")).toBeTruthy();
+
+    // Mutate draft while old request is still pending.
+    await userEvent.type(screen.getByLabelText("证据说明"), "stale error guard");
+
+    // Reject the OLD request — its error message must NOT be displayed.
+    rejectOld!(new ProjectApiError(503, "stale secret"));
+    await waitFor(() => {
+      expect(screen.queryByText("stale secret")).toBeNull();
+      // Match only the preview-error alert role/region, not free text inside textareas.
+      expect(screen.queryByText(/证据预览暂不可用|网络异常，请稍后重试/)).toBeNull();
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+  });
+});

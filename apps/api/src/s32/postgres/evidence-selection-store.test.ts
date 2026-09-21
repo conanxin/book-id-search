@@ -2,6 +2,7 @@ import { it, expect, vi } from 'vitest';
 import type { Pool } from 'pg';
 import { createPostgresEvidenceSelectionStore } from './evidence-selection-store.js';
 import { EvidenceSelectionIntegrityError, EvidenceSelectionStoreUnavailableError, EvidenceTargetNotAvailableError } from '../application/evidence-selection.js';
+import { normalizeEvidencePreviewInput } from '../domain/evidence-selection.js';
 
 const p = '11111111-1111-4111-8111-111111111111';
 const i = '22222222-2222-4222-8222-222222222222';
@@ -195,21 +196,39 @@ it('candidate order is material binding ASC then SOURCE, assets, current note', 
   ]);
 });
 
-it('authorizePreview accepts current and older revisions of the authorized note', async () => {
-  const s = setup({ authorized: [{ ordinal: 1, ok: true }] });
-  await expect(s.store.authorizePreview({
-    projectId: p, issueId: i, claimId: c,
-    items: [{ role: 'SUPPORTING', targetType: 'NOTE_REVISION', targetId: nr, note: null }],
-  })).resolves.toBeTruthy();
-  expect(s.query.mock.calls.some(x => x[0].includes('WITH requested'))).toBe(true);
+it('authorizePreview accepts current revision and rejects orphan old revision (fail closed)', async () => {
+  // M2-C PR17 fix: authorizePreview no longer uses the WITH requested ordinal SQL.
+  // It authorizes against the validated material graph (Finding 1). The graph
+  // holds the current revision directly. Old revisions are accepted only when
+  // they belong to a note that is itself in the graph; orphans are rejected.
+  // Graph-miss cases surface as EvidenceTargetNotAvailableError to preserve
+  // cross-project 404 equivalence (existing acceptance).
+  const s = setup({
+    materials: [
+      materialRow({ noteBindingMetadata: { subjectBindingId: eb, subjectType: 'EDITION', subjectId: ed } }),
+    ],
+  });
+  // current revision is the default materialRow.note.revisionId (== nr) → must succeed.
+  const currentItems = normalizeEvidencePreviewInput({ items: [{ role: 'SUPPORTING', targetType: 'NOTE_REVISION', targetId: nr, note: null }] });
+  await expect(s.store.authorizePreview({ projectId: p, issueId: i, claimId: c, items: currentItems }))
+    .resolves.toBeTruthy();
+  // an OLD revision that does NOT belong to any graph note → fail-closed (target not available).
+  const orphanItems = normalizeEvidencePreviewInput({ items: [{ role: 'SUPPORTING', targetType: 'NOTE_REVISION', targetId: '00000000-0000-4000-8000-000000000001', note: null }] });
+  await expect(s.store.authorizePreview({ projectId: p, issueId: i, claimId: c, items: orphanItems }))
+    .rejects.toBeInstanceOf(EvidenceTargetNotAvailableError);
 });
 
-it('missing authorized ordinal throws EvidenceTargetNotAvailableError', async () => {
-  const s = setup({ authorized: [] });
-  await expect(s.store.authorizePreview({
-    projectId: p, issueId: i, claimId: c,
-    items: [{ role: 'SUPPORTING', targetType: 'SOURCE', targetId: src, note: null }],
-  })).rejects.toBeInstanceOf(EvidenceTargetNotAvailableError);
+it('preview authorization rejects targets not present in the validated material graph', async () => {
+  // M2-C PR17 fix: when the graph does not contain the requested target,
+  // authorizePreview fails closed with EvidenceTargetNotAvailableError so the
+  // route layer keeps the canonical "target not available" response for
+  // cross-project / nonexistent / archived cases (existing acceptance). The
+  // store now enforces the same canonical rules as candidates() — the
+  // difference is only the error class (not available vs canonical corruption).
+  const s = setup({ materials: [] });
+  const items = normalizeEvidencePreviewInput({ items: [{ role: 'SUPPORTING', targetType: 'SOURCE', targetId: 'ffffffff-ffff-4fff-8fff-ffffffffffff', note: null }] });
+  await expect(s.store.authorizePreview({ projectId: p, issueId: i, claimId: c, items }))
+    .rejects.toBeInstanceOf(EvidenceTargetNotAvailableError);
 });
 
 it('preview authorization validates scope first: null scope returns null before target query', async () => {
@@ -224,4 +243,159 @@ it('preview authorization validates scope first: null scope returns null before 
 it('connection failures become typed unavailable', async () => {
   await expect(setup({ fail: 'FROM core.projects p', code: 'ECONNREFUSED' }).store.candidates({ projectId: p, issueId: i, claimId: c }))
     .rejects.toBeInstanceOf(EvidenceSelectionStoreUnavailableError);
+});
+
+// ===== Finding 1: preview authorization must use the same canonical material graph =====
+
+it('preview rejects source whose edition does not match the project edition binding', async () => {
+  const s = setup({
+    materials: [materialRow({ sourceEdition: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' })],
+    authorized: [{ ordinal: 1, ok: true }],
+  });
+  await expect(s.store.authorizePreview({
+    projectId: p, issueId: i, claimId: c,
+    items: [{ role: 'SUPPORTING', targetType: 'SOURCE', targetId: src, note: null }],
+  })).rejects.toBeInstanceOf(EvidenceSelectionIntegrityError);
+});
+
+it('preview rejects source asset whose source edition does not match the project edition binding', async () => {
+  const s = setup({
+    materials: [materialRow({ assetId: sa, sourceEdition: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' })],
+    authorized: [{ ordinal: 1, ok: true }],
+  });
+  await expect(s.store.authorizePreview({
+    projectId: p, issueId: i, claimId: c,
+    items: [{ role: 'SUPPORTING', targetType: 'SOURCE_ASSET', targetId: sa, note: null }],
+  })).rejects.toBeInstanceOf(EvidenceSelectionIntegrityError);
+});
+
+it('preview rejects malformed note subject metadata (subjectType not EDITION)', async () => {
+  const s = setup({
+    materials: [materialRow({ noteBindingMetadata: { subjectBindingId: eb, subjectType: 'WORK', subjectId: ed } })],
+    authorized: [{ ordinal: 1, ok: true }],
+  });
+  await expect(s.store.authorizePreview({
+    projectId: p, issueId: i, claimId: c,
+    items: [{ role: 'SUPPORTING', targetType: 'NOTE_REVISION', targetId: nr, note: null }],
+  })).rejects.toBeInstanceOf(EvidenceSelectionIntegrityError);
+});
+
+it('preview rejects malformed note subject metadata (subjectId not exact bound edition)', async () => {
+  const s = setup({
+    materials: [materialRow({ noteBindingMetadata: { subjectBindingId: eb, subjectType: 'EDITION', subjectId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' } })],
+    authorized: [{ ordinal: 1, ok: true }],
+  });
+  await expect(s.store.authorizePreview({
+    projectId: p, issueId: i, claimId: c,
+    items: [{ role: 'SUPPORTING', targetType: 'NOTE_REVISION', targetId: nr, note: null }],
+  })).rejects.toBeInstanceOf(EvidenceSelectionIntegrityError);
+});
+
+// ===== Finding 2: scope canonicality + error classification =====
+
+it('issue binding role non-null (e.g. OWNER) fails closed', async () => {
+  const s = setup({ scope: [{ ...scopeRow(), issue_binding_role: 'OWNER' }] });
+  await expect(s.store.candidates({ projectId: p, issueId: i, claimId: c })).rejects.toBeInstanceOf(EvidenceSelectionIntegrityError);
+  await expect(s.store.authorizePreview({
+    projectId: p, issueId: i, claimId: c,
+    items: [{ role: 'SUPPORTING', targetType: 'SOURCE', targetId: src, note: null }],
+  })).rejects.toBeInstanceOf(EvidenceSelectionIntegrityError);
+});
+
+it('issue binding metadata non-object (e.g. array) fails closed', async () => {
+  const s = setup({ scope: [{ ...scopeRow(), issue_binding_metadata: [] }] });
+  await expect(s.store.candidates({ projectId: p, issueId: i, claimId: c })).rejects.toBeInstanceOf(EvidenceSelectionIntegrityError);
+});
+
+it('claim statement reduces to empty after canonical normalization (CRLF-only input) fails closed', async () => {
+  // CRLF-only / whitespace-only statements normalize to empty string and must fail closed.
+  const s = setup({ scope: [{ ...scopeRow(), claim_statement: '\r\n \t \r\n' }] });
+  await expect(s.store.candidates({ projectId: p, issueId: i, claimId: c })).rejects.toBeInstanceOf(EvidenceSelectionIntegrityError);
+});
+
+it('claim statement reduces to empty after canonical normalization (whitespace-only input) fails closed', async () => {
+  const s = setup({ scope: [{ ...scopeRow(), claim_statement: '   \t  \n  ' }] });
+  await expect(s.store.candidates({ projectId: p, issueId: i, claimId: c })).rejects.toBeInstanceOf(EvidenceSelectionIntegrityError);
+});
+
+it('claim subject pair malformed (subject_type NULL but subject_id set) fails closed', async () => {
+  const s = setup({ scope: [{ ...scopeRow(), subject_type: null, subject_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' }] });
+  await expect(s.store.candidates({ projectId: p, issueId: i, claimId: c })).rejects.toBeInstanceOf(EvidenceSelectionIntegrityError);
+});
+
+it('claim subject_type outside allowlist fails closed', async () => {
+  const s = setup({ scope: [{ ...scopeRow(), subject_type: 'RESEARCH_ISSUE', subject_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' }] });
+  await expect(s.store.candidates({ projectId: p, issueId: i, claimId: c })).rejects.toBeInstanceOf(EvidenceSelectionIntegrityError);
+});
+
+it('claim_type non-null non-string fails closed', async () => {
+  const s = setup({ scope: [{ ...scopeRow(), claim_type: 42 }] });
+  await expect(s.store.candidates({ projectId: p, issueId: i, claimId: c })).rejects.toBeInstanceOf(EvidenceSelectionIntegrityError);
+});
+
+it('claim subject_type EDITION with valid uuid passes (historical/global compatibility)', async () => {
+  const s = setup({ scope: [{ ...scopeRow(), subject_type: 'EDITION', subject_id: ed }] });
+  const result = await s.store.candidates({ projectId: p, issueId: i, claimId: c });
+  expect(result?.claim.id).toBe(c);
+});
+
+it('claim claim_type non-null string passes (historical/global compatibility)', async () => {
+  const s = setup({ scope: [{ ...scopeRow(), claim_type: 'OBSERVATION' }] });
+  const result = await s.store.candidates({ projectId: p, issueId: i, claimId: c });
+  expect(result?.claim.id).toBe(c);
+});
+
+// Malformed declared sourceId: the SQL cast `(metadata->>'sourceId')::uuid` would throw 22P02
+// and current classify() catches it as StoreUnavailable. After fix it must surface as IntegrityError.
+
+it('declared sourceId malformed string surfaces as integrity (candidates path)', async () => {
+  // We simulate by setting binding_metadata to {sourceId:'not-a-uuid'}; current production code's
+  // readDeclaredSourceId() never runs because the SQL cast fires first.
+  const s = setup({ materials: [materialRow({ bindingMetadata: { sourceId: 'not-a-uuid' } })] });
+  await expect(s.store.candidates({ projectId: p, issueId: i, claimId: c })).rejects.toBeInstanceOf(EvidenceSelectionIntegrityError);
+});
+
+// Error classification: connection-stage failures (from pool.connect) must be typed unavailable;
+// mid-transaction PostgreSQL errors that product did not wrap must NOT be silently re-wrapped
+// as StoreUnavailable.
+
+it('connection-stage failure (pool.connect rejects ECONNREFUSED) becomes typed unavailable', async () => {
+  // Distinct harness: the connect call itself rejects. Setup with a separate connectionRejectingPool.
+  const query = vi.fn();
+  const release = vi.fn();
+  const pool = { connect: async () => { throw Object.assign(new Error('connect down'), { code: 'ECONNREFUSED' }); } } as unknown as Pool;
+  const store = createPostgresEvidenceSelectionStore(pool);
+  await expect(store.candidates({ projectId: p, issueId: i, claimId: c })).rejects.toBeInstanceOf(EvidenceSelectionStoreUnavailableError);
+  await expect(store.authorizePreview({
+    projectId: p, issueId: i, claimId: c,
+    items: [{ role: 'SUPPORTING', targetType: 'SOURCE', targetId: src, note: null }],
+  })).rejects.toBeInstanceOf(EvidenceSelectionStoreUnavailableError);
+});
+
+it('mid-transaction 22P02 not rewrapped to StoreUnavailable when no product validator runs', async () => {
+  // The candidate query SELECT itself fires after begin and gets 22P02 on the cast.
+  // In the current implementation, classify() catches it and wraps to StoreUnavailable.
+  // After fix, raw cast is removed, so this path no longer occurs. The test should still
+  // assert: when the cast IS the only validator, the error type must NOT be StoreUnavailable
+  // — but more importantly, this test pins behavior so future regression is impossible.
+  // We assert: throwing 22P02 inside the SELECT mid-transaction must not become StoreUnavailable.
+  const query = vi.fn(async (sql: string) => {
+    if (sql.includes('BEGIN')) return { rows: [] };
+    if (sql.includes('ROLLBACK')) return { rows: [] };
+    if (sql.includes('FROM core.projects p')) {
+      throw Object.assign(new Error('invalid input syntax for type uuid'), { code: '22P02' });
+    }
+    return { rows: [] };
+  });
+  const release = vi.fn();
+  const pool = { connect: async () => ({ query, release }) } as unknown as Pool;
+  const store = createPostgresEvidenceSelectionStore(pool);
+  // We don't constrain the type (it could be the raw 22P02 error or rethrown as-is); the contract
+  // is that it is NOT wrapped to StoreUnavailable.
+  try {
+    await store.candidates({ projectId: p, issueId: i, claimId: c });
+    throw new Error('expected throw');
+  } catch (e) {
+    expect(e).not.toBeInstanceOf(EvidenceSelectionStoreUnavailableError);
+  }
 });
