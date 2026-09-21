@@ -95,6 +95,7 @@ export function AssessmentComposer({
   }
 
   const normalized = currentCommand();
+  const isSubmitting = state === "submitting";
   const canSubmit = !!normalized
     && writeAllowed
     && !integrityBlocked
@@ -322,10 +323,10 @@ export function AssessmentComposer({
         : <button
             type="button"
             className="research-primary"
-            disabled={!canSubmit || state === "submitting"}
+            disabled={!canSubmit || isSubmitting}
             onClick={() => void submit()}
           >
-            {state === "submitting" ? "正在提交…" : "提交评价"}
+            {isSubmitting ? "正在提交…" : "提交评价"}
           </button>}
   </section>;
 }
