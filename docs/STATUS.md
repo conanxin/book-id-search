@@ -1,5 +1,14 @@
 # BOOK-ID-SEARCH status
 
+## M2-C Evidence Selection — current checkpoint
+
+- task_id: `S32_M2C_EVIDENCE_SELECTION_EXECUTION_R1`; branch `feat/s32-m2c-evidence-selection`; baseline `8f5b4829b172ebae6a0f99201237da0e5666a33b`; spec `23f47490cb5fc9bd872409c98ca24c27f14c0af5`; plan `951ae496ea01bad05897bba65ac52d50ef1b009b`. See the PR for tested_commit and full evidence.
+- Implemented evidence manifest draft domain (canonical fixed-order JSON + server-authoritative SHA-256), selection application service, read-only REPEATABLE READ Postgres store (candidates + preview authorization in one query each), private routes on the shared Pool, strict Web client, and a page-local EvidenceEditor with explicit roles and preview invalidation.
+- Gates: targeted API 43 PASS; API S32 scoped 500 PASS/52 SKIP; targeted Web 65 PASS; Web research 247 PASS; Web broad 2842 PASS; API/Web builds PASS; schema static PASS; real PG16 8 PASS (disposable container removed); ZERO_WRITE_PG_GATE=PASS; frozen SQL unchanged; diff check clean. Full suite fresh: 4115 PASS / 15 known unrelated weread FAIL / 1 known weread unhandled rejection.
+- Real Firefox 146.0.1 acceptance: candidates PASS (no storage_key/remote_uri/note content leakage); explicit roles PASS (no default role); preview PASS (persisted=false, no Manifest ID); preview invalidation PASS (5 mutations); old immutable NoteRevision preview PASS; cross-Project rejected with foreign≡nonexistent identical 404s; independent degradation PASS; no browser persistence, reload discards draft; archived read PASS; DB zero-write PASS (six-table counts unchanged); mobile 390×844 no overflow PASS.
+- Whole-branch review PASS (self-review, no fresh reviewer): 11 inspections, 0 Critical/Important, 1 Minor deferred (declared-source-missing asymmetry between candidates vs preview authorization paths).
+- MERGED=NO; DEPLOYED=NO; PRODUCTION_CHANGED=NO; M2_D_STARTED=NO. Next: PR review.
+
 ## M2-B Candidate Claims — current checkpoint
 
 - task_id: `S32_M2B_CANDIDATE_CLAIMS_EXECUTION_R1`; branch `feat/s32-m2b-candidate-claims`; tested_commit `495c75f5cffdcbffa5d3b6bb5173f039d0f0da64`; baseline `beb3888600c6c9520624093da00619d74a15d68f`; spec `98e521c1962ef9c6152badef541ac3ab1fa1bd99`; plan `eb334d756d07b06a7cb6703d0cf56aa7922b9a8f`.
