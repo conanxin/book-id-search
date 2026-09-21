@@ -25,16 +25,20 @@
 - New M2-D writes: Project `ACTIVE`; Issue `OPEN|RESOLVED`; Claim `ACTIVE|ARCHIVED`.
 - Reads: Project `ACTIVE|ARCHIVED`; Issue `OPEN|RESOLVED|ARCHIVED`; Claim `ACTIVE|ARCHIVED`.
 - M2-D v1 create fields: `actor_id=NULL`, `numeric_score=NULL`, `score_kind=NULL`, required normalized reasoning 1..8000 Unicode code points, evidence Manifest required.
+- Reasoning normalization rejects U+0000, converts CRLF/remaining CR to LF, trims leading/trailing Unicode `White_Space`, and preserves internal whitespace/newlines.
 - Evidence draft/Manifest item count is exactly 1..100. M2-C preview and M2-D create use the same constant/normalizer.
 - Manifest v1: `schema_version=1`, `purpose=CLAIM_ASSESSMENT`, `metadata={}`, `locator_type/locator/excerpt=NULL`.
 - `manifest_sha256` is an integrity fingerprint only; no dedupe by hash.
 - New Assessment/Manifest/Item IDs use `crypto.randomUUID()`, generated once per command and reused across internal retries.
+- Every known failed new command must leave zero durable writes to Assessment/Manifest/ManifestItems and no new COMPLETED idempotency receipt.
+- Canonical read-back is mandatory before receipt completion; require `readBackHash == stored manifest_sha256 == expectedManifestSha256`.
 - Command store transaction isolation: SERIALIZABLE; retry only SQLSTATE `40001` and `40P01`; at most 3 total transaction attempts.
 - Read store isolation: `REPEATABLE READ, READ ONLY`.
 - Completed idempotency replay is not a new write and is evaluated before current write-lifecycle gates.
 - No partial Assessment redaction. If any frozen item cannot be authorized through the current Project, the entire Assessment is hidden.
 - Visibility must be proven before full hidden-object integrity inspection. Unsupported/malformed hidden `target_type` is omitted/safe-404, not an existence-leaking 500.
 - Visible records use strict Manifest v1 integrity validation and recompute the canonical SHA on every history/detail read.
+- Assessment history/detail data access must use bounded queries with no N+1 Manifest, item, Actor, or historical-NoteRevision lookups.
 - History ordering is `created_at DESC, id DESC`; keyset pagination default 20, max 50; no total/hidden count.
 - All private M2-D endpoints set `Cache-Control: no-store`.
 - Never optimistically append an Assessment in the browser; canonical history ordering comes from server GET.
