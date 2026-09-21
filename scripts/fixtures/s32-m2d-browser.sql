@@ -27,6 +27,23 @@ VALUES
   ('71111111-1111-4111-8111-111111111111', '61111111-1111-4111-8111-111111111111', 'DOCUMENT', 'ORIGINAL', 'LOCAL', 'm2d-primary', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'),
   ('72111111-1111-4111-8111-111111111111', '62111111-1111-4111-8111-111111111111', 'DOCUMENT', 'ORIGINAL', 'LOCAL', 'm2d-foreign', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
 
+-- 99 additional authorized assets + the ORIGINAL asset above = exactly 100
+-- Project-1 SourceAssets for the M2-D 100-item Manifest acceptance gate.
+INSERT INTO core.source_assets
+  (id, source_id, asset_type, asset_role, storage_mode, storage_key, sha256)
+SELECT
+  (
+    lpad(to_hex(gs), 8, '0') || '-2222-4222-8222-' ||
+    lpad(to_hex(gs), 12, '0')
+  )::uuid,
+  '61111111-1111-4111-8111-111111111111'::uuid,
+  'DOCUMENT',
+  'DERIVED',
+  'LOCAL',
+  'm2d-extra-' || gs::text,
+  repeat('f', 64)
+FROM generate_series(1, 99) AS gs;
+
 INSERT INTO core.project_bindings
   (id, project_id, target_type, target_id, binding_role, metadata)
 VALUES
