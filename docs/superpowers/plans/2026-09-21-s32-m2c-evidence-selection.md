@@ -882,6 +882,12 @@ export type EvidenceCandidate =
       createdAt: string;
     };
 
+export interface EvidenceClaimContext {
+  id: string;
+  statement: string;
+  lifecycleState: "ACTIVE" | "ARCHIVED";
+}
+
 export interface EvidenceManifestDraftPreview {
   schemaVersion: 1;
   purpose: "CLAIM_ASSESSMENT";
@@ -904,7 +910,7 @@ export function listEvidenceCandidates(
   issueId: string,
   claimId: string,
   signal?: AbortSignal,
-): Promise<{ claim: CandidateClaim; candidates: EvidenceCandidate[] }>;
+): Promise<{ claim: EvidenceClaimContext; candidates: EvidenceCandidate[] }>;
 
 export function previewEvidenceManifest(
   token: string,
