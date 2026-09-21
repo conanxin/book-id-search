@@ -10,16 +10,23 @@ vi.mock("pg", () => {
   return { Pool: MockPool };
 });
 vi.mock("../postgres/evidence-selection-store.js", () => ({ createPostgresEvidenceSelectionStore: vi.fn(() => ({ marker: "evidence-store" })) }));
+vi.mock("../postgres/assessment-command-store.js", () => ({ createPostgresAssessmentCommandStore: vi.fn(() => ({ marker: "assessment-command-store" })) }));
+vi.mock("../postgres/assessment-read-store.js", () => ({ createPostgresAssessmentReadStore: vi.fn(() => ({ marker: "assessment-read-store" })) }));
 vi.mock("../postgres/candidate-claim-store.js", () => ({ createPostgresCandidateClaimStore: vi.fn(() => ({ marker: "claim-store" })) }));
 vi.mock("../application/evidence-selection.js", async (load) => {
   const actual = await load<typeof import("../application/evidence-selection.js")>();
   return { ...actual, createEvidenceSelectionService: vi.fn(() => ({ marker: "evidence-service" })) };
+});
+vi.mock("../application/assessments.js", async (load) => {
+  const actual = await load<typeof import("../application/assessments.js")>();
+  return { ...actual, createAssessmentsService: vi.fn(() => ({ marker: "assessment-service" })) };
 });
 vi.mock("../application/candidate-claims.js", async (load) => {
   const actual = await load<typeof import("../application/candidate-claims.js")>();
   return { ...actual, createCandidateClaimsService: vi.fn(() => ({ marker: "claim-service" })) };
 });
 vi.mock("./evidence-selection-routes.js", () => ({ createEvidenceSelectionRouter: vi.fn(() => (req: unknown, res: unknown, next: () => void) => next()) }));
+vi.mock("./assessment-routes.js", () => ({ createAssessmentRouter: vi.fn(() => (req: unknown, res: unknown, next: () => void) => next()) }));
 vi.mock("./candidate-claim-routes.js", () => ({ createCandidateClaimRouter: vi.fn(() => (req: unknown, res: unknown, next: () => void) => next()) }));
 vi.mock("./project-routes.js", () => ({ createProjectRouter: vi.fn(() => (req: unknown, res: unknown, next: () => void) => next()) }));
 vi.mock("./research-issue-routes.js", () => ({ createResearchIssueRouter: vi.fn(() => (req: unknown, res: unknown, next: () => void) => next()) }));
@@ -46,9 +53,12 @@ vi.mock("../application/project-items.js", () => ({ createProjectItemsService: v
 
 import { createS32Router } from "../register.js";
 import { createPostgresEvidenceSelectionStore } from "../postgres/evidence-selection-store.js";
+import { createPostgresAssessmentCommandStore } from "../postgres/assessment-command-store.js";
+import { createPostgresAssessmentReadStore } from "../postgres/assessment-read-store.js";
 import { createPostgresCandidateClaimStore } from "../postgres/candidate-claim-store.js";
 import { Pool } from "pg";
 import { createEvidenceSelectionRouter } from "./evidence-selection-routes.js";
+import { createAssessmentRouter } from "./assessment-routes.js";
 
 describe("register wiring", () => {
   it("constructs evidence selection store and candidate claim store from the same Pool instance", () => {
@@ -65,5 +75,15 @@ describe("register wiring", () => {
   it("mounts evidence selection router", () => {
     createS32Router({ env: {}, getCatalogDocument: vi.fn() });
     expect(createEvidenceSelectionRouter).toHaveBeenCalled();
+  });
+
+  it("constructs assessment command/read stores from the same Pool and mounts the assessment router", () => {
+    createS32Router({ env: {}, getCatalogDocument: vi.fn() });
+    const evidenceArg = vi.mocked(createPostgresEvidenceSelectionStore).mock.calls.at(-1)?.[0];
+    const commandArg = vi.mocked(createPostgresAssessmentCommandStore).mock.calls.at(-1)?.[0];
+    const readArg = vi.mocked(createPostgresAssessmentReadStore).mock.calls.at(-1)?.[0];
+    expect(commandArg).toBe(evidenceArg);
+    expect(readArg).toBe(evidenceArg);
+    expect(createAssessmentRouter).toHaveBeenCalled();
   });
 });
