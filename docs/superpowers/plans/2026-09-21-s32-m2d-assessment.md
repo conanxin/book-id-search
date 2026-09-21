@@ -434,6 +434,7 @@ export function readAssessmentHistoryQuery(value: unknown): {
   cursor: AssessmentCursor | null;
 };
 export function encodeAssessmentCursor(cursor: AssessmentCursor): string;
+export function decodeAssessmentCursor(value: string): AssessmentCursor;
 ```
 
 Application produces:
@@ -557,7 +558,7 @@ Expected: FAIL because the module/functions do not exist.
 
 - [ ] **Step 3: Implement the domain module**
 
-Use strict top-level keys `stance,confidenceLevel,reasoning,expectedManifestSha256,items`. Reuse `normalizeEvidencePreviewInput({items})` so M2-C/M2-D item semantics cannot drift.
+Define `InvalidAssessmentInputError` and `InvalidAssessmentCursorError` in `domain/assessment.ts`. Use strict top-level keys `stance,confidenceLevel,reasoning,expectedManifestSha256,items`. Reuse `normalizeEvidencePreviewInput({items})` so M2-C/M2-D item semantics cannot drift.
 
 For cursor encoding, use versioned base64url JSON:
 
@@ -646,13 +647,11 @@ pnpm vitest run apps/api/src/s32/application/assessments.test.ts
 
 Expected: FAIL because `createAssessmentsService` does not exist.
 
-- [ ] **Step 6: Implement the application service and explicit error types**
+- [ ] **Step 6: Implement the application service and explicit application errors**
 
-Define errors used later by route/store layers:
+Define application/store-facing errors in `application/assessments.ts`:
 
 ```ts
-export class InvalidAssessmentInputError extends Error {}
-export class InvalidAssessmentCursorError extends Error {}
 export class AssessmentScopeNotFoundError extends Error {}
 export class AssessmentNotFoundError extends Error {}
 export class AssessmentIntegrityError extends Error {}
@@ -664,7 +663,50 @@ export class ResearchIssueReadOnlyForAssessmentError extends Error {}
 export class AssessmentIdempotencyConflictError extends Error {}
 ```
 
+Import `InvalidAssessmentInputError` / `InvalidAssessmentCursorError` from the domain module.
+
 Generate `assessmentId`, `manifestId`, and all `manifestItemIds` with `randomUUID()` exactly once before calling `commandStore.create`.
+
+Implement create-result orchestration exactly:
+
+```ts
+const commandResult = await commandStore.create(command);
+if (commandResult.status === "created") {
+  return {
+    status: "created" as const,
+    visible: true as const,
+    assessment: commandResult.assessment,
+    evidenceManifest: commandResult.evidenceManifest,
+  };
+}
+const lookup = await readStore.get({
+  projectId,
+  issueId,
+  claimId,
+  assessmentId: commandResult.assessmentId,
+});
+if (lookup.kind !== "ok") {
+  return {
+    status: "replayed" as const,
+    visible: false as const,
+    assessmentId: commandResult.assessmentId,
+  };
+}
+return {
+  status: "replayed" as const,
+  visible: true as const,
+  assessment: lookup.value.assessment,
+  evidenceManifest: {
+    id: lookup.value.evidenceManifest.id,
+    schemaVersion: 1,
+    purpose: "CLAIM_ASSESSMENT",
+    manifestSha256: lookup.value.evidenceManifest.manifestSha256,
+    itemCount: lookup.value.evidenceManifest.items.length,
+  },
+};
+```
+
+For normal `list`, map `scope-missing` to `AssessmentScopeNotFoundError`. For normal `get`, map `scope-missing` to `AssessmentScopeNotFoundError` and `not-visible` to `AssessmentNotFoundError`.
 
 - [ ] **Step 7: Run focused tests and commit**
 
@@ -747,13 +789,24 @@ async function serializableWithRetry<T>(
   run: (client: PoolClient) => Promise<T>,
 ): Promise<T> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
+    let client: PoolClient | null = null;
     try {
-      // connect; BEGIN ISOLATION LEVEL SERIALIZABLE; run; COMMIT
+      client = await pool.connect();
+      await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
+      const value = await run(client);
+      await client.query("COMMIT");
+      return value;
     } catch (error) {
-      // ROLLBACK
-      if (!isRetryable(error) || attempt === 2) throw classify(error);
+      if (client) await client.query("ROLLBACK").catch(() => undefined);
+      const code = typeof error === "object" && error !== null
+        ? (error as { code?: unknown }).code
+        : undefined;
+      const retryable = code === "40001" || code === "40P01";
+      if (retryable && attempt < 2) continue;
+      if (retryable) throw new AssessmentStoreUnavailableError("ASSESSMENT_STORE_UNAVAILABLE");
+      throw classifyAssessmentStoreError(error);
     } finally {
-      // release
+      client?.release();
     }
   }
   throw new AssessmentStoreUnavailableError("ASSESSMENT_STORE_UNAVAILABLE");
@@ -798,7 +851,9 @@ Then:
 - Issue OPEN|RESOLVED;
 - Claim ACTIVE|ARCHIVED;
 - load current Project evidence authorization;
-- authorize all submitted items;
+- call `authorizeEvidenceItems`;
+- map `ProjectEvidenceTargetUnavailableError` to `AssessmentEvidenceTargetNotAvailableError`;
+- map `ProjectEvidenceIntegrityError` to `AssessmentIntegrityError`;
 - build canonical Manifest with existing `buildEvidenceManifestDraft(items)`;
 - compare server SHA to `expectedManifestSha256`;
 - mismatch → `EvidencePreviewStaleError`.
@@ -1072,11 +1127,38 @@ it.each([
   [new EvidencePreviewStaleError("x"), 409, "EVIDENCE_PREVIEW_STALE"],
   [new AssessmentIdempotencyConflictError("x"), 409, "IDEMPOTENCY_CONFLICT"],
 ])("maps domain error safely", async (error, status, code) => {
-  // start router, trigger service error, assert status/code and absence of internal detail
+  const app = express();
+  app.use(express.json());
+  const service = {
+    create: vi.fn(async () => { throw error; }),
+    list: vi.fn(),
+    get: vi.fn(),
+  } as unknown as AssessmentsService;
+  app.use("/projects", createAssessmentRouter(baseConfig(), service));
+  const server = app.listen(0, "127.0.0.1");
+  const port = (server.address() as AddressInfo).port;
+  const res = await fetch(
+    `http://127.0.0.1:${port}/projects/${P}/issues/${I}/claims/${C}/assessments`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer t",
+        "Content-Type": "application/json",
+        "Idempotency-Key": KEY,
+      },
+      body: JSON.stringify(BASE_BODY),
+    },
+  );
+  expect(res.status).toBe(status);
+  expect(res.headers.get("cache-control")).toBe("no-store");
+  const text = await res.text();
+  expect(text).toContain(code);
+  expect(text).not.toContain("SQL DETAIL");
+  await new Promise<void>(resolve => server.close(() => resolve()));
 });
 ```
 
-Add 500 generic and 503 unavailable.
+Add separate 500 generic and 503 unavailable cases using the same helper.
 
 Every route test must assert:
 
@@ -1092,7 +1174,7 @@ Pin:
 - POST 200 replay visible=false and no protected fields;
 - GET history default/explicit limit+cursor delegation;
 - GET detail success;
-- GET detail null → safe `ASSESSMENT_NOT_FOUND`;
+- GET detail service `AssessmentNotFoundError` → safe `ASSESSMENT_NOT_FOUND`;
 - limit 51 → 400, not clamped.
 
 - [ ] **Step 3: Run route tests and verify RED**
@@ -1466,8 +1548,21 @@ git commit -m "feat(web): persist pending assessment intent safely"
 ```ts
 it("emits a current preview after server preview succeeds", async () => {
   const onPreviewChange = vi.fn();
-  show({ onPreviewChange });
-  // select + preview
+  render(<EvidenceEditor
+    token="t"
+    projectId={p}
+    issueId={i}
+    claim={claim}
+    onPreviewChange={onPreviewChange}
+  />);
+  await userEvent.click(screen.getByRole("button", { name: "构建证据集" }));
+  await screen.findAllByText(/北京古道志/);
+  await userEvent.click(
+    within(screen.getByTestId(`candidate-${source.targetId}`))
+      .getByRole("button", { name: "作为支持证据" }),
+  );
+  await userEvent.click(screen.getByRole("button", { name: "预览 EvidenceManifest" }));
+  await screen.findByText("尚未提交。");
   expect(onPreviewChange).toHaveBeenLastCalledWith({
     draftVersion: expect.any(Number),
     manifestSha256: "a".repeat(64),
@@ -1475,9 +1570,26 @@ it("emits a current preview after server preview succeeds", async () => {
   });
 });
 
-it("emits null immediately on any evidence mutation and never restores stale in-flight preview", async () => {
-  // existing stale guard + callback assertion
+it("emits null immediately on evidence mutation after a valid preview", async () => {
+  const onPreviewChange = vi.fn();
+  render(<EvidenceEditor
+    token="t"
+    projectId={p}
+    issueId={i}
+    claim={claim}
+    onPreviewChange={onPreviewChange}
+  />);
+  await userEvent.click(screen.getByRole("button", { name: "构建证据集" }));
+  await screen.findAllByText(/北京古道志/);
+  await userEvent.click(
+    within(screen.getByTestId(`candidate-${source.targetId}`))
+      .getByRole("button", { name: "作为支持证据" }),
+  );
+  await userEvent.click(screen.getByRole("button", { name: "预览 EvidenceManifest" }));
+  await screen.findByText("尚未提交。");
+  await userEvent.type(screen.getByLabelText("证据说明"), "新说明");
   expect(onPreviewChange).toHaveBeenLastCalledWith(null);
+  expect(screen.queryByText("尚未提交。")).toBeNull();
 });
 ```
 
@@ -1549,7 +1661,10 @@ it("requires current preview + stance + valid reasoning but not confidence", asy
 
 it("assessment-field changes do not invalidate the evidence preview", async () => {
   const onPreviewInvalidated = vi.fn();
-  // edit stance/confidence/reasoning
+  renderComposer({ preview: PREVIEW, onPreviewInvalidated });
+  await userEvent.click(screen.getByLabelText("支持"));
+  await userEvent.selectOptions(screen.getByLabelText("信心"), "HIGH");
+  await userEvent.type(screen.getByLabelText("判断理由"), "当前证据支持。");
   expect(onPreviewInvalidated).not.toHaveBeenCalled();
 });
 ```
@@ -1562,7 +1677,17 @@ it.each([
   new ProjectApiError(503, "服务暂不可用", "ASSESSMENT_STORE_UNAVAILABLE"),
 ])("keeps frozen command and retries exact same key/body on ambiguous/retryable result %#", async error => {
   vi.mocked(createAssessment).mockRejectedValueOnce(error).mockResolvedValueOnce(CREATED);
-  // submit, assert fields disabled, click same-key retry
+  renderComposer({ preview: PREVIEW });
+  await userEvent.click(screen.getByLabelText("支持"));
+  await userEvent.type(screen.getByLabelText("判断理由"), "当前证据支持。");
+  await userEvent.click(screen.getByRole("button", { name: "提交评价" }));
+  const retry = await screen.findByRole("button", { name: "使用同一标识重试" });
+  expect((screen.getByLabelText("判断理由") as HTMLTextAreaElement).disabled).toBe(true);
+  await userEvent.click(retry);
+  const [firstCall, secondCall] = vi.mocked(createAssessment).mock.calls.map(call => ({
+    idempotencyKey: call[4],
+    input: call[5],
+  }));
   expect(secondCall.idempotencyKey).toBe(firstCall.idempotencyKey);
   expect(secondCall.input).toEqual(firstCall.input);
 });
@@ -1659,7 +1784,15 @@ it("safe 404 after earlier visible summary shows neutral unavailable and asks hi
     new ProjectApiError(404, "该评价当前不可用。", "ASSESSMENT_NOT_FOUND"),
   );
   const onRefreshHistory = vi.fn();
-  // open detail
+  render(<AssessmentDetail
+    token="t"
+    projectId={P}
+    issueId={I}
+    claimId={C}
+    assessmentId={A}
+    onClose={vi.fn()}
+    onRefreshHistory={onRefreshHistory}
+  />);
   expect(await screen.findByText("该评价当前不可用。")).toBeTruthy();
   expect(onRefreshHistory).toHaveBeenCalled();
   expect(document.body.textContent).not.toMatch(/权限|其他项目/);
