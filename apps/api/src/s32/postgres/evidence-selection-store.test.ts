@@ -18,15 +18,18 @@ const nr = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'; // note revision
 function scopeRow(o: any = {}) {
   return {
     project_id: p,
+    project_name: o.projectName ?? 'project name',
     project_state: o.projectState ?? 'ACTIVE',
     issue_id: i,
+    issue_title: o.issueTitle ?? 'issue title',
+    issue_question: o.issueQuestion ?? 'issue question',
     issue_state: o.issueState ?? 'OPEN',
     issue_binding_id: eb,
     owner_project_id: o.owner ?? p,
     issue_binding_role: null,
     issue_binding_metadata: {},
     relation_claim_id: c,
-    claim_statement: 'claim statement',
+    claim_statement: o.claimStatement ?? 'claim statement',
     claim_state: o.claimState ?? 'ACTIVE',
     claim_type: null,
     subject_type: null,
@@ -72,8 +75,23 @@ function setup(o: any = {}) {
   const query = vi.fn(async (sql: string) => {
     if (o.fail && sql.includes(o.fail)) throw Object.assign(new Error('SECRET'), { code: o.code });
     if (sql.includes('WITH requested')) return { rows: o.authorized ?? [{ ordinal: 1, ok: true }] };
-    if (sql.includes('FROM core.projects p')) return { rows: o.scope ?? [scopeRow(o)] };
-    if (sql.includes('LEFT JOIN core.source_assets')) return { rows: o.materials ?? [materialRow()] };
+    if (sql.includes('FROM core.projects p')) {
+      // Two-pass pattern: loadScope runs the scope SQL; if a "missing Issue"
+      // condition is requested, the FIRST scope SQL returns a row with
+      // issue_id=null and a SECOND dangling-binding probe follows.
+      if (o.danglingBinding) {
+        return { rows: [{ project_id: p, project_name: 'project name', project_state: 'ACTIVE', issue_id: null, issue_title: null, issue_question: null, issue_state: null, issue_binding_id: null, owner_project_id: null, issue_binding_role: null, issue_binding_metadata: null, relation_claim_id: null, claim_statement: null, claim_state: null, claim_type: null, subject_type: null, subject_id: null, claim_metadata: null, claim_created_at: new Date(), claim_updated_at: new Date() }] };
+      }
+      if (o.missingIssue) return { rows: [] };
+      return { rows: o.scope ?? [scopeRow(o)] };
+    }
+    if (sql.includes('FROM core.project_bindings pb_only')) {
+      return { rows: o.danglingBinding ? [{ id: 'dangling-binding' }] : [] };
+    }
+    if (sql.includes('LEFT JOIN core.source_assets')) return { rows: o.materials ?? [materialRow(o)] };
+    if (sql.includes('FROM core.note_revisions nr') && sql.includes('ANY(')) {
+      return { rows: o.oldRevisions ?? [] };
+    }
     return { rows: [] };
   });
   const release = vi.fn();
@@ -398,4 +416,106 @@ it('mid-transaction 22P02 not rewrapped to StoreUnavailable when no product vali
   } catch (e) {
     expect(e).not.toBeInstanceOf(EvidenceSelectionStoreUnavailableError);
   }
+});
+
+// === M2-C PR17 R2 RED: old revision canonicality ===
+it('preview rejects old NOTE_REVISION whose revision_no is zero (corruption)', async () => {
+  // The NOTE has a current revision (`nr-current`) that is distinct from
+  // the requested old revision `nr`. The bounded query must surface the
+  // canonical corruption even though the (revision, note) pair exists.
+  const currentRev = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const s = setup({
+    materials: [materialRow({ revisionNo: 1, contentFormat: 'MARKDOWN', currentRevisionId: currentRev })],
+    oldRevisions: [{
+      revision_id: nr,
+      note_id: note,
+      revision_no: 0,
+      content_format: 'MARKDOWN',
+      created_at: new Date('2026-01-01T00:00:00.000Z'),
+    }],
+  });
+  const items = normalizeEvidencePreviewInput({
+    items: [{ role: 'SUPPORTING', targetType: 'NOTE_REVISION', targetId: nr, note: null }],
+  });
+  await expect(s.store.authorizePreview({ projectId: p, issueId: i, claimId: c, items }))
+    .rejects.toBeInstanceOf(EvidenceSelectionIntegrityError);
+});
+
+it('preview rejects old NOTE_REVISION whose content_format is unknown', async () => {
+  const currentRev = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const s = setup({
+    materials: [materialRow({ revisionNo: 1, contentFormat: 'MARKDOWN', currentRevisionId: currentRev })],
+    oldRevisions: [{
+      revision_id: nr,
+      note_id: note,
+      revision_no: 1,
+      content_format: 'BOGUS_FORMAT',
+      created_at: new Date('2026-01-01T00:00:00.000Z'),
+    }],
+  });
+  const items = normalizeEvidencePreviewInput({
+    items: [{ role: 'SUPPORTING', targetType: 'NOTE_REVISION', targetId: nr, note: null }],
+  });
+  await expect(s.store.authorizePreview({ projectId: p, issueId: i, claimId: c, items }))
+    .rejects.toBeInstanceOf(EvidenceSelectionIntegrityError);
+});
+
+// === M2-C PR17 R2 RED: claim statement canonical normalization ===
+it('candidates() rejects claim whose stored statement is not already canonical (whitespace padded)', async () => {
+  const s = setup({
+    scope: [scopeRow({ claimStatement: '  claim   statement  ' })],
+    materials: [],
+  });
+  await expect(s.store.candidates({ projectId: p, issueId: i, claimId: c }))
+    .rejects.toBeInstanceOf(EvidenceSelectionIntegrityError);
+});
+
+it('authorizePreview() rejects claim whose stored statement is not already canonical', async () => {
+  const s = setup({
+    scope: [scopeRow({ claimStatement: '  claim   statement  ' })],
+    materials: [materialRow()],
+  });
+  const items = normalizeEvidencePreviewInput({
+    items: [{ role: 'SUPPORTING', targetType: 'SOURCE', targetId: src, note: null }],
+  });
+  await expect(s.store.authorizePreview({ projectId: p, issueId: i, claimId: c, items }))
+    .rejects.toBeInstanceOf(EvidenceSelectionIntegrityError);
+});
+
+// === M2-C PR17 R2 RED: issue canonicality ===
+it('candidates() rejects Issue whose title is not canonical (whitespace padding)', async () => {
+  const s = setup({
+    scope: [scopeRow({ issueTitle: ' bad title ' })],
+    materials: [],
+  });
+  await expect(s.store.candidates({ projectId: p, issueId: i, claimId: c }))
+    .rejects.toBeInstanceOf(EvidenceSelectionIntegrityError);
+});
+
+it('candidates() rejects Issue whose question contains a CRLF that normalizes (non-canonical)', async () => {
+  const s = setup({
+    scope: [scopeRow({ issueQuestion: 'line1\r\nline2' })],
+    materials: [],
+  });
+  await expect(s.store.candidates({ projectId: p, issueId: i, claimId: c }))
+    .rejects.toBeInstanceOf(EvidenceSelectionIntegrityError);
+});
+
+it('candidates() rejects Project whose name is blank', async () => {
+  const s = setup({
+    scope: [scopeRow({ projectName: '   ' })],
+    materials: [],
+  });
+  await expect(s.store.candidates({ projectId: p, issueId: i, claimId: c }))
+    .rejects.toBeInstanceOf(EvidenceSelectionIntegrityError);
+});
+
+// === M2-C PR17 R2 RED: dangling issue binding ===
+it('candidates() rejects dangling RESEARCH_ISSUE binding (Issue row missing, binding present)', async () => {
+  const s = setup({
+    missingIssue: true,
+    danglingBinding: true,
+  });
+  await expect(s.store.candidates({ projectId: p, issueId: i, claimId: c }))
+    .rejects.toBeInstanceOf(EvidenceSelectionIntegrityError);
 });

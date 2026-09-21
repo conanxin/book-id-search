@@ -12,6 +12,7 @@ import {
   normalizeCandidateClaimStatement,
   readCandidateClaimId,
 } from '../domain/candidate-claim.js';
+import { readResearchIssueInput } from '../domain/research-issue.js';
 
 const uuidPattern = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
 const sourceTypes = new Set(['PUBLICATION', 'WEB_PAGE', 'ARCHIVAL_RECORD', 'DATABASE_RECORD', 'MUSEUM_OBJECT', 'EXHIBITION_LABEL', 'EMAIL', 'FIELD_OBSERVATION', 'INTERVIEW', 'OTHER']);
@@ -91,9 +92,12 @@ async function readOnlyTransaction<T>(pool: Pool, run: (client: PoolClient) => P
 
 interface ScopeRow {
   project_id: string;
+  project_name: string;
   project_state: string;
-  issue_id: string;
-  issue_state: string;
+  issue_id: string | null;
+  issue_title: string | null;
+  issue_question: string | null;
+  issue_state: string | null;
   issue_binding_id: string | null;
   owner_project_id: string | null;
   issue_binding_role: string | null;
@@ -121,8 +125,11 @@ async function loadScope(client: PoolClient, projectId: string, issueId: string,
   const { rows } = await client.query<ScopeRow>(
     `SELECT
        p.id AS project_id,
+       p.name AS project_name,
        p.lifecycle_state AS project_state,
        ri.id AS issue_id,
+       ri.title AS issue_title,
+       ri.question AS issue_question,
        ri.lifecycle_state AS issue_state,
        pb.id AS issue_binding_id,
        pb.project_id AS owner_project_id,
@@ -148,15 +155,39 @@ async function loadScope(client: PoolClient, projectId: string, issueId: string,
      ORDER BY pb.id`,
     [projectId, issueId, claimId],
   );
-  if (!rows.length) return null;
   if (rows.length > 1) integrity('ISSUE_OWNER_AMBIGUOUS');
+  // Dangling project means the project row itself is missing. We can't
+  // recover any canonical graph — return null so the route layer maps it
+  // to the normal not-found response.
+  if (!rows.length) return null;
   const row = rows[0];
+  if (typeof row.project_name !== 'string' || !row.project_name.trim()) integrity('PROJECT_NAME_INVALID');
   if (!['ACTIVE', 'ARCHIVED'].includes(row.project_state)) integrity('PROJECT_LIFECYCLE_INVALID');
-  if (row.issue_id !== issueId || !row.issue_binding_id) {
-    if (row.issue_id === null) return null;
-    if (!row.issue_binding_id) integrity('ISSUE_BINDING_DANGLING');
+  if (row.issue_id === null) {
+    // The Issue row is missing — distinguish "never existed" from "dangling binding".
+    const danglingProbe = await client.query<{ id: string }>(
+      `SELECT id FROM core.project_bindings pb_only
+       WHERE pb_only.target_type = 'RESEARCH_ISSUE' AND pb_only.target_id = $1
+       LIMIT 1`,
+      [issueId],
+    );
+    if (danglingProbe.rows.length > 0) integrity('ISSUE_BINDING_DANGLING');
+    return null;
   }
-  if (!['OPEN', 'RESOLVED', 'ARCHIVED'].includes(row.issue_state)) integrity('ISSUE_LIFECYCLE_INVALID');
+  if (row.issue_id !== issueId) return null;
+  if (typeof row.issue_title !== 'string' || typeof row.issue_question !== 'string') integrity('ISSUE_CANONICAL_INVALID');
+  let normalizedIssueTitle: string;
+  let normalizedIssueQuestion: string;
+  try {
+    const normalized = readResearchIssueInput({ title: row.issue_title, question: row.issue_question });
+    normalizedIssueTitle = normalized.title;
+    normalizedIssueQuestion = normalized.question;
+  } catch {
+    integrity('ISSUE_CANONICAL_INVALID');
+  }
+  if (row.issue_title !== normalizedIssueTitle || row.issue_question !== normalizedIssueQuestion) integrity('ISSUE_CANONICAL_INVALID');
+  if (!row.issue_binding_id) integrity('ISSUE_BINDING_DANGLING');
+  if (!['OPEN', 'RESOLVED', 'ARCHIVED'].includes(row.issue_state ?? '')) integrity('ISSUE_LIFECYCLE_INVALID');
   if (row.owner_project_id !== projectId) return null;
   if (row.issue_binding_role !== null) integrity('ISSUE_OWNER_BINDING_ROLE_INVALID');
   const issueMeta = row.issue_binding_metadata;
@@ -170,7 +201,10 @@ async function loadScope(client: PoolClient, projectId: string, issueId: string,
   } catch {
     integrity('CLAIM_STATEMENT_INVALID');
   }
+  // Stored claim statement must already be canonical — if normalization
+  // changes it, the row is corrupt.
   if (!claimStatement) integrity('CLAIM_STATEMENT_INVALID');
+  if (claimStatement !== row.claim_statement) integrity('CLAIM_STATEMENT_CANONICALITY');
   if (row.claim_metadata === null || typeof row.claim_metadata !== 'object' || Array.isArray(row.claim_metadata)) integrity('CLAIM_METADATA_INVALID');
   if (!validDate(row.claim_created_at) || !validDate(row.claim_updated_at)) integrity('CLAIM_TIMESTAMP_INVALID');
   if (row.claim_type !== null && typeof row.claim_type !== 'string') integrity('CLAIM_TYPE_INVALID');
@@ -506,16 +540,45 @@ async function authorizeItemsAgainstGraph(
   if (pendingOldRevisions.size > 0) {
     const noteIdsArray = Array.from(index.noteIds);
     const revisionIdsArray = Array.from(pendingOldRevisions);
-    const { rows } = await client.query<{ revision_id: string; note_id: string }>(
-      `SELECT nr.id::text AS revision_id, nr.note_id::text AS note_id
+    const { rows } = await client.query<{
+      revision_id: string;
+      note_id: string;
+      revision_no: string | number | null;
+      content_format: string | null;
+      created_at: Date | null;
+    }>(
+      `SELECT nr.id::text AS revision_id,
+              nr.note_id::text AS note_id,
+              nr.revision_no,
+              nr.content_format,
+              nr.created_at
        FROM core.note_revisions nr
        WHERE nr.id = ANY($1::uuid[])
          AND nr.note_id = ANY($2::uuid[])`,
       [revisionIdsArray, noteIdsArray],
     );
     const found = new Set(rows.map(r => r.revision_id));
+    // Every requested old revision must be present in the (revision, note)
+    // intersection — missing → target not available.
     for (const revisionId of pendingOldRevisions) {
       if (!found.has(revisionId)) throw new EvidenceTargetNotAvailableError('EVIDENCE_TARGET_NOT_AVAILABLE');
+    }
+    // Canonical validation of returned revision rows. Any corruption here
+    // closes fail — we do NOT silently trust revision_no, Content Format
+    // or created_at even when the row exists for an authorized note.
+    for (const row of rows) {
+      const revisionNo = typeof row.revision_no === 'string'
+        ? Number.parseInt(row.revision_no, 10)
+        : row.revision_no;
+      if (!Number.isInteger(revisionNo) || (revisionNo as number) <= 0) {
+        integrity('NOTE_REVISION_CANONICAL_INVALID');
+      }
+      if (typeof row.content_format !== 'string' || !['MARKDOWN', 'PLAIN_TEXT'].includes(row.content_format)) {
+        integrity('NOTE_REVISION_CANONICAL_INVALID');
+      }
+      if (!(row.created_at instanceof Date) || Number.isNaN(row.created_at.getTime())) {
+        integrity('NOTE_REVISION_CANONICAL_INVALID');
+      }
     }
   }
 }
