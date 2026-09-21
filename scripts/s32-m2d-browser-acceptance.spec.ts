@@ -154,10 +154,24 @@ test("M2-D real Firefox acceptance: create, recover, audit, privacy, lifecycle, 
   expect(interceptedStatus).toBe(201);
   await page.unroute(assessmentPost);
 
+  // The upstream 201 happened before the browser-side abort, so canonical DB
+  // history must already contain exactly one additional Assessment.
+  await expect.poll(async () => (await history(request)).assessments.length).toBe(beforeUnknown + 1);
+
   await page.reload();
   const reloadedPrimary = claimCard(page, "Primary candidate.");
   await expect(reloadedPrimary.getByRole("button", { name: "使用同一标识重试" })).toBeVisible();
+
+  const replayResponsePromise = page.waitForResponse(response =>
+    response.request().method() === "POST" && assessmentPost.test(response.url()),
+  );
   await reloadedPrimary.getByRole("button", { name: "使用同一标识重试" }).click();
+  const replayResponse = await replayResponsePromise;
+  const replayBody = await replayResponse.json();
+  console.log("M2D_REPLAY_STATUS=" + replayResponse.status());
+  console.log("M2D_REPLAY_BODY=" + JSON.stringify(replayBody));
+  expect(replayResponse.status()).toBe(200);
+  expect(replayBody).toMatchObject({ status: "replayed", visible: true });
   await expect(reloadedPrimary.getByText("此评价此前已经成功提交。")).toBeVisible();
   await expect.poll(async () => (await history(request)).assessments.length).toBe(beforeUnknown + 1);
 
