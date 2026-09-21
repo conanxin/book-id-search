@@ -230,6 +230,33 @@ describe("known POST failures", () => {
 });
 
 describe("successful create/replay", () => {
+  it("keeps the visible replay acknowledgement after reload when there is no current preview", async () => {
+    await getOrCreateAssessmentReceipt({ projectId: P, issueId: I, claimId: C }, {
+      stance: "CONTRADICTS",
+      confidenceLevel: "HIGH",
+      reasoning: "网络结果未知后的第二次评价",
+      expectedManifestSha256: PREVIEW.manifestSha256,
+      items: PREVIEW.items,
+    });
+    resetPendingAssessmentReceiptMemoryForTest();
+    vi.mocked(createAssessment).mockResolvedValueOnce({
+      ...CREATED,
+      status: "replayed",
+      assessment: {
+        ...CREATED.assessment,
+        stance: "CONTRADICTS",
+        confidenceLevel: "HIGH",
+        reasoning: "网络结果未知后的第二次评价",
+      },
+    });
+
+    show({ preview: null });
+    await userEvent.click(screen.getByRole("button", { name: "使用同一标识重试" }));
+
+    expect(await screen.findByText("此评价此前已经成功提交。")).toBeTruthy();
+    expect(loadPendingAssessmentReceipt()).toBeNull();
+  });
+
   it("clears receipt and delegates canonical history refresh through onCommitted", async () => {
     const onCommitted = vi.fn();
     show({ onCommitted });
