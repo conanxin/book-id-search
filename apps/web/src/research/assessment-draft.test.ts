@@ -111,6 +111,15 @@ describe("pending Assessment receipt", () => {
     expect(loadPendingAssessmentReceipt()?.idempotencyKey).toBe(first.idempotencyKey);
   });
 
+  it("does not overwrite an unconfirmed command from another Claim scope", async () => {
+    const first = await getOrCreateAssessmentReceipt(SCOPE, COMMAND);
+    await expect(getOrCreateAssessmentReceipt({
+      ...SCOPE,
+      claimId: "55555555-5555-4555-8555-555555555555",
+    }, COMMAND)).rejects.toBeInstanceOf(PendingAssessmentIntentConflictError);
+    expect(loadPendingAssessmentReceipt()).toEqual(first);
+  });
+
   it("clear creates an in-memory tombstone even when removeItem fails", async () => {
     await getOrCreateAssessmentReceipt(SCOPE, COMMAND);
     const spy = vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
