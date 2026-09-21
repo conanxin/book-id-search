@@ -355,8 +355,75 @@ export function hashAssessmentCreateRequest(
   input: NormalizedAssessmentInput,
 ): string;
 
-export interface AssessmentSummary { /* spec fields */ }
-export interface AssessmentDetail { /* spec full Assessment + Manifest */ }
+export interface AssessmentRecord {
+  id: string;
+  claimId: string;
+  stance: AssessmentStance;
+  confidenceLevel: AssessmentConfidenceLevel | null;
+  actorId: string | null;
+  numericScore: number | null;
+  scoreKind: string | null;
+  reasoning: string | null;
+  createdAt: string;
+}
+
+export interface AssessmentManifestSummary {
+  id: string;
+  schemaVersion: 1;
+  purpose: "CLAIM_ASSESSMENT";
+  manifestSha256: string;
+  itemCount: number;
+}
+
+export interface AssessmentSummary {
+  id: string;
+  stance: AssessmentStance;
+  confidenceLevel: AssessmentConfidenceLevel | null;
+  actorId: string | null;
+  numericScore: number | null;
+  scoreKind: string | null;
+  reasoningExcerpt: string | null;
+  createdAt: string;
+  evidenceManifest: AssessmentManifestSummary;
+}
+
+export interface AssessmentManifestItem {
+  ordinal: number;
+  role: EvidenceRole;
+  targetType: EvidenceTargetType;
+  targetId: string;
+  locatorType: null;
+  locator: null;
+  excerpt: null;
+  note: string | null;
+}
+
+export interface AssessmentDetailResponse {
+  claim: {
+    id: string;
+    statement: string;
+    lifecycleState: "ACTIVE" | "ARCHIVED";
+  };
+  assessment: AssessmentRecord;
+  evidenceManifest: {
+    id: string;
+    schemaVersion: 1;
+    purpose: "CLAIM_ASSESSMENT";
+    manifestSha256: string;
+    createdAt: string;
+    items: AssessmentManifestItem[];
+  };
+}
+
+export interface AssessmentHistoryResponse {
+  claim: {
+    id: string;
+    statement: string;
+    lifecycleState: "ACTIVE" | "ARCHIVED";
+  };
+  assessments: AssessmentSummary[];
+  nextCursor: string | null;
+}
 
 export interface AssessmentCursor {
   createdAt: string;
@@ -477,7 +544,28 @@ it("generates all canonical IDs once and passes one normalized command to the st
 });
 
 it("delegates history/detail with normalized IDs and parsed cursor/limit", async () => {
-  // assert exact projectId/issueId/claimId/assessmentId and limit/cursor values
+  const cursor = encodeAssessmentCursor({ createdAt: "2026-09-21T00:00:00.000Z", id: A });
+  const commandStore = { create: vi.fn() };
+  const readStore = {
+    list: vi.fn(async () => HISTORY),
+    get: vi.fn(async () => DETAIL),
+  };
+  const service = createAssessmentsService(commandStore, readStore);
+  await service.list(P.toUpperCase(), I.toUpperCase(), C.toUpperCase(), { limit: "20", cursor });
+  expect(readStore.list).toHaveBeenCalledWith({
+    projectId: P,
+    issueId: I,
+    claimId: C,
+    limit: 20,
+    cursor: { createdAt: "2026-09-21T00:00:00.000Z", id: A },
+  });
+  await service.get(P.toUpperCase(), I.toUpperCase(), C.toUpperCase(), A.toUpperCase());
+  expect(readStore.get).toHaveBeenCalledWith({
+    projectId: P,
+    issueId: I,
+    claimId: C,
+    assessmentId: A,
+  });
 });
 ```
 
@@ -976,15 +1064,103 @@ git commit -m "feat(s32): expose assessment create and history routes"
 **Interfaces:**
 - Produces:
   ```ts
-  export interface AssessmentSummary { /* exact spec shape */ }
-  export interface AssessmentDetailResponse { /* exact spec shape */ }
+  export interface AssessmentRecord {
+    id: string;
+    claimId: string;
+    stance: "SUPPORTS" | "CONTRADICTS" | "INCONCLUSIVE";
+    confidenceLevel: "LOW" | "MEDIUM" | "HIGH" | null;
+    actorId: string | null;
+    numericScore: number | null;
+    scoreKind: string | null;
+    reasoning: string | null;
+    createdAt: string;
+  }
+
+  export interface AssessmentManifestSummary {
+    id: string;
+    schemaVersion: 1;
+    purpose: "CLAIM_ASSESSMENT";
+    manifestSha256: string;
+    itemCount: number;
+  }
+
+  export interface AssessmentSummary {
+    id: string;
+    stance: AssessmentRecord["stance"];
+    confidenceLevel: AssessmentRecord["confidenceLevel"];
+    actorId: string | null;
+    numericScore: number | null;
+    scoreKind: string | null;
+    reasoningExcerpt: string | null;
+    createdAt: string;
+    evidenceManifest: AssessmentManifestSummary;
+  }
+
+  export interface AssessmentHistoryResponse {
+    claim: { id: string; statement: string; lifecycleState: "ACTIVE" | "ARCHIVED" };
+    assessments: AssessmentSummary[];
+    nextCursor: string | null;
+  }
+
+  export interface AssessmentDetailResponse {
+    claim: { id: string; statement: string; lifecycleState: "ACTIVE" | "ARCHIVED" };
+    assessment: AssessmentRecord;
+    evidenceManifest: {
+      id: string;
+      schemaVersion: 1;
+      purpose: "CLAIM_ASSESSMENT";
+      manifestSha256: string;
+      createdAt: string;
+      items: Array<{
+        ordinal: number;
+        role: EvidenceRole;
+        targetType: EvidenceTargetType;
+        targetId: string;
+        locatorType: null;
+        locator: null;
+        excerpt: null;
+        note: string | null;
+      }>;
+    };
+  }
+
   export type AssessmentCreateResponse =
-    | { status: "created" | "replayed"; visible: true; assessment: Assessment; evidenceManifest: AssessmentManifestSummary }
+    | { status: "created" | "replayed"; visible: true; assessment: AssessmentRecord; evidenceManifest: AssessmentManifestSummary }
     | { status: "replayed"; visible: false; assessmentId: string };
 
-  export function createAssessment(...): Promise<AssessmentCreateResponse>;
-  export function listAssessments(...): Promise<AssessmentHistoryResponse>;
-  export function getAssessment(...): Promise<AssessmentDetailResponse>;
+  export function createAssessment(
+    token: string,
+    projectId: string,
+    issueId: string,
+    claimId: string,
+    idempotencyKey: string,
+    input: {
+      stance: AssessmentRecord["stance"];
+      confidenceLevel: AssessmentRecord["confidenceLevel"];
+      reasoning: string;
+      expectedManifestSha256: string;
+      items: Array<{ role: EvidenceRole; targetType: EvidenceTargetType; targetId: string; note: string | null }>;
+    },
+    signal?: AbortSignal,
+  ): Promise<AssessmentCreateResponse>;
+
+  export function listAssessments(
+    token: string,
+    projectId: string,
+    issueId: string,
+    claimId: string,
+    query?: { limit?: number; cursor?: string | null },
+    signal?: AbortSignal,
+  ): Promise<AssessmentHistoryResponse>;
+
+  export function getAssessment(
+    token: string,
+    projectId: string,
+    issueId: string,
+    claimId: string,
+    assessmentId: string,
+    signal?: AbortSignal,
+  ): Promise<AssessmentDetailResponse>;
   ```
 
 - [ ] **Step 1: Write RED response-validator tests**
@@ -1010,7 +1186,20 @@ it("rejects malformed score pairing and malformed Manifest summary", async () =>
 
 it("accepts replay visible=false only with assessmentId and no protected payload", async () => {
   mockJson({ status: "replayed", visible: false, assessmentId: A });
-  const result = await createAssessment(/* exact args */);
+  const result = await createAssessment(
+    "t",
+    P,
+    I,
+    C,
+    KEY,
+    {
+      stance: "SUPPORTS",
+      confidenceLevel: null,
+      reasoning: "当前证据支持。",
+      expectedManifestSha256: "a".repeat(64),
+      items: [{ role: "SUPPORTING", targetType: "SOURCE", targetId: SOURCE, note: null }],
+    },
+  );
   expect(result.visible).toBe(false);
 });
 ```
@@ -1463,6 +1652,7 @@ git commit -m "feat(web): show assessment history and frozen evidence"
 
 **Files:**
 - Create: `apps/api/src/s32/postgres/assessment-store.integration.test.ts`
+- Create: `scripts/fixtures/s32-m2d-browser.sql`
 - Create: `scripts/s32-m2d-integration-check.ts`
 - Modify: `package.json`
 
@@ -1507,11 +1697,13 @@ it("real PG: atomically creates Manifest + items + Assessment + completed receip
 
 - [ ] **Step 2: Add real-PG zero-write failures**
 
-For stale preview, cross-Project evidence, canonical Project graph corruption, and terminal retry-safe failure where feasible:
+For stale preview, cross-Project evidence, and canonical Project graph corruption:
 - capture counts before;
 - execute;
 - capture after;
 - assert exact equality.
+
+Retry exhaustion remains a deterministic command-store unit test because forcing three real serialization failures would require a timing-dependent/flaky race.
 
 Do not use cleanup to mask partial rows.
 
@@ -1541,7 +1733,18 @@ Attempt UPDATE/DELETE for:
 
 Assert database rejects every mutation.
 
-- [ ] **Step 6: Create disposable PG16 runner**
+- [ ] **Step 6: Create shared synthetic fixture SQL and disposable PG16 runner**
+
+Create `scripts/fixtures/s32-m2d-browser.sql` with only synthetic rows and fixed UUIDs for:
+- ACTIVE Project + OPEN Issue + ACTIVE Claim;
+- Edition binding + Source + SourceAsset;
+- PROJECT_ITEM_NOTE with immutable R1/R2 and current R2;
+- second Project with foreign Source/Note;
+- archived Project/Issue/Claim variants;
+- canonical Actor;
+- no pre-existing Assessment/Manifest/receipt rows.
+
+Use the same fixed IDs in `assessment-store.integration.test.ts`, so the real-PG test and browser fixture exercise the same canonical graph without copying divergent setup logic.
 
 Clone `scripts/s32-m2c-integration-check.ts` safety pattern:
 - `postgres:16-alpine`;
@@ -1551,6 +1754,7 @@ Clone `scripts/s32-m2c-integration-check.ts` safety pattern:
 - random password;
 - ownership label `book-id-search.s32-m2d-run`;
 - apply only `db/migrations/001_s32_core_schema.sql`;
+- apply `scripts/fixtures/s32-m2d-browser.sql`;
 - run only `assessment-store.integration.test.ts`;
 - force-remove only the owned container in `finally`;
 - print `S32_M2D_REAL_PG=PASS` and `DISPOSABLE_TEST_CONTAINER_REMOVED=YES`.
@@ -1577,6 +1781,7 @@ Then:
 ```bash
 git add \
   apps/api/src/s32/postgres/assessment-store.integration.test.ts \
+  scripts/fixtures/s32-m2d-browser.sql \
   scripts/s32-m2d-integration-check.ts \
   package.json
 git commit -m "test(s32): add real postgres assessment gates"
@@ -1635,14 +1840,16 @@ Both must pass; both disposable containers must report removed.
 
 ```bash
 pnpm s32:schema:static
-git diff --exit-code <IMPLEMENTATION_BASE_SHA> -- \
+M2D_IMPLEMENTATION_BASE_SHA="$(git merge-base HEAD main)"
+test -n "$M2D_IMPLEMENTATION_BASE_SHA"
+git diff --exit-code "$M2D_IMPLEMENTATION_BASE_SHA" -- \
   db/migrations/001_s32_core_schema.sql \
   db/tests/001_s32_schema_assertions.sql \
   db/tests/002_s32_negative_invariants.sql
 git diff --check
 ```
 
-At execution time replace `<IMPLEMENTATION_BASE_SHA>` in the command with the exact base SHA recorded in the progress ledger before the first product-code change. Expected: no frozen SQL diff and `git diff --check` exit 0.
+Because execution starts from a fresh branch off then-current `main` and does not merge/rebase main mid-plan, `git merge-base HEAD main` is the implementation base. Expected: no frozen SQL diff and `git diff --check` exit 0.
 
 - [ ] **Step 4: Run API/Web builds**
 
@@ -1691,13 +1898,31 @@ docker --host unix:///var/run/docker.sock run --detach --rm \
   postgres:16-alpine
 ```
 
-Wait with `pg_isready`, apply the frozen migration with `psql -v ON_ERROR_STOP=1`, and seed only synthetic S32 fixture rows equivalent to `assessment-store.integration.test.ts`. Record the mapped port.
+Wait for PostgreSQL, capture the mapped port, apply the frozen migration, and load the synthetic fixture created in Task 11:
+
+```bash
+until docker --host unix:///var/run/docker.sock exec "$M2D_BROWSER_CONTAINER" \
+  pg_isready -h 127.0.0.1 -U s32browser -d s32_m2d_browser >/dev/null 2>&1; do
+  sleep 0.5
+done
+export M2D_BROWSER_PORT="$(
+  docker --host unix:///var/run/docker.sock port "$M2D_BROWSER_CONTAINER" 5432/tcp |
+  sed -n 's/^127\.0\.0\.1:\([0-9][0-9]*\)$/\1/p'
+)"
+test -n "$M2D_BROWSER_PORT"
+docker --host unix:///var/run/docker.sock exec -i "$M2D_BROWSER_CONTAINER" \
+  psql -X -U s32browser -d s32_m2d_browser -v ON_ERROR_STOP=1 -f - \
+  < db/migrations/001_s32_core_schema.sql
+docker --host unix:///var/run/docker.sock exec -i "$M2D_BROWSER_CONTAINER" \
+  psql -X -U s32browser -d s32_m2d_browser -v ON_ERROR_STOP=1 -f - \
+  < scripts/fixtures/s32-m2d-browser.sql
+```
 
 Start local API/Web:
 
 ```bash
 S32_FEATURES_ENABLED=true \
-S32_DATABASE_URL="postgresql://s32browser:$M2D_BROWSER_PASSWORD@127.0.0.1:<MAPPED_PORT>/s32_m2d_browser" \
+S32_DATABASE_URL="postgresql://s32browser:$M2D_BROWSER_PASSWORD@127.0.0.1:$M2D_BROWSER_PORT/s32_m2d_browser" \
 S32_PRIVATE_API_TOKEN="m2d-browser-token" \
 API_HOST=127.0.0.1 \
 API_PORT=3001 \
