@@ -12,6 +12,8 @@ import {
   ProjectApiError,
   type AssessmentDetailResponse,
   type AssessmentHistoryResponse,
+  type ResearchIssue,
+  type ResearchIssueProjectContext,
 } from './api';
 import {clearPendingCandidateClaimReceipt,loadPendingCandidateClaimReceipt} from './candidate-claim-draft';
 import {clearPendingAssessmentReceipt} from './assessment-draft';
@@ -111,7 +113,12 @@ beforeEach(()=>{
   vi.mocked(getAssessment).mockResolvedValue(detail);
 });
 afterEach(cleanup);
-function show(p=project,i=issue){return render(<CandidateClaims token="t" project={p} issue={i}/>);}
+function show(
+  p: ResearchIssueProjectContext = project,
+  i: ResearchIssue = issue,
+) {
+  return render(<CandidateClaims token="t" project={p} issue={i}/>);
+}
 async function submit(){await screen.findByText('还没有可能答案。');await userEvent.type(screen.getByRole('textbox',{name:'可能答案正文'}),'Candidate A');await userEvent.click(screen.getByRole('button',{name:'添加可能答案'}));}
 it('shows confirmed empty and canonical competing claims as plain text',async()=>{vi.mocked(listCandidateClaims).mockResolvedValue({claims:[claim,{...claim,id:'44444444-4444-4444-8444-444444444444',statement:'<script>Candidate B</script>'}]});show();expect(await screen.findByText('Candidate A')).toBeTruthy();expect(screen.getByText('<script>Candidate B</script>')).toBeTruthy();expect(document.querySelector('script')).toBeNull();expect(document.body.textContent).not.toMatch(/置信|首选|真相/);});
 it.each(['project','RESOLVED','ARCHIVED'])('hides writes for %s but reads claims',async state=>{show(state==='project'?{...project,readOnly:true}:project,{...issue,lifecycleState:state==='project'?'OPEN':state} as typeof issue);expect(await screen.findByText('还没有可能答案。')).toBeTruthy();expect(screen.queryByRole('textbox')).toBeNull();});
@@ -200,9 +207,9 @@ it('blocks new Assessment submit after a history integrity failure without hidin
 it.each([
   [{...project,readOnly:true},{...issue,lifecycleState:'OPEN' as const},'project archived'],
   [project,{...issue,lifecycleState:'ARCHIVED' as const},'issue archived'],
-])('keeps history readable but hides Assessment composer when %s',async(p,i)=>{
+])('keeps history readable but hides Assessment composer when %s',async(p,i,_label)=>{
   vi.mocked(listCandidateClaims).mockResolvedValue({claims:[claim]});
-  show(p as typeof project,i as typeof issue);
+  show(p as ResearchIssueProjectContext,i as ResearchIssue);
   expect(await screen.findByText('当前没有可显示的评价记录。')).toBeTruthy();
   await userEvent.click(screen.getByRole('button',{name:'模拟有效证据预览'}));
   expect(screen.queryByRole('heading',{name:'评价这个 Claim'})).toBeNull();
