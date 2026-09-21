@@ -1,5 +1,12 @@
 export const CANDIDATE_CLAIM_PENDING_KEY = "book-id-search:s32-m2b-claim-create-v1";
 
+export class PendingCandidateClaimIntentConflictError extends Error {
+  constructor() {
+    super("创建请求标识与当前可能答案内容不一致。");
+    this.name = "PendingCandidateClaimIntentConflictError";
+  }
+}
+
 export interface PendingCandidateClaimReceipt {
   projectId: string;
   issueId: string;
@@ -79,7 +86,16 @@ export async function getOrCreateCandidateClaimReceipt(
   const canonicalIssueId = issueId.toLowerCase();
   const requestHash = await hashCandidateClaimDraft(canonicalProjectId, canonicalIssueId, normalized);
   const existing = loadPendingCandidateClaimReceipt();
-  if (!forceNew && existing?.projectId === canonicalProjectId && existing.issueId === canonicalIssueId && existing.requestHash === requestHash) return existing;
+  if (
+    !forceNew &&
+    existing?.projectId === canonicalProjectId &&
+    existing.issueId === canonicalIssueId
+  ) {
+    if (existing.requestHash === requestHash) return existing;
+    // Same scope + changed statement: never silently rotate the idempotency key.
+    // The user must explicitly confirm the new intent (forceNew).
+    throw new PendingCandidateClaimIntentConflictError();
+  }
   const receipt = {
     projectId: canonicalProjectId,
     issueId: canonicalIssueId,

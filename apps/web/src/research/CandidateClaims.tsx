@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState,type FormEvent} from 'react';
 import {createCandidateClaim,listCandidateClaims,ProjectApiError,type CandidateClaim,type ResearchIssue,type ResearchIssueProjectContext} from './api';
-import {clearPendingCandidateClaimReceipt,getOrCreateCandidateClaimReceipt,normalizeCandidateClaimDraft} from './candidate-claim-draft';
+import {clearPendingCandidateClaimReceipt,getOrCreateCandidateClaimReceipt,normalizeCandidateClaimDraft,PendingCandidateClaimIntentConflictError} from './candidate-claim-draft';
 type Props={token:string;project:ResearchIssueProjectContext;issue:ResearchIssue};
 export function CandidateClaims(props:Props){return <CandidateClaimsSession key={`${props.token}:${props.project.id}:${props.issue.id}`} {...props}/>;}
 function CandidateClaimsSession({token,project,issue}:Props){
@@ -25,10 +25,14 @@ function CandidateClaimsSession({token,project,issue}:Props){
    const response=await createCandidateClaim(token,project.id,issue.id,receipt.idempotencyKey,normalized,controller.signal);
    if(controller.signal.aborted)return;
    clearPendingCandidateClaimReceipt();setStatement('');setState('idle');
-   setClaims(previous=>[...previous.filter(c=>c.id!==response.claim.id),response.claim]);
+   // Canonical order (ACTIVE before ARCHIVED, created_at ASC, id ASC) comes only
+   // from the server GET; a local append could reorder against PostgreSQL's
+   // microsecond-precision created_at.
+   setAttempt(n=>n+1);
   }catch(e){
    if(controller.signal.aborted)return;
-   if(e instanceof ProjectApiError&&e.code==='IDEMPOTENCY_CONFLICT'){setState('idempotency-conflict');setMessage('创建请求标识与当前可能答案内容不一致。');}
+   if(e instanceof PendingCandidateClaimIntentConflictError){setState('idempotency-conflict');setMessage(e.message);}
+   else if(e instanceof ProjectApiError&&e.code==='IDEMPOTENCY_CONFLICT'){setState('idempotency-conflict');setMessage('创建请求标识与当前可能答案内容不一致。');}
    else if(e instanceof ProjectApiError&&([400,404].includes(e.status)||['PROJECT_READ_ONLY','RESEARCH_ISSUE_READ_ONLY'].includes(e.code??''))){clearPendingCandidateClaimReceipt();setState('rejected');setMessage(e.message);}
    else{setState('unconfirmed');setMessage('创建结果尚未确认。请使用同一标识重试。');}
   }finally{if(!controller.signal.aborted)active.current=null;}
