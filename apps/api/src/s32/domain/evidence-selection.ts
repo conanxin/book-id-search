@@ -2,6 +2,9 @@ import { createHash } from "node:crypto";
 
 export class InvalidEvidenceDraftError extends Error {}
 
+export const EVIDENCE_MANIFEST_ITEMS_MIN = 1;
+export const EVIDENCE_MANIFEST_ITEMS_MAX = 100;
+
 export type EvidenceRole = "SUPPORTING" | "CONTRADICTORY" | "CONTEXTUAL";
 export type EvidenceTargetType = "SOURCE" | "SOURCE_ASSET" | "NOTE_REVISION";
 
@@ -65,7 +68,12 @@ export function normalizeEvidencePreviewInput(value: unknown): EvidenceDraftInpu
     if (!allowed.has(key)) throw new InvalidEvidenceDraftError("证据草稿包含不支持的字段。");
   }
   const items = (value as Record<string, unknown>).items;
-  if (!Array.isArray(items) || items.length === 0) throw new InvalidEvidenceDraftError("证据草稿不能为空。");
+  if (!Array.isArray(items) || items.length < EVIDENCE_MANIFEST_ITEMS_MIN) {
+    throw new InvalidEvidenceDraftError("证据草稿不能为空。");
+  }
+  if (items.length > EVIDENCE_MANIFEST_ITEMS_MAX) {
+    throw new InvalidEvidenceDraftError("证据草稿最多包含 100 条证据。");
+  }
   const itemKeys = new Set(["role", "targetType", "targetId", "note"]);
   const seen = new Set<string>();
   const normalized: EvidenceDraftInputItem[] = [];
