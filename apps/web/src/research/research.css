@@ -104,3 +104,18 @@
 .research-candidate-claims, .research-claim-list, .research-claim-list .research-card { min-width: 0; overflow-wrap: anywhere; }
 .research-candidate-claims textarea { box-sizing: border-box; width: 100%; max-width: 100%; }
 .research-claim-list { display: grid; gap: 1rem; }
+
+/* ===== S32 M2-C Evidence Editor ===== */
+.evidence-editor { margin-top: 10px; min-width: 0; overflow-wrap: anywhere; }
+.evidence-editor .evidence-toggle { font-size: 13px; padding: 4px 10px; }
+.evidence-candidates { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; }
+.evidence-candidates li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--color-border); border-radius: var(--radius); min-width: 0; }
+.evidence-role-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.evidence-draft { margin-top: 10px; display: grid; gap: 8px; }
+.evidence-draft ol { margin: 0; padding-left: 20px; display: grid; gap: 10px; }
+.evidence-draft li { display: grid; gap: 6px; border: 1px solid var(--color-border); border-radius: var(--radius); padding: 8px; min-width: 0; }
+.evidence-draft label { display: grid; gap: 4px; font-size: 13px; }
+.evidence-draft select, .evidence-draft textarea { width: 100%; min-width: 0; }
+.evidence-order-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.evidence-preview { border: 1px dashed var(--color-primary); border-radius: var(--radius); padding: 10px; margin-top: 10px; overflow-wrap: anywhere; }
+.evidence-preview code { word-break: break-all; }

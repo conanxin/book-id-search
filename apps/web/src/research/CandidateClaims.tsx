@@ -1,5 +1,6 @@
 import {useEffect,useRef,useState,type FormEvent} from 'react';
 import {createCandidateClaim,listCandidateClaims,ProjectApiError,type CandidateClaim,type ResearchIssue,type ResearchIssueProjectContext} from './api';
+import {EvidenceEditor} from './EvidenceEditor';
 import {clearPendingCandidateClaimReceipt,getOrCreateCandidateClaimReceipt,normalizeCandidateClaimDraft,PendingCandidateClaimIntentConflictError} from './candidate-claim-draft';
 type Props={token:string;project:ResearchIssueProjectContext;issue:ResearchIssue};
 export function CandidateClaims(props:Props){return <CandidateClaimsSession key={`${props.token}:${props.project.id}:${props.issue.id}`} {...props}/>;}
@@ -43,7 +44,7 @@ function CandidateClaimsSession({token,project,issue}:Props){
   {load==='loading'?<p role="status">正在读取可能答案…</p>:null}
   {load==='unavailable'?<div className="research-error" role="alert">可能答案暂不可用。<button onClick={()=>setAttempt(n=>n+1)}>重试可能答案</button></div>:null}
   {load==='ready'?<>
-   {claims.length?<div className="research-claim-list">{claims.map(claim=><article className="research-card" key={claim.id}><span className="research-issue-state">{claim.lifecycleState}</span><p>{claim.statement}</p><small>创建于 {new Date(claim.createdAt).toLocaleString('zh-CN')}</small></article>)}</div>:<p>还没有可能答案。</p>}
+   {claims.length?<div className="research-claim-list">{claims.map(claim=><article className="research-card" key={claim.id}><span className="research-issue-state">{claim.lifecycleState}</span><p>{claim.statement}</p><small>创建于 {new Date(claim.createdAt).toLocaleString('zh-CN')}</small><EvidenceEditor token={token} projectId={project.id} issueId={issue.id} claim={claim}/></article>)}</div>:<p>还没有可能答案。</p>}
    {canCreate?<form className="research-issue-form" onSubmit={onSubmit}>
     <label htmlFor="candidate-statement">可能答案正文</label>
     <textarea id="candidate-statement" rows={4} value={statement} disabled={state==='submitting'||state==='unconfirmed'} onChange={e=>setStatement(e.target.value)}/>
