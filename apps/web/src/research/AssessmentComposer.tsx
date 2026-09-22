@@ -230,6 +230,12 @@ export function AssessmentComposer({
     onPreviewInvalidated();
   }
 
+  if (state === "success" && !pendingReceipt && !preview) {
+    return <div className="assessment-composer">
+      <p className="research-issue-notice" role="status">{message}</p>
+    </div>;
+  }
+
   if (locallyReadOnly) {
     return <div className="assessment-composer">
       <p className="research-issue-notice" role="alert">{message}</p>
