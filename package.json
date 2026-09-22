@@ -42,7 +42,8 @@
     "s32:m2a:check": "tsx scripts/s32-m2a-integration-check.ts",
     "s32:m2b:check": "tsx scripts/s32-m2b-integration-check.ts",
     "s32:m2c:check": "tsx scripts/s32-m2c-integration-check.ts",
-    "s32:m2d:check": "tsx scripts/s32-m2d-integration-check.ts"
+    "s32:m2d:check": "tsx scripts/s32-m2d-integration-check.ts",
+    "s32:production:acceptance": "tsx scripts/verify-s32-production-acceptance.ts"
   },
   "dependencies": {
     "dotenv": "^17.2.3",
