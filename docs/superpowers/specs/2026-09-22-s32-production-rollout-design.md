@@ -889,7 +889,7 @@ SOURCE_BASELINE=3ddfce979ed3a2f73e75eab5f186944880c6ad4b
 PLANNING_BRANCH=plan/s32-production-rollout
 
 CONVERSATIONAL_DESIGN=APPROVED
-WRITTEN_SPEC=READY_FOR_USER_DECISION_SUMMARY
+WRITTEN_SPEC=APPROVED
 
 R0_RUNTIME_IDENTITY=PASS
 R0_LEGACY_SEARCH_SMOKE=REFRESH_REQUIRED
@@ -906,7 +906,7 @@ PRODUCTION_WRITE_AUTHORIZED=NO
 PRODUCTION_CHANGED=NO
 M2_E_STARTED=NO
 
-NEXT_ACTION=USER_DECISION_SUMMARY
+NEXT_ACTION=WRITE_IMPLEMENTATION_PLAN
 ```
 
 ## 25. Self-review result and remaining human decisions
@@ -934,15 +934,25 @@ Self-review corrections already incorporated:
 Remaining decisions are deliberately limited to user-facing behavior, not raw technical implementation:
 
 ```text
-D1_ACCESS_MODEL=
-  SESSION_ONLY_MANUAL_CREDENTIAL
-  OR
-  REQUIRE_NEW_AUTH_SYSTEM_BEFORE_ROLLOUT
+D1_ACCESS_MODEL=SESSION_ONLY_MANUAL_CREDENTIAL
 
-D2_ACCEPTANCE_DATA=
-  RETAIN_ONE_RELEASE_SCOPED_ACCEPTANCE_PROJECT
-  OR
-  REQUIRE_A_DIFFERENT_ACCEPTANCE_DATA_POLICY
+D2_ACCEPTANCE_DATA=RETAIN_ONE_RELEASE_SCOPED_ACCEPTANCE_PROJECT
 ```
 
 No production write is authorized by either decision.
+
+
+## 26. User-approved rollout decisions
+
+Approved on 2026-09-22:
+
+```text
+ACCESS_MODEL=SESSION_ONLY_MANUAL_CREDENTIAL
+ACCEPTANCE_DATA=RETAIN_ONE_RELEASE_SCOPED_ACCEPTANCE_PROJECT
+```
+
+Implications:
+
+- The first production rollout keeps the current browser-session credential UX. No new authentication subsystem is introduced before S32 deployment.
+- The R7 acceptance project is intentionally retained as release-scoped audit/persistence evidence and is never automatically deleted.
+- These approvals finalize the written design only; they do not authorize implementation execution or any production write.
