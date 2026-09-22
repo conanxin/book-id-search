@@ -74,9 +74,11 @@ def emit(f):
     print(f"MEILI_DOCUMENTS={f['stats']['numberOfDocuments']}"); print('MEILI_INDEXING=NO'); print('PUBLIC_HTTP_STATUS=200')
 
 def main():
-    ap=argparse.ArgumentParser(); ap.add_argument('--facts-json'); ap.add_argument('--public-url',default='https://books.conanxin.com'); args=ap.parse_args()
+    ap=argparse.ArgumentParser(); ap.add_argument('--facts-json'); ap.add_argument('--public-url',default='https://books.conanxin.com'); ap.add_argument('--json-out'); args=ap.parse_args()
     try:
       f=json.loads(pathlib.Path(args.facts_json).read_text()) if args.facts_json else live_facts(args.public_url)
-      validate(f); emit(f); return 0
+      validate(f)
+      if args.json_out: pathlib.Path(args.json_out).write_text(json.dumps(f,sort_keys=True),encoding='utf-8')
+      emit(f); return 0
     except Exception as e: return block(str(e))
 if __name__=='__main__': raise SystemExit(main())
