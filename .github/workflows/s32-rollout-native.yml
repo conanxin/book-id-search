@@ -40,6 +40,7 @@ jobs:
           python3 scripts/test-execute-s32-r6-web.py
           python3 scripts/test-execute-s32-r7-acceptance.py
           python3 scripts/test-plan-s32-production-rollout.py
+          python3 scripts/test-s32-production-rollout-e2e.py
       - name: R7 acceptance + scoped S32 suites
         run: |
           pnpm vitest run             scripts/verify-s32-production-acceptance.test.ts             apps/api/src/s32             apps/web/src/research
