@@ -28,11 +28,15 @@ def read_kv(path: Path) -> dict[str, str]:
         values[key] = value
     return values
 
-def receipt_path(root: Path, stage: str) -> Path:
-    return root / f"{stage.lower()}.env"
+def receipt_path(root: Path, stage: str, fp: str) -> Path:
+    if stage == "R0":
+        return root / "s32-r0.env"
+    if stage == "R1":
+        return root / "s32-r1.env"
+    return root / f"s32-rollout-{fp}-{stage}.result.env"
 
-def start_path(root: Path, stage: str) -> Path:
-    return root / f"{stage.lower()}.start"
+def start_path(root: Path, stage: str, fp: str) -> Path:
+    return root / f"s32-rollout-{fp}-{stage}.start.env"
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Read-only S32 production rollout state planner")
@@ -51,7 +55,7 @@ def main() -> int:
     receipts: dict[str, dict[str, str]] = {}
     try:
         for stage in STAGES:
-            rp = receipt_path(root, stage)
+            rp = receipt_path(root, stage, fp)
             if rp.exists():
                 receipt = read_kv(rp)
                 if receipt.get("STATUS") != "PASS":
@@ -62,7 +66,7 @@ def main() -> int:
 
         # A start artifact without a terminal receipt is ambiguous and must never auto-resume.
         for stage in STAGES[2:]:
-            if start_path(root, stage).exists() and stage not in receipts:
+            if start_path(root, stage, fp).exists() and stage not in receipts:
                 return emit(STATUS="INCOMPLETE", BLOCK_REASON=f"INCOMPLETE_{stage}")
 
         if "R0" not in receipts:
