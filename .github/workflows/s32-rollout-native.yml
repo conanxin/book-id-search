@@ -21,4 +21,4 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
       - name: R7 acceptance unit
-        run: pnpm vitest run scripts/test-verify-s32-production-acceptance.ts
+        run: pnpm vitest run scripts/verify-s32-production-acceptance.test.ts
