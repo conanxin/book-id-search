@@ -130,6 +130,14 @@ interface ActorRow {
   actor_updated_at: Date;
 }
 
+interface HistoricalNoteRevisionRow {
+  revision_id: string;
+  note_id: string;
+  revision_no: string | number | null;
+  content_format: string | null;
+  created_at: Date | null;
+}
+
 function authArrays(auth: ProjectEvidenceAuthorization): [string[], string[], string[]] {
   return [
     Array.from(auth.sourceIds),
@@ -283,6 +291,59 @@ async function loadItems(
     bucket.push(row);
   }
   return result;
+}
+
+async function validateHistoricalNoteRevisions(
+  client: PoolClient,
+  itemMap: Map<string, ManifestItemRow[]>,
+  auth: ProjectEvidenceAuthorization,
+): Promise<void> {
+  const revisionIds = Array.from(new Set(
+    Array.from(itemMap.values()).flatMap(items =>
+      items.flatMap(item => {
+        if (item.target_type !== "NOTE_REVISION") return [];
+        const revisionId = item.target_id.toLowerCase();
+        return auth.currentRevisionNoteByRevision.has(revisionId) ? [] : [revisionId];
+      }),
+    ),
+  ));
+  if (!revisionIds.length) return;
+
+  const { rows } = await client.query<HistoricalNoteRevisionRow>(
+    `/* assessment-old-note-revisions */
+     SELECT nr.id::text AS revision_id,
+            nr.note_id::text AS note_id,
+            nr.revision_no,
+            nr.content_format,
+            nr.created_at
+     FROM core.note_revisions nr
+     WHERE nr.id = ANY($1::uuid[])
+       AND nr.note_id = ANY($2::uuid[])`,
+    [revisionIds, Array.from(auth.noteIds)],
+  );
+
+  const found = new Set<string>();
+  for (const row of rows) {
+    const revisionId = row.revision_id.toLowerCase();
+    const noteId = row.note_id.toLowerCase();
+    if (!uuidPattern.test(revisionId) || !uuidPattern.test(noteId) || !auth.noteIds.has(noteId)) {
+      integrity("NOTE_REVISION_CANONICAL_INVALID");
+    }
+    const revisionNo = typeof row.revision_no === "string" ? Number(row.revision_no) : row.revision_no;
+    if (
+      !Number.isInteger(revisionNo) ||
+      (revisionNo as number) <= 0 ||
+      (row.content_format !== "MARKDOWN" && row.content_format !== "PLAIN_TEXT") ||
+      !validDate(row.created_at)
+    ) {
+      integrity("NOTE_REVISION_CANONICAL_INVALID");
+    }
+    found.add(revisionId);
+  }
+
+  if (found.size !== revisionIds.length || revisionIds.some(id => !found.has(id))) {
+    integrity("NOTE_REVISION_CANONICAL_INVALID");
+  }
 }
 
 async function loadActors(
@@ -444,9 +505,11 @@ export function reasoningExcerpt(reasoning: string | null): string | null {
 async function validateRows(
   client: PoolClient,
   rows: VisibleAssessmentRow[],
+  auth: ProjectEvidenceAuthorization,
 ): Promise<Array<{ row: VisibleAssessmentRow; canonical: ReturnType<typeof validateVisible> }>> {
   const manifestIds = rows.map(row => row.manifest_id.toLowerCase());
   const itemMap = await loadItems(client, manifestIds);
+  await validateHistoricalNoteRevisions(client, itemMap, auth);
   const actorIds = Array.from(new Set(
     rows.flatMap(row => row.actor_id === null ? [] : [row.actor_id.toLowerCase()]),
   ));
@@ -472,7 +535,7 @@ export function createPostgresAssessmentReadStore(pool: Pool): AssessmentReadSto
         const visible = await visibleHistoryRows(client, input, auth);
         const hasMore = visible.length > input.limit;
         const page = visible.slice(0, input.limit);
-        const validated = await validateRows(client, page);
+        const validated = await validateRows(client, page, auth);
 
         const last = page.at(-1);
         return {
@@ -505,7 +568,7 @@ export function createPostgresAssessmentReadStore(pool: Pool): AssessmentReadSto
         if (!visible.length) return { kind: "not-visible" };
         if (visible.length !== 1) integrity("ASSESSMENT_DETAIL_AMBIGUOUS");
 
-        const [validated] = await validateRows(client, visible);
+        const [validated] = await validateRows(client, visible, auth);
         return {
           kind: "ok",
           value: {
