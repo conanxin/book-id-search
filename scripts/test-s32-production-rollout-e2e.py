@@ -228,8 +228,25 @@ class RolloutE2E(unittest.TestCase):
             S32_R7_TEST_MODE="true", S32_R7_ACCEPTANCE_OUTPUT_FILE=str(accept),
             S32_R7_FAKE_ACCEPTANCE_EXIT="0",
         )
-        r = run(["bash", str(R7), "--execute-r7", self.fp, SRC, CTRL], env)
+        r = run(["bash", str(R7), "--execute-r7-api", self.fp, SRC, CTRL], env)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("R7_ACCEPTANCE=PENDING_WEB", r.stdout)
+
+        web_receipt = self.root / "progress" / f"s32-rollout-{self.fp}-R7.web.env"
+        web_receipt.write_text("\n".join([
+            "STATUS=PASS",
+            "STAGE=R7_WEB",
+            f"S32_RELEASE_FINGERPRINT={self.fp}",
+            "PROJECT_ID=11111111-1111-4111-8111-111111111111",
+            "S32_WEB_ACCEPTANCE=PASS",
+            "MOBILE_390x844=PASS",
+            "NO_HORIZONTAL_OVERFLOW=PASS",
+            "",
+        ]))
+        os.chmod(web_receipt, 0o600)
+        r = run(["bash", str(R7), "--complete-r7", self.fp, SRC, CTRL], env)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("R7_ACCEPTANCE=PASS", r.stdout)
 
         # The read-only planner must see the exact receipts emitted by executors.
         proc = run([
