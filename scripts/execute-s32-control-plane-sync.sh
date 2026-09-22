@@ -36,7 +36,22 @@ done
 [ "$(get_kv "$CLAIM" AUTHORIZATION_VERSION || true)" = 1 ]   && [ "$(get_kv "$CLAIM" AUTHORIZED_ACTION || true)" = S32_PRODUCTION_ROLLOUT ]   && [ "$(get_kv "$CLAIM" STAGE_GROUP || true)" = CONTROL_PLANE_SYNC ]   && [ "$(get_kv "$CLAIM" S32_RELEASE_FINGERPRINT || true)" = "$FP" ]   && [ "$(get_kv "$CLAIM" RELEASE_SOURCE_SHA || true)" = "$SRC" ]   && [ "$(get_kv "$CLAIM" CONTROL_PLANE_SHA || true)" = "$CTRL" ]   && [ "$(get_kv "$CLAIM" EXPLICIT_APPROVAL || true)" = true ]   && [ "$(get_kv "$CLAIM" CONSUMABLE_ONCE || true)" = true ]   && [ "$(get_kv "$CLAIM" CAPACITY_HARD_ONLY_ACCEPTED || true)" = false ]   && [ "$(get_kv "$CLAIM" PRODUCTION_WRITE_EXECUTED || true)" = false ]   || block CONTROL_PLANE_SYNC_CLAIM_MISMATCH
 
 [ "$(git -C "$ROOT" branch --show-current)" = main ] || block NOT_MAIN_BRANCH
-[ -z "$(git -C "$ROOT" status --porcelain)" ] || block WORKTREE_NOT_CLEAN
+
+dirty_outside_runtime() {
+  local line status path
+  while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    status="${line:0:2}"
+    path="${line:3}"
+    case "$status:$path" in
+      "??:progress/"*|"??:logs/"*) ;;
+      *) return 0 ;;
+    esac
+  done < <(git -C "$ROOT" status --porcelain=v1 --untracked-files=all)
+  return 1
+}
+
+dirty_outside_runtime && block WORKTREE_NOT_CLEAN
 
 git -C "$ROOT" fetch origin main --no-tags >/dev/null 2>&1 || block FETCH_FAILED
 TARGET="$(git -C "$ROOT" rev-parse "${CTRL}^{commit}" 2>/dev/null)" || block INVALID_TARGET
