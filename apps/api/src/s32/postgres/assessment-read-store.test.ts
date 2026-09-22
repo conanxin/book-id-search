@@ -138,6 +138,7 @@ type Options = {
   detailRows?: ReturnType<typeof assessmentRow>[];
   scopeMissing?: boolean;
   actorRows?: unknown[];
+  oldRevisionRows?: unknown[];
 };
 
 function fakePool(options: Options = {}) {
@@ -164,6 +165,17 @@ function fakePool(options: Options = {}) {
           const row = byId.get(id);
           return row ? [frozenItem(id, row.__item)] : [];
         }),
+      };
+    }
+    if (sql.includes("/* assessment-old-note-revisions */")) {
+      return {
+        rows: options.oldRevisionRows ?? [{
+          revision_id: OLD_REV,
+          note_id: NOTE,
+          revision_no: 1,
+          content_format: "MARKDOWN",
+          created_at: new Date("2025-12-31T00:00:00Z"),
+        }],
       };
     }
     if (sql.includes("FROM core.actors") && sql.includes("ANY($1::uuid[])")) {
@@ -225,6 +237,29 @@ it("keeps archived Source/Note and an older immutable NoteRevision readable", as
   expect(result.kind).toBe("ok");
   if (result.kind !== "ok") throw new Error("expected ok");
   expect(result.value.evidenceManifest.items[0].targetId).toBe(OLD_REV);
+});
+
+it("fails a visible older NoteRevision whose revision_no is noncanonical", async () => {
+  const oldItem: EvidenceDraftInputItem = {
+    role: "CONTEXTUAL",
+    targetType: "NOTE_REVISION",
+    targetId: OLD_REV,
+    note: "old immutable revision",
+  };
+  const row = assessmentRow(1, oldItem);
+  const fx = fakePool({
+    detailRows: [row],
+    oldRevisionRows: [{
+      revision_id: OLD_REV,
+      note_id: NOTE,
+      revision_no: 0,
+      content_format: "MARKDOWN",
+      created_at: new Date("2025-12-31T00:00:00Z"),
+    }],
+  });
+  await expect(createPostgresAssessmentReadStore(fx.pool).get({
+    projectId: P, issueId: I, claimId: C, assessmentId: row.assessment_id,
+  })).rejects.toBeInstanceOf(AssessmentIntegrityError);
 });
 
 it("hides manifestless/non-visible/unsupported-target Assessments instead of leaking corruption", async () => {
