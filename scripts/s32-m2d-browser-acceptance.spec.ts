@@ -215,7 +215,9 @@ test("M2-D real Firefox acceptance: create, recover, audit, privacy, lifecycle, 
   await expect(hundredPrimary.getByText("100 条证据").first()).toBeVisible();
   await hundredPrimary.getByRole("button", { name: "查看完整评价" }).first().click();
   await expect(hundredPrimary.locator(".assessment-detail-items > li")).toHaveCount(100);
-  await expect(hundredPrimary.locator(".assessment-hash")).toHaveText(/^[0-9a-f]{64}$/);
+  await expect(
+    hundredPrimary.getByLabel("完整评价").locator(".assessment-hash"),
+  ).toHaveText(/^[0-9a-f]{64}$/);
 
   // Mobile gate while the largest legal detail is visible.
   await page.setViewportSize({ width: 390, height: 844 });
