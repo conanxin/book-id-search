@@ -147,7 +147,7 @@ git commit -m "feat(s32): add canonical release manifest"
 
 ---
 
-### Task 2: Web OCI provenance and public-bundle secret guard
+### Task 2: Web OCI provenance, S32 enablement binding, and public-bundle secret guard
 
 **Files:**
 - Modify: \`apps/web/Dockerfile\`
@@ -155,8 +155,8 @@ git commit -m "feat(s32): add canonical release manifest"
 - Create: \`scripts/test-build-web-release-candidate.py\`
 
 **Interfaces:**
-- Consumes: \`SOURCE_COMMIT\`/clean repository source.
-- Produces: Web image with \`org.opencontainers.image.revision=<source sha>\`, existing static manifest, candidate JSON containing source/image identity but no secrets.
+- Consumes: exact \`SOURCE_COMMIT\` from the reviewed source.
+- Produces: Web image with \`org.opencontainers.image.revision=<source sha>\`, explicit \`VITE_S32_ENABLED=true\` release binding, static manifest, C/T/U size measurements, and candidate JSON containing source/image identity but no secrets.
 
 - [ ] **Step 1: Write RED tests**
 
@@ -164,16 +164,33 @@ Assert Dockerfile contains:
 
 \`\`\`dockerfile
 ARG SOURCE_COMMIT
+ARG VITE_S32_ENABLED=false
+ENV VITE_S32_ENABLED=$VITE_S32_ENABLED
 LABEL org.opencontainers.image.revision=$SOURCE_COMMIT
 \`\`\`
 
-Assert builder passes:
+Assert the production candidate builder passes:
 
 \`\`\`text
 --build-arg SOURCE_COMMIT=$FULL_SHA
+--build-arg VITE_S32_ENABLED=true
 \`\`\`
 
 and validates inspected OCI revision equals \`FULL_SHA\`.
+
+Candidate evidence must record:
+
+\`\`\`json
+{
+  "gitSha": "<full sha>",
+  "webS32Enabled": true,
+  "imageId": "sha256:...",
+  "imageBytes": 1,
+  "tarBytes": 1,
+  "compressedBytes": 1,
+  "staticManifestSha256": "..."
+}
+\`\`\`
 
 Also create a fake static artifact containing a known sentinel private token and prove the candidate validator rejects it.
 
@@ -183,14 +200,15 @@ Also create a fake static artifact containing a known sentinel private token and
 python3 scripts/test-build-web-release-candidate.py
 \`\`\`
 
-Expected: missing OCI revision/build arg/secret-scan behavior.
+Expected: missing OCI revision, missing explicit S32 build flag, missing size evidence, and secret-scan behavior.
 
-- [ ] **Step 3: Implement minimal provenance hardening**
+- [ ] **Step 3: Implement provenance + enablement hardening**
 
-Add build arg + label to final nginx image and update builder:
+Add the build args and OCI label to the final nginx image. The production candidate builder must pass:
 
 \`\`\`bash
---build-arg "SOURCE_COMMIT=$FULL_SHA"
+--build-arg "SOURCE_COMMIT=$FULL_SHA" \
+--build-arg "VITE_S32_ENABLED=true"
 \`\`\`
 
 After build:
@@ -201,7 +219,9 @@ OCI_REV="$($DOCKER_SUDO docker image inspect "$TAG" \
 test "$OCI_REV" = "$FULL_SHA"
 \`\`\`
 
-Scan extracted static files for the runtime-provided private-token sentinel only in tests; production build must not accept any \`VITE_S32_PRIVATE_API_TOKEN\` mechanism.
+Extract the static tree, compute the existing static manifest, export the image to tar + gzip, and record exact C/T/U measurements for R1.
+
+Scan extracted static files for the runtime-provided private-token sentinel in tests. The production build must not introduce or accept a \`VITE_S32_PRIVATE_API_TOKEN\` mechanism.
 
 - [ ] **Step 4: GREEN + existing Web tests/build**
 
@@ -215,7 +235,7 @@ pnpm --filter @book-id-search/web build
 
 \`\`\`bash
 git add apps/web/Dockerfile scripts/build-web-release-candidate.sh scripts/test-build-web-release-candidate.py
-git commit -m "feat(s32): bind web release to source revision"
+git commit -m "feat(s32): bind web release to source and enablement"
 \`\`\`
 
 ---
@@ -949,20 +969,20 @@ Document exactly:
 At minimum:
 
 \`\`\`bash
-python3 -m pytest \
-  scripts/test-s32-release-manifest.py \
-  scripts/test-build-s32-api-release-candidate.py \
-  scripts/test-build-web-release-candidate.py \
-  scripts/test-s32-runtime-common.py \
-  scripts/test-plan-s32-production-baseline.py \
-  scripts/test-plan-s32-production-capacity.py \
-  scripts/test-s32-production-authorization.py \
-  scripts/test-s32-production-roles.py \
-  scripts/test-execute-s32-r2-postgres.py \
-  scripts/test-execute-s32-r3-schema.py \
-  scripts/test-execute-s32-r4-r5.py \
-  scripts/test-execute-s32-r6-web.py \
-  scripts/test-plan-s32-production-rollout.py -q
+python3 scripts/test-s32-release-manifest.py
+python3 scripts/test-build-s32-api-release-candidate.py
+python3 scripts/test-build-web-release-candidate.py
+python3 scripts/test-s32-runtime-common.py
+python3 scripts/test-plan-s32-production-baseline.py
+python3 scripts/test-plan-s32-production-capacity.py
+python3 scripts/test-s32-control-plane-sync.py
+python3 scripts/test-s32-production-authorization.py
+python3 scripts/test-s32-production-roles.py
+python3 scripts/test-execute-s32-r2-postgres.py
+python3 scripts/test-execute-s32-r3-schema.py
+python3 scripts/test-execute-s32-r4-r5.py
+python3 scripts/test-execute-s32-r6-web.py
+python3 scripts/test-plan-s32-production-rollout.py
 
 pnpm vitest run apps/api/src/s32 apps/web/src/research \
   scripts/test-verify-s32-production-acceptance.ts
