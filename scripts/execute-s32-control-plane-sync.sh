@@ -15,6 +15,7 @@ printf '%s' "$FP" | grep -qE '^[0-9a-f]{64}$' || block INVALID_RELEASE_FINGERPRI
 printf '%s' "$SRC" | grep -qE '^[0-9a-f]{40}$' || block INVALID_SOURCE_SHA
 printf '%s' "$CTRL" | grep -qE '^[0-9a-f]{40}$' || block INVALID_CONTROL_PLANE_SHA
 
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${BOOK_ID_SEARCH_REPO_ROOT:-/opt/book-id-search}"
 CLAIM="$ROOT/progress/s32-rollout-authorization-${FP}-CONTROL_PLANE_SYNC-claim.env"
 
@@ -65,13 +66,13 @@ PRE="${S32_SYNC_PRE_FACTS_JSON:-$TMP/pre.json}"
 POST="${S32_SYNC_POST_FACTS_JSON:-$TMP/post.json}"
 
 if [ -z "${S32_SYNC_PRE_FACTS_JSON:-}" ]; then
-  python3 "$ROOT/scripts/plan-s32-production-baseline.py" --json-out "$PRE" >/dev/null     || block PRE_BASELINE_FAILED
+  BOOK_ID_SEARCH_REPO_ROOT="$ROOT" python3 "$SCRIPT_DIR/plan-s32-production-baseline.py" --json-out "$PRE" >/dev/null     || block PRE_BASELINE_FAILED
 fi
 
 git -C "$ROOT" reset --hard "$TARGET" >/dev/null || block CHECKOUT_SYNC_FAILED true
 
 if [ -z "${S32_SYNC_POST_FACTS_JSON:-}" ]; then
-  python3 "$ROOT/scripts/plan-s32-production-baseline.py" --json-out "$POST" >/dev/null     || block POST_BASELINE_FAILED true
+  BOOK_ID_SEARCH_REPO_ROOT="$ROOT" python3 "$SCRIPT_DIR/plan-s32-production-baseline.py" --json-out "$POST" >/dev/null     || block POST_BASELINE_FAILED true
 fi
 
 python3 - "$PRE" "$POST" <<'PY' || block CONTROL_PLANE_RUNTIME_DRIFT true
