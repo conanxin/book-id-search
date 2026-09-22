@@ -43,6 +43,14 @@ class RolloutPlannerTests(unittest.TestCase):
         self.assertEqual(out["STATUS"], "BLOCKED")
         self.assertEqual(out["BLOCK_REASON"], "R0_MISSING")
 
+    def test_real_r0_without_release_fingerprint_can_advance(self):
+        write(self.state / "r0.env", STATUS="PASS", STAGE="R0", R0_FINAL="PASS")
+        pass_receipt(self.state, "R1", CAPACITY_GATE="PASS_PREFERRED")
+        proc, out = run_planner(self.state)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertEqual(out["STATUS"], "READY_FOR_R2")
+        self.assertEqual(out["NEXT_STAGE"], "R2")
+
     def test_blocks_capacity_failure(self):
         pass_receipt(self.state, "R0")
         pass_receipt(self.state, "R1", CAPACITY_GATE="BLOCKED_CAPACITY")
