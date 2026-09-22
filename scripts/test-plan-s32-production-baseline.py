@@ -34,6 +34,13 @@ class T(unittest.TestCase):
   def test_http_or_indexing_failure_blocks(self):
     f=good(); f['httpStatus']=503; r=run(f); self.assertNotEqual(r.returncode,0); self.assertIn('PUBLIC_HTTP_FAILED',r.stdout+r.stderr)
     f=good(); f['stats']['isIndexing']=True; r=run(f); self.assertNotEqual(r.returncode,0); self.assertIn('MEILI_INDEXING_ACTIVE',r.stdout+r.stderr)
+  def test_live_mode_anchors_git_and_runtime_discovery(self):
+    text=SCRIPT.read_text() if SCRIPT.exists() else ''
+    self.assertIn('BOOK_ID_SEARCH_REPO_ROOT',text)
+    self.assertIn("'git','-C',str(repo)",text)
+    self.assertIn('com.docker.compose.project',text)
+    self.assertIn('com.docker.compose.service',text)
+
   def test_script_contains_no_mutating_docker_verbs(self):
     text=SCRIPT.read_text() if SCRIPT.exists() else ''
     for bad in ['docker compose up','docker compose down','docker restart','docker pull','docker build','docker rm']:
