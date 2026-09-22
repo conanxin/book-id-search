@@ -239,6 +239,23 @@ it('successful Assessment submit refreshes canonical history instead of locally 
   expect(listAssessments).toHaveBeenCalledTimes(2);
 });
 
+it('clears the committed evidence preview after Assessment success while keeping the success acknowledgement',async()=>{
+  vi.mocked(listCandidateClaims).mockResolvedValue({claims:[claim]});
+  vi.mocked(listAssessments)
+    .mockResolvedValueOnce(emptyHistory)
+    .mockResolvedValueOnce({...emptyHistory,assessments:[assessmentSummary]});
+  show();
+  await screen.findByText('当前没有可显示的评价记录。');
+  await userEvent.click(screen.getByRole('button',{name:'模拟有效证据预览'}));
+  expect(await screen.findByRole('heading',{name:'评价这个 Claim'})).toBeTruthy();
+  await userEvent.click(screen.getByLabelText('支持'));
+  await userEvent.type(screen.getByLabelText('判断理由'),'当前证据支持。');
+  await userEvent.click(screen.getByRole('button',{name:'提交评价'}));
+  expect(await screen.findByText('评价已成功提交。')).toBeTruthy();
+  expect(screen.queryByRole('heading',{name:'评价这个 Claim'})).toBeNull();
+  expect(await screen.findByText('最近一次评价')).toBeTruthy();
+});
+
 it('keeps Assessment success authoritative when the following history refresh fails',async()=>{
   vi.mocked(listCandidateClaims).mockResolvedValue({claims:[claim]});
   vi.mocked(listAssessments)
