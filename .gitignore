@@ -61,6 +61,9 @@ meilisearch-windows-amd64.exe
 # Runtime logs and generated JSON reports.
 logs/
 **/logs/
+
+# Playwright acceptance run artifacts (error contexts, traces).
+test-results/
 *.log
 *.pid
 npm-debug.log*
