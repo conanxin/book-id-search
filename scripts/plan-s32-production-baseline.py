@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import argparse,json,pathlib,subprocess,sys,urllib.parse,urllib.request
+import argparse,json,os,pathlib,subprocess,sys,urllib.parse,urllib.request
 REQ_SEARCH=('ISBN','SSID','DXID','title','author','publisher')
 
 def block(reason):
@@ -40,23 +40,45 @@ def search(public_url,q,kind):
 
 def live_facts(public_url):
     who=sh('whoami'); host=sh('hostname')
-    checkout=sh('git','rev-parse','HEAD'); branch=sh('git','branch','--show-current')
+    repo=pathlib.Path(os.environ.get('BOOK_ID_SEARCH_REPO_ROOT','/opt/book-id-search'))
+    project=os.environ.get('BOOK_ID_SEARCH_COMPOSE_PROJECT','book-id-search')
+    checkout=sh('git','-C',str(repo),'rev-parse','HEAD')
+    branch=sh('git','-C',str(repo),'branch','--show-current')
     status,_=fetch_json(public_url.rstrip('/')+'/api/health')
     _,stats=fetch_json(public_url.rstrip('/')+'/api/stats')
+
+    def compose_service_ids(name, include_stopped=False):
+        args=['sudo','-n','docker','ps']
+        if include_stopped: args.append('-a')
+        args += [
+            '--filter',f'label=com.docker.compose.project={project}',
+            '--filter',f'label=com.docker.compose.service={name}',
+            '--format','{{.ID}}',
+        ]
+        out=sh(*args)
+        return [line.strip() for line in out.splitlines() if line.strip()]
+
     services={}
     for name in ('web','api','meilisearch'):
-        cid=sh('sudo','-n','docker','compose','ps','-q',name)
-        if not cid or '\n' in cid: services[name]=None; continue
+        ids=compose_service_ids(name)
+        if len(ids)!=1:
+            services[name]=None
+            continue
+        cid=ids[0]
         vals=sh('sudo','-n','docker','inspect',cid,'--format','{{.Id}}|{{.State.StartedAt}}|{{.Config.Image}}|{{.Image}}').split('|')
         img, iid = vals[2], vals[3]
         try: rev=sh('sudo','-n','docker','image','inspect',img,'--format','{{index .Config.Labels "org.opencontainers.image.revision"}}')
         except Exception: rev=img
         services[name]={'cid':vals[0],'startedAt':vals[1],'image':img,'imageId':iid,'revision':rev or img}
-    try: pg=bool(sh('sudo','-n','docker','compose','ps','-aq','postgres'))
-    except Exception: pg=False
+
+    pg_ids=compose_service_ids('postgres',include_stopped=True)
+    if len(pg_ids)>1: raise ValueError('SERVICE_IDENTITY_INVALID:postgres')
+    pg=bool(pg_ids)
+
     try:
-        api_cid=sh('sudo','-n','docker','compose','ps','-q','api')
-        env=sh('sudo','-n','docker','inspect',api_cid,'--format','{{range .Config.Env}}{{println .}}{{end}}').splitlines()
+        api_ids=compose_service_ids('api')
+        if len(api_ids)!=1: raise ValueError('SERVICE_IDENTITY_INVALID:api')
+        env=sh('sudo','-n','docker','inspect',api_ids[0],'--format','{{range .Config.Env}}{{println .}}{{end}}').splitlines()
         s32=sorted({x.split('=',1)[0] for x in env if x.startswith('S32_')})
     except Exception: s32=[]
     qs={'ISBN':'9787538455250','SSID':'13000000','DXID':'000008232537','title':'时尚秋冬披肩','author':'鲁迅','publisher':'人民文学出版社'}
