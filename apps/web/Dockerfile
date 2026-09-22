@@ -4,7 +4,9 @@ WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 
 ARG VITE_API_BASE_URL=/api
+ARG VITE_S32_ENABLED=false
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+ENV VITE_S32_ENABLED=$VITE_S32_ENABLED
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY apps/web/package.json apps/web/package.json
@@ -14,6 +16,8 @@ COPY apps/web apps/web
 RUN pnpm --filter @book-id-search/web build
 
 FROM nginx:1.27-alpine
+ARG SOURCE_COMMIT
+LABEL org.opencontainers.image.revision=$SOURCE_COMMIT
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 EXPOSE 80
