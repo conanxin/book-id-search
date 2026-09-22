@@ -7,7 +7,7 @@ R0="${S32_R0_RECEIPT:-$ROOT/progress/s32-r0.env}"; R3="${S32_R3_RECEIPT:-$ROOT/p
 get(){ local f="$1" k="$2" n; n="$(grep -cE "^${k}=" "$f" 2>/dev/null||true)"; [ "$n" = 1 ] || return 1; grep -E "^${k}=" "$f"|head -1|cut -d= -f2-; }
 for f in "$R0" "$R3" "$CAP" "$MAN" "$CLAIM" "$PG_ENV"; do [ -f "$f" ] && [ ! -L "$f" ] || block REQUIRED_INPUT_MISSING; done
 [ "$(get "$R3" R3_SCHEMA || true)" = PASS ] && [ "$(get "$R3" S32_RELEASE_FINGERPRINT || true)" = "$FP" ] || block R3_NOT_PASS
-case "$(get "$CAP" CAPACITY_GATE || true)" in PASS_PREFERRED|PASS_HARD_ONLY) ;; *) block R4_CAPACITY_NOT_PASS;; esac
+case "$(get "$CAP" CAPACITY_GATE || true)" in PASS_PREFERRED) ;; PASS_HARD_ONLY) [ "$(get "$CLAIM" CAPACITY_HARD_ONLY_ACCEPTED || true)" = true ] || block HARD_ONLY_NOT_ACCEPTED ;; *) block R4_CAPACITY_NOT_PASS;; esac
 [ "$(get "$CLAIM" STAGE_GROUP || true)" = R4_R5 ] && [ "$(get "$CLAIM" S32_RELEASE_FINGERPRINT || true)" = "$FP" ] && [ "$(get "$CLAIM" RELEASE_SOURCE_SHA || true)" = "$SRC" ] && [ "$(get "$CLAIM" CONTROL_PLANE_SHA || true)" = "$CTRL" ] || block R4_R5_CLAIM_MISMATCH
 [ ! -e "$START" ] && [ ! -e "$RESULT" ] || block INCOMPLETE_OR_TERMINAL_R4
 OUT="$(python3 "$SCRIPT_DIR/s32-release-manifest.py" "$MAN" 2>&1)" || block RELEASE_MANIFEST_INVALID; [ "$(printf '%s\n' "$OUT"|awk -F= '$1=="S32_RELEASE_FINGERPRINT"{print $2;exit}')" = "$FP" ] || block RELEASE_MANIFEST_IDENTITY_MISMATCH
