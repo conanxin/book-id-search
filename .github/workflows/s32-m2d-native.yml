@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - feat/s32-m2d-assessment
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
