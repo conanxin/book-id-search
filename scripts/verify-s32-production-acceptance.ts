@@ -69,21 +69,29 @@ async function runLegacyChecks(apiBase: string, publicUrl: string) {
   }
 
   const probes = [
-    ["isbn", "9787111128069"],
-    ["ssid", "10000001"],
-    ["dxid", "00000001"],
-    ["title", "Acceptance"],
-    ["author", "Acceptance"],
-    ["publisher", "Acceptance"],
+    ["isbn", "9787538455250"],
+    ["ssid", "13000000"],
+    ["dxid", "000008232537"],
+    ["title", "时尚秋冬披肩"],
+    ["author", "鲁迅"],
+    ["publisher", "人民文学出版社"],
   ] as const;
 
+  let catalogBookId: string | null = null;
   for (const [kind, value] of probes) {
-    const query = new URLSearchParams({ q: value, kind });
+    const query = new URLSearchParams({ q: value });
     const result = await jsonRequest(`${apiBase}/api/search?${query}`);
     if (!result || !Array.isArray(result.items) || result.items.length < 1) {
       throw new Error(`LEGACY_SEARCH_FAILED_${kind.toUpperCase()}`);
     }
+    if (kind === "isbn") {
+      const id = result.items[0]?.id;
+      if (typeof id !== "string" || !id.trim()) throw new Error("ACCEPTANCE_CATALOG_BOOK_ID_MISSING");
+      catalogBookId = id.trim();
+    }
   }
+  if (!catalogBookId) throw new Error("ACCEPTANCE_CATALOG_BOOK_ID_MISSING");
+  return catalogBookId;
 }
 
 function jsonBody(value: unknown): RequestInit {
@@ -107,12 +115,14 @@ export async function runProductionAcceptance(options: AcceptanceOptions): Promi
   const claimStatement = `Production acceptance claim ${short}.`;
   const reasoning = `Production acceptance assessment ${short}.`;
 
-  if (!options.backendOnly) await runLegacyChecks(apiBase, publicUrl);
-  else {
-    // Backend-only acceptance still proves the legacy API stays healthy, but skips
-    // the public HTML fetch so it can run before the new Web is deployed.
-    await runLegacyChecks(apiBase, `${apiBase}/api/health`);
-  }
+  const catalogBookId = !options.backendOnly
+    ? await runLegacyChecks(apiBase, publicUrl)
+    : await runLegacyChecks(
+        apiBase,
+        // Backend-only acceptance still proves the legacy API stays healthy, but skips
+        // the public HTML fetch so it can run before the new Web is deployed.
+        `${apiBase}/api/health`,
+      );
 
   const projects = await privateRequest(apiBase, token, "/projects");
   let project = Array.isArray(projects?.projects)
@@ -134,7 +144,7 @@ export async function runProductionAcceptance(options: AcceptanceOptions): Promi
     apiBase,
     token,
     `/projects/${encodeURIComponent(projectId)}/catalog-books`,
-    jsonBody({ bookId: "catalog-book-1" }),
+    jsonBody({ bookId: catalogBookId }),
     [200, 201],
   );
   const bindingId = String(promoted.item.bindingId);
@@ -161,7 +171,13 @@ export async function runProductionAcceptance(options: AcceptanceOptions): Promi
       apiBase,
       token,
       issuesPath,
-      jsonBody({ title: issueTitle, question: "Does the production S32 vertical slice persist correctly?" }),
+      {
+        ...jsonBody({ title: issueTitle, question: "Does the production S32 vertical slice persist correctly?" }),
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": randomUUID(),
+        },
+      },
       [201],
     );
     issue = created.issue;
@@ -178,7 +194,13 @@ export async function runProductionAcceptance(options: AcceptanceOptions): Promi
       apiBase,
       token,
       claimsPath,
-      jsonBody({ statement: claimStatement }),
+      {
+        ...jsonBody({ statement: claimStatement }),
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": randomUUID(),
+        },
+      },
       [201],
     );
     claim = created.claim;
@@ -194,9 +216,6 @@ export async function runProductionAcceptance(options: AcceptanceOptions): Promi
     role: "SUPPORTING",
     targetType: candidate.targetType,
     targetId: candidate.targetId,
-    locatorType: null,
-    locator: null,
-    excerpt: null,
     note: null,
   }];
 
@@ -224,20 +243,28 @@ export async function runProductionAcceptance(options: AcceptanceOptions): Promi
       confidenceLevel: "HIGH",
       reasoning,
       expectedManifestSha256,
-      evidenceItems: items,
+      items,
     };
     const headers = {
       "content-type": "application/json",
       "Idempotency-Key": idempotencyKey,
     };
-    const first = await privateRequest(
-      apiBase,
-      token,
-      assessmentsPath,
-      { method: "POST", headers, body: JSON.stringify(payload) },
-      [201],
-    );
-    assessmentId = String(first.assessment.id);
+
+    let firstAssessmentId: string | null = null;
+    try {
+      const first = await privateRequest(
+        apiBase,
+        token,
+        assessmentsPath,
+        { method: "POST", headers, body: JSON.stringify(payload) },
+        [201],
+      );
+      firstAssessmentId = String(first.assessment.id);
+    } catch (error) {
+      // A transport failure after the server committed is deliberately ambiguous.
+      // Confirm it only by retrying the exact same command with the exact same key.
+      if (!(error instanceof TypeError)) throw error;
+    }
 
     const replay = await privateRequest(
       apiBase,
@@ -246,7 +273,11 @@ export async function runProductionAcceptance(options: AcceptanceOptions): Promi
       { method: "POST", headers, body: JSON.stringify(payload) },
       [200],
     );
-    if (String(replay.assessment?.id) !== assessmentId) throw new Error("ASSESSMENT_REPLAY_IDENTITY_MISMATCH");
+    assessmentId = String(replay.assessment?.id);
+    if (!assessmentId) throw new Error("ASSESSMENT_REPLAY_ID_MISSING");
+    if (firstAssessmentId && firstAssessmentId !== assessmentId) {
+      throw new Error("ASSESSMENT_REPLAY_IDENTITY_MISMATCH");
+    }
   }
 
   const detail = await privateRequest(
