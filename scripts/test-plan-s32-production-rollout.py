@@ -24,10 +24,20 @@ def run_planner(state: Path):
             parsed[key] = value
     return proc, parsed
 
+def receipt_path(state: Path, stage: str, fp: str = FP) -> Path:
+    if stage == "R0":
+        return state / "s32-r0.env"
+    if stage == "R1":
+        return state / "s32-r1.env"
+    return state / f"s32-rollout-{fp}-{stage}.result.env"
+
+def start_path(state: Path, stage: str, fp: str = FP) -> Path:
+    return state / f"s32-rollout-{fp}-{stage}.start.env"
+
 def pass_receipt(state: Path, stage: str, fp: str = FP, **extra: str) -> None:
     fields = {"STATUS": "PASS", "STAGE": stage, "S32_RELEASE_FINGERPRINT": fp}
     fields.update(extra)
-    write(state / f"{stage.lower()}.env", **fields)
+    write(receipt_path(state, stage, fp), **fields)
 
 class RolloutPlannerTests(unittest.TestCase):
     def setUp(self):
@@ -44,7 +54,7 @@ class RolloutPlannerTests(unittest.TestCase):
         self.assertEqual(out["BLOCK_REASON"], "R0_MISSING")
 
     def test_real_r0_without_release_fingerprint_can_advance(self):
-        write(self.state / "r0.env", STATUS="PASS", STAGE="R0", R0_FINAL="PASS")
+        write(receipt_path(self.state, "R0"), STATUS="PASS", STAGE="R0", R0_FINAL="PASS")
         pass_receipt(self.state, "R1", CAPACITY_GATE="PASS_PREFERRED")
         proc, out = run_planner(self.state)
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
@@ -61,7 +71,7 @@ class RolloutPlannerTests(unittest.TestCase):
     def test_reports_incomplete_r2_attempt(self):
         pass_receipt(self.state, "R0")
         pass_receipt(self.state, "R1", CAPACITY_GATE="PASS_PREFERRED")
-        write(self.state / "r2.start", S32_RELEASE_FINGERPRINT=FP, STARTED="true")
+        write(start_path(self.state, "R2"), S32_RELEASE_FINGERPRINT=FP, STARTED="true")
         proc, out = run_planner(self.state)
         self.assertNotEqual(proc.returncode, 0)
         self.assertEqual(out["STATUS"], "INCOMPLETE")
@@ -110,6 +120,13 @@ class RolloutPlannerTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0)
         self.assertEqual(out["STATUS"], "ROLLOUT_COMPLETE")
         self.assertEqual(out["NEXT_STAGE"], "NONE")
+
+    def test_legacy_simplified_receipt_names_do_not_advance_state(self):
+        write(self.state / "r0.env", STATUS="PASS", STAGE="R0", R0_FINAL="PASS")
+        write(self.state / "r1.env", STATUS="PASS", STAGE="R1", S32_RELEASE_FINGERPRINT=FP, CAPACITY_GATE="PASS_PREFERRED")
+        proc, out = run_planner(self.state)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertEqual(out["BLOCK_REASON"], "R0_MISSING")
 
     def test_mixed_fingerprint_blocks(self):
         pass_receipt(self.state, "R0")
