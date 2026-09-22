@@ -47,6 +47,6 @@ def main():
    if root_after<HARD or used_after_pct(root['freeBytes'],root['usedPercent'],root_peak)>80: return block('ROOT_FILESYSTEM_CAPACITY',root_after,root_peak+data_peak)
    free_after=min(root_after,data_after); peak=root_peak+data_peak
    gate='PASS_PREFERRED' if root_after>=PREFERRED and data_after>=PREFERRED else 'PASS_HARD_ONLY'
-  print('STATUS=PASS'); print(f'CAPACITY_GATE={gate}'); print(f'CURRENT_FREE_BYTES={root["freeBytes"]}'); print(f'PEAK_INCREMENT_BYTES={peak}'); print(f'FREE_AFTER_PEAK_BYTES={free_after}'); print('HARD_RESERVE_BYTES='+str(HARD)); print('PREFERRED_RESERVE_BYTES='+str(PREFERRED)); return 0
+  print('STATUS=PASS'); print(f'CAPACITY_GATE={gate}'); print(f'S32_RELEASE_FINGERPRINT={f["releaseFingerprint"]}'); print(f'CURRENT_FREE_BYTES={root["freeBytes"]}'); print(f'PEAK_INCREMENT_BYTES={peak}'); print(f'FREE_AFTER_PEAK_BYTES={free_after}'); print('HARD_RESERVE_BYTES='+str(HARD)); print('PREFERRED_RESERVE_BYTES='+str(PREFERRED)); return 0
  except Exception as e: return block(str(e))
 if __name__=='__main__': raise SystemExit(main())
