@@ -38,6 +38,7 @@ jobs:
           python3 scripts/test-execute-s32-r3-schema.py
           python3 scripts/test-execute-s32-r4-r5.py
           python3 scripts/test-execute-s32-r6-web.py
+          python3 scripts/test-execute-s32-r7-acceptance.py
           python3 scripts/test-plan-s32-production-rollout.py
       - name: R7 acceptance + scoped S32 suites
         run: |
