@@ -91,16 +91,17 @@ New or modified units:
 Test exact required keys, 40-hex source SHA, sha256 fields, image IDs, stage-neutral secret absence, deterministic key order, and mutation sensitivity.
 
 \`\`\`python
-def test_fingerprint_changes_when_migration_changes():
-    base = valid_manifest()
-    first = mod.fingerprint_manifest(base)
-    changed = {**base, "migrationSha256": "b" * 64}
-    assert mod.fingerprint_manifest(changed) != first
+class ReleaseManifestTests(unittest.TestCase):
+    def test_fingerprint_changes_when_migration_changes(self):
+        base = valid_manifest()
+        first = mod.fingerprint_manifest(base)
+        changed = {**base, "migrationSha256": "b" * 64}
+        self.assertNotEqual(mod.fingerprint_manifest(changed), first)
 
-def test_secret_keys_are_rejected():
-    data = valid_manifest() | {"s32PrivateApiToken": "secret"}
-    with pytest.raises(ValueError, match="SECRET_FIELD_FORBIDDEN"):
-        mod.fingerprint_manifest(data)
+    def test_secret_keys_are_rejected(self):
+        data = valid_manifest() | {"s32PrivateApiToken": "secret"}
+        with self.assertRaisesRegex(ValueError, "SECRET_FIELD_FORBIDDEN"):
+            mod.fingerprint_manifest(data)
 \`\`\`
 
 - [ ] **Step 2: Run the tests and verify RED**
@@ -108,7 +109,7 @@ def test_secret_keys_are_rejected():
 Run:
 
 \`\`\`bash
-python3 -m pytest scripts/test-s32-release-manifest.py -q
+python3 scripts/test-s32-release-manifest.py
 \`\`\`
 
 Expected: import/file missing failures.
@@ -122,7 +123,8 @@ FIELDS = (
     "version", "sourceSha", "pnpmLockSha256",
     "apiImageTag", "apiImageId", "apiOciRevision", "apiBaseDigest",
     "webImageTag", "webImageId", "webOciRevision",
-    "webStaticManifestSha256", "webNodeBaseDigest", "webNginxBaseDigest",
+    "webStaticManifestSha256", "webS32Enabled",
+    "webNodeBaseDigest", "webNginxBaseDigest",
     "pgImageRef", "pgImageId",
     "migrationPath", "migrationSha256",
     "roleBootstrapPath", "roleBootstrapSha256",
@@ -178,7 +180,7 @@ Also create a fake static artifact containing a known sentinel private token and
 - [ ] **Step 2: Run RED**
 
 \`\`\`bash
-python3 -m pytest scripts/test-build-web-release-candidate.py -q
+python3 scripts/test-build-web-release-candidate.py
 \`\`\`
 
 Expected: missing OCI revision/build arg/secret-scan behavior.
@@ -204,7 +206,7 @@ Scan extracted static files for the runtime-provided private-token sentinel only
 - [ ] **Step 4: GREEN + existing Web tests/build**
 
 \`\`\`bash
-python3 -m pytest scripts/test-build-web-release-candidate.py -q
+python3 scripts/test-build-web-release-candidate.py
 pnpm vitest run apps/web/src/research
 pnpm --filter @book-id-search/web build
 \`\`\`
@@ -250,7 +252,7 @@ Test candidate JSON fields:
 - [ ] **Step 2: Run RED**
 
 \`\`\`bash
-python3 -m pytest scripts/test-build-s32-api-release-candidate.py -q
+python3 scripts/test-build-s32-api-release-candidate.py
 \`\`\`
 
 - [ ] **Step 3: Implement exact-source build**
@@ -308,7 +310,7 @@ Cover duplicate keys, symlinks, mode mismatch, atomic temp+rename, receipt hash,
 - [ ] **Step 2: Run RED**
 
 \`\`\`bash
-python3 -m pytest scripts/test-s32-runtime-common.py -q
+python3 scripts/test-s32-runtime-common.py
 \`\`\`
 
 - [ ] **Step 3: Implement helpers**
@@ -361,7 +363,7 @@ assert result["R0_FINAL"] == "PASS"
 - [ ] **Step 2: Run RED**
 
 \`\`\`bash
-python3 -m pytest scripts/test-plan-s32-production-baseline.py -q
+python3 scripts/test-plan-s32-production-baseline.py
 \`\`\`
 
 - [ ] **Step 3: Implement read-only planner**
@@ -404,7 +406,7 @@ Cases:
 - [ ] **Step 2: Run RED**
 
 \`\`\`bash
-python3 -m pytest scripts/test-plan-s32-production-capacity.py -q
+python3 scripts/test-plan-s32-production-capacity.py
 \`\`\`
 
 - [ ] **Step 3: Implement integer-byte accounting**
@@ -424,7 +426,86 @@ git commit -m "feat(s32): add production capacity gate"
 
 ---
 
-### Task 7: Stage-scoped S32 production authorization and claim
+### Task 7: Control-plane sync planner and guarded executor
+
+**Files:**
+- Create: \`scripts/plan-s32-control-plane-sync.py\`
+- Create: \`scripts/execute-s32-control-plane-sync.sh\`
+- Create: \`scripts/test-s32-control-plane-sync.py\`
+
+**Interfaces:**
+- Planner consumes current production checkout SHA, target reviewed control-plane SHA, R0 runtime identities, and clean-worktree facts; produces a read-only sync plan.
+- Executor consumes an explicit control-plane-sync authorization, exact target SHA, and frozen R0 identities; it updates only the production Git checkout and then proves Web/API/Meili runtime identities and public behavior did not change.
+
+- [ ] **Step 1: Write RED tests**
+
+Use a temporary Git repository plus fake Docker/HTTP readers.
+
+Required cases:
+- target SHA not reachable from reviewed \`origin/main\` => block;
+- dirty production checkout outside allowed runtime/progress paths => block;
+- branch not \`main\` => block;
+- planner attempts a write => test fails;
+- executor invoked without exact explicit sync authorization => block;
+- post-sync Web/API/Meili CID, StartedAt, or image ID drift => \`CONTROL_PLANE_RUNTIME_DRIFT\`;
+- sync succeeds only when checkout moves to exact target SHA while runtime identities remain byte-for-byte/fact-for-fact unchanged.
+
+- [ ] **Step 2: Run RED**
+
+\`\`\`bash
+python3 scripts/test-s32-control-plane-sync.py
+\`\`\`
+
+Expected: missing planner/executor failures.
+
+- [ ] **Step 3: Implement read-only planner**
+
+The planner may run \`git fetch\` only when invoked in an explicitly designated planning environment; production-side planning defaults to reading existing refs. It emits:
+
+\`\`\`text
+STATUS=READY
+CURRENT_CONTROL_PLANE_SHA=...
+TARGET_CONTROL_PLANE_SHA=...
+TARGET_REACHABLE_FROM_ORIGIN_MAIN=YES
+RUNTIME_BASELINE_MATCH=YES
+PRODUCTION_WRITE_EXECUTED=false
+\`\`\`
+
+It never changes checkout, Docker, Compose, env files, or database state.
+
+- [ ] **Step 4: Implement guarded sync executor**
+
+The only intended production Git mutation is an exact fast-forward/reset-to-reviewed-commit operation after explicit authorization; do not merge, rebase, cherry-pick, or build.
+
+Immediately after the checkout update, re-read:
+
+\`\`\`text
+WEB_CID / WEB_STARTED_AT / WEB_IMAGE_ID
+API_CID / API_STARTED_AT / API_IMAGE_ID
+MEILI_CID / MEILI_STARTED_AT / MEILI_IMAGE_ID
+PUBLIC_HTTP
+\`\`\`
+
+and require equality with the pre-sync R0 runtime receipt.
+
+- [ ] **Step 5: GREEN**
+
+\`\`\`bash
+python3 scripts/test-s32-control-plane-sync.py
+\`\`\`
+
+Expected: all fake-repo/fake-runtime tests PASS and no Docker mutation command appears in planner/executor fixtures.
+
+- [ ] **Step 6: Commit**
+
+\`\`\`bash
+git add scripts/plan-s32-control-plane-sync.py scripts/execute-s32-control-plane-sync.sh scripts/test-s32-control-plane-sync.py
+git commit -m "feat(s32): add guarded control-plane sync"
+\`\`\`
+
+---
+
+### Task 8: Stage-scoped S32 production authorization and claim
 
 **Files:**
 - Create: \`scripts/authorize-s32-production-rollout.sh\`
@@ -449,7 +530,7 @@ Reject:
 - [ ] **Step 2: Run RED**
 
 \`\`\`bash
-python3 -m pytest scripts/test-s32-production-authorization.py -q
+python3 scripts/test-s32-production-authorization.py
 \`\`\`
 
 - [ ] **Step 3: Implement one-time artifact**
@@ -483,7 +564,7 @@ git commit -m "feat(s32): add stage-scoped rollout authorization"
 
 ---
 
-### Task 8: Non-secret PostgreSQL role bootstrap artifact
+### Task 9: Non-secret PostgreSQL role bootstrap artifact
 
 **Files:**
 - Create: \`deploy/s32-production-roles.sql\`
@@ -534,7 +615,7 @@ git commit -m "feat(s32): add production application role bootstrap"
 
 ---
 
-### Task 9: R2 PostgreSQL dark-bootstrap executor
+### Task 10: R2 PostgreSQL dark-bootstrap executor
 
 **Files:**
 - Create: \`scripts/execute-s32-r2-postgres.sh\`
@@ -559,7 +640,7 @@ Test:
 - [ ] **Step 2: Run RED**
 
 \`\`\`bash
-python3 -m pytest scripts/test-execute-s32-r2-postgres.py -q
+python3 scripts/test-execute-s32-r2-postgres.py
 \`\`\`
 
 - [ ] **Step 3: Implement narrow stage executor**
@@ -587,7 +668,7 @@ git commit -m "feat(s32): add postgres dark rollout executor"
 
 ---
 
-### Task 10: R3 frozen-schema and runtime-role executor
+### Task 11: R3 frozen-schema and runtime-role executor
 
 **Files:**
 - Create: \`scripts/execute-s32-r3-schema.sh\`
@@ -611,7 +692,7 @@ Cases:
 - [ ] **Step 2: Run RED**
 
 \`\`\`bash
-python3 -m pytest scripts/test-execute-s32-r3-schema.py -q
+python3 scripts/test-execute-s32-r3-schema.py
 \`\`\`
 
 - [ ] **Step 3: Implement exact execution order**
@@ -642,7 +723,7 @@ git commit -m "feat(s32): add frozen schema rollout executor"
 
 ---
 
-### Task 11: R4 API dark rollout and R5 S32 activation
+### Task 12: R4 API dark rollout and R5 S32 activation
 
 **Files:**
 - Create: \`scripts/execute-s32-r4-api-dark.sh\`
@@ -672,7 +753,7 @@ R5:
 - [ ] **Step 2: Run RED**
 
 \`\`\`bash
-python3 -m pytest scripts/test-execute-s32-r4-r5.py -q
+python3 scripts/test-execute-s32-r4-r5.py
 \`\`\`
 
 - [ ] **Step 3: Implement R4 narrow API replacement**
@@ -686,7 +767,7 @@ Mount/use root-owned mode-600 API env file; never echo values. Run private backe
 - [ ] **Step 5: GREEN + existing S32 API suites**
 
 \`\`\`bash
-python3 -m pytest scripts/test-execute-s32-r4-r5.py -q
+python3 scripts/test-execute-s32-r4-r5.py
 pnpm vitest run apps/api/src/s32
 pnpm s32:m2a:check
 pnpm s32:m2b:check
@@ -703,7 +784,7 @@ git commit -m "feat(s32): add api dark rollout and activation"
 
 ---
 
-### Task 12: R6 Web rollout bound to the S32 release
+### Task 13: R6 Web rollout bound to the S32 release
 
 **Files:**
 - Create: \`scripts/execute-s32-r6-web.sh\`
@@ -728,7 +809,7 @@ Require:
 - [ ] **Step 2: Run RED**
 
 \`\`\`bash
-python3 -m pytest scripts/test-execute-s32-r6-web.py -q
+python3 scripts/test-execute-s32-r6-web.py
 \`\`\`
 
 - [ ] **Step 3: Implement Web-only stage**
@@ -738,7 +819,7 @@ Integrate the existing Web deploy executor by passing an already verified image 
 - [ ] **Step 4: GREEN + Web research tests**
 
 \`\`\`bash
-python3 -m pytest scripts/test-execute-s32-r6-web.py -q
+python3 scripts/test-execute-s32-r6-web.py
 pnpm vitest run apps/web/src/research
 pnpm --filter @book-id-search/web build
 \`\`\`
@@ -752,7 +833,7 @@ git commit -m "feat(s32): add release-bound web rollout"
 
 ---
 
-### Task 13: R7 production acceptance harness and retained canary project
+### Task 14: R7 production acceptance harness and retained canary project
 
 **Files:**
 - Create: \`scripts/verify-s32-production-acceptance.ts\`
@@ -812,7 +893,7 @@ git commit -m "feat(s32): add production acceptance harness"
 
 ---
 
-### Task 14: Cross-stage rollout planner, operator docs, and whole-branch verification
+### Task 15: Cross-stage rollout planner, operator docs, and whole-branch verification
 
 **Files:**
 - Create: \`scripts/plan-s32-production-rollout.py\`
@@ -844,7 +925,7 @@ mixed release fingerprints => BLOCK
 - [ ] **Step 2: Run RED**
 
 \`\`\`bash
-python3 -m pytest scripts/test-plan-s32-production-rollout.py -q
+python3 scripts/test-plan-s32-production-rollout.py
 \`\`\`
 
 - [ ] **Step 3: Implement read-only planner**
@@ -943,7 +1024,7 @@ git commit -m "docs(s32): complete production rollout toolchain plan"
 
 ## Implementation completion gate
 
-Implementation is complete only when all 14 tasks are committed on one feature branch, the isolated rollout E2E passes, frozen SQL is byte-identical to the approved baseline, and a final whole-branch review reports no unresolved Critical/Important finding.
+Implementation is complete only when all 15 tasks are committed on one feature branch, the isolated rollout E2E passes, frozen SQL is byte-identical to the approved baseline, and a final whole-branch review reports no unresolved Critical/Important finding.
 
 Implementation completion still means:
 
