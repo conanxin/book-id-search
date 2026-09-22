@@ -1,5 +1,14 @@
 # BOOK-ID-SEARCH status
 
+## M2-D Assessment — implementation checkpoint
+
+- task_id: `S32_M2D_ASSESSMENT_EXECUTION_R1`; branch `feat/s32-m2d-assessment`; implementation base `eddc0c1ef2d89870ffe9c5a40e0c5e881b5bc627` (approved spec+plan atop `main@59476a97739c13ed039ab315cad8e29c85acf94a`); exact tested commit before status docs `c34c72d1fb96d2159340ae9e990521ecb1a30780`; PR #18 draft.
+- Implemented CQRS-lite Assessment flow: shared Project evidence authorization; 1..100 Manifest bound; strict Assessment domain/application contracts; SERIALIZABLE atomic Manifest+Items+Assessment command store with idempotent replay; REPEATABLE READ Project-scoped history/detail with visibility-before-integrity and keyset pagination; private routes; strict Web client; sessionStorage pending committed-intent receipt; Claim-card Evidence → Assessment Composer → History → Detail surfaces with independent degradation.
+- Fresh exact-head gates at `c34c72d1...`: API S32 scoped 584 PASS / 70 SKIP (43 files PASS / 9 SKIP); Web research 304 PASS; M2-C real PG16 13/13 PASS; M2-D real PG16 13/13 PASS; schema static 23/23 PASS; frozen SQL unchanged; API build PASS; Web build PASS.
+- Real Firefox acceptance: 1/1 PASS; create/replay/audit/privacy/lifecycle/reload recovery PASS; `M2_D_REAL_BROWSER=PASS`; mobile 390×844 no horizontal overflow PASS; disposable browser PG container removed.
+- Full repository suite after excluding the Playwright-only M2-D acceptance spec from Vitest collection: 4255 PASS / 16 FAIL / 70 SKIP / 1 error. All remaining failures are pre-existing Weread files: `scripts/weread/audit-confirmed-matches.test.ts`, `scripts/weread/build-duplicate-catalog-review.test.ts`, `scripts/weread/repair-confirmed-match-review.test.ts`, `apps/web/src/weread/wereadReadingArchiveMarkdown.test.ts`. Reported exactly; not relabeled as PASS.
+- `M2_D_IMPLEMENTATION=COMPLETE_ON_BRANCH` pending final whole-branch review and exact-head post-doc smoke; `M2_E_STARTED=NO`; `PRODUCTION_CHANGED=NO`; `PRODUCTION_DEPLOYED=NO`.
+
 ## M2-C Evidence Selection — current checkpoint
 
 - task_id: `S32_M2C_EVIDENCE_SELECTION_EXECUTION_R1`; branch `feat/s32-m2c-evidence-selection`; baseline `8f5b4829b172ebae6a0f99201237da0e5666a33b`; spec `23f47490cb5fc9bd872409c98ca24c27f14c0af5`; plan `951ae496ea01bad05897bba65ac52d50ef1b009b`. See the PR for tested_commit and full evidence.
