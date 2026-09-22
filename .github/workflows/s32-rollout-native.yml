@@ -22,3 +22,5 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: R7 acceptance unit
         run: pnpm vitest run scripts/verify-s32-production-acceptance.test.ts
+      - name: R0-R7 state machine
+        run: python3 scripts/test-plan-s32-production-rollout.py
