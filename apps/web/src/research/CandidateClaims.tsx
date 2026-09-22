@@ -39,6 +39,7 @@ function ClaimAssessmentSession({
   const [integrityBlocked, setIntegrityBlocked] = useState(false);
   const [selectedAssessmentId, setSelectedAssessmentId] = useState<string | null>(null);
   const [evidenceRefreshVersion, setEvidenceRefreshVersion] = useState(0);
+  const [previewResetVersion, setPreviewResetVersion] = useState(0);
 
   const writeAllowed = !project.readOnly
     && (issue.lifecycleState === "OPEN" || issue.lifecycleState === "RESOLVED");
@@ -64,6 +65,7 @@ function ClaimAssessmentSession({
       issueId={issue.id}
       claim={claim}
       onPreviewChange={setPreview}
+      previewResetVersion={previewResetVersion}
     />
 
     <AssessmentComposer
@@ -75,7 +77,8 @@ function ClaimAssessmentSession({
       writeAllowed={writeAllowed}
       integrityBlocked={integrityBlocked}
       onCommitted={() => {
-        refreshEvidence();
+        setPreview(null);
+        setPreviewResetVersion(version => version + 1);
         refreshHistory();
       }}
       onNeedsEvidenceRefresh={refreshEvidence}
