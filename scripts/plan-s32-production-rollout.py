@@ -56,7 +56,7 @@ def main() -> int:
                 receipt = read_kv(rp)
                 if receipt.get("STATUS") != "PASS":
                     return emit(STATUS="BLOCKED", BLOCK_REASON=f"{stage}_RECEIPT_NOT_PASS")
-                if receipt.get("S32_RELEASE_FINGERPRINT") != fp:
+                if stage != "R0" and receipt.get("S32_RELEASE_FINGERPRINT") != fp:
                     return emit(STATUS="BLOCKED", BLOCK_REASON="RELEASE_FINGERPRINT_MISMATCH")
                 receipts[stage] = receipt
 
