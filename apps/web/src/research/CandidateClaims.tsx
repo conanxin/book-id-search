@@ -74,7 +74,10 @@ function ClaimAssessmentSession({
       preview={preview}
       writeAllowed={writeAllowed}
       integrityBlocked={integrityBlocked}
-      onCommitted={() => refreshHistory()}
+      onCommitted={() => {
+        refreshEvidence();
+        refreshHistory();
+      }}
       onNeedsEvidenceRefresh={refreshEvidence}
       onPreviewInvalidated={() => setPreview(null)}
     />
