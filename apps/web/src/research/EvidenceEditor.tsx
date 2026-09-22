@@ -39,6 +39,7 @@ export interface EvidenceEditorProps {
   issueId: string;
   claim: CandidateClaim;
   onPreviewChange?: (preview: CurrentEvidencePreview | null) => void;
+  previewResetVersion?: number;
   disabled?: boolean;
 }
 
@@ -60,7 +61,15 @@ function candidateLabel(candidate: EvidenceCandidate): string {
 }
 
 export function EvidenceEditor(props: EvidenceEditorProps) {
-  const { token, projectId, issueId, claim, onPreviewChange, disabled = false } = props;
+  const {
+    token,
+    projectId,
+    issueId,
+    claim,
+    onPreviewChange,
+    previewResetVersion = 0,
+    disabled = false,
+  } = props;
   const [load, setLoad] = useState<CandidateLoadState>("collapsed");
   const [candidates, setCandidates] = useState<EvidenceCandidate[]>([]);
   const [draft, setDraft] = useState<LocalEvidenceItem[]>([]);
@@ -71,10 +80,20 @@ export function EvidenceEditor(props: EvidenceEditorProps) {
   // response never overwrites a more recent idle/loading state.
   const previewRequest = useRef<AbortController | null>(null);
   const draftVersion = useRef(0);
+  const lastPreviewResetVersion = useRef(previewResetVersion);
   useEffect(() => () => {
     active.current?.abort();
     previewRequest.current?.abort();
   }, []);
+
+  useEffect(() => {
+    if (lastPreviewResetVersion.current === previewResetVersion) return;
+    lastPreviewResetVersion.current = previewResetVersion;
+    previewRequest.current?.abort();
+    previewRequest.current = null;
+    setPreview({ state: "idle" });
+    onPreviewChange?.(null);
+  }, [previewResetVersion, onPreviewChange]);
 
   function mutateDraft(update: (previous: LocalEvidenceItem[]) => LocalEvidenceItem[]) {
     if (disabled) return;
