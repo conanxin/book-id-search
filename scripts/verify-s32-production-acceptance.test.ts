@@ -58,7 +58,8 @@ async function fixtureServer(token: string, fingerprint: string) {
       if (req.headers.authorization !== `Bearer ${token}`) return send(res, 403, { error: { message: "bad token" } });
     }
 
-    if (url.pathname === "/") return send(res, 200, { ok: true });\n    if (url.pathname === "/api/health") return send(res, 200, { ok: true });
+    if (url.pathname === "/") return send(res, 200, { ok: true });
+    if (url.pathname === "/api/health") return send(res, 200, { ok: true });
     if (url.pathname === "/api/stats") return send(res, 200, { numberOfDocuments: 5115734, isIndexing: false });
     if (url.pathname === "/api/search") return send(res, 200, { items: [{ id: "catalog-book-1", title: "Acceptance Book" }] });
 
