@@ -64,6 +64,7 @@ import {
 import { createS32Router } from "./s32/register.js";
 import { readS32Config } from "./s32/config.js";
 import { createProjectItemNoteBodyParser } from "./s32/routes/project-item-note-routes.js";
+import { createResearchRouter } from "./research/register.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(currentDir, "../../../");
@@ -136,6 +137,10 @@ app.use(
     getCatalogDocument: (id) => index.getDocument(id),
   }),
 );
+
+// P9-A Research Runtime sidecar: contract + policy evaluation + skill
+// discovery only (no DB, no LLM). Isolated prefix; no existing routes change.
+app.use("/api/research/v0", createResearchRouter());
 
 // ---------------------------------------------------------------------------
 // S27H: lightweight in-memory rate limiter for the private reading-map
