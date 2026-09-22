@@ -91,7 +91,7 @@ class RealPostgresRoleTests(unittest.TestCase):
         self.assertEqual(flags, "0,0,0,0")
 
         ddl = subprocess.run([
-            "docker", "exec", "-e", "PGPASSWORD=app-test-password", cls_name(self),
+            "docker", "exec", "-e", "PGPASSWORD=app-test-password", self.name,
             "psql", "-X", "-h", "127.0.0.1", "-U", "s32_app", "-d", "book_id_search_s32",
             "-c", "CREATE TABLE core.forbidden(id integer)",
         ], text=True, capture_output=True)
@@ -99,7 +99,7 @@ class RealPostgresRoleTests(unittest.TestCase):
         self.assertIn("permission denied", (ddl.stdout + ddl.stderr).lower())
 
         dml = subprocess.run([
-            "docker", "exec", "-e", "PGPASSWORD=app-test-password", cls_name(self),
+            "docker", "exec", "-e", "PGPASSWORD=app-test-password", self.name,
             "psql", "-X", "-h", "127.0.0.1", "-U", "s32_app", "-d", "book_id_search_s32",
             "-c", "INSERT INTO core.runtime_probe(id) VALUES (1)",
         ], text=True, capture_output=True)
@@ -115,8 +115,6 @@ class RealPostgresRoleTests(unittest.TestCase):
         exists = self.psql_admin("SELECT count(*) FROM pg_roles WHERE rolname='s32_fail'").stdout.strip()
         self.assertEqual(exists, "0")
 
-def cls_name(testcase):
-    return testcase.__class__.name
 
 if __name__ == "__main__":
     unittest.main()
