@@ -1,5 +1,13 @@
 # BOOK-ID-SEARCH status
 
+## S32 Production Rollout tooling — implementation checkpoint
+
+- task_id: `S32_PRODUCTION_ROLLOUT_EXECUTION_R1`; branch `feat/s32-production-rollout`; approved spec+plan are implemented through the R7 acceptance harness and cross-stage planner.
+- Tooling covers immutable release fingerprints, exact-source API/Web candidates, fresh R0/R1 gates, guarded control-plane sync, stage-scoped one-time authorization, R2 PostgreSQL, R3 schema/roles, R4/R5 API dark+activation, R6 Web, and R7 retained-canary acceptance.
+- Production remains untouched. This branch implements deployment tooling only; no stage authorization has been issued.
+- `PRODUCTION_WRITE_AUTHORIZED=NO`; `PRODUCTION_CHANGED=NO`; `PRODUCTION_DEPLOYED=NO`; `M2_E_STARTED=NO`.
+- Next: whole-branch verification and review, then fresh R0/R1 read-only preflight after merge; do not deploy automatically.
+
 ## M2-D Assessment — merged checkpoint
 
 - task_id: `S32_M2D_MERGE_R1`; [PR #18](https://github.com/conanxin/book-id-search/pull/18) merged into `main` as `78f37901931fe262b1887bd52bda32a56b4d02c2`; merged PR head `a9e0e1212d77dc26f75b0ffc024d91d7983522d2`; product fix tested commit `a11b0f9f073f9823fbeeecdafef14c9144c656ff`.
