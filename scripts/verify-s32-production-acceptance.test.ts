@@ -27,6 +27,8 @@ type State = {
   droppedAssessmentResponses: number;
   promotedBookId: string | null;
   assessmentKey: string | null;
+  issueKey: string | null;
+  claimKey: string | null;
 };
 
 const servers: Array<ReturnType<typeof createServer>> = [];
@@ -52,7 +54,18 @@ async function fixtureServer(token: string, fingerprint: string) {
   const issueTitle = `[Acceptance] ${short}`;
   const claimStatement = `Production acceptance claim ${short}.`;
   const reasoning = `Production acceptance assessment ${short}.`;
-  const state: State = { projects: 0, notes: 0, issues: 0, claims: 0, assessments: 0, droppedAssessmentResponses: 0, promotedBookId: null, assessmentKey: null };
+  const state: State = {
+    projects: 0,
+    notes: 0,
+    issues: 0,
+    claims: 0,
+    assessments: 0,
+    droppedAssessmentResponses: 0,
+    promotedBookId: null,
+    assessmentKey: null,
+    issueKey: null,
+    claimKey: null,
+  };
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url || "/", "http://127.0.0.1");
@@ -101,14 +114,30 @@ async function fixtureServer(token: string, fingerprint: string) {
       return send(res, 200, { project: { id: UUID.project }, issues: state.issues ? [{ id: UUID.issue, projectId: UUID.project, title: issueTitle, questionExcerpt: "Acceptance?", lifecycleState: "OPEN", createdAt: "2026-09-22T00:00:00Z", updatedAt: "2026-09-22T00:00:00Z" }] : [] });
     }
     if (url.pathname === `/api/private/s32/projects/${UUID.project}/issues` && req.method === "POST") {
-      state.issues += 1;
+      const key = String(req.headers["idempotency-key"] || "");
+      if (!/^[0-9a-f-]{36}$/.test(key)) {
+        return send(res, 400, { error: { code: "RESEARCH_ISSUE_INVALID_INPUT", message: "missing idempotency key" } });
+      }
+      if (state.issueKey && state.issueKey !== key) {
+        return send(res, 409, { error: { code: "IDEMPOTENCY_CONFLICT", message: "different issue key" } });
+      }
+      state.issueKey = key;
+      state.issues = 1;
       return send(res, 201, { project: { id: UUID.project }, issue: { id: UUID.issue, projectId: UUID.project, title: issueTitle, question: "Acceptance?", lifecycleState: "OPEN", createdAt: "2026-09-22T00:00:00Z", updatedAt: "2026-09-22T00:00:00Z" } });
     }
     if (url.pathname === `/api/private/s32/projects/${UUID.project}/issues/${UUID.issue}/claims` && req.method === "GET") {
       return send(res, 200, { claims: state.claims ? [{ id: UUID.claim, statement: claimStatement, lifecycleState: "ACTIVE", createdAt: "2026-09-22T00:00:00Z", updatedAt: "2026-09-22T00:00:00Z" }] : [] });
     }
     if (url.pathname === `/api/private/s32/projects/${UUID.project}/issues/${UUID.issue}/claims` && req.method === "POST") {
-      state.claims += 1;
+      const key = String(req.headers["idempotency-key"] || "");
+      if (!/^[0-9a-f-]{36}$/.test(key)) {
+        return send(res, 400, { error: { code: "CLAIM_INVALID_INPUT", message: "missing idempotency key" } });
+      }
+      if (state.claimKey && state.claimKey !== key) {
+        return send(res, 409, { error: { code: "IDEMPOTENCY_CONFLICT", message: "different claim key" } });
+      }
+      state.claimKey = key;
+      state.claims = 1;
       return send(res, 201, { claim: { id: UUID.claim, statement: claimStatement, lifecycleState: "ACTIVE", createdAt: "2026-09-22T00:00:00Z", updatedAt: "2026-09-22T00:00:00Z" } });
     }
     if (url.pathname.endsWith("/evidence-candidates") && req.method === "GET") {
@@ -141,7 +170,11 @@ async function fixtureServer(token: string, fingerprint: string) {
       if (replay && state.assessmentKey !== key) return send(res, 409, { error: { code: "IDEMPOTENCY_CONFLICT", message: "different key" } });
       if (!replay) state.assessmentKey = key;
       state.assessments = 1;
-      if (!replay) state.droppedAssessmentResponses += 1;
+      if (!replay && state.droppedAssessmentResponses === 0) {
+        state.droppedAssessmentResponses = 1;
+        req.socket.destroy();
+        return;
+      }
       const response = { status: replay ? "replayed" : "created", visible: true, assessment: { id: UUID.assessment, claimId: UUID.claim, stance: "SUPPORTS", confidenceLevel: "HIGH", actorId: null, numericScore: null, scoreKind: null, reasoning, createdAt: "2026-09-22T00:00:00Z" }, evidenceManifest: { id: UUID.manifest, schemaVersion: 1, purpose: "CLAIM_ASSESSMENT", manifestSha256: "a".repeat(64), itemCount: 1 } };
       return send(res, replay ? 200 : 201, response);
     }
@@ -177,6 +210,9 @@ describe("S32 production acceptance harness", () => {
     expect(first.assessmentReplay).toBe("PASS");
     expect(fixture.state.promotedBookId).toBe("catalog-prod-1");
     expect(fixture.state.assessmentKey).toMatch(/^[0-9a-f-]{36}$/);
+    expect(fixture.state.issueKey).toMatch(/^[0-9a-f-]{36}$/);
+    expect(fixture.state.claimKey).toMatch(/^[0-9a-f-]{36}$/);
+    expect(fixture.state.droppedAssessmentResponses).toBe(1);
   });
 
   it("never renders the bearer token in its machine-readable result", async () => {
