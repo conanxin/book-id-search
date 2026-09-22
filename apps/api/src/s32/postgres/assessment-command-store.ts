@@ -20,7 +20,9 @@ import {
 import type {
   AssessmentManifestSummary,
   AssessmentRecord,
+  NormalizedAssessmentInput,
 } from "../domain/assessment.js";
+import { hashAssessmentCreateRequest } from "../domain/assessment.js";
 import {
   ProjectEvidenceIntegrityError,
   ProjectEvidenceTargetUnavailableError,
@@ -182,6 +184,83 @@ function canonicalReceiptResourceId(value: unknown): string {
   return value.toLowerCase();
 }
 
+function readCompletedReceiptPayload(value: unknown): {
+  assessmentId: string;
+  manifestId: string;
+} {
+  if (
+    !isPlainObject(value)
+    || Object.keys(value).length !== 2
+    || typeof value.assessmentId !== "string"
+    || typeof value.manifestId !== "string"
+    || !uuidPattern.test(value.assessmentId)
+    || !uuidPattern.test(value.manifestId)
+  ) {
+    integrity("IDEMPOTENCY_RESULT_PAYLOAD_INVALID");
+  }
+  return {
+    assessmentId: value.assessmentId.toLowerCase(),
+    manifestId: value.manifestId.toLowerCase(),
+  };
+}
+
+async function loadAssessmentReadback(
+  client: PoolClient,
+  assessmentId: string,
+): Promise<AssessmentManifestRow> {
+  const resource = await client.query<AssessmentManifestRow>(
+    `SELECT
+       a.id AS assessment_id,
+       a.claim_id,
+       a.actor_id,
+       a.stance,
+       a.confidence_level,
+       a.numeric_score,
+       a.score_kind,
+       a.evidence_manifest_id,
+       a.reasoning,
+       a.metadata AS assessment_metadata,
+       a.created_at AS assessment_created_at,
+       em.id AS manifest_id,
+       em.schema_version,
+       em.purpose,
+       em.manifest_sha256,
+       em.metadata AS manifest_metadata,
+       em.created_at AS manifest_created_at
+     FROM core.assessments a
+     JOIN core.evidence_manifests em ON em.id=a.evidence_manifest_id
+     WHERE a.id=$1`,
+    [assessmentId],
+  );
+  if (resource.rows.length !== 1) integrity("ASSESSMENT_READBACK_MISSING");
+  return resource.rows[0];
+}
+
+async function loadManifestItemReadback(
+  client: PoolClient,
+  manifestId: string,
+): Promise<ManifestItemRow[]> {
+  const itemRows = await client.query<ManifestItemRow>(
+    `SELECT
+       id AS item_id,
+       manifest_id,
+       ordinal,
+       role,
+       target_type,
+       target_id,
+       locator_type,
+       locator,
+       excerpt,
+       note,
+       created_at
+     FROM core.evidence_manifest_items
+     WHERE manifest_id=$1
+     ORDER BY ordinal`,
+    [manifestId],
+  );
+  return itemRows.rows;
+}
+
 async function resolveExistingReceipt(
   client: PoolClient,
   input: AssessmentCreateCommand,
@@ -212,16 +291,57 @@ async function resolveExistingReceipt(
   }
 
   const assessmentId = canonicalReceiptResourceId(receipt.resource_id);
-  const resource = await client.query<{ id: string; claim_id: string }>(
-    "SELECT id,claim_id FROM core.assessments WHERE id=$1",
-    [assessmentId],
+  const payload = readCompletedReceiptPayload(receipt.result_payload);
+  if (payload.assessmentId !== assessmentId) {
+    integrity("IDEMPOTENCY_RESULT_ASSESSMENT_INVALID");
+  }
+
+  const row = await loadAssessmentReadback(client, assessmentId);
+  if (row.claim_id.toLowerCase() !== input.claimId) {
+    integrity("IDEMPOTENCY_RESOURCE_INVALID");
+  }
+  if (row.manifest_id.toLowerCase() !== payload.manifestId) {
+    integrity("IDEMPOTENCY_RESULT_MANIFEST_INVALID");
+  }
+
+  const itemRows = await loadManifestItemReadback(client, payload.manifestId);
+
+  // Replay validates against the persisted canonical resource, not this
+  // retry's freshly generated manifestItemIds (a new HTTP attempt regenerates
+  // assessmentId/manifestId/manifestItemIds; the first successful attempt's
+  // IDs are the identity of record).
+  validateReadback(input, row, itemRows, "replay");
+
+  // Close the identity loop end-to-end: rebuild the original command's
+  // semantic input purely from the persisted canonical resource and re-derive
+  // its request hash. This proves receipt -> exact canonical Assessment ->
+  // exact original command, not merely "some Assessment on this Claim".
+  // Field shapes are already proven by validateReadback(..., "replay") above
+  // (stance/confidence enum match, reasoning string equality, hash format,
+  // item content/order), so the cast is safe.
+  const replayInput = {
+    stance: row.stance,
+    confidenceLevel: row.confidence_level,
+    reasoning: row.reasoning as string,
+    expectedManifestSha256: row.manifest_sha256,
+    items: itemRows.map(item => ({
+      role: item.role,
+      targetType: item.target_type,
+      targetId: item.target_id.toLowerCase(),
+      note: item.note,
+    })),
+  } as NormalizedAssessmentInput;
+  const replayRequestHash = hashAssessmentCreateRequest(
+    input.projectId,
+    input.issueId,
+    input.claimId,
+    replayInput,
   );
   if (
-    resource.rows.length !== 1 ||
-    resource.rows[0].id.toLowerCase() !== assessmentId ||
-    resource.rows[0].claim_id.toLowerCase() !== input.claimId
+    replayRequestHash !== receipt.request_hash
+    || replayRequestHash !== input.requestHash
   ) {
-    integrity("IDEMPOTENCY_RESOURCE_INVALID");
+    integrity("IDEMPOTENCY_REPLAY_HASH_MISMATCH");
   }
 
   return { status: "replayed", assessmentId };
@@ -231,36 +351,56 @@ function validateReadback(
   input: AssessmentCreateCommand,
   row: AssessmentManifestRow,
   itemRows: ManifestItemRow[],
+  mode: "created" | "replay" = "created",
 ): { assessment: AssessmentRecord; evidenceManifest: AssessmentManifestSummary } {
-  if (!uuidPattern.test(row.assessment_id) || row.assessment_id.toLowerCase() !== input.assessmentId) {
-    integrity("ASSESSMENT_ID_INVALID");
+  // "created": this attempt just wrote the rows; every generated ID must match.
+  // "replay": the caller (resolveExistingReceipt) already proved the receipt's
+  // canonical assessment/manifest identity against the payload and the loaded
+  // row. A retry attempt carries freshly generated assessmentId / manifestId /
+  // manifestItemIds which are NOT the identity of record, so ID-equality
+  // against input is skipped; content and content-derived hash still must
+  // match the original command exactly.
+  if (mode === "created") {
+    if (!uuidPattern.test(row.assessment_id) || row.assessment_id.toLowerCase() !== input.assessmentId) {
+      integrity("ASSESSMENT_ID_INVALID");
+    }
+    if (row.evidence_manifest_id?.toLowerCase() !== input.manifestId) integrity("ASSESSMENT_MANIFEST_INVALID");
+    if (row.manifest_id.toLowerCase() !== input.manifestId) integrity("MANIFEST_ID_INVALID");
   }
   if (row.claim_id.toLowerCase() !== input.claimId) integrity("ASSESSMENT_CLAIM_INVALID");
   if (row.actor_id !== null) integrity("ASSESSMENT_ACTOR_INVALID");
   if (row.stance !== input.stance) integrity("ASSESSMENT_STANCE_INVALID");
   if (row.confidence_level !== input.confidenceLevel) integrity("ASSESSMENT_CONFIDENCE_INVALID");
   if (row.numeric_score !== null || row.score_kind !== null) integrity("ASSESSMENT_SCORE_INVALID");
-  if (row.evidence_manifest_id?.toLowerCase() !== input.manifestId) integrity("ASSESSMENT_MANIFEST_INVALID");
   if (row.reasoning !== input.reasoning) integrity("ASSESSMENT_REASONING_INVALID");
   if (!isEmptyObject(row.assessment_metadata)) integrity("ASSESSMENT_METADATA_INVALID");
   if (!validDate(row.assessment_created_at)) integrity("ASSESSMENT_CREATED_AT_INVALID");
 
-  if (row.manifest_id.toLowerCase() !== input.manifestId) integrity("MANIFEST_ID_INVALID");
   if (row.schema_version !== 1) integrity("MANIFEST_SCHEMA_INVALID");
   if (row.purpose !== "CLAIM_ASSESSMENT") integrity("MANIFEST_PURPOSE_INVALID");
   if (!/^[0-9a-f]{64}$/.test(row.manifest_sha256)) integrity("MANIFEST_HASH_INVALID");
   if (!isEmptyObject(row.manifest_metadata)) integrity("MANIFEST_METADATA_INVALID");
   if (!validDate(row.manifest_created_at)) integrity("MANIFEST_CREATED_AT_INVALID");
 
-  if (itemRows.length !== input.items.length || itemRows.length !== input.manifestItemIds.length) {
+  // Item count always equals the command's item list; in "created" mode the
+  // persisted IDs must also equal this attempt's generated UUID list.
+  if (itemRows.length !== input.items.length) {
+    integrity("MANIFEST_ITEM_COUNT_INVALID");
+  }
+  if (mode === "created" && itemRows.length !== input.manifestItemIds.length) {
     integrity("MANIFEST_ITEM_COUNT_INVALID");
   }
 
+  const manifestRef = mode === "replay"
+    ? row.manifest_id.toLowerCase()
+    : input.manifestId;
   const draftItems: EvidenceDraftInputItem[] = [];
   itemRows.forEach((item, index) => {
     const expected = input.items[index];
-    if (item.item_id.toLowerCase() !== input.manifestItemIds[index]) integrity("MANIFEST_ITEM_ID_INVALID");
-    if (item.manifest_id.toLowerCase() !== input.manifestId) integrity("MANIFEST_ITEM_MANIFEST_INVALID");
+    if (mode === "created" && item.item_id.toLowerCase() !== input.manifestItemIds[index]) {
+      integrity("MANIFEST_ITEM_ID_INVALID");
+    }
+    if (item.manifest_id.toLowerCase() !== manifestRef) integrity("MANIFEST_ITEM_MANIFEST_INVALID");
     if (item.ordinal !== index + 1) integrity("MANIFEST_ITEM_ORDINAL_INVALID");
     if (item.role !== expected.role) integrity("MANIFEST_ITEM_ROLE_INVALID");
     if (item.target_type !== expected.targetType) integrity("MANIFEST_ITEM_TARGET_TYPE_INVALID");
@@ -385,52 +525,10 @@ async function insertNewAssessment(
     ],
   );
 
-  const resource = await client.query<AssessmentManifestRow>(
-    `SELECT
-       a.id AS assessment_id,
-       a.claim_id,
-       a.actor_id,
-       a.stance,
-       a.confidence_level,
-       a.numeric_score,
-       a.score_kind,
-       a.evidence_manifest_id,
-       a.reasoning,
-       a.metadata AS assessment_metadata,
-       a.created_at AS assessment_created_at,
-       em.id AS manifest_id,
-       em.schema_version,
-       em.purpose,
-       em.manifest_sha256,
-       em.metadata AS manifest_metadata,
-       em.created_at AS manifest_created_at
-     FROM core.assessments a
-     JOIN core.evidence_manifests em ON em.id=a.evidence_manifest_id
-     WHERE a.id=$1`,
-    [input.assessmentId],
-  );
-  if (resource.rows.length !== 1) integrity("ASSESSMENT_READBACK_MISSING");
+  const row = await loadAssessmentReadback(client, input.assessmentId);
+  const itemRows = await loadManifestItemReadback(client, input.manifestId);
 
-  const itemRows = await client.query<ManifestItemRow>(
-    `SELECT
-       id AS item_id,
-       manifest_id,
-       ordinal,
-       role,
-       target_type,
-       target_id,
-       locator_type,
-       locator,
-       excerpt,
-       note,
-       created_at
-     FROM core.evidence_manifest_items
-     WHERE manifest_id=$1
-     ORDER BY ordinal`,
-    [input.manifestId],
-  );
-
-  const canonical = validateReadback(input, resource.rows[0], itemRows.rows);
+  const canonical = validateReadback(input, row, itemRows);
 
   await client.query(
     `UPDATE ops.idempotency_keys

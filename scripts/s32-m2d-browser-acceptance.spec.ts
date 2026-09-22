@@ -262,3 +262,78 @@ test("M2-D real Firefox acceptance: create, recover, audit, privacy, lifecycle, 
   const archivedClaim = await selectSourceAndCurrentNote(page, "Archived candidate in active issue.");
   await expect(archivedClaim.getByRole("button", { name: "提交评价" })).toBeVisible();
 });
+
+test("M2-D stale preview acceptance: 409 EVIDENCE_PREVIEW_STALE clears the visible hash and preserves the draft", async ({ page, request }) => {
+  test.setTimeout(120_000);
+
+  await page.addInitScript(
+    ({ key, token }) => sessionStorage.setItem(key, token),
+    { key: TOKEN_KEY, token: TOKEN },
+  );
+
+  await page.goto(issueUrl(P1, I1));
+  await expect(page.getByRole("heading", { name: "M2D Open Issue" })).toBeVisible();
+
+  const before = (await history(request)).assessments.length;
+
+  // Build a real preview on the primary claim.
+  const card = await selectSourceAndCurrentNote(page);
+
+  // Force the browser-visible 409 EVIDENCE_PREVIEW_STALE by fulfilling the
+  // POST locally (Firefox route-rewrite forwarding is unreliable; a synthetic
+  // exact server response is the contract under test at the UI layer).
+  const assessmentPost = new RegExp(
+    `/api/private/s32/projects/${P1}/issues/${I1}/claims/${C1}/assessments$`,
+  );
+  await page.route(assessmentPost, async route => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 409,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: {
+          code: "EVIDENCE_PREVIEW_STALE",
+          message: "证据集自上次预览后已发生变化，请重新预览。",
+        },
+      }),
+    });
+  });
+
+  await card.getByRole("radio", { name: "支持" }).check();
+  await card.getByLabel("信心").selectOption("HIGH");
+  await card.getByLabel("判断理由").fill("过期预览回归验收");
+
+  await card.getByRole("button", { name: "提交评价" }).click();
+
+  // PR18 review finding 3: the composer drops the pending receipt and the
+  // EvidenceEditor's visible "尚未提交。" + SHA must disappear...
+  await expect(card.getByRole("heading", { name: "评价这个 Claim" })).toHaveCount(0);
+  await expect(card.getByText("尚未提交。")).toHaveCount(0);
+  await expect(card.locator(".evidence-preview")).toHaveCount(0);
+
+  // ...while the selected evidence survives untouched (stale preview does not
+  // invalidate the evidence selection; judgment fields live in the preserved
+  // draft and are restored when the composer re-opens after re-preview).
+  await expect(card.getByTestId(`selected-${SRC1}`)).toBeVisible();
+  await expect(card.getByTestId(`selected-${REV2}`)).toBeVisible();
+
+  // No durable Assessment/Manifest writes happened for the stale attempt.
+  expect((await history(request)).assessments.length).toBe(before);
+
+  await page.unroute(assessmentPost);
+
+  // Re-preview from the preserved draft and commit for real.
+  await card.getByRole("button", { name: "预览 EvidenceManifest" }).click();
+  await expect(card.getByText("尚未提交。")).toBeVisible();
+  await expect(card.getByRole("radio", { name: "支持" })).toBeChecked();
+  await expect(card.getByLabel("信心")).toHaveValue("HIGH");
+  await expect(card.getByLabel("判断理由")).toHaveValue("过期预览回归验收");
+  await card.getByRole("button", { name: "提交评价" }).click();
+  await expect(card.getByText("评价已成功提交。")).toBeVisible();
+  expect((await history(request)).assessments.length).toBe(before + 1);
+
+  console.log("STALE_PREVIEW_VISIBLE_HASH_CLEARED=PASS");
+});

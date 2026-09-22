@@ -53,6 +53,16 @@ function ClaimAssessmentSession({
     setHistoryRefreshVersion(version => version + 1);
   }
 
+  // Single invalidation path for "the server proved this preview stale":
+  // clears the parent handoff AND bumps previewResetVersion so the real
+  // EvidenceEditor drops its internal ready preview/hash. Selected evidence
+  // and draft fields are intentionally preserved — a fresh preview can be
+  // rebuilt from them without remounting the editor.
+  function invalidateAssessmentPreview() {
+    setPreview(null);
+    setPreviewResetVersion(version => version + 1);
+  }
+
   return <article className="research-card">
     <span className="research-issue-state">{claim.lifecycleState}</span>
     <p>{claim.statement}</p>
@@ -77,12 +87,11 @@ function ClaimAssessmentSession({
       writeAllowed={writeAllowed}
       integrityBlocked={integrityBlocked}
       onCommitted={() => {
-        setPreview(null);
-        setPreviewResetVersion(version => version + 1);
+        invalidateAssessmentPreview();
         refreshHistory();
       }}
       onNeedsEvidenceRefresh={refreshEvidence}
-      onPreviewInvalidated={() => setPreview(null)}
+      onPreviewInvalidated={invalidateAssessmentPreview}
     />
 
     <AssessmentHistory

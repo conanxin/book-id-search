@@ -1,6 +1,7 @@
 import { expect, it, vi } from "vitest";
 import type { Pool, PoolClient } from "pg";
 import { AssessmentIntegrityError } from "../application/assessments.js";
+import { decodeAssessmentCursor } from "../domain/assessment.js";
 import { buildEvidenceManifestDraft, type EvidenceDraftInputItem } from "../domain/evidence-selection.js";
 import { createPostgresAssessmentReadStore } from "./assessment-read-store.js";
 
@@ -111,6 +112,10 @@ function assessmentRow(
   const manifestId = uuid(1000 + index);
   const assessmentId = uuid(2000 + index);
   const hash = buildEvidenceManifestDraft([item]).manifestSha256;
+  const createdAt = new Date(Date.UTC(2026, 8, 21, 0, 0, 60 - index));
+  // Exact epoch-microsecond sort key, mirroring the SQL
+  // (extract(epoch FROM a.created_at) * 1000000)::bigint on PG16 (numeric, exact).
+  const createdAtMicros = String(BigInt(createdAt.getTime()) * 1000n + 123n - BigInt(index));
   return {
     assessment_id: assessmentId,
     claim_id: C,
@@ -121,7 +126,8 @@ function assessmentRow(
     score_kind: null,
     reasoning: "Reasoning " + index,
     assessment_metadata: {},
-    assessment_created_at: new Date(Date.UTC(2026, 8, 21, 0, 0, 60 - index)),
+    assessment_created_at: createdAt,
+    assessment_created_at_micros: createdAtMicros,
     manifest_id: manifestId,
     schema_version: 1,
     purpose: "CLAIM_ASSESSMENT",
@@ -208,6 +214,48 @@ it("filters visibility in SQL before keyset pagination and returns 20 of 21 visi
   expect(sql).toContain("target_type NOT IN ('SOURCE','SOURCE_ASSET','NOTE_REVISION')");
   expect(sql).toContain("nr.note_id = ANY");
   expect(sql).toContain("LIMIT");
+});
+
+it("keyset predicate compares the exact microsecond bigint tuple and cursor never touches a JS Date", async () => {
+  const rows = Array.from({ length: 21 }, (_, n) => assessmentRow(n + 1));
+  const fx = fakePool({ pageRows: rows });
+  const result = await createPostgresAssessmentReadStore(fx.pool).list({
+    projectId: P,
+    issueId: I,
+    claimId: C,
+    limit: 20,
+    cursor: null,
+  });
+  if (result.kind !== "ok") throw new Error("expected ok");
+
+  const sql = fx.queries.find(x => x.includes("/* assessment-history-visible */"))!;
+  // Exact PostgreSQL sort key: epoch-microsecond bigint tuple, not timestamptz.
+  expect(sql).toContain("(extract(epoch FROM a.created_at) * 1000000)::bigint");
+  expect(sql).toContain("AS assessment_created_at_micros");
+  expect(sql).toContain("$5::bigint IS NULL");
+  expect(sql).not.toContain("$5::timestamptz");
+
+  // nextCursor must round-trip the exact microsecond sort key of the last row.
+  const last = rows[19];
+  expect(result.value.nextCursor).not.toBeNull();
+  const decoded = decodeAssessmentCursor(result.value.nextCursor!);
+  expect(decoded.createdAtMicros).toBe(last.assessment_created_at_micros);
+  expect(decoded.id).toBe(last.assessment_id);
+  // Cursor must not be built from the millisecond JS Date.
+  expect(decoded.createdAtMicros).not.toBe(String(last.assessment_created_at.getTime()));
+
+  // The cursor is fed back as a bigint parameter, not a timestamp.
+  const secondPage = fakePool({ pageRows: [assessmentRow(0)] });
+  await createPostgresAssessmentReadStore(secondPage.pool).list({
+    projectId: P, issueId: I, claimId: C, limit: 20,
+    cursor: decoded,
+  });
+  const secondSql = secondPage.queries.find(x => x.includes("/* assessment-history-visible */"))!;
+  expect(secondSql).toContain("$5::bigint");
+  const params = secondPage.query.mock.calls.find(([text]) =>
+    String(text).includes("/* assessment-history-visible */"))![1] as unknown[];
+  expect(params[4]).toBe(last.assessment_created_at_micros);
+  expect(params[5]).toBe(last.assessment_id);
 });
 
 it("uses a bounded query count independent of page size", async () => {

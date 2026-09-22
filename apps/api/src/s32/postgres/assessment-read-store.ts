@@ -99,6 +99,12 @@ interface VisibleAssessmentRow {
   reasoning: string | null;
   assessment_metadata: unknown;
   assessment_created_at: Date;
+  /**
+   * Epoch microseconds of a.created_at as a string (pg returns bigint as
+   * string). This is the exact PostgreSQL sort key for keyset pagination;
+   * assessment_created_at (JS Date, milliseconds) is display-only.
+   */
+  assessment_created_at_micros: string;
   manifest_id: string;
   schema_version: number;
   purpose: string;
@@ -186,7 +192,7 @@ async function visibleHistoryRows(
   auth: ProjectEvidenceAuthorization,
 ): Promise<VisibleAssessmentRow[]> {
   const [sources, assets, notes] = authArrays(auth);
-  const cursorAt = input.cursor?.createdAt ?? null;
+  const cursorMicros = input.cursor?.createdAtMicros ?? null;
   const cursorId = input.cursor?.id ?? null;
   const { rows } = await client.query<VisibleAssessmentRow>(
     `/* assessment-history-visible */
@@ -201,6 +207,8 @@ async function visibleHistoryRows(
        a.reasoning,
        a.metadata AS assessment_metadata,
        a.created_at AS assessment_created_at,
+       (extract(epoch FROM a.created_at) * 1000000)::bigint
+         AS assessment_created_at_micros,
        em.id AS manifest_id,
        em.schema_version,
        em.purpose,
@@ -212,12 +220,17 @@ async function visibleHistoryRows(
      WHERE a.claim_id = $1
        AND ${visibilityPredicate("emi", 2, 3, 4)}
        AND (
-         $5::timestamptz IS NULL
-         OR (a.created_at, a.id) < ($5::timestamptz, $6::uuid)
+         $5::bigint IS NULL
+         OR (
+           (extract(epoch FROM a.created_at) * 1000000)::bigint,
+           a.id
+         )
+         <
+         ($5::bigint, $6::uuid)
        )
      ORDER BY a.created_at DESC, a.id DESC
      LIMIT $7`,
-    [input.claimId, sources, assets, notes, cursorAt, cursorId, input.limit + 1],
+    [input.claimId, sources, assets, notes, cursorMicros, cursorId, input.limit + 1],
   );
   return rows;
 }
@@ -241,6 +254,8 @@ async function visibleDetailRows(
        a.reasoning,
        a.metadata AS assessment_metadata,
        a.created_at AS assessment_created_at,
+       (extract(epoch FROM a.created_at) * 1000000)::bigint
+         AS assessment_created_at_micros,
        em.id AS manifest_id,
        em.schema_version,
        em.purpose,
@@ -549,7 +564,7 @@ export function createPostgresAssessmentReadStore(pool: Pool): AssessmentReadSto
             assessments: validated.map(item => item.canonical.summary),
             nextCursor: hasMore && last
               ? encodeAssessmentCursor({
-                  createdAt: last.assessment_created_at.toISOString(),
+                  createdAtMicros: last.assessment_created_at_micros,
                   id: last.assessment_id.toLowerCase(),
                 })
               : null,

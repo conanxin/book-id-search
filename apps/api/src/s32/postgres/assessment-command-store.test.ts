@@ -2,6 +2,7 @@ import { expect, it, vi } from "vitest";
 import type { Pool, PoolClient } from "pg";
 import {
   AssessmentIdempotencyConflictError,
+  AssessmentIntegrityError,
   AssessmentStoreUnavailableError,
   EvidencePreviewStaleError,
   ProjectReadOnlyForAssessmentError,
@@ -9,6 +10,7 @@ import {
   type AssessmentCreateCommand,
 } from "../application/assessments.js";
 import { buildEvidenceManifestDraft } from "../domain/evidence-selection.js";
+import { hashAssessmentCreateRequest } from "../domain/assessment.js";
 import { createPostgresAssessmentCommandStore } from "./assessment-command-store.js";
 
 const P = "11111111-1111-4111-8111-111111111111";
@@ -22,6 +24,11 @@ const RECEIPT = "88888888-8888-4888-8888-888888888888";
 const BINDING = "99999999-9999-4999-8999-999999999999";
 const EDITION = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const SOURCE = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+// A different Assessment on the same Claim: exists, visible, but NOT the
+// product of COMMAND. A corrupted COMPLETED receipt pointing here must fail
+// closed instead of replaying the wrong historical Assessment.
+const OTHER = "c0000000-0000-4000-8000-00000000000c";
+const OTHER_MANIFEST = "d0000000-0000-4000-8000-00000000000d";
 
 const items = [{
   role: "SUPPORTING" as const,
@@ -30,6 +37,15 @@ const items = [{
   note: null,
 }];
 const manifestHash = buildEvidenceManifestDraft(items).manifestSha256;
+// The command carries a real request hash so the replay path's end-to-end
+// reconstruction (persisted resource -> hash) can match it.
+const REQUEST_HASH = hashAssessmentCreateRequest(P, I, C, {
+  stance: "SUPPORTS",
+  confidenceLevel: null,
+  reasoning: "当前证据支持。",
+  expectedManifestSha256: manifestHash,
+  items,
+});
 
 const COMMAND: AssessmentCreateCommand = {
   projectId: P,
@@ -39,7 +55,7 @@ const COMMAND: AssessmentCreateCommand = {
   manifestId: M,
   manifestItemIds: [MI],
   idempotencyKey: KEY,
-  requestHash: "c".repeat(64),
+  requestHash: REQUEST_HASH,
   stance: "SUPPORTS",
   confidenceLevel: null,
   reasoning: "当前证据支持。",
@@ -149,8 +165,13 @@ type Options = {
     status: string;
     resource_type: string | null;
     resource_id: string | null;
+    result_payload?: unknown;
   };
   firstSerializableError?: "40001" | "40P01";
+  /** Overrides for the Assessment row the receipt's resource_id points at. */
+  replayAssessmentOverrides?: Record<string, unknown>;
+  /** Overrides for the ManifestItem rows loaded during replay verification. */
+  replayItemOverrides?: Array<Record<string, unknown>>;
 };
 
 function fakePool(options: Options = {}) {
@@ -185,15 +206,17 @@ function fakePool(options: Options = {}) {
     if (text.startsWith("INSERT INTO core.evidence_manifest_items")) return { rows: [] };
     if (text.startsWith("INSERT INTO core.assessments")) return { rows: [] };
     if (text.includes("FROM core.assessments a") && text.includes("JOIN core.evidence_manifests")) {
-      return { rows: [readbackAssessment()] };
+      // Readback of an Assessment joined with its Manifest. Serves both the
+      // created path (after INSERTs) and the replay verification path.
+      return { rows: [{ ...readbackAssessment(), ...(options.replayAssessmentOverrides ?? {}) }] };
     }
     if (text.includes("FROM core.evidence_manifest_items") && text.includes("ORDER BY ordinal")) {
+      if (options.replayItemOverrides) {
+        return { rows: options.replayItemOverrides.map(row => ({ ...readbackItem(), ...row })) };
+      }
       return { rows: [readbackItem()] };
     }
     if (text.startsWith("UPDATE ops.idempotency_keys")) return { rows: [] };
-    if (text.startsWith("SELECT id,claim_id FROM core.assessments WHERE id=$1")) {
-      return { rows: [{ id: A, claim_id: C }] };
-    }
     if (text === "COMMIT" || text === "ROLLBACK") return { rows: [] };
     throw new Error(`Unexpected SQL: ${text} :: ${JSON.stringify(params)}`);
   });
@@ -231,6 +254,7 @@ it("returns the original assessmentId from a completed receipt before lifecycle 
       status: "COMPLETED",
       resource_type: "ASSESSMENT",
       resource_id: A,
+      result_payload: { assessmentId: A, manifestId: M },
     },
   });
   const result = await createPostgresAssessmentCommandStore(fx.pool).create(COMMAND);
@@ -246,11 +270,103 @@ it("rejects same key with a different request hash", async () => {
       status: "COMPLETED",
       resource_type: "ASSESSMENT",
       resource_id: A,
+      result_payload: { assessmentId: A, manifestId: M },
     },
   });
   await expect(createPostgresAssessmentCommandStore(fx.pool).create(COMMAND))
     .rejects.toBeInstanceOf(AssessmentIdempotencyConflictError);
 });
+
+const replayTamperCases: Array<[string, {
+  resource_id: string;
+  result_payload: unknown;
+  replayAssessmentOverrides: Record<string, unknown>;
+  replayItemOverrides?: Array<Record<string, unknown>>;
+  requestHashOverride?: string;
+  /** When set, COMMAND.requestHash is overridden too so the entry check passes. */
+  requestHashAlsoOnCommand?: boolean;
+}]> = [
+  ["a completed receipt whose resource_id points at a different same-Claim Assessment", {
+    resource_id: OTHER,
+    result_payload: { assessmentId: OTHER, manifestId: M },
+    replayAssessmentOverrides: {
+      assessment_id: OTHER,
+      stance: "CONTRADICTS",
+      confidence_level: "LOW",
+      reasoning: "A different historical judgment, not this command's product.",
+      manifest_id: OTHER_MANIFEST,
+      evidence_manifest_id: OTHER_MANIFEST,
+      manifest_sha256: "1".repeat(64),
+    },
+  }],
+  ["a completed receipt whose minimal result_payload IDs disagree with the receipt resource", {
+    resource_id: A,
+    result_payload: { assessmentId: A, manifestId: OTHER_MANIFEST },
+    replayAssessmentOverrides: {},
+  }],
+  ["a completed receipt with a malformed result_payload shape", {
+    resource_id: A,
+    result_payload: { assessmentId: A },
+    replayAssessmentOverrides: {},
+  }],
+  ["a completed receipt with a non-object result_payload", {
+    resource_id: A,
+    result_payload: "corrupted",
+    replayAssessmentOverrides: {},
+  }],
+  ["a completed receipt whose referenced Assessment content diverges from the command", {
+    resource_id: A,
+    result_payload: { assessmentId: A, manifestId: M },
+    replayAssessmentOverrides: {
+      stance: "CONTRADICTS",
+    },
+  }],
+  ["a completed receipt whose referenced Assessment was written for a different manifest hash", {
+    resource_id: A,
+    result_payload: { assessmentId: A, manifestId: M },
+    replayAssessmentOverrides: {
+      manifest_sha256: "2".repeat(64),
+    },
+  }],
+  ["a completed receipt whose referenced Assessment manifest items diverge from the command", {
+    resource_id: A,
+    result_payload: { assessmentId: A, manifestId: M },
+    replayAssessmentOverrides: {},
+    replayItemOverrides: [{ note: "tampered item note" }],
+  }],
+  ["a completed receipt whose stored request hash was corrupted", {
+    // request_hash still matches the retry's command hash at the entry check,
+    // but the persisted resource is NOT what that hash was computed from:
+    // the reconstruction (resource -> hash) must diverge and fail closed.
+    resource_id: A,
+    result_payload: { assessmentId: A, manifestId: M },
+    replayAssessmentOverrides: {},
+    requestHashOverride: "e".repeat(64),
+    requestHashAlsoOnCommand: true,
+  }],
+];
+
+for (const [label, overrides] of replayTamperCases) {
+  it(`fails closed on ${label}`, async () => {
+    const command = overrides.requestHashAlsoOnCommand
+      ? { ...COMMAND, requestHash: overrides.requestHashOverride! }
+      : COMMAND;
+    const fx = fakePool({
+      existingReceipt: {
+        request_hash: overrides.requestHashOverride ?? COMMAND.requestHash,
+        status: "COMPLETED",
+        resource_type: "ASSESSMENT",
+        resource_id: overrides.resource_id,
+        result_payload: overrides.result_payload,
+      },
+      replayAssessmentOverrides: overrides.replayAssessmentOverrides,
+      replayItemOverrides: overrides.replayItemOverrides,
+    });
+    await expect(createPostgresAssessmentCommandStore(fx.pool).create(command))
+      .rejects.toBeInstanceOf(AssessmentIntegrityError);
+    expect(fx.sql.some(x => x.startsWith("INSERT INTO core.assessments"))).toBe(false);
+  });
+}
 
 it.each([
   ["ARCHIVED", "OPEN", ProjectReadOnlyForAssessmentError],

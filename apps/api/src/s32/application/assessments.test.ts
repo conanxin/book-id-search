@@ -157,14 +157,14 @@ describe("assessment application reads", () => {
       evidenceManifest: MANIFEST_SUMMARY,
     });
     const service = createAssessmentsService(commandStore, readStore);
-    const cursor = encodeAssessmentCursor({ createdAt: RECORD.createdAt, id: A });
+    const cursor = encodeAssessmentCursor({ createdAtMicros: "1790000000123456", id: A });
     await service.list(P.toUpperCase(), I.toUpperCase(), C.toUpperCase(), { limit: "20", cursor });
     expect(readStore.list).toHaveBeenCalledWith({
       projectId: P,
       issueId: I,
       claimId: C,
       limit: 20,
-      cursor: { createdAt: RECORD.createdAt, id: A },
+      cursor: { createdAtMicros: "1790000000123456", id: A },
     });
     await service.get(P.toUpperCase(), I.toUpperCase(), C.toUpperCase(), A.toUpperCase());
     expect(readStore.get).toHaveBeenCalledWith({

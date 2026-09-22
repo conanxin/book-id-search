@@ -108,18 +108,18 @@ describe("assessment request hash", () => {
 });
 
 describe("assessment history query", () => {
-  it("round-trips a versioned opaque cursor and defaults limit to 20", () => {
+  it("round-trips a versioned opaque microsecond cursor and defaults limit to 20", () => {
     const cursor = encodeAssessmentCursor({
-      createdAt: "2026-09-21T00:00:00.000Z",
+      createdAtMicros: "1790000000123456",
       id: C,
     });
     expect(decodeAssessmentCursor(cursor)).toEqual({
-      createdAt: "2026-09-21T00:00:00.000Z",
+      createdAtMicros: "1790000000123456",
       id: C,
     });
     expect(readAssessmentHistoryQuery({ cursor })).toEqual({
       limit: 20,
-      cursor: { createdAt: "2026-09-21T00:00:00.000Z", id: C },
+      cursor: { createdAtMicros: "1790000000123456", id: C },
     });
   });
 
@@ -132,15 +132,49 @@ describe("assessment history query", () => {
   });
 
   it("rejects malformed/tampered/unknown-version cursor and unknown query fields", () => {
-    const cursor = encodeAssessmentCursor({ createdAt: "2026-09-21T00:00:00.000Z", id: C });
+    const cursor = encodeAssessmentCursor({ createdAtMicros: "1790000000123456", id: C });
     expect(() => readAssessmentHistoryQuery({ cursor: cursor + "x" }))
       .toThrow(InvalidAssessmentCursorError);
     const unsupported = Buffer.from(JSON.stringify({
       v: 2,
+      createdAtMicros: "1790000000123456",
+      id: C,
+    }), "utf8").toString("base64url");
+    expect(() => decodeAssessmentCursor(unsupported)).not.toThrow();
+    const legacyV1 = Buffer.from(JSON.stringify({
+      v: 1,
       createdAt: "2026-09-21T00:00:00.000Z",
       id: C,
     }), "utf8").toString("base64url");
-    expect(() => decodeAssessmentCursor(unsupported)).toThrow(InvalidAssessmentCursorError);
+    expect(() => decodeAssessmentCursor(legacyV1)).toThrow(InvalidAssessmentCursorError);
     expect(() => readAssessmentHistoryQuery({ extra: "x" })).toThrow(InvalidAssessmentInputError);
+  });
+
+  it("rejects noncanonical or non-numeric createdAtMicros (tamper/noncanonical guard)", () => {
+    for (const createdAtMicros of [
+      "1790000000123456.5",  // non-integer
+      "179000000012345x",    // non-numeric suffix
+      "01790000000123456",   // leading zero (noncanonical)
+      "+1790000000123456",   // sign
+      "-1",                  // negative
+      "",                    // empty
+      "1e15",                // exponent form
+      "9999999999999999999", // 19 digits: exceeds any timestamptz epoch micros
+    ]) {
+      expect(() => encodeAssessmentCursor({ createdAtMicros, id: C }))
+        .toThrow(InvalidAssessmentCursorError);
+    }
+    // Reasonable canonical values still encode.
+    expect(() => encodeAssessmentCursor({ createdAtMicros: "0", id: C })).not.toThrow();
+    expect(() => encodeAssessmentCursor({ createdAtMicros: "1790000000123456", id: C })).not.toThrow();
+    // 18 digits is the accepted maximum length.
+    expect(() => encodeAssessmentCursor({ createdAtMicros: "179000000012345678", id: C })).not.toThrow();
+    // Re-encoded canonical token must be byte-identical (no silent normalization).
+    const token = encodeAssessmentCursor({ createdAtMicros: "1790000000123456", id: C });
+    expect(Buffer.from(token, "base64url").toString("utf8"))
+      .toBe(Buffer.from(encodeAssessmentCursor({
+        createdAtMicros: "1790000000123456",
+        id: C.toUpperCase(),
+      }), "base64url").toString("utf8"));
   });
 });

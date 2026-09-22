@@ -173,21 +173,36 @@ export function hashAssessmentCreateRequest(
 }
 
 export interface AssessmentCursor {
-  createdAt: string;
+  /**
+   * PostgreSQL-precision sort key: epoch microseconds of the Assessment's
+   * created_at, as a canonical decimal string. Never round-trip this value
+   * through a JS Date (millisecond precision only).
+   */
+  createdAtMicros: string;
   id: string;
 }
 
-function validTimestamp(value: unknown): value is string {
-  return typeof value === "string" && Number.isFinite(Date.parse(value));
+function validCreatedAtMicros(value: unknown): value is string {
+  // Canonical decimal epoch-microseconds: digits only, no leading zeros
+  // (except "0" itself), no sign. Length is bounded at 18 digits
+  // (<= 999999999999999999 micros ≈ year 33658), which covers every
+  // representable PostgreSQL timestamptz a real created_at could hold in
+  // this system while staying an exact Number for parity checks.
+  return (
+    typeof value === "string"
+    && /^[0-9]+$/.test(value)
+    && (value === "0" || !value.startsWith("0"))
+    && value.length <= 18
+  );
 }
 
 export function encodeAssessmentCursor(cursor: AssessmentCursor): string {
-  if (!validTimestamp(cursor.createdAt) || !uuidPattern.test(cursor.id)) {
+  if (!validCreatedAtMicros(cursor.createdAtMicros) || !uuidPattern.test(cursor.id)) {
     throw new InvalidAssessmentCursorError("评价历史游标不正确。");
   }
   return Buffer.from(JSON.stringify({
-    v: 1,
-    createdAt: cursor.createdAt,
+    v: 2,
+    createdAtMicros: cursor.createdAtMicros,
     id: cursor.id.toLowerCase(),
   }), "utf8").toString("base64url");
 }
@@ -203,21 +218,21 @@ export function decodeAssessmentCursor(value: string): AssessmentCursor {
     const record = parsed as Record<string, unknown>;
     if (
       Object.keys(record).length !== 3 ||
-      record.v !== 1 ||
-      !validTimestamp(record.createdAt) ||
+      record.v !== 2 ||
+      !validCreatedAtMicros(record.createdAtMicros) ||
       typeof record.id !== "string" ||
       !uuidPattern.test(record.id)
     ) {
       throw new Error("shape");
     }
     const canonical = {
-      v: 1,
-      createdAt: record.createdAt,
+      v: 2,
+      createdAtMicros: record.createdAtMicros,
       id: record.id.toLowerCase(),
     };
     const canonicalToken = Buffer.from(JSON.stringify(canonical), "utf8").toString("base64url");
     if (canonicalToken !== value) throw new Error("noncanonical");
-    return { createdAt: canonical.createdAt, id: canonical.id };
+    return { createdAtMicros: canonical.createdAtMicros, id: canonical.id };
   } catch {
     throw new InvalidAssessmentCursorError("评价历史游标不正确。");
   }

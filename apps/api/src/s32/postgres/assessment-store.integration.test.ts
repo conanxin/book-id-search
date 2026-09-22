@@ -9,14 +9,15 @@ import {
   type AssessmentCreateCommand,
 } from "../application/assessments.js";
 import {
-  hashAssessmentCreateRequest,
-  normalizeAssessmentCreateInput,
-} from "../domain/assessment.js";
-import {
   buildEvidenceManifestDraft,
   normalizeEvidencePreviewInput,
   type EvidenceDraftInputItem,
 } from "../domain/evidence-selection.js";
+import {
+  decodeAssessmentCursor,
+  hashAssessmentCreateRequest,
+  normalizeAssessmentCreateInput,
+} from "../domain/assessment.js";
 import { createPostgresAssessmentCommandStore } from "./assessment-command-store.js";
 import { createPostgresAssessmentReadStore } from "./assessment-read-store.js";
 
@@ -104,6 +105,7 @@ async function counts() {
 
 async function insertSchemaCompatibleAssessment(options: {
   claimId?: string;
+  assessmentId?: string;
   actorId?: string | null;
   numericScore?: number | null;
   scoreKind?: string | null;
@@ -116,7 +118,7 @@ async function insertSchemaCompatibleAssessment(options: {
   ]);
   const draft = buildEvidenceManifestDraft(items);
   const manifestId = randomUUID();
-  const assessmentId = randomUUID();
+  const assessmentId = options.assessmentId ?? randomUUID();
   const itemId = randomUUID();
   await pool.query(
     `INSERT INTO core.evidence_manifests
@@ -233,6 +235,77 @@ d("M2-D assessment stores on real PostgreSQL 16", () => {
     const second = await commandStore.create(command);
     expect(second).toEqual({ status: "replayed", assessmentId: command.assessmentId });
     expect(await counts()).toEqual(beforeReplay);
+  });
+
+  it("a COMPLETED receipt corrupted onto a different same-Claim Assessment fails closed with no new rows", async () => {
+    // PR18 review finding 2: receipt tamper scenario on real PostgreSQL.
+    // Key K created Assessment A1 on C1. A second command (different key)
+    // creates A2 on the same claim. The A1 receipt is then corrupted to
+    // point at A2 (resource_id + payload). Replaying the original A1 key
+    // must fail closed (integrity), never replay A2, never write new rows.
+    const first = makeCommand({ reasoning: "Original A1 judgment." });
+    const created = await commandStore.create(first);
+    expect(created.status).toBe("created");
+
+    const second = makeCommand({
+      reasoning: "A different A2 judgment on the same claim.",
+    });
+    const secondResult = await commandStore.create(second);
+    expect(secondResult.status).toBe("created");
+    if (secondResult.status !== "created") throw new Error("expected created");
+
+    await pool.query(
+      `UPDATE ops.idempotency_keys
+          SET resource_id=$1,
+              result_payload=$2::jsonb
+        WHERE idempotency_key=$3`,
+      [
+        secondResult.assessment.id,
+        JSON.stringify({
+          assessmentId: secondResult.assessment.id,
+          manifestId: secondResult.evidenceManifest.id,
+        }),
+        first.idempotencyKey,
+      ],
+    );
+
+    const before = await counts();
+    await expect(commandStore.create(first)).rejects.toBeInstanceOf(AssessmentIntegrityError);
+    expect(await counts()).toEqual(before);
+  });
+
+  it("a receipt whose payload manifestId points at another Assessment's manifest fails closed", async () => {
+    // PR18 review finding 2, second tamper shape: resource_id stays A1 but
+    // result_payload.manifestId is corrupted onto A2's manifest. The replayed
+    // command's items were not drawn from A2's manifest, so identity must
+    // fail closed with no new durable rows.
+    const first = makeCommand({ reasoning: "Original A1 judgment." });
+    const created = await commandStore.create(first);
+    expect(created.status).toBe("created");
+
+    const second = makeCommand({
+      reasoning: "A different A2 judgment on the same claim.",
+    });
+    const secondResult = await commandStore.create(second);
+    expect(secondResult.status).toBe("created");
+    if (secondResult.status !== "created") throw new Error("expected created");
+
+    await pool.query(
+      `UPDATE ops.idempotency_keys
+          SET result_payload=$1::jsonb
+        WHERE idempotency_key=$2`,
+      [
+        JSON.stringify({
+          assessmentId: first.assessmentId,
+          manifestId: secondResult.evidenceManifest.id,
+        }),
+        first.idempotencyKey,
+      ],
+    );
+
+    const before = await counts();
+    await expect(commandStore.create(first)).rejects.toBeInstanceOf(AssessmentIntegrityError);
+    expect(await counts()).toEqual(before);
   });
 
   it("same key/different command conflicts without new rows", async () => {
@@ -383,6 +456,55 @@ d("M2-D assessment stores on real PostgreSQL 16", () => {
     if (page.kind !== "ok") throw new Error("expected page");
     expect(page.value.assessments).toHaveLength(20);
     expect(page.value.nextCursor).toBeNull();
+  });
+
+  it("keyset pagination preserves PostgreSQL microsecond timestamps with no duplicates or skips", async () => {
+    // PR18 review finding 1: JS Date only keeps milliseconds while PostgreSQL
+    // timestamptz keeps microseconds. Three visible Assessments whose
+    // created_at differ only below the millisecond boundary must page exactly
+    // in DESC order A -> B -> C with cursor round-trips. Timestamps are set in
+    // the far future so earlier same-claim rows in this suite can never
+    // interleave between them.
+    const AMICRO = "31411111-1111-4111-8111-111111111111";
+    const BMICRO = "31411112-1111-4111-8111-111111111111";
+    const CMICRO = "31411113-1111-4111-8111-111111111111";
+    await insertSchemaCompatibleAssessment({
+      claimId: CPAGE,
+      assessmentId: AMICRO,
+      createdAtSql: "'2999-01-01 10:00:00.123456+00'",
+    });
+    await insertSchemaCompatibleAssessment({
+      claimId: CPAGE,
+      assessmentId: BMICRO,
+      createdAtSql: "'2999-01-01 10:00:00.123455+00'",
+    });
+    await insertSchemaCompatibleAssessment({
+      claimId: CPAGE,
+      assessmentId: CMICRO,
+      createdAtSql: "'2999-01-01 10:00:00.123454+00'",
+    });
+
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    for (let page = 0; page < 3; page += 1) {
+      const result = await readStore.list({
+        projectId: P1,
+        issueId: I1,
+        claimId: CPAGE,
+        limit: 1,
+        cursor: cursor
+          ? decodeAssessmentCursor(cursor)
+          : null,
+      });
+      expect(result.kind).toBe("ok");
+      if (result.kind !== "ok") throw new Error("expected page");
+      expect(result.value.assessments).toHaveLength(1);
+      seen.push(result.value.assessments[0].id);
+      cursor = result.value.nextCursor;
+      expect(cursor).not.toBeNull();
+    }
+    // Newest first, exact microsecond order, no duplicates, no skips.
+    expect(seen).toEqual([AMICRO, BMICRO, CMICRO]);
   });
 
   it("fresh frozen triggers reject Assessment, Manifest, and ManifestItem UPDATE/DELETE", async () => {
