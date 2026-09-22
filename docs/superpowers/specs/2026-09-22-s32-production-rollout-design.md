@@ -889,7 +889,7 @@ SOURCE_BASELINE=3ddfce979ed3a2f73e75eab5f186944880c6ad4b
 PLANNING_BRANCH=plan/s32-production-rollout
 
 CONVERSATIONAL_DESIGN=APPROVED
-WRITTEN_SPEC=SELF_REVIEW_IN_PROGRESS
+WRITTEN_SPEC=READY_FOR_USER_DECISION_SUMMARY
 
 R0_RUNTIME_IDENTITY=PASS
 R0_LEGACY_SEARCH_SMOKE=REFRESH_REQUIRED
@@ -906,5 +906,43 @@ PRODUCTION_WRITE_AUTHORIZED=NO
 PRODUCTION_CHANGED=NO
 M2_E_STARTED=NO
 
-NEXT_ACTION=SELF_REVIEW_AND_USER_DECISION_SUMMARY
+NEXT_ACTION=USER_DECISION_SUMMARY
 ```
+
+## 25. Self-review result and remaining human decisions
+
+Self-review completed before asking the user to approve the written design.
+
+Checks:
+
+```text
+PLACEHOLDER_SCAN=PASS
+INTERNAL_CONSISTENCY=PASS
+SCOPE=ONE_ROLLOUT_SUBSYSTEM
+PRODUCTION_WRITE_BOUNDARIES=EXPLICIT
+SECRET_BOUNDARIES=PASS
+ROLLBACK_BOUNDARIES=PASS
+R0_EVIDENCE_CORRECTED=YES
+```
+
+Self-review corrections already incorporated:
+
+1. R0 was corrected from full PASS to runtime-identity PASS + fresh legacy-search smoke required before any write.
+2. The private S32 bearer token is explicitly prohibited from the public Web bundle; the existing session-only manual credential model is preserved for the first rollout.
+3. R7 uses one release-scoped acceptance project that is retained as audit evidence instead of being automatically deleted.
+
+Remaining decisions are deliberately limited to user-facing behavior, not raw technical implementation:
+
+```text
+D1_ACCESS_MODEL=
+  SESSION_ONLY_MANUAL_CREDENTIAL
+  OR
+  REQUIRE_NEW_AUTH_SYSTEM_BEFORE_ROLLOUT
+
+D2_ACCEPTANCE_DATA=
+  RETAIN_ONE_RELEASE_SCOPED_ACCEPTANCE_PROJECT
+  OR
+  REQUIRE_A_DIFFERENT_ACCEPTANCE_DATA_POLICY
+```
+
+No production write is authorized by either decision.
