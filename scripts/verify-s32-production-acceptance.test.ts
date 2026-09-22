@@ -25,6 +25,8 @@ type State = {
   claims: number;
   assessments: number;
   droppedAssessmentResponses: number;
+  promotedBookId: string | null;
+  assessmentKey: string | null;
 };
 
 const servers: Array<ReturnType<typeof createServer>> = [];
@@ -50,7 +52,7 @@ async function fixtureServer(token: string, fingerprint: string) {
   const issueTitle = `[Acceptance] ${short}`;
   const claimStatement = `Production acceptance claim ${short}.`;
   const reasoning = `Production acceptance assessment ${short}.`;
-  const state: State = { projects: 0, notes: 0, issues: 0, claims: 0, assessments: 0, droppedAssessmentResponses: 0 };
+  const state: State = { projects: 0, notes: 0, issues: 0, claims: 0, assessments: 0, droppedAssessmentResponses: 0, promotedBookId: null, assessmentKey: null };
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url || "/", "http://127.0.0.1");
@@ -61,7 +63,15 @@ async function fixtureServer(token: string, fingerprint: string) {
     if (url.pathname === "/") return send(res, 200, { ok: true });
     if (url.pathname === "/api/health") return send(res, 200, { ok: true });
     if (url.pathname === "/api/stats") return send(res, 200, { numberOfDocuments: 5115734, isIndexing: false });
-    if (url.pathname === "/api/search") return send(res, 200, { items: [{ id: "catalog-book-1", title: "Acceptance Book" }] });
+    if (url.pathname === "/api/search") return send(res, 200, { items: [{
+      id: "catalog-prod-1",
+      isbn: "9787538455250",
+      ssid: "13000000",
+      dxid: "000008232537",
+      title: "时尚秋冬披肩",
+      author: "鲁迅",
+      publisher: "人民文学出版社",
+    }] });
 
     if (url.pathname === "/api/private/s32/projects" && req.method === "GET") {
       return send(res, 200, { projects: state.projects ? [{ id: UUID.project, name, description: "acceptance", lifecycleState: "ACTIVE", createdAt: "2026-09-22T00:00:00Z", updatedAt: "2026-09-22T00:00:00Z" }] : [] });
@@ -71,10 +81,13 @@ async function fixtureServer(token: string, fingerprint: string) {
       return send(res, 201, { project: { id: UUID.project, name, description: "acceptance", lifecycleState: "ACTIVE", createdAt: "2026-09-22T00:00:00Z", updatedAt: "2026-09-22T00:00:00Z" } });
     }
     if (url.pathname === `/api/private/s32/projects/${UUID.project}/catalog-books` && req.method === "POST") {
+      const input = await body(req);
+      if (input?.bookId !== "catalog-prod-1") return send(res, 400, { error: { code: "CATALOG_BOOK_INVALID", message: "bad book" } });
+      state.promotedBookId = input.bookId;
       return send(res, 200, {
         promotionStatus: "existing",
         bindingStatus: "existing",
-        item: { bindingId: UUID.binding, projectId: UUID.project, workId: "aaaaaaaa-1111-4111-8111-111111111111", editionId: "bbbbbbbb-1111-4111-8111-111111111111", sourceId: UUID.source, catalogBookId: "catalog-book-1", title: "Acceptance Book", publisher: null, publicationDate: null, publicationDatePrecision: "YEAR", isbn: null, addedAt: "2026-09-22T00:00:00Z" },
+        item: { bindingId: UUID.binding, projectId: UUID.project, workId: "aaaaaaaa-1111-4111-8111-111111111111", editionId: "bbbbbbbb-1111-4111-8111-111111111111", sourceId: UUID.source, catalogBookId: "catalog-prod-1", title: "时尚秋冬披肩", publisher: "人民文学出版社", publicationDate: null, publicationDatePrecision: "YEAR", isbn: "9787538455250", addedAt: "2026-09-22T00:00:00Z" },
       });
     }
     if (url.pathname === `/api/private/s32/projects/${UUID.project}/items/${UUID.binding}/note` && req.method === "GET") {
@@ -102,14 +115,31 @@ async function fixtureServer(token: string, fingerprint: string) {
       return send(res, 200, { claim: { id: UUID.claim, statement: claimStatement, lifecycleState: "ACTIVE" }, candidates: [{ targetType: "SOURCE", targetId: UUID.source, materialBindingId: UUID.binding, materialTitle: "Acceptance Book", sourceType: "DATABASE_RECORD", sourceLifecycleState: "ACTIVE", observedAt: "2026-09-22T00:00:00Z" }] });
     }
     if (url.pathname.endsWith("/evidence-manifest-preview") && req.method === "POST") {
+      const input = await body(req);
+      const topKeys = input && typeof input === "object" ? Object.keys(input).sort() : [];
+      const item = Array.isArray(input?.items) ? input.items[0] : null;
+      const itemKeys = item && typeof item === "object" ? Object.keys(item).sort() : [];
+      if (JSON.stringify(topKeys) !== JSON.stringify(["items"]) ||
+          JSON.stringify(itemKeys) !== JSON.stringify(["note","role","targetId","targetType"])) {
+        return send(res, 400, { error: { code: "EVIDENCE_DRAFT_INVALID", message: "strict preview body" } });
+      }
       return send(res, 200, { claim: { id: UUID.claim, statement: claimStatement }, persisted: false, draft: { schemaVersion: 1, purpose: "CLAIM_ASSESSMENT", manifestSha256: "a".repeat(64), items: [{ ordinal: 1, role: "SUPPORTING", targetType: "SOURCE", targetId: UUID.source, locatorType: null, locator: null, excerpt: null, note: null }] } });
     }
     if (url.pathname.endsWith("/assessments") && req.method === "GET") {
       return send(res, 200, { claim: { id: UUID.claim, statement: claimStatement, lifecycleState: "ACTIVE" }, assessments: state.assessments ? [{ id: UUID.assessment, stance: "SUPPORTS", confidenceLevel: "HIGH", actorId: null, numericScore: null, scoreKind: null, reasoningExcerpt: reasoning, createdAt: "2026-09-22T00:00:00Z", evidenceManifest: { id: UUID.manifest, schemaVersion: 1, purpose: "CLAIM_ASSESSMENT", manifestSha256: "a".repeat(64), itemCount: 1 } }] : [], nextCursor: null });
     }
     if (url.pathname.endsWith("/assessments") && req.method === "POST") {
-      await body(req);
+      const input = await body(req);
+      const keys = input && typeof input === "object" ? Object.keys(input).sort() : [];
+      const expectedKeys = ["confidenceLevel","expectedManifestSha256","items","reasoning","stance"];
+      if (JSON.stringify(keys) !== JSON.stringify(expectedKeys) || !Array.isArray(input?.items) || "evidenceItems" in (input ?? {})) {
+        return send(res, 400, { error: { code: "ASSESSMENT_INVALID", message: "strict assessment body" } });
+      }
+      const key = String(req.headers["idempotency-key"] || "");
+      if (!key) return send(res, 400, { error: { code: "IDEMPOTENCY_KEY_REQUIRED", message: "missing key" } });
       const replay = state.assessments > 0;
+      if (replay && state.assessmentKey !== key) return send(res, 409, { error: { code: "IDEMPOTENCY_CONFLICT", message: "different key" } });
+      if (!replay) state.assessmentKey = key;
       state.assessments = 1;
       if (!replay) state.droppedAssessmentResponses += 1;
       const response = { status: replay ? "replayed" : "created", visible: true, assessment: { id: UUID.assessment, claimId: UUID.claim, stance: "SUPPORTS", confidenceLevel: "HIGH", actorId: null, numericScore: null, scoreKind: null, reasoning, createdAt: "2026-09-22T00:00:00Z" }, evidenceManifest: { id: UUID.manifest, schemaVersion: 1, purpose: "CLAIM_ASSESSMENT", manifestSha256: "a".repeat(64), itemCount: 1 } };
@@ -145,6 +175,8 @@ describe("S32 production acceptance harness", () => {
     expect(fixture.state.assessments).toBe(1);
     expect(first.legacySearchRegression).toBe("PASS");
     expect(first.assessmentReplay).toBe("PASS");
+    expect(fixture.state.promotedBookId).toBe("catalog-prod-1");
+    expect(fixture.state.assessmentKey).toMatch(/^[0-9a-f-]{36}$/);
   });
 
   it("never renders the bearer token in its machine-readable result", async () => {
