@@ -33,10 +33,17 @@ function isResearchErrorCode(value: unknown): value is ResearchErrorCode {
   return typeof value === "string" && Object.hasOwn(STATUS_BY_ERROR, value);
 }
 
-// Validate the resolve request body; returns an error string or null.
-function validateResolveBody(
-  body: unknown,
-): { sourceId: string; action: string; surface: string; purpose: string; at: string } | { error: string } {
+// Validate the resolve request body; returns parsed fields or an error.
+interface ResolveBody {
+  sourceId: string;
+  action: string;
+  surface: string;
+  purpose: string;
+  at: string;
+  entitlement?: { kind: string };
+}
+
+function validateResolveBody(body: unknown): ResolveBody | { error: string } {
   if (typeof body !== "object" || body === null) return { error: "请求体必须是 JSON 对象。" };
   const b = body as Record<string, unknown>;
   for (const key of ["sourceId", "action", "surface", "purpose", "at"] as const) {
@@ -44,12 +51,21 @@ function validateResolveBody(
       return { error: `字段 ${key} 必须是非空字符串。` };
     }
   }
+  let entitlement: ResolveBody["entitlement"];
+  if (b.entitlement !== undefined) {
+    if (typeof b.entitlement !== "object" || b.entitlement === null
+      || typeof (b.entitlement as Record<string, unknown>).kind !== "string") {
+      return { error: "字段 entitlement 必须是包含字符串 kind 的对象。" };
+    }
+    entitlement = { kind: (b.entitlement as { kind: string }).kind };
+  }
   return {
     sourceId: b.sourceId as string,
     action: b.action as string,
     surface: b.surface as string,
     purpose: b.purpose as string,
     at: b.at as string,
+    entitlement,
   };
 }
 
@@ -109,6 +125,7 @@ export function createResearchRouter(): Router {
         surface: parsed.surface,
         purpose: parsed.purpose,
         at: parsed.at,
+        entitlement: parsed.entitlement,
       },
     });
     res.status(resolution.allowed ? 200 : 403).json({ resolution });

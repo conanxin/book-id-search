@@ -144,6 +144,8 @@ export interface CapabilityResolutionRequest {
   readonly purpose: string;
   /** ISO-8601 date used for expiry checks. */
   readonly at: string;
+  /** Entitlement claim presented by the caller; rules may require one. */
+  readonly entitlement?: { readonly kind: string };
 }
 
 export interface CapabilityResolutionAllowed {

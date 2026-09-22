@@ -84,6 +84,33 @@ describe("research router", () => {
     expect(body.resolution.allowed).toBe(true);
   });
 
+  it("POST /capabilities/resolve allows the licensed book when the entitlement claim is presented", async () => {
+    const res = await post("/api/research/v0/capabilities/resolve", {
+      sourceId: "src:test:licensed-book",
+      action: "read_text",
+      surface: "api",
+      purpose: "provenance_investigation",
+      at: "2026-01-01",
+      entitlement: { kind: "license" },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.resolution.allowed).toBe(true);
+  });
+
+  it("POST resolve denies a missing entitlement claim with typed reason", async () => {
+    const res = await post("/api/research/v0/capabilities/resolve", {
+      sourceId: "src:test:licensed-book",
+      action: "read_text",
+      surface: "api",
+      purpose: "provenance_investigation",
+      at: "2026-01-01",
+    });
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.resolution.reason).toBe("ENTITLEMENT_MISSING");
+  });
+
   it("POST resolve denies with typed TECHNICAL_CAPABILITY_MISSING", async () => {
     const res = await post("/api/research/v0/capabilities/resolve", {
       sourceId: "src:test:public-book",
@@ -105,6 +132,7 @@ describe("research router", () => {
       surface: "api",
       purpose: "provenance_investigation",
       at: "2026-01-01",
+      entitlement: { kind: "license" },
     });
     expect(res.status).toBe(403);
     const body = await res.json();

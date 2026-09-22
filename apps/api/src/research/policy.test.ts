@@ -26,7 +26,7 @@ const baselinePolicy: KnowledgePolicy = {
   ],
 };
 
-const REQ = {
+const REQ: import("./types.js").CapabilityResolutionRequest = {
   sourceId: "src:unit:baseline",
   action: "read_text",
   surface: "api",
@@ -37,7 +37,7 @@ const REQ = {
 function resolve(overrides: {
   source?: Partial<Source>;
   policy?: KnowledgePolicy | undefined;
-  request?: typeof REQ;
+  request?: import("./types.js").CapabilityResolutionRequest;
 }) {
   const source = { ...baselineSource, ...overrides.source };
   return resolveEffectiveCapability({
@@ -129,9 +129,50 @@ describe("resolveEffectiveCapability truth table", () => {
           },
         ],
       },
+      request: { ...REQ, entitlement: { kind: "license" } },
     });
     expect(result.allowed).toBe(false);
     if (!result.allowed) expect(result.reason).toBe("ENTITLEMENT_EXPIRED");
+  });
+
+  it("denies ENTITLEMENT_MISSING when the request presents no entitlement claim", () => {
+    const result = resolve({
+      policy: {
+        ...baselinePolicy,
+        rules: [
+          {
+            action: "read_text",
+            effect: "allow",
+            surfaces: ["api"],
+            purposes: ["provenance_investigation"],
+            requiresEntitlement: { kind: "license", expiresAt: "2099-12-31" },
+          },
+        ],
+      },
+      request: { ...REQ },
+    });
+    expect(result.allowed).toBe(false);
+    if (!result.allowed) expect(result.reason).toBe("ENTITLEMENT_MISSING");
+  });
+
+  it("denies ENTITLEMENT_MISSING when the presented entitlement kind mismatches", () => {
+    const result = resolve({
+      policy: {
+        ...baselinePolicy,
+        rules: [
+          {
+            action: "read_text",
+            effect: "allow",
+            surfaces: ["api"],
+            purposes: ["provenance_investigation"],
+            requiresEntitlement: { kind: "license", expiresAt: "2099-12-31" },
+          },
+        ],
+      },
+      request: { ...REQ, entitlement: { kind: "subscription" } },
+    });
+    expect(result.allowed).toBe(false);
+    if (!result.allowed) expect(result.reason).toBe("ENTITLEMENT_MISSING");
   });
 
   it("allows an entitlement rule before expiry (boundary date inclusive)", () => {
@@ -148,6 +189,7 @@ describe("resolveEffectiveCapability truth table", () => {
           },
         ],
       },
+      request: { ...REQ, entitlement: { kind: "license" } },
     });
     expect(result.allowed).toBe(true);
   });
@@ -220,9 +262,35 @@ describe("synthetic registry four-axis visibility", () => {
         surface: "api",
         purpose: "provenance_investigation",
         at: "2026-01-01",
+        entitlement: { kind: "license" },
       },
     });
     expect(result.allowed).toBe(false);
     if (!result.allowed) expect(result.reason).toBe("ENTITLEMENT_EXPIRED");
+  });
+
+  it("licensed-book fixture denies with ENTITLEMENT_MISSING until a claim is presented", () => {
+    const source = getSource("src:test:licensed-book")!;
+    const base = {
+      sourceId: source.identity.id,
+      action: "read_text" as const,
+      surface: "api" as const,
+      purpose: "provenance_investigation" as const,
+      at: "2026-01-01",
+    };
+    const missing = resolveEffectiveCapability({
+      source,
+      policy: getPolicy(source.policyRef.policyId),
+      request: base,
+    });
+    expect(missing.allowed).toBe(false);
+    if (!missing.allowed) expect(missing.reason).toBe("ENTITLEMENT_MISSING");
+
+    const present = resolveEffectiveCapability({
+      source,
+      policy: getPolicy(source.policyRef.policyId),
+      request: { ...base, entitlement: { kind: "license" } },
+    });
+    expect(present.allowed).toBe(true);
   });
 });

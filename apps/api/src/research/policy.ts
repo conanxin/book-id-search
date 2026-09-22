@@ -87,20 +87,23 @@ export function resolveEffectiveCapability(
   }
 
   // Gate 5+6 — entitlement: if any applicable allow rule requires an
-  // entitlement, the request must be covered by a rule whose entitlement is
-  // present and not expired. An expired entitlement can never be rescued by
-  // a second rule.
+  // entitlement, the request must present a matching kind. A missing claim
+  // or a kind mismatch is ENTITLEMENT_MISSING; a present-but-lapsed claim
+  // is ENTITLEMENT_EXPIRED. An expired entitlement can never be rescued.
   const withEntitlement = purposeRules.filter(rule => rule.requiresEntitlement);
   if (withEntitlement.length > 0) {
-    const now = dateOnly(request.at);
+    const presented = request.entitlement?.kind;
     for (const rule of withEntitlement) {
-      const expires = dateOnly(rule.requiresEntitlement!.expiresAt);
+      const required = rule.requiresEntitlement!;
+      if (presented !== required.kind) {
+        return deny("ENTITLEMENT_MISSING");
+      }
+      const now = dateOnly(request.at);
+      const expires = dateOnly(required.expiresAt);
       if (expires !== null && now !== null && now > expires) {
-        // Expired entitlement on a rule that would otherwise allow.
         return deny("ENTITLEMENT_EXPIRED");
       }
     }
-    // Entitlements present and unexpired on all applicable rules.
   }
 
   return {
