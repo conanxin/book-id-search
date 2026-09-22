@@ -64,6 +64,19 @@ The release manifest binds:
 
 Secrets are never part of the manifest or receipts.
 
+## Control-plane sync bootstrap
+
+The current production checkout may predate the rollout tooling. Therefore `CONTROL_PLANE_SYNC` must be launched from a reviewed external tool bundle containing at least:
+
+```text
+execute-s32-control-plane-sync.sh
+plan-s32-production-baseline.py
+```
+
+The bundle bytes/commit identity must correspond to the reviewed control-plane SHA. The sync executor uses the baseline planner from its own `SCRIPT_DIR` before and after changing the checkout, so it never assumes the old checkout already contains the new rollout scripts.
+
+The control-plane sync changes Git checkout state only. Web/API/Meilisearch CID, StartedAt, image ID, and public HTTP state must remain unchanged.
+
 ## R0 / R1 read-only preflight
 
 R0 must freshly record:
