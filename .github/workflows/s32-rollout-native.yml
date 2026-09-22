@@ -1,0 +1,24 @@
+name: S32 rollout native continuation
+
+on:
+  push:
+    branches:
+      - feat/s32-production-rollout
+
+jobs:
+  task14:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: R7 acceptance unit
+        run: pnpm vitest run scripts/test-verify-s32-production-acceptance.ts
