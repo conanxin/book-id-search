@@ -452,20 +452,32 @@ R6/R7 acceptance must scan the built/static Web artifacts and prove that the pri
 
 ## 11. R0 — Production Baseline
 
-R0 is already complete for the current baseline.
-
-It records:
+The 2026-09-22 read-only audit has already established the **runtime identity baseline**:
 
 - production checkout;
-- Web/API/Meili container IDs;
-- StartedAt values;
-- image tags/IDs/revisions;
-- public HTTP;
-- search smoke;
+- Web/API image tags/revisions;
+- three-service Web/API/Meilisearch topology;
+- public HTTP 200;
 - absence of PostgreSQL;
 - absence of S32 environment names.
 
-R0 is the rollback-reference identity.
+Before any production write, R0 must be refreshed once more to capture:
+
+- exact Web/API/Meili container IDs;
+- StartedAt values;
+- exact image IDs;
+- fresh ISBN / SSID / DXID / title / author / publisher search smoke;
+- current Meilisearch document count / indexing-health state.
+
+Therefore:
+
+```text
+R0_RUNTIME_IDENTITY=PASS
+R0_LEGACY_SEARCH_SMOKE=REFRESH_REQUIRED
+R0_FINAL=NOT_YET_PASS
+```
+
+Only the refreshed R0 receipt becomes the rollback-reference identity for R2–R7.
 
 ## 12. R1 — Capacity & Release Safety Gate
 
@@ -879,7 +891,9 @@ PLANNING_BRANCH=plan/s32-production-rollout
 CONVERSATIONAL_DESIGN=APPROVED
 WRITTEN_SPEC=SELF_REVIEW_IN_PROGRESS
 
-R0_BASELINE=PASS
+R0_RUNTIME_IDENTITY=PASS
+R0_LEGACY_SEARCH_SMOKE=REFRESH_REQUIRED
+R0_FINAL=NOT_YET_PASS
 R1_CAPACITY=NOT_EXECUTED
 R2_POSTGRES=NOT_EXECUTED
 R3_SCHEMA=NOT_EXECUTED
