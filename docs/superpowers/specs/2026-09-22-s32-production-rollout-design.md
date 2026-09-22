@@ -426,12 +426,29 @@ Secrets must not appear in:
 Runtime files live under:
 
 ```text
-/opt/book-id-search-runtime/s32/<S32_RELEASE_FINGERPRINT>/
+/opt/book-id-search-runtime/s32/{release-fingerprint}/
 ```
 
 with root-owned directory and `0600` secret files.
 
 Use separate files for PostgreSQL bootstrap and API activation.
+
+### 10.1 Browser access credential
+
+The production Web must **not** embed `S32_PRIVATE_API_TOKEN` in JavaScript, HTML, build-time Vite variables, or static assets.
+
+The first rollout preserves the existing access model:
+
+```text
+operator/user manually enters the independent S32 credential
+→ browser stores it in sessionStorage only
+→ Web sends Authorization: Bearer <token>
+→ closing the browser session discards the credential
+```
+
+This keeps the private S32 bearer secret out of the public Web image and static bundle.
+
+R6/R7 acceptance must scan the built/static Web artifacts and prove that the private token value is absent.
 
 ## 11. R0 — Production Baseline
 
@@ -676,12 +693,20 @@ Failure action: restore the exact R0 Web image. Keep API/PostgreSQL unless a bac
 
 ## 18. R7 — Production acceptance and closure
 
-R7 performs a complete production vertical slice:
+R7 performs a complete production vertical slice using one clearly named production acceptance project:
+
+```text
+[S32 Production Acceptance] <release-fingerprint-short>
+```
+
+The acceptance project and its child research data are **retained as an audit fixture** after a successful rollout. They are not automatically deleted, because destructive cleanup would weaken the proof of persistence and could accidentally remove canonical S32 data.
+
+The vertical slice is:
 
 ```text
 Search
 → Add to Research
-→ Project
+→ Acceptance Project
 → Note
 → Research Issue
 → Candidate Claim
@@ -694,6 +719,7 @@ Search
 
 Required S32 behavior:
 
+- acceptance fixture is uniquely identifiable by the release fingerprint and is not reused as ordinary research data;
 - response-unknown same-key replay;
 - stale-preview recovery;
 - archived readability;
@@ -811,7 +837,8 @@ Before production execution can be requested, the rollout tooling must implement
 12. Web rollout integration with S32 release identity;
 13. R7 production acceptance harness;
 14. receipt/readback verification;
-15. secret leakage tests.
+15. secret leakage tests;
+16. production acceptance-fixture tests proving that successful R7 retains exactly one release-scoped canary project and never performs destructive cleanup.
 
 Implementation must follow TDD and use isolated/disposable environments for destructive tests.
 
@@ -850,7 +877,7 @@ SOURCE_BASELINE=3ddfce979ed3a2f73e75eab5f186944880c6ad4b
 PLANNING_BRANCH=plan/s32-production-rollout
 
 CONVERSATIONAL_DESIGN=APPROVED
-WRITTEN_SPEC=READY_FOR_SELF_REVIEW
+WRITTEN_SPEC=SELF_REVIEW_IN_PROGRESS
 
 R0_BASELINE=PASS
 R1_CAPACITY=NOT_EXECUTED
