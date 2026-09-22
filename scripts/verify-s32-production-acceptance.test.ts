@@ -20,6 +20,7 @@ const UUID = {
 
 type State = {
   projects: number;
+  notes: number;
   issues: number;
   claims: number;
   assessments: number;
@@ -49,7 +50,7 @@ async function fixtureServer(token: string, fingerprint: string) {
   const issueTitle = `[Acceptance] ${short}`;
   const claimStatement = `Production acceptance claim ${short}.`;
   const reasoning = `Production acceptance assessment ${short}.`;
-  const state: State = { projects: 0, issues: 0, claims: 0, assessments: 0, droppedAssessmentResponses: 0 };
+  const state: State = { projects: 0, notes: 0, issues: 0, claims: 0, assessments: 0, droppedAssessmentResponses: 0 };
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url || "/", "http://127.0.0.1");
@@ -76,9 +77,10 @@ async function fixtureServer(token: string, fingerprint: string) {
       });
     }
     if (url.pathname === `/api/private/s32/projects/${UUID.project}/items/${UUID.binding}/note` && req.method === "GET") {
-      return send(res, 200, { note: state.projects > 1 ? { noteId: UUID.note } : null });
+      return send(res, 200, { note: state.notes ? { noteId: UUID.note, currentRevision: { revisionId: UUID.revision } } : null });
     }
     if (url.pathname === `/api/private/s32/projects/${UUID.project}/items/${UUID.binding}/note` && req.method === "POST") {
+      state.notes = 1;
       return send(res, 201, { note: { noteId: UUID.note, currentRevision: { revisionId: UUID.revision } } });
     }
     if (url.pathname === `/api/private/s32/projects/${UUID.project}/issues` && req.method === "GET") {
@@ -106,10 +108,11 @@ async function fixtureServer(token: string, fingerprint: string) {
     }
     if (url.pathname.endsWith("/assessments") && req.method === "POST") {
       await body(req);
+      const replay = state.assessments > 0;
       state.assessments = 1;
-      const response = { status: state.droppedAssessmentResponses ? "replayed" : "created", visible: true, assessment: { id: UUID.assessment, claimId: UUID.claim, stance: "SUPPORTS", confidenceLevel: "HIGH", actorId: null, numericScore: null, scoreKind: null, reasoning, createdAt: "2026-09-22T00:00:00Z" }, evidenceManifest: { id: UUID.manifest, schemaVersion: 1, purpose: "CLAIM_ASSESSMENT", manifestSha256: "a".repeat(64), itemCount: 1 } };
-      if (!state.droppedAssessmentResponses) state.droppedAssessmentResponses += 1;
-      return send(res, state.droppedAssessmentResponses > 1 ? 200 : 201, response);
+      if (!replay) state.droppedAssessmentResponses += 1;
+      const response = { status: replay ? "replayed" : "created", visible: true, assessment: { id: UUID.assessment, claimId: UUID.claim, stance: "SUPPORTS", confidenceLevel: "HIGH", actorId: null, numericScore: null, scoreKind: null, reasoning, createdAt: "2026-09-22T00:00:00Z" }, evidenceManifest: { id: UUID.manifest, schemaVersion: 1, purpose: "CLAIM_ASSESSMENT", manifestSha256: "a".repeat(64), itemCount: 1 } };
+      return send(res, replay ? 200 : 201, response);
     }
     if (url.pathname.endsWith(`/assessments/${UUID.assessment}`) && req.method === "GET") {
       return send(res, 200, { claim: { id: UUID.claim, statement: claimStatement, lifecycleState: "ACTIVE" }, assessment: { id: UUID.assessment, claimId: UUID.claim, stance: "SUPPORTS", confidenceLevel: "HIGH", actorId: null, numericScore: null, scoreKind: null, reasoning, createdAt: "2026-09-22T00:00:00Z" }, evidenceManifest: { id: UUID.manifest, schemaVersion: 1, purpose: "CLAIM_ASSESSMENT", manifestSha256: "a".repeat(64), createdAt: "2026-09-22T00:00:00Z", items: [{ ordinal: 1, role: "SUPPORTING", targetType: "SOURCE", targetId: UUID.source, locatorType: null, locator: null, excerpt: null, note: null }] } });
@@ -135,6 +138,7 @@ describe("S32 production acceptance harness", () => {
     expect(first.projectName).toBe("[S32 Production Acceptance] ffffffffffff");
     expect(second.projectId).toBe(first.projectId);
     expect(fixture.state.projects).toBe(1);
+    expect(fixture.state.notes).toBe(1);
     expect(fixture.state.issues).toBe(1);
     expect(fixture.state.claims).toBe(1);
     expect(fixture.state.assessments).toBe(1);
