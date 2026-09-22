@@ -15,6 +15,7 @@ def run(f):
 class T(unittest.TestCase):
  def test_preferred(self):
   r=run(facts(25*G,50)); self.assertEqual(r.returncode,0,r.stdout+r.stderr); self.assertIn('CAPACITY_GATE=PASS_PREFERRED',r.stdout)
+  self.assertIn('S32_RELEASE_FINGERPRINT='+'a'*64,r.stdout)
  def test_hard_only(self):
   r=run(facts(int(22.5*G),50)); self.assertEqual(r.returncode,0,r.stdout+r.stderr); self.assertIn('CAPACITY_GATE=PASS_HARD_ONLY',r.stdout)
  def test_below_reserve_blocks(self):
