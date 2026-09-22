@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - feat/research-v0-pilot
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "apps/api/src/research-v0/**"
+      - "apps/api/src/index.ts"
+      - ".github/workflows/research-v0-pilot.yml"
   workflow_dispatch:
 
 jobs:
