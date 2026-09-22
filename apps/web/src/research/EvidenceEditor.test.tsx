@@ -365,3 +365,44 @@ describe("M2-D preview handoff", () => {
     ).toBe(true);
   }, 20_000);
 });
+
+
+describe("external preview reset after committed Assessment", () => {
+  it("invalidates the preview but preserves the selected evidence draft for re-preview", async () => {
+    const onPreviewChange = vi.fn();
+    const view = render(
+      <EvidenceEditor
+        token="t"
+        projectId={p}
+        issueId={i}
+        claim={claim}
+        onPreviewChange={onPreviewChange}
+        previewResetVersion={0}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "构建证据集" }));
+    await screen.findAllByText(/北京古道志/);
+    await userEvent.click(
+      within(screen.getByTestId(`candidate-${source.targetId}`))
+        .getByRole("button", { name: "作为支持证据" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "预览 EvidenceManifest" }));
+    await screen.findByText("尚未提交。");
+
+    view.rerender(
+      <EvidenceEditor
+        token="t"
+        projectId={p}
+        issueId={i}
+        claim={claim}
+        onPreviewChange={onPreviewChange}
+        previewResetVersion={1}
+      />,
+    );
+
+    await waitFor(() => expect(screen.queryByText("尚未提交。")).toBeNull());
+    expect(screen.getByTestId(`selected-${source.targetId}`)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "预览 EvidenceManifest" })).toBeTruthy();
+    expect(onPreviewChange).toHaveBeenLastCalledWith(null);
+  });
+});
