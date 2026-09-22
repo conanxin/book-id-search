@@ -149,23 +149,63 @@ R0 is the rollback reference.
 
 ## R7 acceptance
 
-Run:
+R7 is two-phase and consumes the already-claimed `R7` stage authorization.
+
+### Phase 1 — API canary
+
+Run the guarded R7 executor in API mode:
 
 ```bash
-S32_PRIVATE_API_TOKEN='<runtime secret>' \
-S32_RELEASE_FINGERPRINT='<64 hex>' \
-S32_API_BASE_URL='https://books.conanxin.com' \
-S32_PUBLIC_URL='https://books.conanxin.com' \
-pnpm s32:production:acceptance
+scripts/execute-s32-r7-acceptance.sh \
+  --execute-r7-api \
+  <S32_RELEASE_FINGERPRINT> \
+  <RELEASE_SOURCE_SHA> \
+  <CONTROL_PLANE_SHA>
 ```
 
-The harness retains exactly one project named:
+This creates/reuses exactly one retained project:
 
 ```text
 [S32 Production Acceptance] <fingerprint-short>
 ```
 
-as persistence/audit evidence. Do not automatically delete it.
+and writes a mode-600 `R7.api.env` partial receipt. It does **not** write the terminal R7 receipt.
+
+### Phase 2 — real Web/mobile evidence
+
+Using the existing session-only S32 credential model, run an external real-browser acceptance against the public Web and the exact canary `PROJECT_ID` from `R7.api.env`.
+
+The browser evidence must prove:
+
+```text
+S32_WEB_ACCEPTANCE=PASS
+MOBILE_390x844=PASS
+NO_HORIZONTAL_OVERFLOW=PASS
+```
+
+and write a mode-600, non-secret receipt:
+
+```text
+progress/s32-rollout-<fingerprint>-R7.web.env
+```
+
+bound to the same fingerprint and Project ID. The browser receipt must not contain token/password/database-url fields.
+
+### Phase 3 — terminal completion
+
+Only after both partial receipts exist:
+
+```bash
+scripts/execute-s32-r7-acceptance.sh \
+  --complete-r7 \
+  <S32_RELEASE_FINGERPRINT> \
+  <RELEASE_SOURCE_SHA> \
+  <CONTROL_PLANE_SHA>
+```
+
+The executor validates API canary identity plus the Web/mobile receipt and only then writes `R7.result.env`. The cross-stage planner cannot report `ROLLOUT_COMPLETE` before that terminal receipt exists.
+
+The acceptance project is retained as persistence/audit evidence. Do not automatically delete it.
 
 ## Current execution boundary
 
