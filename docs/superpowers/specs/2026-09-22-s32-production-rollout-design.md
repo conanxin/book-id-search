@@ -254,13 +254,17 @@ WEB_IMAGE_TAG
 WEB_IMAGE_ID
 WEB_OCI_REVISION
 WEB_STATIC_MANIFEST_SHA256
+WEB_S32_ENABLED=true
 ```
 
 and requires:
 
 ```text
 WEB_OCI_REVISION == RELEASE_SOURCE_SHA
+WEB_S32_ENABLED == true
 ```
+
+The first S32 production Web candidate must be built with an explicit build-time `VITE_S32_ENABLED=true`. The flag is part of release identity because omitting it would deploy the correct static code while leaving the research UI disabled.
 
 ### 6.5 Final release parity
 
