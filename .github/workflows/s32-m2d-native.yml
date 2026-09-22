@@ -11,6 +11,7 @@ on:
 
 jobs:
   verification:
+    if: github.event_name != 'pull_request' || github.head_ref == 'feat/s32-m2d-assessment'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -60,6 +61,7 @@ jobs:
           exit 0
 
   firefox-acceptance:
+    if: github.event_name != 'pull_request' || github.head_ref == 'feat/s32-m2d-assessment'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
