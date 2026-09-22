@@ -149,6 +149,10 @@ test("M2-D real Firefox acceptance: create, recover, audit, privacy, lifecycle, 
     await route.abort("failed");
   });
 
+  // A successful Assessment intentionally consumes the previous preview.
+  // Re-preview the still-selected evidence before expressing a second intent.
+  await primary.getByRole("button", { name: "预览 EvidenceManifest" }).click();
+  await expect(primary.getByText("尚未提交。")).toBeVisible();
   await submitAssessment(primary, "网络结果未知后的第二次评价", "反驳");
   await expect(primary.getByText(/评价提交结果尚未确认/)).toBeVisible();
   expect(interceptedStatus).toBe(201);
