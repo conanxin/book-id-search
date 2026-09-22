@@ -59,6 +59,12 @@ class T(unittest.TestCase):
   td,w,first,second=repo(); self.addCleanup(td.cleanup); pre=pathlib.Path(td.name)/'pre.json'; post=pathlib.Path(td.name)/'post.json'; facts(pre); facts(post); claim(w,second)
   env=os.environ.copy(); env.update(BOOK_ID_SEARCH_REPO_ROOT=str(w),S32_SYNC_PRE_FACTS_JSON=str(pre),S32_SYNC_POST_FACTS_JSON=str(post))
   r=sh(['bash',str(EXEC),'--execute-control-plane-sync',FP,SRC,second],w,env); self.assertEqual(r.returncode,0,r.stdout+r.stderr); self.assertIn('CONTROL_PLANE_SYNC=PASS',r.stdout); self.assertEqual(subprocess.check_output(['git','rev-parse','HEAD'],cwd=w,text=True).strip(),second)
+ def test_executor_uses_tool_bundle_baseline_planner(self):
+  text=EXEC.read_text() if EXEC.exists() else ''
+  self.assertIn('SCRIPT_DIR=',text)
+  self.assertIn('"$SCRIPT_DIR/plan-s32-production-baseline.py"',text)
+  self.assertNotIn('"$ROOT/scripts/plan-s32-production-baseline.py"',text)
+
  def test_executor_has_no_runtime_mutation_commands(self):
   text=EXEC.read_text() if EXEC.exists() else ''
   for bad in ['docker compose up','docker compose down','docker restart','docker pull','docker build','docker rm']:
