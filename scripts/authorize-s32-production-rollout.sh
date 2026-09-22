@@ -9,7 +9,7 @@ printf '%s' "$FP"|grep -qE '^[0-9a-f]{64}$' || block INVALID_RELEASE_FINGERPRINT
 printf '%s' "$SRC"|grep -qE '^[0-9a-f]{40}$' || block INVALID_SOURCE_SHA
 printf '%s' "$CTRL"|grep -qE '^[0-9a-f]{40}$' || block INVALID_CONTROL_PLANE_SHA
 CAPACITY_HARD_ONLY_ACCEPTED=false
-if [ "$STAGE" = R2_R3 ] && [ "${S32_CAPACITY_HARD_ONLY_ACCEPTED:-false}" = true ]; then CAPACITY_HARD_ONLY_ACCEPTED=true; fi
+if [ "$STAGE" != CONTROL_PLANE_SYNC ] && [ "${S32_CAPACITY_HARD_ONLY_ACCEPTED:-false}" = true ]; then CAPACITY_HARD_ONLY_ACCEPTED=true; fi
 ROOT="${BOOK_ID_SEARCH_REPO_ROOT:-/opt/book-id-search}"; DIR="$ROOT/progress"; mkdir -p "$DIR"
 OUT="$DIR/s32-rollout-authorization-${FP}-${STAGE}.env"; [ ! -e "$OUT" ] && [ ! -L "$OUT" ] || block AUTHORIZATION_ALREADY_EXISTS
 TMP="$(mktemp "$DIR/.s32-auth.XXXXXX")"; trap 'rm -f "$TMP"' EXIT
