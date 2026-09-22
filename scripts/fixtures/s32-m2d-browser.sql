@@ -1,0 +1,109 @@
+BEGIN;
+
+-- Synthetic fixture shared by M2-D real-PG and browser acceptance.
+INSERT INTO core.actors (id, actor_type, display_name)
+VALUES ('f1111111-1111-4111-8111-111111111111', 'HUMAN', 'Synthetic Researcher');
+
+INSERT INTO core.projects (id, name, lifecycle_state) VALUES
+  ('11111111-1111-4111-8111-111111111111', 'M2D Active Project', 'ACTIVE'),
+  ('12111111-1111-4111-8111-111111111111', 'M2D Foreign Project', 'ACTIVE'),
+  ('13111111-1111-4111-8111-111111111111', 'M2D Archived Project', 'ARCHIVED');
+
+INSERT INTO core.works (id, work_type, title, title_status) VALUES
+  ('41111111-1111-4111-8111-111111111111', 'BOOK', 'M2D Primary Work', 'KNOWN'),
+  ('42111111-1111-4111-8111-111111111111', 'BOOK', 'M2D Foreign Work', 'KNOWN');
+
+INSERT INTO core.editions (id, work_id, edition_type, publication_date_precision, lifecycle_state) VALUES
+  ('51111111-1111-4111-8111-111111111111', '41111111-1111-4111-8111-111111111111', 'PRINT', 'YEAR', 'ACTIVE'),
+  ('52111111-1111-4111-8111-111111111111', '42111111-1111-4111-8111-111111111111', 'PRINT', 'YEAR', 'ACTIVE');
+
+INSERT INTO core.sources (id, source_type, edition_id, lifecycle_state, observed_at) VALUES
+  ('61111111-1111-4111-8111-111111111111', 'DATABASE_RECORD', '51111111-1111-4111-8111-111111111111', 'ACTIVE', '2026-09-21T00:00:00Z'),
+  ('62111111-1111-4111-8111-111111111111', 'ARCHIVAL_RECORD', '52111111-1111-4111-8111-111111111111', 'ACTIVE', '2026-09-21T00:00:00Z');
+
+INSERT INTO core.source_assets
+  (id, source_id, asset_type, asset_role, storage_mode, storage_key, sha256)
+VALUES
+  ('71111111-1111-4111-8111-111111111111', '61111111-1111-4111-8111-111111111111', 'DOCUMENT', 'ORIGINAL', 'LOCAL', 'm2d-primary', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'),
+  ('72111111-1111-4111-8111-111111111111', '62111111-1111-4111-8111-111111111111', 'DOCUMENT', 'ORIGINAL', 'LOCAL', 'm2d-foreign', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
+
+-- 99 additional authorized assets + the ORIGINAL asset above = exactly 100
+-- Project-1 SourceAssets for the M2-D 100-item Manifest acceptance gate.
+INSERT INTO core.source_assets
+  (id, source_id, asset_type, asset_role, storage_mode, storage_key, sha256)
+SELECT
+  (
+    lpad(to_hex(gs), 8, '0') || '-2222-4222-8222-' ||
+    lpad(to_hex(gs), 12, '0')
+  )::uuid,
+  '61111111-1111-4111-8111-111111111111'::uuid,
+  'DOCUMENT',
+  'DERIVED',
+  'LOCAL',
+  'm2d-extra-' || gs::text,
+  repeat('f', 64)
+FROM generate_series(1, 99) AS gs;
+
+INSERT INTO core.project_bindings
+  (id, project_id, target_type, target_id, binding_role, metadata)
+VALUES
+  ('81111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111111111', 'EDITION', '51111111-1111-4111-8111-111111111111', NULL, '{"sourceId":"61111111-1111-4111-8111-111111111111"}'),
+  ('82111111-1111-4111-8111-111111111111', '12111111-1111-4111-8111-111111111111', 'EDITION', '52111111-1111-4111-8111-111111111111', NULL, '{"sourceId":"62111111-1111-4111-8111-111111111111"}');
+
+INSERT INTO core.notes (id, note_type, lifecycle_state, next_revision_no) VALUES
+  ('91111111-1111-4111-8111-111111111111', 'PROJECT_ITEM_NOTE', 'ACTIVE', 3),
+  ('92111111-1111-4111-8111-111111111111', 'PROJECT_ITEM_NOTE', 'ACTIVE', 2);
+
+INSERT INTO core.note_revisions
+  (id, note_id, revision_no, content_format, content, content_sha256)
+VALUES
+  ('a1111111-1111-4111-8111-111111111111', '91111111-1111-4111-8111-111111111111', 1, 'MARKDOWN', 'primary note revision 1', 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'),
+  ('a1211111-1111-4111-8111-111111111111', '91111111-1111-4111-8111-111111111111', 2, 'MARKDOWN', 'primary note revision 2', 'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd'),
+  ('a2111111-1111-4111-8111-111111111111', '92111111-1111-4111-8111-111111111111', 1, 'MARKDOWN', 'foreign note revision', 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee');
+
+UPDATE core.notes
+SET current_revision_id='a1211111-1111-4111-8111-111111111111'
+WHERE id='91111111-1111-4111-8111-111111111111';
+UPDATE core.notes
+SET current_revision_id='a2111111-1111-4111-8111-111111111111'
+WHERE id='92111111-1111-4111-8111-111111111111';
+
+INSERT INTO core.project_bindings
+  (id, project_id, target_type, target_id, binding_role, metadata)
+VALUES
+  ('b1111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111111111', 'NOTE', '91111111-1111-4111-8111-111111111111', 'ANNOTATION', '{"subjectBindingId":"81111111-1111-4111-8111-111111111111","subjectType":"EDITION","subjectId":"51111111-1111-4111-8111-111111111111"}'),
+  ('b2111111-1111-4111-8111-111111111111', '12111111-1111-4111-8111-111111111111', 'NOTE', '92111111-1111-4111-8111-111111111111', 'ANNOTATION', '{"subjectBindingId":"82111111-1111-4111-8111-111111111111","subjectType":"EDITION","subjectId":"52111111-1111-4111-8111-111111111111"}');
+
+INSERT INTO core.research_issues (id, title, question, lifecycle_state) VALUES
+  ('21111111-1111-4111-8111-111111111111', 'M2D Open Issue', 'Does the primary evidence support the candidate?', 'OPEN'),
+  ('21211111-1111-4111-8111-111111111111', 'M2D Resolved Issue', 'Can an assessment be appended after resolution?', 'RESOLVED'),
+  ('21311111-1111-4111-8111-111111111111', 'M2D Archived Issue', 'Is archived history still readable?', 'ARCHIVED'),
+  ('22111111-1111-4111-8111-111111111111', 'M2D Foreign Issue', 'Foreign context?', 'OPEN'),
+  ('23111111-1111-4111-8111-111111111111', 'M2D Archived Project Issue', 'Archived project context?', 'OPEN');
+
+INSERT INTO core.project_bindings (id, project_id, target_type, target_id) VALUES
+  ('c1111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111111111', 'RESEARCH_ISSUE', '21111111-1111-4111-8111-111111111111'),
+  ('c1211111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111111111', 'RESEARCH_ISSUE', '21211111-1111-4111-8111-111111111111'),
+  ('c1311111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111111111', 'RESEARCH_ISSUE', '21311111-1111-4111-8111-111111111111'),
+  ('c2111111-1111-4111-8111-111111111111', '12111111-1111-4111-8111-111111111111', 'RESEARCH_ISSUE', '22111111-1111-4111-8111-111111111111'),
+  ('c3111111-1111-4111-8111-111111111111', '13111111-1111-4111-8111-111111111111', 'RESEARCH_ISSUE', '23111111-1111-4111-8111-111111111111');
+
+INSERT INTO core.claims (id, statement, lifecycle_state) VALUES
+  ('31111111-1111-4111-8111-111111111111', 'Primary candidate.', 'ACTIVE'),
+  ('31211111-1111-4111-8111-111111111111', 'Archived candidate in active issue.', 'ARCHIVED'),
+  ('31311111-1111-4111-8111-111111111111', 'Pagination candidate.', 'ACTIVE'),
+  ('31411111-1111-4111-8111-111111111111', 'Resolved issue candidate.', 'ACTIVE'),
+  ('31511111-1111-4111-8111-111111111111', 'Archived issue candidate.', 'ACTIVE'),
+  ('32111111-1111-4111-8111-111111111111', 'Foreign candidate.', 'ACTIVE'),
+  ('33111111-1111-4111-8111-111111111111', 'Archived project candidate.', 'ACTIVE');
+
+INSERT INTO core.research_issue_claims (issue_id, claim_id) VALUES
+  ('21111111-1111-4111-8111-111111111111', '31111111-1111-4111-8111-111111111111'),
+  ('21111111-1111-4111-8111-111111111111', '31211111-1111-4111-8111-111111111111'),
+  ('21111111-1111-4111-8111-111111111111', '31311111-1111-4111-8111-111111111111'),
+  ('21211111-1111-4111-8111-111111111111', '31411111-1111-4111-8111-111111111111'),
+  ('21311111-1111-4111-8111-111111111111', '31511111-1111-4111-8111-111111111111'),
+  ('22111111-1111-4111-8111-111111111111', '32111111-1111-4111-8111-111111111111'),
+  ('23111111-1111-4111-8111-111111111111', '33111111-1111-4111-8111-111111111111');
+
+COMMIT;

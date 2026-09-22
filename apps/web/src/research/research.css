@@ -119,3 +119,125 @@
 .evidence-order-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .evidence-preview { border: 1px dashed var(--color-primary); border-radius: var(--radius); padding: 10px; margin-top: 10px; overflow-wrap: anywhere; }
 .evidence-preview code { word-break: break-all; }
+
+
+/* ===== S32 M2-D Assessment ===== */
+.assessment-composer,
+.assessment-history,
+.assessment-detail {
+  margin-top: 14px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.assessment-composer {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+.assessment-composer h4,
+.assessment-history h4,
+.assessment-detail h4,
+.assessment-detail h5 { margin: 0; }
+.assessment-composer fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+}
+.assessment-composer > label {
+  display: grid;
+  gap: 5px;
+  font-size: 13px;
+}
+.assessment-composer textarea,
+.assessment-composer select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 10px 11px;
+  font: inherit;
+}
+.assessment-pending-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.assessment-history {
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+.assessment-history-list {
+  display: grid;
+}
+.assessment-history-list,
+.assessment-detail-items {
+  list-style: none;
+  margin: 10px 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.assessment-history-item,
+.assessment-detail-items li {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: 6px;
+}
+.assessment-history-item p { margin: 0; }
+.assessment-history-item button { justify-self: start; }
+.assessment-hash {
+  display: block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+.assessment-detail {
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: #f7f9fc;
+}
+.assessment-detail-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.assessment-reasoning {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
+.assessment-detail-items code {
+  display: block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+@media (max-width: 700px) {
+  .assessment-composer,
+  .assessment-detail-heading {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .assessment-composer fieldset {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .assessment-history-item button,
+  .assessment-detail-heading button {
+    width: 100%;
+  }
+}

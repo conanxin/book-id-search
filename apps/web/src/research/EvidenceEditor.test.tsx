@@ -299,3 +299,110 @@ describe("in-flight preview stale response guard (Finding 3)", () => {
     });
   });
 });
+
+
+describe("M2-D preview handoff", () => {
+  it("emits the server-authoritative current preview and invalidates it on evidence mutation", async () => {
+    const onPreviewChange = vi.fn();
+    render(
+      <EvidenceEditor
+        token="t"
+        projectId={p}
+        issueId={i}
+        claim={claim}
+        onPreviewChange={onPreviewChange}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "构建证据集" }));
+    await screen.findAllByText(/北京古道志/);
+    await userEvent.click(
+      within(screen.getByTestId(`candidate-${source.targetId}`))
+        .getByRole("button", { name: "作为支持证据" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "预览 EvidenceManifest" }));
+    await screen.findByText("尚未提交。");
+    expect(onPreviewChange).toHaveBeenLastCalledWith({
+      draftVersion: expect.any(Number),
+      manifestSha256: "a".repeat(64),
+      items: [{
+        role: "SUPPORTING",
+        targetType: "SOURCE",
+        targetId: source.targetId,
+        note: null,
+      }],
+    });
+
+    await userEvent.type(screen.getByLabelText("证据说明"), "改变证据说明");
+    expect(onPreviewChange).toHaveBeenLastCalledWith(null);
+    expect(screen.queryByText("尚未提交。")).toBeNull();
+  });
+
+  it("prevents selecting a 101st evidence item in the browser", async () => {
+    const candidates = Array.from({ length: 101 }, (_, n) => ({
+      ...source,
+      targetId: `${(n + 1).toString(16).padStart(8, "0")}-0000-4000-8000-${(n + 1).toString(16).padStart(12, "0")}`,
+      materialTitle: `资料 ${n + 1}`,
+    }));
+    vi.mocked(listEvidenceCandidates).mockResolvedValueOnce({
+      claim: { ...claim },
+      candidates,
+    });
+    render(<EvidenceEditor token="t" projectId={p} issueId={i} claim={claim} />);
+    await userEvent.click(screen.getByRole("button", { name: "构建证据集" }));
+    await screen.findByText(/资料 101/);
+
+    for (let n = 0; n < 100; n += 1) {
+      await userEvent.click(
+        within(screen.getByTestId(`candidate-${candidates[n].targetId}`))
+          .getByRole("button", { name: "作为支持证据" }),
+      );
+    }
+
+    expect(screen.getByText("最多选择 100 项证据。")).toBeTruthy();
+    const finalCandidate = screen.getByTestId(`candidate-${candidates[100].targetId}`);
+    expect(
+      (within(finalCandidate).getByRole("button", { name: "作为支持证据" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+  }, 20_000);
+});
+
+
+describe("external preview reset after committed Assessment", () => {
+  it("invalidates the preview but preserves the selected evidence draft for re-preview", async () => {
+    const onPreviewChange = vi.fn();
+    const view = render(
+      <EvidenceEditor
+        token="t"
+        projectId={p}
+        issueId={i}
+        claim={claim}
+        onPreviewChange={onPreviewChange}
+        previewResetVersion={0}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "构建证据集" }));
+    await screen.findAllByText(/北京古道志/);
+    await userEvent.click(
+      within(screen.getByTestId(`candidate-${source.targetId}`))
+        .getByRole("button", { name: "作为支持证据" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "预览 EvidenceManifest" }));
+    await screen.findByText("尚未提交。");
+
+    view.rerender(
+      <EvidenceEditor
+        token="t"
+        projectId={p}
+        issueId={i}
+        claim={claim}
+        onPreviewChange={onPreviewChange}
+        previewResetVersion={1}
+      />,
+    );
+
+    await waitFor(() => expect(screen.queryByText("尚未提交。")).toBeNull());
+    expect(screen.getByTestId(`selected-${source.targetId}`)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "预览 EvidenceManifest" })).toBeTruthy();
+    expect(onPreviewChange).toHaveBeenLastCalledWith(null);
+  });
+});

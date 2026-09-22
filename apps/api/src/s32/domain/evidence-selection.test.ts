@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  EVIDENCE_MANIFEST_ITEMS_MAX,
   InvalidEvidenceDraftError,
   buildEvidenceManifestDraft,
   canonicalEvidencePayload,
@@ -88,6 +89,25 @@ describe("evidence preview input shape", () => {
       ],
     });
     expect(normalized).toHaveLength(2);
+  });
+
+  it("accepts exactly 100 evidence items and rejects 101", () => {
+    const hundred = Array.from({ length: 100 }, (_, n) => ({
+      role: "SUPPORTING" as const,
+      targetType: "SOURCE" as const,
+      targetId: `${n.toString(16).padStart(8, "0")}-1111-4111-8111-111111111111`,
+      note: null,
+    }));
+    expect(EVIDENCE_MANIFEST_ITEMS_MAX).toBe(100);
+    expect(normalizeEvidencePreviewInput({ items: hundred })).toHaveLength(100);
+    expect(() => normalizeEvidencePreviewInput({
+      items: [...hundred, {
+        role: "SUPPORTING",
+        targetType: "SOURCE",
+        targetId: "ffffffff-1111-4111-8111-111111111111",
+        note: null,
+      }],
+    })).toThrow("证据草稿最多");
   });
 });
 
