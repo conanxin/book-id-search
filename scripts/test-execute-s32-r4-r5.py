@@ -38,6 +38,11 @@ class T(unittest.TestCase):
   self.assertEqual(x.r4().returncode,0); x.api.write_text('S32_DATABASE_URL=postgresql://s32_admin:x@postgres/book_id_search_s32\nS32_PRIVATE_API_TOKEN=TOKEN_SENTINEL\n'); os.chmod(x.api,0o600); r=x.r5(); self.assertNotEqual(r.returncode,0); self.assertIn('API_DATABASE_ROLE_INVALID',r.stdout+r.stderr)
  def test_r5_enables_s32_and_token_never_leaks(self):
   x=Env(); self.addCleanup(x.close); self.assertEqual(x.r4().returncode,0); r=x.r5(); self.assertEqual(r.returncode,0,r.stdout+r.stderr); self.assertIn('R5_S32_ACTIVATION=PASS',r.stdout); combined=r.stdout+r.stderr+x.log.read_text(); self.assertNotIn('TOKEN_SENTINEL',combined); self.assertNotIn('appsentinel',combined); self.assertIn('S32_FEATURES_ENABLED=true',x.log.read_text())
+ def test_r5_backend_acceptance_uses_environment_flag(self):
+  text=R5.read_text() if R5.exists() else ''
+  self.assertIn('S32_ACCEPTANCE_BACKEND_ONLY=true',text)
+  self.assertNotIn('-- --backend-only',text)
+
  def test_no_auto_rollback_or_pg_delete(self):
   text=(R4.read_text() if R4.exists() else '')+(R5.read_text() if R5.exists() else '')
   self.assertNotIn('rm -rf',text); self.assertNotIn('docker compose down',text); self.assertNotIn('AUTO_ROLLBACK=true',text)
