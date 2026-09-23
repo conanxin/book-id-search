@@ -34,7 +34,7 @@ if a.get("imageId")!=sys.argv[2] or a.get("revision")!=sys.argv[3]: raise System
 r={}
 for line in open(sys.argv[4]):
  if "=" in line:
-  k,v=line.rstrip("\\n").split("=",1); r[k]=v
+  k,v=line.rstrip("\n").split("=",1); r[k]=v
 for svc,prefix in [("web","WEB"),("meilisearch","MEILISEARCH")]:
  s=p["services"].get(svc,{})
  for field,key in [("cid","CID"),("startedAt","STARTED_AT"),("imageId","IMAGE_ID")]:
