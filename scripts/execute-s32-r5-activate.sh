@@ -11,7 +11,12 @@ get(){ local f="$1" k="$2" n; n="$(grep -cE "^${k}=" "$f" 2>/dev/null||true)"; [
 [ "$(get "$CLAIM" STAGE_GROUP || true)" = R4_R5 ] && [ "$(get "$CLAIM" RELEASE_SOURCE_SHA || true)" = "$SRC" ] && [ "$(get "$CLAIM" CONTROL_PLANE_SHA || true)" = "$CTRL" ] || block R4_R5_CLAIM_MISMATCH
 [ -f "$API_ENV" ] && [ ! -L "$API_ENV" ] && [ "$(stat -c '%a' "$API_ENV")" = 600 ] || block API_ENV_UNSAFE
 [ -f "$PG_ENV" ] && [ ! -L "$PG_ENV" ] && [ "$(stat -c '%a' "$PG_ENV")" = 600 ] || block POSTGRES_ENV_UNSAFE
+[ -f "$MAN" ] && [ ! -L "$MAN" ] || block RELEASE_MANIFEST_MISSING
 [ ! -e "$START" ] && [ ! -e "$RESULT" ] || block INCOMPLETE_OR_TERMINAL_R5
+MAN_OUT="$(python3 "$SCRIPT_DIR/s32-release-manifest.py" "$MAN" 2>&1)" || block RELEASE_MANIFEST_INVALID
+MAN_FP="$(printf '%s\n' "$MAN_OUT"|awk -F= '$1=="S32_RELEASE_FINGERPRINT"{print $2;exit}')"
+MAN_SRC="$(printf '%s\n' "$MAN_OUT"|awk -F= '$1=="SOURCE_SHA"{print $2;exit}')"
+[ "$MAN_FP" = "$FP" ] && [ "$MAN_SRC" = "$SRC" ] || block RELEASE_MANIFEST_IDENTITY_MISMATCH
 DBURL="$(secret S32_DATABASE_URL || true)"; TOKEN="$(secret S32_PRIVATE_API_TOKEN || true)"; [ -n "$DBURL" ] && [ -n "$TOKEN" ] || block API_ENV_CONTRACT_INVALID; printf '%s' "$DBURL"|grep -qE '^postgresql://s32_app:' || block API_DATABASE_ROLE_INVALID; printf '%s' "$DBURL"|grep -q '@postgres/book_id_search_s32' || block API_DATABASE_TARGET_INVALID
 readarray -t M < <(python3 - "$MAN" <<'PY'
 import json,sys;m=json.load(open(sys.argv[1]));print(m['apiImageTag']);print(m['apiImageId']);print(m['pgImageRef']);print(m['s32OverridePath'])
