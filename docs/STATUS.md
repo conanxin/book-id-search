@@ -1,12 +1,15 @@
 # BOOK-ID-SEARCH status
 
-## S32 Production Rollout tooling — implementation checkpoint
+## S32 Production Rollout tooling — implementation complete on branch
 
-- task_id: `S32_PRODUCTION_ROLLOUT_EXECUTION_R1`; branch `feat/s32-production-rollout`; approved spec+plan are implemented through the R7 acceptance harness and cross-stage planner.
-- Tooling covers immutable release fingerprints, exact-source API/Web candidates, fresh R0/R1 gates, guarded control-plane sync, stage-scoped one-time authorization, R2 PostgreSQL, R3 schema/roles, R4/R5 API dark+activation, R6 Web, and R7 retained-canary acceptance.
-- Production remains untouched. This branch implements deployment tooling only; no stage authorization has been issued.
-- `PRODUCTION_WRITE_AUTHORIZED=NO`; `PRODUCTION_CHANGED=NO`; `PRODUCTION_DEPLOYED=NO`; `M2_E_STARTED=NO`.
-- Next: whole-branch verification and review, then fresh R0/R1 read-only preflight after merge; do not deploy automatically.
+- task_id: `S32_PRODUCTION_ROLLOUT_EXECUTION_R1`; branch `feat/s32-production-rollout`; approved spec+plan implemented through R7 acceptance, explicit API rollback guard, and cross-stage planner.
+- Exact reviewed product/tooling head before this status-doc commit: `f6f2ca1ac58fb1e1ba4f707a334a7a2264466d9d`; GitHub Actions run `35812844126` = SUCCESS.
+- Fresh exact-head verification: all Python rollout contract suites PASS including isolated R2→R7 E2E and explicit API rollback tests; scoped S32/Research Vitest = **905 PASS / 73 SKIP** across 67 passed / 9 skipped files; schema static **23/23 PASS**; M2-C real PG16 **13/13 PASS**; M2-D real PG16 **16/16 PASS**; API build PASS; Web build PASS; `FROZEN_SQL_CHANGED=NO`; `git diff --check` PASS.
+- Whole-branch review closed the production-safety findings before PR: atomic role bootstrap; exact reviewed-source ancestry for API/Web candidates; release-scoped secret-path consistency; R3 binding to the verified live PostgreSQL container; exact-byte/candidate-bound capacity math; R4/R5/R6 secret and service-drift guards; fresh R7 replay evidence; and separately-authorized exact-R0 API rollback. No unresolved Critical/Important finding remains.
+- Deferred non-blocking note: Web production build still emits the existing >500 kB chunk-size warning; release identity remains pinned by exact Web image ID/revision/static-manifest hash.
+- This branch contains deployment tooling only. No production stage authorization has been issued and no production mutation was performed.
+- `S32_ROLLOUT_TOOLING=COMPLETE_ON_BRANCH`; `PRODUCTION_WRITE_AUTHORIZED=NO`; `PRODUCTION_CHANGED=NO`; `PRODUCTION_DEPLOYED=NO`; `M2_E_STARTED=NO`.
+- Next: exact-head docs smoke / PR review. After merge, the next production interaction is fresh **R0 + R1 read-only preflight**, not deployment.
 
 ## M2-D Assessment — merged checkpoint
 
