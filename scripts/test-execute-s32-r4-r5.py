@@ -17,7 +17,7 @@ class Env:
   self.pg=self.root/'postgres.env'; self.pg.write_text('S32_POSTGRES_DB=book_id_search_s32\nS32_POSTGRES_USER=s32_admin\nS32_POSTGRES_PASSWORD=pgsentinel\n'); os.chmod(self.pg,0o600)
   self.api=self.root/'api.env'; self.api.write_text('S32_DATABASE_URL=postgresql://s32_app:appsentinel@postgres/book_id_search_s32\nS32_PRIVATE_API_TOKEN=TOKEN_SENTINEL\n'); os.chmod(self.api,0o600)
   self.r4post=self.root/'r4post.json'; self.r4post.write_text(json.dumps({'services':{'web':{'cid':'w1','startedAt':'wt','imageId':'wi'},'api':{'cid':'newapi','startedAt':'newt','imageId':'sha256:'+'2'*64,'revision':SRC},'meilisearch':{'cid':'m1','startedAt':'mt','imageId':'mi'}},'httpStatus':200,'stats':{'numberOfDocuments':5115734,'isIndexing':False},'searches':{k:{'status':'PASS'} for k in ['ISBN','SSID','DXID','title','author','publisher']},'s32Enabled':False}))
-  self.r5post=self.root/'r5post.json'; self.r5post.write_text(json.dumps({'services':{'web':{'cid':'w1','startedAt':'wt','imageId':'wi'},'api':{'cid':'newapi2','startedAt':'newt2','imageId':'sha256:'+'2'*64,'revision':SRC},'meilisearch':{'cid':'m1','startedAt':'mt','imageId':'mi'}},'httpStatus':200,'backendAcceptance':'PASS'}))
+  self.r5post=self.root/'r5post.json'; self.r5post.write_text(json.dumps({'services':{'web':{'cid':'w1','startedAt':'wt','imageId':'wi'},'api':{'cid':'newapi2','startedAt':'newt2','imageId':'sha256:'+'2'*64,'revision':SRC},'meilisearch':{'cid':'m1','startedAt':'mt','imageId':'mi'}},'httpStatus':200,'postgresPresent':True,'s32EnvNames':['S32_FEATURES_ENABLED','S32_DATABASE_URL','S32_PRIVATE_API_TOKEN'],'stats':{'numberOfDocuments':5115734,'isIndexing':False},'searches':{k:{'status':'PASS'} for k in ['ISBN','SSID','DXID','title','author','publisher']},'backendAcceptance':'PASS'}))
   self.log=self.root/'cmd.log'
  def close(self): self.t.cleanup()
  def env(self):
@@ -38,6 +38,27 @@ class T(unittest.TestCase):
   self.assertEqual(x.r4().returncode,0); x.api.write_text('S32_DATABASE_URL=postgresql://s32_admin:x@postgres/book_id_search_s32\nS32_PRIVATE_API_TOKEN=TOKEN_SENTINEL\n'); os.chmod(x.api,0o600); r=x.r5(); self.assertNotEqual(r.returncode,0); self.assertIn('API_DATABASE_ROLE_INVALID',r.stdout+r.stderr)
  def test_r5_enables_s32_and_token_never_leaks(self):
   x=Env(); self.addCleanup(x.close); self.assertEqual(x.r4().returncode,0); r=x.r5(); self.assertEqual(r.returncode,0,r.stdout+r.stderr); self.assertIn('R5_S32_ACTIVATION=PASS',r.stdout); combined=r.stdout+r.stderr+x.log.read_text(); self.assertNotIn('TOKEN_SENTINEL',combined); self.assertNotIn('appsentinel',combined); self.assertIn('S32_FEATURES_ENABLED=true',x.log.read_text())
+
+ def test_r5_rejects_unsafe_or_ambiguous_secret_files(self):
+  x=Env(); self.addCleanup(x.close); self.assertEqual(x.r4().returncode,0)
+  x.api.write_text('S32_DATABASE_URL=postgresql://s32_app:a@postgres/book_id_search_s32\nS32_DATABASE_URL=postgresql://s32_app:b@postgres/book_id_search_s32\nS32_PRIVATE_API_TOKEN=TOKEN_SENTINEL\n')
+  os.chmod(x.api,0o600)
+  r=x.r5(); self.assertNotEqual(r.returncode,0); self.assertIn('API_ENV_CONTRACT_INVALID',r.stdout+r.stderr)
+
+  y=Env(); self.addCleanup(y.close); self.assertEqual(y.r4().returncode,0)
+  target=y.root/'api-target.env'; target.write_text(y.api.read_text()); os.chmod(target,0o600)
+  y.api.unlink(); y.api.symlink_to(target)
+  r=y.r5(); self.assertNotEqual(r.returncode,0); self.assertIn('API_ENV_UNSAFE',r.stdout+r.stderr)
+
+ def test_r5_fails_if_web_or_meili_drift_or_s32_runtime_env_is_missing(self):
+  x=Env(); self.addCleanup(x.close); self.assertEqual(x.r4().returncode,0)
+  facts=json.loads(x.r5post.read_text()); facts['services']['web']['cid']='changed'; x.r5post.write_text(json.dumps(facts))
+  r=x.r5(); self.assertNotEqual(r.returncode,0); self.assertIn('R5_POSTVERIFY_FAILED',r.stdout+r.stderr)
+
+  y=Env(); self.addCleanup(y.close); self.assertEqual(y.r4().returncode,0)
+  facts=json.loads(y.r5post.read_text()); facts['s32EnvNames']=['S32_FEATURES_ENABLED']; y.r5post.write_text(json.dumps(facts))
+  r=y.r5(); self.assertNotEqual(r.returncode,0); self.assertIn('R5_POSTVERIFY_FAILED',r.stdout+r.stderr)
+
  def test_r5_backend_acceptance_uses_environment_flag(self):
   text=R5.read_text() if R5.exists() else ''
   self.assertIn('S32_ACCEPTANCE_BACKEND_ONLY=true',text)
