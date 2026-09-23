@@ -12,6 +12,11 @@ class ApiCandidateBuilderTests(unittest.TestCase):
         self.assertIn("^[0-9a-f]{40}$", self.text)
         self.assertNotIn('SOURCE_SHA="$(git rev-parse HEAD)"', self.text)
 
+
+    def test_requires_source_reachable_from_reviewed_origin_main(self):
+        self.assertIn('git merge-base --is-ancestor "$SOURCE_SHA" origin/main', self.text)
+        self.assertIn('SOURCE_NOT_REACHABLE_FROM_ORIGIN_MAIN', self.text)
+
     def test_builds_from_git_archive_not_worktree(self):
         self.assertIn('git archive "$SOURCE_SHA"', self.text)
         self.assertIn('--build-arg "SOURCE_COMMIT=$SOURCE_SHA"', self.text)
