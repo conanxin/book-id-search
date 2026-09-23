@@ -354,7 +354,10 @@ A: R2 + R3
 B: R4 + R5
 C: R6
 R7: explicit acceptance execution
+ROLLBACK_API_TO_R0: separate explicit rollback authorization
 ```
+
+Forward rollout authorization never implicitly authorizes rollback. API rollback is a separate, one-time production-write authorization bound to the same release fingerprint, release source SHA, and control-plane SHA.
 
 No authorization artifact contains secret values.
 
@@ -778,8 +781,8 @@ Rollback is layer-specific.
 | --- | --- |
 | R2 PostgreSQL | stop/remove PG container; retain PGDATA |
 | R3 migration/assertions | stop rollout; retain PGDATA/schema for inspection |
-| R4 API dark | restore exact baseline API |
-| R5 S32 activation | disable S32 and/or restore baseline API |
+| R4 API dark | after separate rollback authorization, run the exact R0 API rollback guard |
+| R5 S32 activation | after separate rollback authorization, restore the exact R0 API/config; retain PostgreSQL/schema |
 | R6 Web | restore exact baseline Web |
 | R7 | restore only the proven failing layer |
 
@@ -848,7 +851,7 @@ Before production execution can be requested, the rollout tooling must implement
 7. PostgreSQL dark-bootstrap executor;
 8. schema + role bootstrap executor;
 9. production-safe schema assertions runner;
-10. API dark rollout and rollback guard;
+10. API dark rollout and explicit separately-authorized exact-R0 rollback guard;
 11. S32 activation guard;
 12. Web rollout integration with S32 release identity;
 13. R7 production acceptance harness;
