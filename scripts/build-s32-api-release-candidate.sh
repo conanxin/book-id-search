@@ -16,6 +16,12 @@ if ! git cat-file -e "${SOURCE_SHA}^{commit}" 2>/dev/null; then
   exit 2
 fi
 SOURCE_SHA="$(git rev-parse "${SOURCE_SHA}^{commit}")"
+if ! git rev-parse --verify "origin/main^{commit}" >/dev/null 2>&1 \
+  || ! git merge-base --is-ancestor "$SOURCE_SHA" origin/main; then
+  echo 'STATUS=BLOCKED' >&2
+  echo 'BLOCK_REASON=SOURCE_NOT_REACHABLE_FROM_ORIGIN_MAIN' >&2
+  exit 2
+fi
 TAG="book-id-search-api:s32-${SOURCE_SHA}"
 OUT_DIR="${APP_DIR}/progress/s32-api-release-candidate-${SOURCE_SHA}"
 mkdir -p "$OUT_DIR"
