@@ -30,7 +30,10 @@ R2_R3
 R4_R5
 R6
 R7
+API_TO_R0_ROLLBACK   # separate explicit rollback authorization
 ```
+
+Forward rollout authorization never authorizes rollback. API rollback requires its own one-time `S32_PRODUCTION_ROLLBACK / API_TO_R0` artifact.
 
 Planning, candidate building, tests, or merge approval never imply production-write authorization.
 
@@ -161,8 +164,8 @@ R0 is the rollback reference.
 
 - R2 failure: stop/remove PG container only; retain PGDATA.
 - R3 failure: stop rollout; retain schema/PGDATA for inspection.
-- R4/R5 failure: restore exact R0 API image/config or disable S32.
-- R6 failure: restore exact R0 Web image.
+- R4/R5 failure: after separate explicit rollback authorization, run `scripts/rollback-s32-api-to-r0.sh --rollback-api-to-r0 <fingerprint> <release-source-sha> <control-plane-sha>`. It restores the exact R0 API compose/image identity, verifies legacy search, and retains PostgreSQL/schema.
+- R6 failure: restore exact R0 Web image using the reviewed Web deploy path; do not roll API/PostgreSQL back unless independently required.
 - Never alter Meilisearch as S32 rollback.
 
 ## R7 acceptance
