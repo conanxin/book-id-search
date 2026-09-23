@@ -16,6 +16,11 @@ if ! git cat-file -e "${SOURCE_INPUT}^{commit}" 2>/dev/null; then
   exit 2
 fi
 FULL_SHA="$(git rev-parse "${SOURCE_INPUT}^{commit}")"
+if ! git rev-parse --verify "origin/main^{commit}" >/dev/null 2>&1 \
+  || ! git merge-base --is-ancestor "$FULL_SHA" origin/main; then
+  echo "[build-web-release-candidate] ERROR: source is not reachable from origin/main" >&2
+  exit 2
+fi
 TAG="book-id-search-web:${FULL_SHA}"
 OUT_DIR="${APP_DIR}/progress/web-release-candidate-${FULL_SHA}"
 mkdir -p "$OUT_DIR"
