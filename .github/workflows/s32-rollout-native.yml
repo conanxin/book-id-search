@@ -33,6 +33,7 @@ jobs:
           python3 scripts/test-plan-s32-production-capacity.py
           python3 scripts/test-s32-control-plane-sync.py
           python3 scripts/test-s32-production-authorization.py
+          python3 scripts/test-s32-api-rollback.py
           python3 scripts/test-s32-production-roles.py
           python3 scripts/test-execute-s32-r2-postgres.py
           python3 scripts/test-execute-s32-r3-schema.py
