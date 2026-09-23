@@ -743,7 +743,7 @@ git commit -m "feat(s32): add frozen schema rollout executor"
 
 ---
 
-### Task 12: R4 API dark rollout and R5 S32 activation
+### Task 12: R4 API dark rollout, R5 S32 activation, and explicit API rollback guard
 
 **Files:**
 - Create: \`scripts/execute-s32-r4-api-dark.sh\`
