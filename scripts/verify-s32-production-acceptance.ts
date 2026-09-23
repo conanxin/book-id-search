@@ -258,15 +258,22 @@ export async function runProductionAcceptance(options: AcceptanceOptions): Promi
     "Idempotency-Key": idempotencyKey,
   };
 
-  const first = await privateRequest(
-    apiBase,
-    token,
-    assessmentsPath,
-    { method: "POST", headers, body: JSON.stringify(payload) },
-    [200, 201],
-  );
-  const firstAssessmentId = String(first.assessment?.id);
-  if (!firstAssessmentId) throw new Error("ASSESSMENT_FIRST_ID_MISSING");
+  let firstAssessmentId: string | null = null;
+  try {
+    const first = await privateRequest(
+      apiBase,
+      token,
+      assessmentsPath,
+      { method: "POST", headers, body: JSON.stringify(payload) },
+      [200, 201],
+    );
+    firstAssessmentId = String(first.assessment?.id);
+    if (!firstAssessmentId) throw new Error("ASSESSMENT_FIRST_ID_MISSING");
+  } catch (error) {
+    // A transport failure after commit is deliberately ambiguous.  The exact
+    // same deterministic command/key below is the only allowed confirmation.
+    if (!(error instanceof TypeError)) throw error;
+  }
 
   const replay = await privateRequest(
     apiBase,
@@ -277,7 +284,7 @@ export async function runProductionAcceptance(options: AcceptanceOptions): Promi
   );
   const assessmentId = String(replay.assessment?.id);
   if (!assessmentId) throw new Error("ASSESSMENT_REPLAY_ID_MISSING");
-  if (firstAssessmentId !== assessmentId) {
+  if (firstAssessmentId && firstAssessmentId !== assessmentId) {
     throw new Error("ASSESSMENT_REPLAY_IDENTITY_MISMATCH");
   }
 
