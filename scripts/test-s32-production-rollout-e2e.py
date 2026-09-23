@@ -237,18 +237,17 @@ class RolloutE2E(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("R7_ACCEPTANCE=PENDING_WEB", r.stdout)
 
+        # R7 web acceptance receipt must come from the browser receipt
+        # producer (fixture mode) — hand-written receipts are no longer
+        # accepted by this E2E.
         web_receipt = self.root / "progress" / f"s32-rollout-{self.fp}-R7.web.env"
-        web_receipt.write_text("\n".join([
-            "STATUS=PASS",
-            "STAGE=R7_WEB",
-            f"S32_RELEASE_FINGERPRINT={self.fp}",
-            "PROJECT_ID=11111111-1111-4111-8111-111111111111",
-            "S32_WEB_ACCEPTANCE=PASS",
-            "MOBILE_390x844=PASS",
-            "NO_HORIZONTAL_OVERFLOW=PASS",
-            "",
-        ]))
-        os.chmod(web_receipt, 0o600)
+        producer = ROOT / "s32-r7-browser-receipt-producer.cjs"
+        r = run([
+            "node", str(producer), "fixture", str(web_receipt), self.fp,
+            "11111111-1111-4111-8111-111111111111",
+        ], env)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("R7_BROWSER_RECEIPT=PASS", r.stdout)
         r = run(["bash", str(R7), "--complete-r7", self.fp, SRC, CTRL], env)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("R7_ACCEPTANCE=PASS", r.stdout)
