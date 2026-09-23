@@ -26,6 +26,15 @@ class Env:
   e=os.environ.copy(); e.update(BOOK_ID_SEARCH_REPO_ROOT=str(self.root),S32_R2_RECEIPT=str(self.r2),S32_RELEASE_MANIFEST_JSON=str(self.man),S32_POSTGRES_ENV_FILE=str(self.pg),S32_R3_TEST_MODE='true',S32_R3_COMMAND_LOG=str(self.log)); e.update({k:str(v) for k,v in kw.items()}); return e
  def run(self,args=None,**kw): return subprocess.run(['bash',str(EXEC),*(args or ['--execute-r3',self.fp,SRC,CTRL])],text=True,capture_output=True,env=self.env(**kw))
 class T(unittest.TestCase):
+
+ def test_production_path_binds_to_verified_postgres_container(self):
+  text=EXEC.read_text()
+  self.assertIn('label=com.docker.compose.service=postgres', text)
+  self.assertIn('EXPECTED_PG_IMAGE_ID', text)
+  self.assertIn('ACTUAL_PG_IMAGE_ID', text)
+  self.assertIn('docker exec -i "$PG_CID" psql', text)
+  self.assertNotIn('docker compose exec -T postgres psql', text)
+
  def test_success_runs_migration_assertions_roles_and_empty_check(self):
   x=Env(); self.addCleanup(x.close); r=x.run(); self.assertEqual(r.returncode,0,r.stdout+r.stderr); self.assertIn('R3_SCHEMA=PASS',r.stdout); log=x.log.read_text(); self.assertIn('MIGRATION',log); self.assertIn('SCHEMA_ASSERTIONS',log); self.assertIn('ROLE_BOOTSTRAP',log); self.assertIn('EMPTY_BASELINE',log); self.assertTrue(any(x.root.glob('progress/*R3.result.env')))
  def test_existing_schema_without_matching_partial_receipt_blocks(self):
