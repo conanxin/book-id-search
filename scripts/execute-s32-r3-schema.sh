@@ -49,6 +49,22 @@ ASSERT="$ROOT/db/tests/001_s32_schema_assertions.sql"
 DB="$(get_secret S32_POSTGRES_DB || true)"; ADMIN="$(get_secret S32_POSTGRES_USER || true)"; ADMIN_PASS="$(get_secret S32_POSTGRES_PASSWORD || true)"; APP_PASS="$(get_secret S32_APP_PASSWORD || true)"
 [ "$DB" = book_id_search_s32 ] && [ "$ADMIN" = s32_admin ] && [ -n "$ADMIN_PASS" ] && [ -n "$APP_PASS" ] || block POSTGRES_SECRET_CONTRACT_INVALID
 
+PG_CID=""
+if [ "${S32_R3_TEST_MODE:-false}" != true ]; then
+  PROJECT="${BOOK_ID_SEARCH_COMPOSE_PROJECT:-book-id-search}"
+  mapfile -t PG_IDS < <(sudo -n docker ps \
+    --filter "label=com.docker.compose.project=${PROJECT}" \
+    --filter "label=com.docker.compose.service=postgres" \
+    --format '{{.ID}}')
+  [ "${#PG_IDS[@]}" -eq 1 ] || block POSTGRES_CONTAINER_IDENTITY_INVALID
+  PG_CID="${PG_IDS[0]}"
+  EXPECTED_PG_IMAGE_ID="$(get_kv "$R2" PG_IMAGE_ID || true)"
+  ACTUAL_PG_IMAGE_ID="$(sudo -n docker inspect "$PG_CID" --format '{{.Image}}' 2>/dev/null)" || block POSTGRES_CONTAINER_IDENTITY_INVALID
+  [ -n "$EXPECTED_PG_IMAGE_ID" ] && [ "$ACTUAL_PG_IMAGE_ID" = "$EXPECTED_PG_IMAGE_ID" ] || block POSTGRES_CONTAINER_IDENTITY_INVALID
+  PG_HEALTH="$(sudo -n docker inspect "$PG_CID" --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' 2>/dev/null)" || block POSTGRES_CONTAINER_IDENTITY_INVALID
+  [ "$PG_HEALTH" = healthy ] || block POSTGRES_NOT_HEALTHY
+fi
+
 if [ "$MODE" = --recover-role-only ]; then
   [ -f "$PARTIAL" ] && [ ! -L "$PARTIAL" ] && [ "$(stat -c '%a' "$PARTIAL")" = 600 ] || block ROLE_RECOVERY_RECEIPT_MISSING
   [ "$(get_kv "$PARTIAL" SCHEMA_ASSERTIONS || true)" = PASS ] && [ "$(get_kv "$PARTIAL" S32_RELEASE_FINGERPRINT || true)" = "$FP" ] || block ROLE_RECOVERY_RECEIPT_INVALID
@@ -57,7 +73,7 @@ else
   if [ "${S32_R3_TEST_MODE:-false}" = true ]; then
     [ "${S32_R3_FAKE_SCHEMA_PRESENT:-false}" != true ] || block SCHEMA_STATE_UNKNOWN
   else
-    COUNT="$(sudo -n docker compose exec -T postgres psql -X -U "$ADMIN" -d "$DB" -Atc "SELECT count(*) FROM pg_namespace WHERE nspname IN ('core','ops','derived')")" || block SCHEMA_PREFLIGHT_FAILED
+    COUNT="$(sudo -n docker exec -i "$PG_CID" psql -X -U "$ADMIN" -d "$DB" -Atc "SELECT count(*) FROM pg_namespace WHERE nspname IN ('core','ops','derived')")" || block SCHEMA_PREFLIGHT_FAILED
     [ "$COUNT" = 0 ] || block SCHEMA_STATE_UNKNOWN
   fi
   umask 077; T="$(mktemp "$ROOT/progress/.r3-start.XXXXXX")"; printf 'STATUS=STARTED\nSTAGE=R3\nS32_RELEASE_FINGERPRINT=%s\n' "$FP" >"$T"; chmod 600 "$T"; ln -- "$T" "$START" 2>/dev/null || { rm -f "$T"; block INCOMPLETE_R3; }; rm -f "$T"
@@ -69,13 +85,13 @@ if [ "$MODE" = --execute-r3 ]; then
   if [ "${S32_R3_TEST_MODE:-false}" = true ]; then
     [ "${S32_R3_FAKE_MIGRATION_EXIT:-0}" = 0 ] || block MIGRATION_FAILED
   else
-    cat "$MIG" | sudo -n docker compose exec -T postgres psql -X -v ON_ERROR_STOP=1 -U "$ADMIN" -d "$DB" >/dev/null || block MIGRATION_FAILED
+    cat "$MIG" | sudo -n docker exec -i "$PG_CID" psql -X -v ON_ERROR_STOP=1 -U "$ADMIN" -d "$DB" >/dev/null || block MIGRATION_FAILED
   fi
   log SCHEMA_ASSERTIONS
   if [ "${S32_R3_TEST_MODE:-false}" = true ]; then
     if [ "${S32_R3_FAKE_ASSERTION_EXIT:-0}" != 0 ]; then block SCHEMA_INTEGRITY_INCIDENT; fi
   else
-    cat "$ASSERT" | sudo -n docker compose exec -T postgres psql -X -v ON_ERROR_STOP=1 -U "$ADMIN" -d "$DB" >/dev/null || block SCHEMA_INTEGRITY_INCIDENT
+    cat "$ASSERT" | sudo -n docker exec -i "$PG_CID" psql -X -v ON_ERROR_STOP=1 -U "$ADMIN" -d "$DB" >/dev/null || block SCHEMA_INTEGRITY_INCIDENT
   fi
   umask 077; P="$(mktemp "$ROOT/progress/.r3-schema.XXXXXX")"; printf 'STATUS=PASS\nSTAGE=R3_SCHEMA\nS32_RELEASE_FINGERPRINT=%s\nMIGRATION_SHA256=%s\nSCHEMA_ASSERTIONS=PASS\n' "$FP" "$MIG_SHA" >"$P"; chmod 600 "$P"; ln -- "$P" "$PARTIAL" 2>/dev/null || { rm -f "$P"; block PARTIAL_RECEIPT_WRITE_FAILED; }; rm -f "$P"
 fi
@@ -84,8 +100,8 @@ log ROLE_BOOTSTRAP
 if [ "${S32_R3_TEST_MODE:-false}" = true ]; then
   if [ "${S32_R3_FAKE_ROLE_EXIT:-0}" != 0 ]; then block ROLE_BOOTSTRAP_FAILED; fi
 else
-  { printf '\\set db_name %s\n\\set app_role %s\n\\set app_password %s\n' "$DB" s32_app "$APP_PASS"; cat "$ROLE"; } | sudo -n docker compose exec -T postgres psql -X -v ON_ERROR_STOP=1 -U "$ADMIN" -d "$DB" >/dev/null || block ROLE_BOOTSTRAP_FAILED
-  FLAGS="$(sudo -n docker compose exec -T postgres psql -X -U "$ADMIN" -d "$DB" -Atc "SELECT rolsuper::int||','||rolcreaterole::int||','||rolcreatedb::int||','||rolreplication::int FROM pg_roles WHERE rolname='s32_app'")" || block ROLE_VERIFY_FAILED
+  { printf '\\set db_name %s\n\\set app_role %s\n\\set app_password %s\n' "$DB" s32_app "$APP_PASS"; cat "$ROLE"; } | sudo -n docker exec -i "$PG_CID" psql -X -v ON_ERROR_STOP=1 -U "$ADMIN" -d "$DB" >/dev/null || block ROLE_BOOTSTRAP_FAILED
+  FLAGS="$(sudo -n docker exec -i "$PG_CID" psql -X -U "$ADMIN" -d "$DB" -Atc "SELECT rolsuper::int||','||rolcreaterole::int||','||rolcreatedb::int||','||rolreplication::int FROM pg_roles WHERE rolname='s32_app'")" || block ROLE_VERIFY_FAILED
   [ "$FLAGS" = 0,0,0,0 ] || block ROLE_VERIFY_FAILED
 fi
 
@@ -93,7 +109,7 @@ log EMPTY_BASELINE
 if [ "${S32_R3_TEST_MODE:-false}" = true ]; then
   [ "${S32_R3_FAKE_EMPTY_EXIT:-0}" = 0 ] || block EMPTY_BASELINE_FAILED
 else
-  cat <<'SQL' | sudo -n docker compose exec -T postgres psql -X -v ON_ERROR_STOP=1 -U "$ADMIN" -d "$DB" >/dev/null || block EMPTY_BASELINE_FAILED
+  cat <<'SQL' | sudo -n docker exec -i "$PG_CID" psql -X -v ON_ERROR_STOP=1 -U "$ADMIN" -d "$DB" >/dev/null || block EMPTY_BASELINE_FAILED
 DO $$
 DECLARE r record; n bigint;
 BEGIN
