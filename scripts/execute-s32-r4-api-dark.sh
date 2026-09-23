@@ -6,6 +6,8 @@ FP="$2"; SRC="$3"; CTRL="$4"; SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_
 R0="${S32_R0_RECEIPT:-$ROOT/progress/s32-r0.env}"; R3="${S32_R3_RECEIPT:-$ROOT/progress/s32-rollout-${FP}-R3.result.env}"; CAP="${S32_R4_CAPACITY_RECEIPT:-$ROOT/progress/s32-r4-capacity.env}"; MAN="${S32_RELEASE_MANIFEST_JSON:-$ROOT/progress/s32-release-manifest.json}"; PG_ENV="${S32_POSTGRES_ENV_FILE:-/opt/book-id-search-runtime/s32/${FP}/postgres.env}"; CLAIM="$ROOT/progress/s32-rollout-authorization-${FP}-R4_R5-claim.env"; START="$ROOT/progress/s32-rollout-${FP}-R4.start.env"; RESULT="$ROOT/progress/s32-rollout-${FP}-R4.result.env"
 get(){ local f="$1" k="$2" n; n="$(grep -cE "^${k}=" "$f" 2>/dev/null||true)"; [ "$n" = 1 ] || return 1; grep -E "^${k}=" "$f"|head -1|cut -d= -f2-; }
 for f in "$R0" "$R3" "$CAP" "$MAN" "$CLAIM" "$PG_ENV"; do [ -f "$f" ] && [ ! -L "$f" ] || block REQUIRED_INPUT_MISSING; done
+[ "$(stat -c '%a' "$CLAIM")" = 600 ] || block R4_R5_CLAIM_UNSAFE_MODE
+[ "$(stat -c '%a' "$PG_ENV")" = 600 ] || block POSTGRES_ENV_UNSAFE
 [ "$(get "$R3" R3_SCHEMA || true)" = PASS ] && [ "$(get "$R3" S32_RELEASE_FINGERPRINT || true)" = "$FP" ] || block R3_NOT_PASS
 case "$(get "$CAP" CAPACITY_GATE || true)" in PASS_PREFERRED) ;; PASS_HARD_ONLY) [ "$(get "$CLAIM" CAPACITY_HARD_ONLY_ACCEPTED || true)" = true ] || block HARD_ONLY_NOT_ACCEPTED ;; *) block R4_CAPACITY_NOT_PASS;; esac
 [ "$(get "$CLAIM" STAGE_GROUP || true)" = R4_R5 ] && [ "$(get "$CLAIM" S32_RELEASE_FINGERPRINT || true)" = "$FP" ] && [ "$(get "$CLAIM" RELEASE_SOURCE_SHA || true)" = "$SRC" ] && [ "$(get "$CLAIM" CONTROL_PLANE_SHA || true)" = "$CTRL" ] || block R4_R5_CLAIM_MISMATCH
