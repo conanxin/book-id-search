@@ -23,6 +23,11 @@ class WebReleaseCandidateContractTests(unittest.TestCase):
         self.assertIn('org.opencontainers.image.revision', self.builder)
         self.assertIn('webS32Enabled', self.builder)
 
+
+    def test_builder_requires_source_reachable_from_reviewed_origin_main(self):
+        self.assertIn('git merge-base --is-ancestor "$FULL_SHA" origin/main', self.builder)
+        self.assertIn('source is not reachable from origin/main', self.builder)
+
     def test_builder_records_capacity_evidence(self):
         for field in ('imageBytes', 'tarBytes', 'compressedBytes'):
             self.assertIn(field, self.builder)
