@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 type AcceptanceOptions = {
   apiBaseUrl: string;
@@ -23,6 +23,14 @@ function trimSlash(value: string) {
 
 function expectFingerprint(value: string) {
   if (!/^[0-9a-f]{64}$/.test(value)) throw new Error("INVALID_RELEASE_FINGERPRINT");
+}
+
+function deterministicUuid(seed: string) {
+  const chars = createHash("sha256").update(seed, "utf8").digest("hex").slice(0, 32).split("");
+  chars[12] = "4";
+  chars[16] = ((Number.parseInt(chars[16], 16) & 0x3) | 0x8).toString(16);
+  const hex = chars.join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 async function jsonRequest(
@@ -231,53 +239,46 @@ export async function runProductionAcceptance(options: AcceptanceOptions): Promi
   }
 
   const assessmentsPath = `${claimBase}/assessments`;
-  const history = await privateRequest(apiBase, token, assessmentsPath);
-  let assessmentId: string;
+  // Every acceptance invocation must produce fresh replay evidence.  The key is
+  // deterministic for this exact release/claim/Manifest identity so rerunning
+  // the acceptance harness confirms the existing command instead of creating
+  // duplicate Assessments.
+  const idempotencyKey = deterministicUuid(
+    `s32-production-acceptance:${options.releaseFingerprint}:${claimId}:${expectedManifestSha256}`,
+  );
+  const payload = {
+    stance: "SUPPORTS",
+    confidenceLevel: "HIGH",
+    reasoning,
+    expectedManifestSha256,
+    items,
+  };
+  const headers = {
+    "content-type": "application/json",
+    "Idempotency-Key": idempotencyKey,
+  };
 
-  if (Array.isArray(history?.assessments) && history.assessments.length > 0) {
-    assessmentId = String(history.assessments[0].id);
-  } else {
-    const idempotencyKey = randomUUID();
-    const payload = {
-      stance: "SUPPORTS",
-      confidenceLevel: "HIGH",
-      reasoning,
-      expectedManifestSha256,
-      items,
-    };
-    const headers = {
-      "content-type": "application/json",
-      "Idempotency-Key": idempotencyKey,
-    };
+  const first = await privateRequest(
+    apiBase,
+    token,
+    assessmentsPath,
+    { method: "POST", headers, body: JSON.stringify(payload) },
+    [200, 201],
+  );
+  const firstAssessmentId = String(first.assessment?.id);
+  if (!firstAssessmentId) throw new Error("ASSESSMENT_FIRST_ID_MISSING");
 
-    let firstAssessmentId: string | null = null;
-    try {
-      const first = await privateRequest(
-        apiBase,
-        token,
-        assessmentsPath,
-        { method: "POST", headers, body: JSON.stringify(payload) },
-        [201],
-      );
-      firstAssessmentId = String(first.assessment.id);
-    } catch (error) {
-      // A transport failure after the server committed is deliberately ambiguous.
-      // Confirm it only by retrying the exact same command with the exact same key.
-      if (!(error instanceof TypeError)) throw error;
-    }
-
-    const replay = await privateRequest(
-      apiBase,
-      token,
-      assessmentsPath,
-      { method: "POST", headers, body: JSON.stringify(payload) },
-      [200],
-    );
-    assessmentId = String(replay.assessment?.id);
-    if (!assessmentId) throw new Error("ASSESSMENT_REPLAY_ID_MISSING");
-    if (firstAssessmentId && firstAssessmentId !== assessmentId) {
-      throw new Error("ASSESSMENT_REPLAY_IDENTITY_MISMATCH");
-    }
+  const replay = await privateRequest(
+    apiBase,
+    token,
+    assessmentsPath,
+    { method: "POST", headers, body: JSON.stringify(payload) },
+    [200],
+  );
+  const assessmentId = String(replay.assessment?.id);
+  if (!assessmentId) throw new Error("ASSESSMENT_REPLAY_ID_MISSING");
+  if (firstAssessmentId !== assessmentId) {
+    throw new Error("ASSESSMENT_REPLAY_IDENTITY_MISMATCH");
   }
 
   const detail = await privateRequest(
