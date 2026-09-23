@@ -24,6 +24,8 @@ type State = {
   issues: number;
   claims: number;
   assessments: number;
+  assessmentPostRequests: number;
+  assessmentReplayResponses: number;
   droppedAssessmentResponses: number;
   promotedBookId: string | null;
   assessmentKey: string | null;
@@ -60,6 +62,8 @@ async function fixtureServer(token: string, fingerprint: string) {
     issues: 0,
     claims: 0,
     assessments: 0,
+    assessmentPostRequests: 0,
+    assessmentReplayResponses: 0,
     droppedAssessmentResponses: 0,
     promotedBookId: null,
     assessmentKey: null,
@@ -158,6 +162,7 @@ async function fixtureServer(token: string, fingerprint: string) {
       return send(res, 200, { claim: { id: UUID.claim, statement: claimStatement, lifecycleState: "ACTIVE" }, assessments: state.assessments ? [{ id: UUID.assessment, stance: "SUPPORTS", confidenceLevel: "HIGH", actorId: null, numericScore: null, scoreKind: null, reasoningExcerpt: reasoning, createdAt: "2026-09-22T00:00:00Z", evidenceManifest: { id: UUID.manifest, schemaVersion: 1, purpose: "CLAIM_ASSESSMENT", manifestSha256: "a".repeat(64), itemCount: 1 } }] : [], nextCursor: null });
     }
     if (url.pathname.endsWith("/assessments") && req.method === "POST") {
+      state.assessmentPostRequests += 1;
       const input = await body(req);
       const keys = input && typeof input === "object" ? Object.keys(input).sort() : [];
       const expectedKeys = ["confidenceLevel","expectedManifestSha256","items","reasoning","stance"];
@@ -167,6 +172,7 @@ async function fixtureServer(token: string, fingerprint: string) {
       const key = String(req.headers["idempotency-key"] || "");
       if (!key) return send(res, 400, { error: { code: "IDEMPOTENCY_KEY_REQUIRED", message: "missing key" } });
       const replay = state.assessments > 0;
+      if (replay) state.assessmentReplayResponses += 1;
       if (replay && state.assessmentKey !== key) return send(res, 409, { error: { code: "IDEMPOTENCY_CONFLICT", message: "different key" } });
       if (!replay) state.assessmentKey = key;
       state.assessments = 1;
@@ -206,6 +212,11 @@ describe("S32 production acceptance harness", () => {
     expect(fixture.state.issues).toBe(1);
     expect(fixture.state.claims).toBe(1);
     expect(fixture.state.assessments).toBe(1);
+    // Each invocation sends the same Assessment command twice.  The first
+    // invocation proves response-unknown recovery; the rerun proves a fresh
+    // same-key replay rather than trusting historical state.
+    expect(fixture.state.assessmentPostRequests).toBe(4);
+    expect(fixture.state.assessmentReplayResponses).toBe(3);
     expect(first.legacySearchRegression).toBe("PASS");
     expect(first.assessmentReplay).toBe("PASS");
     expect(fixture.state.promotedBookId).toBe("catalog-prod-1");
