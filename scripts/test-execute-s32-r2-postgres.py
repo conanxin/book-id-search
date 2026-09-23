@@ -24,6 +24,12 @@ class Env:
   e=os.environ.copy(); e.update(BOOK_ID_SEARCH_REPO_ROOT=str(self.root),S32_R0_RECEIPT=str(self.r0),S32_R1_RECEIPT=str(self.r1),S32_RELEASE_MANIFEST_JSON=str(self.man),S32_POSTGRES_ENV_FILE=str(self.secrets),S32_PG_DATA_DIR=str(self.pgdata),S32_R2_TEST_MODE='true',S32_R2_COMMAND_LOG=str(self.log),S32_R2_FAKE_PG_UID=str(os.getuid()),S32_R2_FAKE_PG_GID=str(os.getgid()),S32_R2_POST_FACTS_JSON=str(self.post)); return e
  def run(self): return subprocess.run(['bash',str(EXEC),'--execute-r2',self.fp,SRC,CTRL],text=True,capture_output=True,env=self.env())
 class T(unittest.TestCase):
+
+ def test_default_postgres_secret_path_is_release_scoped_runtime_path(self):
+  text=EXEC.read_text()
+  self.assertIn('/opt/book-id-search-runtime/s32/${FP}/postgres.env', text)
+  self.assertNotIn('$ROOT/.s32-postgres.env', text)
+
  def test_success_targets_postgres_only_and_writes_receipt(self):
   x=Env(); self.addCleanup(x.close); r=x.run(); self.assertEqual(r.returncode,0,r.stdout+r.stderr); self.assertIn('R2_POSTGRES=PASS',r.stdout); cmd=x.log.read_text(); self.assertIn('--no-build --no-deps postgres',cmd); self.assertNotIn(' web',cmd); self.assertTrue(any(x.root.glob('progress/*R2.result.env')))
  def test_nonempty_or_symlink_pgdata_blocks_before_command(self):
