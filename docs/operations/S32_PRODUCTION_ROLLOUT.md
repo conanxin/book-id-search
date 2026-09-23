@@ -88,7 +88,15 @@ R0 must freshly record:
 - Meilisearch document count and indexing state;
 - PostgreSQL/S32 runtime presence.
 
-R1 must use fresh exact-candidate C/T/U sizes and filesystem facts.
+R1 must use fresh exact-candidate C/T/U sizes and exact filesystem byte facts.
+
+The capacity planner must be given:
+- the canonical S32 release manifest;
+- the exact API candidate JSON;
+- the exact Web candidate JSON;
+- filesystem facts containing `totalBytes`, `usedBytes`, and `freeBytes`.
+
+It verifies candidate image/tag/revision/lock/base/static identities against the release manifest before using the candidate C/T/U measurements. Rounded `df` percentages are not capacity identity and are not used to derive total bytes.
 
 Capacity policy:
 
@@ -108,10 +116,20 @@ Canonical PGDATA:
 /data/book-id-search/postgres_data
 ```
 
+Release-scoped secret files:
+
+```text
+/opt/book-id-search-runtime/s32/<S32_RELEASE_FINGERPRINT>/postgres.env
+/opt/book-id-search-runtime/s32/<S32_RELEASE_FINGERPRINT>/api.env
+```
+
+Both secret files must be regular, non-symlink, mode-600 files. R2–R5 use the same release-scoped `postgres.env`; do not create an alternate repo-local PostgreSQL secret file.
+
 - no host PostgreSQL port;
 - no auto-created bind path;
 - `s32_admin` is bootstrap/admin only;
 - API uses `s32_app`;
+- R3 discovers the already-running PostgreSQL container by the exact Compose project/service labels, verifies its image ID against the R2 receipt and requires health=healthy before any psql operation;
 - production may run `db/tests/001_s32_schema_assertions.sql`;
 - production must **not** run `db/tests/002_s32_negative_invariants.sql`.
 
