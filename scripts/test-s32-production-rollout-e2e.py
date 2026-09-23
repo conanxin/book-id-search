@@ -158,7 +158,12 @@ class RolloutE2E(unittest.TestCase):
                 "api":{"cid":"newapi2","startedAt":"newt2","imageId":"sha256:"+"2"*64,"revision":SRC},
                 "meilisearch":{"cid":"m1","startedAt":"mt","imageId":"mi"},
             },
-            "httpStatus":200, "backendAcceptance":"PASS",
+            "httpStatus":200,
+            "postgresPresent":True,
+            "s32EnvNames":["S32_FEATURES_ENABLED","S32_DATABASE_URL","S32_PRIVATE_API_TOKEN"],
+            "stats":{"numberOfDocuments":5115734,"isIndexing":False},
+            "searches":{k:{"status":"PASS"} for k in ("ISBN","SSID","DXID","title","author","publisher")},
+            "backendAcceptance":"PASS",
         }))
         env.update(
             S32_R3_RECEIPT=str(self.root/"progress"/f"s32-rollout-{self.fp}-R3.result.env"),
