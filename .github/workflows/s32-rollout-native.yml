@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - feat/s32-production-rollout
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
