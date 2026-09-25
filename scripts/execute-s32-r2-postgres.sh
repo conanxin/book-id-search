@@ -86,9 +86,30 @@ fi
 
 if [ "${S32_R2_TEST_MODE:-false}" = true ]; then
   PG_UID="${S32_R2_FAKE_PG_UID:?}"; PG_GID="${S32_R2_FAKE_PG_GID:?}"
+  ACTUAL_PG_ID="$PG_IMAGE_ID"
+  EXPECTED_MANIFEST_DIGEST="${PG_IMAGE##*@}"
 else
   ACTUAL_PG_ID="$(sudo -n docker image inspect "$PG_IMAGE" --format '{{.Id}}' 2>/dev/null)" || block PG_IMAGE_NOT_LOCAL
-  [ "$ACTUAL_PG_ID" = "$PG_IMAGE_ID" ] || block PG_IMAGE_ID_MISMATCH
+  # Backend-compatible identity contract (fail-closed):
+  #   EXPECTED_MANIFEST_DIGEST is the immutable digest suffix of pgImageRef.
+  #   Valid observed host IDs are exactly two:
+  #     (a) manifest pgImageId (classic image store: config digest), or
+  #     (b) EXPECTED_MANIFEST_DIGEST (containerd image store target digest).
+  # Expected manifest digest = the @-suffix of pgImageRef (already sha256:…).
+  EXPECTED_MANIFEST_DIGEST="${PG_IMAGE##*@}"
+  case "$ACTUAL_PG_ID" in
+    "$PG_IMAGE_ID"|"$EXPECTED_MANIFEST_DIGEST") ;;
+    *) block PG_IMAGE_ID_MISMATCH ;;
+  esac
+  # Digest/reference proof: local image RepoDigests must carry the exact
+  # expected manifest digest (registry names may normalize to
+  # docker.io/library/postgres@..., so compare the @-suffix only).
+  REPO_DIGEST_PROOF="$(sudo -n docker image inspect "$PG_IMAGE" --format '{{join .RepoDigests " "}}' 2>/dev/null)" || block PG_IMAGE_REPODIGEST_MISMATCH
+  DIGEST_SEEN=false
+  for REF in $REPO_DIGEST_PROOF; do
+    case "$REF" in *"$EXPECTED_MANIFEST_DIGEST") DIGEST_SEEN=true; break ;; esac
+  done
+  [ "$DIGEST_SEEN" = true ] || block PG_IMAGE_REPODIGEST_MISMATCH
   PG_UID="$(sudo -n docker run --rm --network none --pull never --entrypoint sh "$PG_IMAGE" -c 'id -u postgres')" || block PG_UID_LOOKUP_FAILED
   PG_GID="$(sudo -n docker run --rm --network none --pull never --entrypoint sh "$PG_IMAGE" -c 'id -g postgres')" || block PG_GID_LOOKUP_FAILED
 fi
@@ -152,7 +173,7 @@ if [ "${S32_R2_TEST_MODE:-false}" != true ]; then
 fi
 
 TMP_RESULT="$(mktemp "$ROOT/progress/.r2-result.XXXXXX")"
-printf 'STATUS=PASS\nSTAGE=R2\nR2_POSTGRES=PASS\nS32_RELEASE_FINGERPRINT=%s\nRELEASE_SOURCE_SHA=%s\nMEILI_DOCUMENTS=%s\nPG_IMAGE_ID=%s\nPGDATA=%s\nLEGACY_RUNTIME_UNCHANGED=PASS\n' "$FP" "$SRC" "$BASE_MEILI_DOCUMENTS" "$PG_IMAGE_ID" "$PGDATA" > "$TMP_RESULT"
+printf 'STATUS=PASS\nSTAGE=R2\nR2_POSTGRES=PASS\nS32_RELEASE_FINGERPRINT=%s\nRELEASE_SOURCE_SHA=%s\nMEILI_DOCUMENTS=%s\nPG_IMAGE_ID=%s\nPG_MANIFEST_DIGEST=%s\nPGDATA=%s\nLEGACY_RUNTIME_UNCHANGED=PASS\n' "$FP" "$SRC" "$BASE_MEILI_DOCUMENTS" "$ACTUAL_PG_ID" "$EXPECTED_MANIFEST_DIGEST" "$PGDATA" > "$TMP_RESULT"
 chmod 600 "$TMP_RESULT"
 ln -- "$TMP_RESULT" "$RESULT" 2>/dev/null || { rm -f "$TMP_RESULT"; block RESULT_WRITE_FAILED; }
 rm -f "$TMP_RESULT"

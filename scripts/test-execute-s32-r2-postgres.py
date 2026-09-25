@@ -47,4 +47,37 @@ class T(unittest.TestCase):
   x=Env(); self.addCleanup(x.close); f=json.loads(x.post.read_text()); f['services']['api']['cid']='changed'; x.post.write_text(json.dumps(f)); r=x.run(); self.assertNotEqual(r.returncode,0); self.assertIn('LEGACY_RUNTIME_DRIFT',r.stdout+r.stderr); self.assertTrue(any(x.root.glob('progress/*R2.start.env')))
  def test_incomplete_attempt_never_retries(self):
   x=Env(); self.addCleanup(x.close); start=x.root/'progress'/f's32-rollout-{x.fp}-R2.start.env'; start.write_text('STATUS=STARTED\n'); os.chmod(start,0o600); r=x.run(); self.assertNotEqual(r.returncode,0); self.assertIn('INCOMPLETE_R2',r.stdout+r.stderr); self.assertFalse(x.log.exists())
+ def test_identity_contract_accepts_classic_and_containerd_ids(self):
+  # Contract: the non-test-mode identity gate must accept exactly two
+  # observed host IDs (manifest pgImageId OR the manifest digest itself)
+  # and require RepoDigest proof of the exact expected manifest digest.
+  text=EXEC.read_text()
+  self.assertIn('EXPECTED_MANIFEST_DIGEST="${PG_IMAGE##*@}"',text)
+  self.assertIn('"$PG_IMAGE_ID"|"$EXPECTED_MANIFEST_DIGEST")',text)
+  self.assertIn('PG_IMAGE_REPODIGEST_MISMATCH',text)
+  self.assertIn('*"$EXPECTED_MANIFEST_DIGEST")',text)
+  # Registry-name normalization must not defeat digest comparison.
+  self.assertNotIn('"$REPO_DIGEST_PROOF" = "$PG_IMAGE"',text)
+ def test_receipt_records_host_observed_id_and_manifest_digest(self):
+  x=Env(); self.addCleanup(x.close); r=x.run(); self.assertEqual(r.returncode,0,r.stdout+r.stderr)
+  result=next(x.root.glob('progress/*R2.result.env')); body=result.read_text()
+  # Test mode records the manifest pgImageId as the host-observed ID.
+  self.assertIn('PG_IMAGE_ID=sha256:'+'9'*64,body)
+  self.assertIn('PG_MANIFEST_DIGEST=sha256:'+'8'*64,body)
+ def test_r3_reads_r2_host_binding_not_manifest_id(self):
+  # R3 must keep binding to the R2 receipt's PG_IMAGE_ID (same-host
+  # runtime binding), never re-compare against the manifest config ID.
+  r3=(ROOT/'execute-s32-r3-schema.sh').read_text()
+  self.assertIn('get_kv "$R2" PG_IMAGE_ID',r3)
+  self.assertNotIn('get_kv "$MANIFEST" PG_IMAGE_ID',r3)
+ def test_identity_gate_precedes_any_mutation(self):
+  # The identity contract must run before R2.start.env is published and
+  # before PGDATA creation, so a mismatch cannot leave partial state.
+  text=EXEC.read_text()
+  self.assertLess(text.index('PG_IMAGE_ID_MISMATCH'),text.index('TMP_START="$(mktemp'))
+  self.assertLess(text.index('PG_IMAGE_REPODIGEST_MISMATCH'),text.index('mkdir -p "$PGDATA"'))
+ def test_wrong_observed_or_digest_blocks_with_exact_reason(self):
+  text=EXEC.read_text()
+  self.assertIn('*) block PG_IMAGE_ID_MISMATCH ;;',text)
+  self.assertIn('[ "$DIGEST_SEEN" = true ] || block PG_IMAGE_REPODIGEST_MISMATCH',text)
 if __name__=='__main__': unittest.main()
