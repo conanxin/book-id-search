@@ -132,7 +132,9 @@ Both secret files must be regular, non-symlink, mode-600 files. R2–R5 use the 
 - no auto-created bind path;
 - `s32_admin` is bootstrap/admin only;
 - API uses `s32_app`;
-- R3 discovers the already-running PostgreSQL container by the exact Compose project/service labels, verifies its image ID against the R2 receipt and requires health=healthy before any psql operation;
+- PostgreSQL image identity is backend-compatible and fail-closed: the manifest digest in `pgImageRef` (`…@sha256:…`) is the canonical cross-backend pull identity; `pgImageId` is legacy/config identity evidence. Hosts running Docker with the containerd image store (e.g. Docker 29 `io.containerd.snapshotter.v1`) report `docker image inspect <digest> .Id` as the manifest digest, while classic image stores report the config digest — both are accepted observed values, anything else blocks (`PG_IMAGE_ID_MISMATCH`), and RepoDigests must independently carry the exact expected manifest digest (`PG_IMAGE_REPODIGEST_MISMATCH` otherwise);
+- the R2 receipt records the host-local observed image ID (`PG_IMAGE_ID`) plus the non-secret `PG_MANIFEST_DIGEST`;
+- R3 discovers the already-running PostgreSQL container by the exact Compose project/service labels, verifies its `docker inspect .Image` against the R2 receipt's host-local `PG_IMAGE_ID` (same-host runtime binding; never the manifest config ID) and requires health=healthy before any psql operation;
 - production may run `db/tests/001_s32_schema_assertions.sql`;
 - production must **not** run `db/tests/002_s32_negative_invariants.sql`.
 
