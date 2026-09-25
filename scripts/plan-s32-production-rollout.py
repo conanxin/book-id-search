@@ -8,6 +8,7 @@ import sys
 
 STAGES = ("R0", "R1", "R2", "R3", "R4", "R5", "R6", "R7")
 FP_RE = re.compile(r"^[0-9a-f]{64}$")
+SRC_RE = re.compile(r"^[0-9a-f]{40}$")
 
 def emit(**fields: str) -> int:
     for key, value in fields.items():
@@ -42,11 +43,15 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Read-only S32 production rollout state planner")
     ap.add_argument("--state-dir", required=True)
     ap.add_argument("--release-fingerprint", required=True)
+    ap.add_argument("--release-source-sha", required=True)
     args = ap.parse_args()
 
     fp = args.release_fingerprint.strip()
+    src = args.release_source_sha.strip()
     if not FP_RE.fullmatch(fp):
         return emit(STATUS="BLOCKED", BLOCK_REASON="INVALID_RELEASE_FINGERPRINT")
+    if not SRC_RE.fullmatch(src):
+        return emit(STATUS="BLOCKED", BLOCK_REASON="INVALID_RELEASE_SOURCE_SHA")
 
     root = Path(args.state_dir)
     if not root.is_dir():
@@ -62,6 +67,8 @@ def main() -> int:
                     return emit(STATUS="BLOCKED", BLOCK_REASON=f"{stage}_RECEIPT_NOT_PASS")
                 if stage != "R0" and receipt.get("S32_RELEASE_FINGERPRINT") != fp:
                     return emit(STATUS="BLOCKED", BLOCK_REASON="RELEASE_FINGERPRINT_MISMATCH")
+                if stage in ("R1", "R2", "R4", "R5", "R6", "R7") and receipt.get("RELEASE_SOURCE_SHA") != src:
+                    return emit(STATUS="BLOCKED", BLOCK_REASON="RELEASE_SOURCE_MISMATCH")
                 receipts[stage] = receipt
 
         # A start artifact without a terminal receipt is ambiguous and must never auto-resume.
