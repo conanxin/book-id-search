@@ -84,6 +84,8 @@ The control-plane sync changes Git checkout state only. Web/API/Meilisearch CID,
 
 Each sync execution is itself one-shot and forward-only. The executor writes `s32-rollout-<FP>-CONTROL_PLANE_SYNC-<CTRL>.start.env` (with `PRE_CONTROL_PLANE_SHA`) immediately before the checkout mutation and `…result.env` only after the post-reset baseline and runtime-unchanged checks pass; a START without a RESULT marks the attempt INCOMPLETE/UNKNOWN and is never auto-retried, and a terminal RESULT blocks re-execution for that FP+CTRL. A target equal to the current HEAD blocks (`CONTROL_PLANE_ALREADY_AT_TARGET`) and a target that is not a descendant of the current HEAD blocks (`CONTROL_PLANE_NON_FORWARD_TARGET`) — so no retained claim (scoped or legacy) can ever roll the control plane back to an older checkout.
 
+Although CONTROL_PLANE_SYNC may repeat within one release, each CTRL authorization yields exactly one execution attempt: START without RESULT = incomplete/unknown (no retry); a terminal RESULT = consumed (no second execution); control-plane movement is only allowed from the current HEAD to a descendant target; and old retained claims never constitute rollback authorization.
+
 ## R0 / R1 read-only preflight
 
 R0 must freshly record:
