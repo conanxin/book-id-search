@@ -17,7 +17,33 @@ printf '%s' "$CTRL" | grep -qE '^[0-9a-f]{40}$' || block INVALID_CONTROL_PLANE_S
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${BOOK_ID_SEARCH_REPO_ROOT:-/opt/book-id-search}"
-CLAIM="$ROOT/progress/s32-rollout-authorization-${FP}-CONTROL_PLANE_SYNC-claim.env"
+# Preferred: CTRL-scoped claim (authorizations for a second sync under the
+# same fingerprint but a different main commit coexist by design).
+CLAIM="$ROOT/progress/s32-rollout-authorization-${FP}-CONTROL_PLANE_SYNC-${CTRL}-claim.env"
+# Legacy fallback (first-sync historical evidence): only usable when no
+# CTRL-scoped claim exists, the legacy file is a regular non-symlink mode-600
+# file, and every field inside binds to exactly this FP/SRC/CTRL request.
+LEGACY_CLAIM="$ROOT/progress/s32-rollout-authorization-${FP}-CONTROL_PLANE_SYNC-claim.env"
+
+claim_get_kv() {
+  local file="$1" key="$2" count
+  count="$(grep -cE "^${key}=" "$file" 2>/dev/null || true)"
+  [ "$count" = 1 ] || return 1
+  grep -E "^${key}=" "$file" | head -1 | cut -d= -f2-
+}
+
+if [ ! -f "$CLAIM" ] && [ ! -L "$CLAIM" ]; then
+  if [ -f "$LEGACY_CLAIM" ] && [ ! -L "$LEGACY_CLAIM" ] && [ "$(stat -c '%a' "$LEGACY_CLAIM" 2>/dev/null)" = 600 ] \
+     && [ "$(claim_get_kv "$LEGACY_CLAIM" STAGE_GROUP || true)" = CONTROL_PLANE_SYNC ] \
+     && [ "$(claim_get_kv "$LEGACY_CLAIM" S32_RELEASE_FINGERPRINT || true)" = "$FP" ] \
+     && [ "$(claim_get_kv "$LEGACY_CLAIM" RELEASE_SOURCE_SHA || true)" = "$SRC" ] \
+     && [ "$(claim_get_kv "$LEGACY_CLAIM" CONTROL_PLANE_SHA || true)" = "$CTRL" ] \
+     && [ "$(claim_get_kv "$LEGACY_CLAIM" EXPLICIT_APPROVAL || true)" = true ] \
+     && [ "$(claim_get_kv "$LEGACY_CLAIM" CONSUMABLE_ONCE || true)" = true ] \
+     && [ "$(claim_get_kv "$LEGACY_CLAIM" PRODUCTION_WRITE_EXECUTED || true)" = false ]; then
+    CLAIM="$LEGACY_CLAIM"
+  fi
+fi
 
 [ -f "$CLAIM" ] && [ ! -L "$CLAIM" ] || block CONTROL_PLANE_SYNC_CLAIM_MISSING
 [ "$(stat -c '%a' "$CLAIM")" = 600 ] || block CONTROL_PLANE_SYNC_CLAIM_UNSAFE_MODE

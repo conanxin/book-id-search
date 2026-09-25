@@ -69,4 +69,60 @@ class T(unittest.TestCase):
   text=EXEC.read_text() if EXEC.exists() else ''
   for bad in ['docker compose up','docker compose down','docker restart','docker pull','docker build','docker rm']:
    self.assertNotIn(bad,text)
+
+ def test_executor_consumes_only_requested_ctrl_claim(self):
+  # Case C: claims for CTRL_A and CTRL_B both exist; executing toward
+  # CTRL_B must read only the CTRL_B-scoped claim (never A's).
+  td,w,first,second=repo(); self.addCleanup(td.cleanup)
+  ctrl_a=first; ctrl_b=second
+  p=w/'progress'; p.mkdir(exist_ok=True)
+  for c in (ctrl_a,ctrl_b):
+   body=('AUTHORIZATION_VERSION=1\nAUTHORIZED_ACTION=S32_PRODUCTION_ROLLOUT\nSTAGE_GROUP=CONTROL_PLANE_SYNC\n'
+    f'S32_RELEASE_FINGERPRINT={FP}\nRELEASE_SOURCE_SHA={SRC}\nCONTROL_PLANE_SHA={c}\n'
+    'EXPLICIT_APPROVAL=true\nCONSUMABLE_ONCE=true\nCAPACITY_HARD_ONLY_ACCEPTED=false\nPRODUCTION_WRITE_EXECUTED=false\n')
+   (p/f's32-rollout-authorization-{FP}-CONTROL_PLANE_SYNC-{c}-claim.env').write_text(body)
+  for f in p.glob('*.env'): f.chmod(0o600)
+  env=os.environ.copy(); env.update(BOOK_ID_SEARCH_REPO_ROOT=str(w))
+  pre=pathlib.Path(td.name)/'c.json'; post=pathlib.Path(td.name)/'d.json'; facts(pre); facts(post)
+  env.update(S32_SYNC_PRE_FACTS_JSON=str(pre),S32_SYNC_POST_FACTS_JSON=str(post))
+  r=sh(['bash',str(EXEC),'--execute-control-plane-sync',FP,SRC,ctrl_b],w,env)
+  self.assertEqual(r.returncode,0,r.stdout+r.stderr)
+  self.assertEqual(subprocess.check_output(['git','rev-parse','HEAD'],cwd=w,text=True).strip(),ctrl_b)
+  # A's claim evidence is intact and untouched.
+  self.assertTrue((p/f's32-rollout-authorization-{FP}-CONTROL_PLANE_SYNC-{ctrl_a}-claim.env').exists())
+
+ def test_executor_rejects_legacy_claim_bound_to_other_ctrl(self):
+  # Case D: only a legacy (non-CTRL-scoped) claim exists and it binds
+  # CTRL_A; requesting CTRL_B must BLOCK, never reuse the old grant.
+  td,w,first,second=repo(); self.addCleanup(td.cleanup)
+  env=os.environ.copy(); env.update(BOOK_ID_SEARCH_REPO_ROOT=str(w))
+  legacy=claim(w,first)  # binds CONTROL_PLANE_SHA=first
+  r=sh(['bash',str(EXEC),'--execute-control-plane-sync',FP,SRC,second],w,env)
+  self.assertNotEqual(r.returncode,0); self.assertIn('CONTROL_PLANE_SYNC_CLAIM_MISSING',r.stdout+r.stderr)
+  self.assertTrue(legacy.exists())  # untouched, not deleted/rewritten
+
+ def test_executor_accepts_matching_legacy_claim(self):
+  # Case E: legacy claim whose internal CTRL equals the requested CTRL
+  # still authorizes (backward compatibility for first-sync evidence).
+  td,w,first,second=repo(); self.addCleanup(td.cleanup)
+  claim(w,second)  # legacy path, binds second
+  pre=pathlib.Path(td.name)/'pre.json'; post=pathlib.Path(td.name)/'post.json'; facts(pre); facts(post)
+  env=os.environ.copy(); env.update(BOOK_ID_SEARCH_REPO_ROOT=str(w),S32_SYNC_PRE_FACTS_JSON=str(pre),S32_SYNC_POST_FACTS_JSON=str(post))
+  r=sh(['bash',str(EXEC),'--execute-control-plane-sync',FP,SRC,second],w,env)
+  self.assertEqual(r.returncode,0,r.stdout+r.stderr); self.assertIn('CONTROL_PLANE_SYNC=PASS',r.stdout)
+
+ def test_executor_prefers_ctrl_scoped_claim_over_legacy(self):
+  # With both present, the CTRL-scoped claim wins; a mismatching legacy
+  # file must not interfere with a valid scoped authorization.
+  td,w,first,second=repo(); self.addCleanup(td.cleanup)
+  p=w/'progress'; p.mkdir(exist_ok=True)
+  body=('AUTHORIZATION_VERSION=1\nAUTHORIZED_ACTION=S32_PRODUCTION_ROLLOUT\nSTAGE_GROUP=CONTROL_PLANE_SYNC\n'
+   f'S32_RELEASE_FINGERPRINT={FP}\nRELEASE_SOURCE_SHA={SRC}\nCONTROL_PLANE_SHA={second}\n'
+   'EXPLICIT_APPROVAL=true\nCONSUMABLE_ONCE=true\nCAPACITY_HARD_ONLY_ACCEPTED=false\nPRODUCTION_WRITE_EXECUTED=false\n')
+  scoped=p/f's32-rollout-authorization-{FP}-CONTROL_PLANE_SYNC-{second}-claim.env'; scoped.write_text(body); scoped.chmod(0o600)
+  claim(w,first)  # legacy binds first — must be ignored
+  pre=pathlib.Path(td.name)/'pre.json'; post=pathlib.Path(td.name)/'post.json'; facts(pre); facts(post)
+  env=os.environ.copy(); env.update(BOOK_ID_SEARCH_REPO_ROOT=str(w),S32_SYNC_PRE_FACTS_JSON=str(pre),S32_SYNC_POST_FACTS_JSON=str(post))
+  r=sh(['bash',str(EXEC),'--execute-control-plane-sync',FP,SRC,second],w,env)
+  self.assertEqual(r.returncode,0,r.stdout+r.stderr)
 if __name__=='__main__': unittest.main()

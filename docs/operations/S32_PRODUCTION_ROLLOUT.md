@@ -80,6 +80,8 @@ The bundle bytes/commit identity must correspond to the reviewed control-plane S
 
 The control-plane sync changes Git checkout state only. Web/API/Meilisearch CID, StartedAt, image ID, and public HTTP state must remain unchanged.
 
+`CONTROL_PLANE_SYNC` authorizations and claims are scoped to the target control-plane SHA (`s32-rollout-authorization-<FP>-CONTROL_PLANE_SYNC-<CTRL>.env` and its `-claim.env`), so a second sync under the same release fingerprint but a newer main commit gets its own authorization without touching the first sync's evidence. A first-sync legacy claim (`…-CONTROL_PLANE_SYNC-claim.env` without the SHA suffix) remains usable only when its recorded `CONTROL_PLANE_SHA` exactly matches the requested target; legacy evidence bound to any other SHA is never reused, migrated, or rewritten. All other stage groups (`R2_R3`, `R4_R5`, `R6`, `R7`) keep the fingerprint+stage paths.
+
 ## R0 / R1 read-only preflight
 
 R0 must freshly record:
