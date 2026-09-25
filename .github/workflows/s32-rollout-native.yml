@@ -1,9 +1,7 @@
 name: S32 rollout native verification
 
 on:
-  push:
-    branches:
-      - feat/s32-production-rollout
+  workflow_dispatch:
 
 jobs:
   verification:
