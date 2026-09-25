@@ -4,7 +4,14 @@ block(){ printf 'STATUS=BLOCKED\nBLOCK_REASON=%s\nPRODUCTION_WRITE_EXECUTED=fals
 [ "$#" -eq 5 ] && [ "$1" = "--claim-production-rollout" ] || block INVALID_ARGUMENTS
 STAGE="$2"; FP="$3"; SRC="$4"; CTRL="$5"
 case "$STAGE" in CONTROL_PLANE_SYNC|R2_R3|R4_R5|R6|R7) ;; *) block INVALID_STAGE_GROUP;; esac
-ROOT="${BOOK_ID_SEARCH_REPO_ROOT:-/opt/book-id-search}"; DIR="$ROOT/progress"; AUTH="$DIR/s32-rollout-authorization-${FP}-${STAGE}.env"; CLAIM="$DIR/s32-rollout-authorization-${FP}-${STAGE}-claim.env"
+ROOT="${BOOK_ID_SEARCH_REPO_ROOT:-/opt/book-id-search}"; DIR="$ROOT/progress"
+# CONTROL_PLANE_SYNC claims are CTRL-scoped exactly like their authorizations;
+# every other stage keeps the fingerprint+stage paths unchanged.
+if [ "$STAGE" = CONTROL_PLANE_SYNC ]; then
+  AUTH="$DIR/s32-rollout-authorization-${FP}-CONTROL_PLANE_SYNC-${CTRL}.env"; CLAIM="$DIR/s32-rollout-authorization-${FP}-CONTROL_PLANE_SYNC-${CTRL}-claim.env"
+else
+  AUTH="$DIR/s32-rollout-authorization-${FP}-${STAGE}.env"; CLAIM="$DIR/s32-rollout-authorization-${FP}-${STAGE}-claim.env"
+fi
 [ -e "$AUTH" ] || block AUTHORIZATION_MISSING
 [ ! -L "$AUTH" ] && [ -f "$AUTH" ] || block AUTHORIZATION_UNSAFE_FILE
 [ "$(stat -c '%a' "$AUTH")" = 600 ] || block AUTHORIZATION_UNSAFE_PERMISSIONS

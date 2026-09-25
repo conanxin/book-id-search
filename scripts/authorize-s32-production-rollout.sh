@@ -11,7 +11,16 @@ printf '%s' "$CTRL"|grep -qE '^[0-9a-f]{40}$' || block INVALID_CONTROL_PLANE_SHA
 CAPACITY_HARD_ONLY_ACCEPTED=false
 if [ "$STAGE" != CONTROL_PLANE_SYNC ] && [ "${S32_CAPACITY_HARD_ONLY_ACCEPTED:-false}" = true ]; then CAPACITY_HARD_ONLY_ACCEPTED=true; fi
 ROOT="${BOOK_ID_SEARCH_REPO_ROOT:-/opt/book-id-search}"; DIR="$ROOT/progress"; mkdir -p "$DIR"
-OUT="$DIR/s32-rollout-authorization-${FP}-${STAGE}.env"; [ ! -e "$OUT" ] && [ ! -L "$OUT" ] || block AUTHORIZATION_ALREADY_EXISTS
+# CONTROL_PLANE_SYNC authorizations are scoped to the target control-plane SHA:
+# a second sync under the same release fingerprint but a new main commit must
+# coexist with (never overwrite) the first sync's evidence. Other stages keep
+# the fingerprint+stage path unchanged.
+if [ "$STAGE" = CONTROL_PLANE_SYNC ]; then
+  OUT="$DIR/s32-rollout-authorization-${FP}-CONTROL_PLANE_SYNC-${CTRL}.env"
+else
+  OUT="$DIR/s32-rollout-authorization-${FP}-${STAGE}.env"
+fi
+[ ! -e "$OUT" ] && [ ! -L "$OUT" ] || block AUTHORIZATION_ALREADY_EXISTS
 TMP="$(mktemp "$DIR/.s32-auth.XXXXXX")"; trap 'rm -f "$TMP"' EXIT
 chmod 600 "$TMP"
 cat >"$TMP" <<EOF

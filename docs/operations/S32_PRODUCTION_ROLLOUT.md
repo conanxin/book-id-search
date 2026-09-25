@@ -80,6 +80,10 @@ The bundle bytes/commit identity must correspond to the reviewed control-plane S
 
 The control-plane sync changes Git checkout state only. Web/API/Meilisearch CID, StartedAt, image ID, and public HTTP state must remain unchanged.
 
+`CONTROL_PLANE_SYNC` is a repeatable control-plane maintenance stage within one release: tooling fixes merged to main can require a second sync under the same release fingerprint. Its authorization identity therefore binds release fingerprint + control-plane SHA (`s32-rollout-authorization-<FP>-CONTROL_PLANE_SYNC-<CTRL>.env` and its `-claim.env`). Historical sync authorizations/claims are retained for audit; a new sync never deletes or overwrites earlier evidence. A first-sync legacy claim (`…-CONTROL_PLANE_SYNC-claim.env` without the SHA suffix) remains usable only when its recorded `CONTROL_PLANE_SHA` exactly matches the requested target; legacy evidence bound to any other SHA is never reused, migrated, or rewritten. All other rollout stages remain one-shot authorizations keyed by release fingerprint + stage (`R2_R3`, `R4_R5`, `R6`, `R7` keep the fingerprint+stage paths).
+
+Each sync execution is itself one-shot and forward-only. The executor writes `s32-rollout-<FP>-CONTROL_PLANE_SYNC-<CTRL>.start.env` (with `PRE_CONTROL_PLANE_SHA`) immediately before the checkout mutation and `…result.env` only after the post-reset baseline and runtime-unchanged checks pass; a START without a RESULT marks the attempt INCOMPLETE/UNKNOWN and is never auto-retried, and a terminal RESULT blocks re-execution for that FP+CTRL. A target equal to the current HEAD blocks (`CONTROL_PLANE_ALREADY_AT_TARGET`) and a target that is not a descendant of the current HEAD blocks (`CONTROL_PLANE_NON_FORWARD_TARGET`) — so no retained claim (scoped or legacy) can ever roll the control plane back to an older checkout.
+
 ## R0 / R1 read-only preflight
 
 R0 must freshly record:

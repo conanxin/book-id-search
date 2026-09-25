@@ -35,4 +35,35 @@ class T(unittest.TestCase):
  def test_artifact_contains_no_secret_keys(self):
   p=self.repo(); run(AUTH,['--authorize-production-rollout','R4_R5',FP,SRC,CTRL],p,{'S32_EXPLICIT_APPROVAL':'true'}); f=next((p/'progress').glob('s32-rollout-authorization-*.env')); up=f.read_text().upper()
   for word in ('PASSWORD','TOKEN','DATABASE_URL'): self.assertNotIn(word,up)
+ def test_cp_sync_two_ctrl_authorizations_coexist(self):
+  # Case A: same fingerprint, two different target control-plane SHAs.
+  CTRL_B='e'*40
+  p=self.repo(); env={'S32_EXPLICIT_APPROVAL':'true'}
+  ra=run(AUTH,['--authorize-production-rollout','CONTROL_PLANE_SYNC',FP,SRC,CTRL],p,env); self.assertEqual(ra.returncode,0,ra.stdout+ra.stderr)
+  rb=run(AUTH,['--authorize-production-rollout','CONTROL_PLANE_SYNC',FP,SRC,CTRL_B],p,env); self.assertEqual(rb.returncode,0,rb.stdout+rb.stderr)
+  fa=p/'progress'/f's32-rollout-authorization-{FP}-CONTROL_PLANE_SYNC-{CTRL}.env'; fb=p/'progress'/f's32-rollout-authorization-{FP}-CONTROL_PLANE_SYNC-{CTRL_B}.env'
+  self.assertTrue(fa.exists() and fb.exists())
+  self.assertIn('CONTROL_PLANE_SHA='+CTRL,fa.read_text()); self.assertIn('CONTROL_PLANE_SHA='+CTRL_B,fb.read_text())
+  # Neither file was overwritten by the other; re-authorizing either blocks.
+  self.assertNotEqual(run(AUTH,['--authorize-production-rollout','CONTROL_PLANE_SYNC',FP,SRC,CTRL],p,env).returncode,0)
+  self.assertNotEqual(run(AUTH,['--authorize-production-rollout','CONTROL_PLANE_SYNC',FP,SRC,CTRL_B],p,env).returncode,0)
+ def test_cp_sync_claims_independent_one_time_per_ctrl(self):
+  # Case B: each CTRL claims exactly once, hard-linked to its own auth.
+  CTRL_B='e'*40
+  p=self.repo(); env={'S32_EXPLICIT_APPROVAL':'true'}
+  for c in (CTRL,CTRL_B):
+   self.assertEqual(run(AUTH,['--authorize-production-rollout','CONTROL_PLANE_SYNC',FP,SRC,c],p,env).returncode,0)
+   r1=run(CLAIM,['--claim-production-rollout','CONTROL_PLANE_SYNC',FP,SRC,c],p); self.assertEqual(r1.returncode,0,r1.stdout+r1.stderr)
+   auth=p/'progress'/f's32-rollout-authorization-{FP}-CONTROL_PLANE_SYNC-{c}.env'; claim=p/'progress'/f's32-rollout-authorization-{FP}-CONTROL_PLANE_SYNC-{c}-claim.env'
+   self.assertEqual(os.stat(auth).st_ino,os.stat(claim).st_ino)
+   self.assertEqual(claim.stat().st_mode&0o777,0o600)
+   r2=run(CLAIM,['--claim-production-rollout','CONTROL_PLANE_SYNC',FP,SRC,c],p); self.assertNotEqual(r2.returncode,0); self.assertIn('AUTHORIZATION_ALREADY_CLAIMED',r2.stdout+r2.stderr)
+ def test_cp_sync_legacy_auth_untouched_and_other_stage_paths_unchanged(self):
+  # Case F: R2_R3 keeps the fingerprint+stage path (no CTRL suffix), and a
+  # pre-existing legacy CONTROL_PLANE_SYNC auth is never deleted or renamed.
+  p=self.repo(); env={'S32_EXPLICIT_APPROVAL':'true'}
+  legacy=p/'progress'/f's32-rollout-authorization-{FP}-CONTROL_PLANE_SYNC.env'; legacy.write_text('legacy first-sync evidence\n'); os.chmod(legacy,0o600)
+  self.assertEqual(run(AUTH,['--authorize-production-rollout','R2_R3',FP,SRC,CTRL],p,env).returncode,0)
+  f=next((p/'progress').glob(f's32-rollout-authorization-{FP}-R2_R3*.env')); self.assertEqual(f.name,f's32-rollout-authorization-{FP}-R2_R3.env')
+  self.assertTrue(legacy.exists()); self.assertEqual(legacy.read_text(),'legacy first-sync evidence\n')
 if __name__=='__main__': unittest.main()
