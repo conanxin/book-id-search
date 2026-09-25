@@ -13,11 +13,11 @@ class Env:
  def __init__(self, hard=False):
   self.t=tempfile.TemporaryDirectory(); self.root=pathlib.Path(self.t.name); (self.root/'progress').mkdir(); (self.root/'deploy').mkdir(); (self.root/'docker-compose.yml').write_text('services: {}\n'); (self.root/'docker-compose.override.yml').write_text('services: {}\n'); (self.root/'deploy'/'s32-production.override.yml').write_text('services: {}\n')
   self.man=self.root/'manifest.json'; self.man.write_text(json.dumps(valid_manifest())); self.fp=fp(self.man)
-  self.r0=self.root/'r0.env'; self.r0.write_text('\n'.join(['R0_FINAL=PASS','WEB_CID=w1','WEB_STARTED_AT=wt','WEB_IMAGE=book-id-search-web:old','WEB_IMAGE_ID=wi','WEB_REVISION='+'d'*40,'API_CID=a1','API_STARTED_AT=at','API_IMAGE=book-id-search-api:old','API_IMAGE_ID=ai','API_REVISION='+'e'*40,'MEILISEARCH_CID=m1','MEILISEARCH_STARTED_AT=mt','MEILISEARCH_IMAGE_ID=mi','PUBLIC_HTTP_STATUS=200'])+'\n')
-  self.r1=self.root/'r1.env'; self.r1.write_text('CAPACITY_GATE='+('PASS_HARD_ONLY' if hard else 'PASS_PREFERRED')+'\n')
+  self.r0=self.root/'r0.env'; self.r0.write_text('\n'.join(['R0_FINAL=PASS','WEB_CID=w1','WEB_STARTED_AT=wt','WEB_IMAGE=book-id-search-web:old','WEB_IMAGE_ID=wi','WEB_REVISION='+'d'*40,'API_CID=a1','API_STARTED_AT=at','API_IMAGE=book-id-search-api:old','API_IMAGE_ID=ai','API_REVISION='+'e'*40,'MEILISEARCH_CID=m1','MEILISEARCH_STARTED_AT=mt','MEILISEARCH_IMAGE_ID=mi','MEILI_DOCUMENTS=5115734','PUBLIC_HTTP_STATUS=200'])+'\n')
+  self.r1=self.root/'r1.env'; self.r1.write_text('CAPACITY_GATE='+('PASS_HARD_ONLY' if hard else 'PASS_PREFERRED')+'\nS32_RELEASE_FINGERPRINT='+self.fp+'\nRELEASE_SOURCE_SHA='+SRC+'\n')
   self.claim=self.root/'progress'/f's32-rollout-authorization-{self.fp}-R2_R3-claim.env'; self.claim.write_text('\n'.join(['STAGE_GROUP=R2_R3','S32_RELEASE_FINGERPRINT='+self.fp,'RELEASE_SOURCE_SHA='+SRC,'CONTROL_PLANE_SHA='+CTRL,'CAPACITY_HARD_ONLY_ACCEPTED='+('true' if hard else 'false')])+'\n'); os.chmod(self.claim,0o600)
   self.pgdata=self.root/'pgdata'; self.secrets=self.root/'postgres.env'; self.secrets.write_text('S32_POSTGRES_DB=book_id_search_s32\nS32_POSTGRES_USER=s32_admin\nS32_POSTGRES_PASSWORD=dummy\n'); os.chmod(self.secrets,0o600)
-  self.post=self.root/'post.json'; self.post.write_text(json.dumps({'services':{'web':{'cid':'w1','startedAt':'wt','imageId':'wi'},'api':{'cid':'a1','startedAt':'at','imageId':'ai'},'meilisearch':{'cid':'m1','startedAt':'mt','imageId':'mi'}},'httpStatus':200}))
+  self.post=self.root/'post.json'; self.post.write_text(json.dumps({'services':{'web':{'cid':'w1','startedAt':'wt','imageId':'wi'},'api':{'cid':'a1','startedAt':'at','imageId':'ai'},'meilisearch':{'cid':'m1','startedAt':'mt','imageId':'mi'}},'httpStatus':200,'stats':{'numberOfDocuments':5115734,'isIndexing':False}}))
   self.log=self.root/'cmd.log'
  def close(self): self.t.cleanup()
  def env(self):
@@ -36,8 +36,13 @@ class T(unittest.TestCase):
   x=Env(); self.addCleanup(x.close); x.pgdata.mkdir(); (x.pgdata/'x').write_text('x'); r=x.run(); self.assertNotEqual(r.returncode,0); self.assertIn('PGDATA_NOT_EMPTY',r.stdout+r.stderr); self.assertFalse(x.log.exists())
   y=Env(); self.addCleanup(y.close); target=y.root/'target'; target.mkdir(); y.pgdata.symlink_to(target); r=y.run(); self.assertNotEqual(r.returncode,0); self.assertIn('PGDATA_SYMLINK',r.stdout+r.stderr)
  def test_hard_only_requires_bound_acceptance(self):
-  x=Env(hard=False); self.addCleanup(x.close); x.r1.write_text('CAPACITY_GATE=PASS_HARD_ONLY\n'); r=x.run(); self.assertNotEqual(r.returncode,0); self.assertIn('HARD_ONLY_NOT_ACCEPTED',r.stdout+r.stderr)
+  x=Env(hard=False); self.addCleanup(x.close); x.r1.write_text('CAPACITY_GATE=PASS_HARD_ONLY\nS32_RELEASE_FINGERPRINT='+x.fp+'\nRELEASE_SOURCE_SHA='+SRC+'\n'); r=x.run(); self.assertNotEqual(r.returncode,0); self.assertIn('HARD_ONLY_NOT_ACCEPTED',r.stdout+r.stderr)
   y=Env(hard=True); self.addCleanup(y.close); r=y.run(); self.assertEqual(r.returncode,0,r.stdout+r.stderr)
+ def test_capacity_receipt_is_bound_to_exact_release(self):
+  x=Env(); self.addCleanup(x.close); x.r1.write_text('CAPACITY_GATE=PASS_PREFERRED\nS32_RELEASE_FINGERPRINT='+'f'*64+'\nRELEASE_SOURCE_SHA='+SRC+'\n'); r=x.run(); self.assertNotEqual(r.returncode,0); self.assertIn('CAPACITY_RELEASE_MISMATCH',r.stdout+r.stderr); self.assertFalse(any(x.root.glob('progress/*R2.start.env')))
+  y=Env(); self.addCleanup(y.close); y.r1.write_text('CAPACITY_GATE=PASS_PREFERRED\nS32_RELEASE_FINGERPRINT='+y.fp+'\nRELEASE_SOURCE_SHA='+'f'*40+'\n'); r=y.run(); self.assertNotEqual(r.returncode,0); self.assertIn('CAPACITY_RELEASE_MISMATCH',r.stdout+r.stderr); self.assertFalse(any(y.root.glob('progress/*R2.start.env')))
+ def test_meili_document_count_drift_fails_closed(self):
+  x=Env(); self.addCleanup(x.close); facts=json.loads(x.post.read_text()); facts['stats']['numberOfDocuments']=5115735; x.post.write_text(json.dumps(facts)); r=x.run(); self.assertNotEqual(r.returncode,0); self.assertIn('MEILI_DOCUMENT_COUNT_DRIFT',r.stdout+r.stderr)
  def test_legacy_identity_drift_fails_closed(self):
   x=Env(); self.addCleanup(x.close); f=json.loads(x.post.read_text()); f['services']['api']['cid']='changed'; x.post.write_text(json.dumps(f)); r=x.run(); self.assertNotEqual(r.returncode,0); self.assertIn('LEGACY_RUNTIME_DRIFT',r.stdout+r.stderr); self.assertTrue(any(x.root.glob('progress/*R2.start.env')))
  def test_incomplete_attempt_never_retries(self):
