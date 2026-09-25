@@ -1,6 +1,9 @@
 name: S32 rollout native verification
 
 on:
+  push:
+    branches:
+      - feat/s32-production-rollout
   workflow_dispatch:
 
 jobs:
@@ -20,6 +23,8 @@ jobs:
           corepack prepare pnpm@10.33.0 --activate
       - name: Install
         run: pnpm install --frozen-lockfile
+      - name: Install Playwright-managed Chromium
+        run: pnpm dlx playwright@1.55.0 install chromium
       - name: Python rollout contracts
         run: |
           set -euo pipefail
@@ -31,6 +36,7 @@ jobs:
           python3 scripts/test-plan-s32-production-capacity.py
           python3 scripts/test-s32-control-plane-sync.py
           python3 scripts/test-s32-production-authorization.py
+          python3 scripts/test-s32-r7-browser-receipt-producer.py
           python3 scripts/test-s32-api-rollback.py
           python3 scripts/test-s32-production-roles.py
           python3 scripts/test-execute-s32-r2-postgres.py
