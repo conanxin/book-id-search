@@ -250,10 +250,10 @@ class R7ExecutorTests(unittest.TestCase):
         y = Env(); self.addCleanup(y.close)
         self.assertEqual(y.run_api().returncode, 0)
         p = y.write_web_receipt()
-        p.write_text(p.read_text().replace("MOBILE_390x844=PASS", "MOBILE_390x844=FAIL"))
+        p.write_text(p.read_text().replace("RUNNER_MODE=fixture", "RUNNER_MODE=browser"))
         r = y.complete()
         self.assertNotEqual(r.returncode, 0)
-        self.assertTrue("R7_WEB_ACCEPTANCE_CONTRACT_INVALID" in r.stdout + r.stderr or "R7_WEB_ACCEPTANCE_HASH_INVALID" in r.stdout + r.stderr)
+        self.assertIn("R7_WEB_ACCEPTANCE_HASH_INVALID", r.stdout + r.stderr)
 
     def test_no_destructive_or_global_compose_commands(self):
         text = EXEC.read_text() if EXEC.exists() else ""
