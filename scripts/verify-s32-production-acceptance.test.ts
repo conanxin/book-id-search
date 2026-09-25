@@ -226,6 +226,20 @@ describe("S32 production acceptance harness", () => {
     expect(fixture.state.droppedAssessmentResponses).toBe(1);
   });
 
+  it("fails when the legacy Meili document count drifts from R0", async () => {
+    const token = "TOKEN";
+    const fingerprint = "d".repeat(64);
+    const fixture = await fixtureServer(token, fingerprint);
+    await expect(runProductionAcceptance({
+      apiBaseUrl: fixture.base,
+      publicUrl: fixture.base,
+      token,
+      releaseFingerprint: fingerprint,
+      backendOnly: true,
+      expectedDocumentCount: 5115735,
+    })).rejects.toThrow("MEILI_DOCUMENT_COUNT_DRIFT");
+  });
+
   it("never renders the bearer token in its machine-readable result", async () => {
     const token = "TOP_SECRET_SENTINEL";
     const fingerprint = "e".repeat(64);
