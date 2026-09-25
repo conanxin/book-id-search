@@ -1,5 +1,13 @@
 # BOOK-ID-SEARCH status
 
+## S32 Production Rollout tooling — PR #21 merged
+
+- task_id: `S32_PRODUCTION_ROLLOUT_PR21_MERGE_R1`; PR #21 merged into `main` as `ec6843954addd8cee3def7a3a3f340b06e0bc298`; merged reviewed head `47640cf30467802d4c1393f58654b87616978247`.
+- Current-head rollout workflow `36088672215` = SUCCESS; current-head delta rereview `5313726848` reported `CRITICAL=0`, `IMPORTANT=0`.
+- The merge changes repository source/tooling only. No Tencent production checkout, runtime override, container, PostgreSQL state, Meilisearch data, or S32 feature flag was changed by the merge.
+- `S32_ROLLOUT_TOOLING=MERGED`; `PRODUCTION_WRITE_AUTHORIZED=NO`; `PRODUCTION_DEPLOYED=NO`; `FROZEN_SQL_CHANGED=NO`; `M2_E_STARTED=NO`.
+- Next gate: reconcile the user's local Native worktree to merged `main`, then run fresh **R0 + R1 read-only production preflight**. R2+ still requires a separate stage-scoped production-write authorization.
+
 ## S32 Production Rollout review fixes — PR #21 sync checkpoint
 
 - task_id: `S32_PRODUCTION_ROLLOUT_REVIEW_FIX_R1`; the previously local-only review fixes are now being synchronized onto `feat/s32-production-rollout`.
