@@ -223,4 +223,52 @@ class T(unittest.TestCase):
   r=sh(['bash',str(EXEC),'--execute-control-plane-sync',FP,SRC,first],w,env)
   self.assertNotEqual(r.returncode,0); self.assertIn('CONTROL_PLANE_NON_FORWARD_TARGET',r.stdout+r.stderr)
   self.assertEqual(subprocess.check_output(['git','rev-parse','HEAD'],cwd=w,text=True).strip(),second)
+
+ def test_normal_forward_sync_writes_start_and_result(self):
+  # Case K: A→B with a fresh B claim and no prior state: PASS, and the
+  # full audit chain (START + RESULT, mode 600) exists with HEAD=B.
+  td,w,first,second=repo(); self.addCleanup(td.cleanup)
+  p=w/'progress'; p.mkdir(exist_ok=True)
+  body=('AUTHORIZATION_VERSION=1\nAUTHORIZED_ACTION=S32_PRODUCTION_ROLLOUT\nSTAGE_GROUP=CONTROL_PLANE_SYNC\n'
+   f'S32_RELEASE_FINGERPRINT={FP}\nRELEASE_SOURCE_SHA={SRC}\nCONTROL_PLANE_SHA={second}\n'
+   'EXPLICIT_APPROVAL=true\nCONSUMABLE_ONCE=true\nCAPACITY_HARD_ONLY_ACCEPTED=false\nPRODUCTION_WRITE_EXECUTED=false\n')
+  (p/f's32-rollout-authorization-{FP}-CONTROL_PLANE_SYNC-{second}-claim.env').write_text(body)
+  for f in p.glob('*.env'): f.chmod(0o600)
+  pre=pathlib.Path(td.name)/'pre.json'; post=pathlib.Path(td.name)/'post.json'; facts(pre); facts(post)
+  env=os.environ.copy(); env.update(BOOK_ID_SEARCH_REPO_ROOT=str(w),S32_SYNC_PRE_FACTS_JSON=str(pre),S32_SYNC_POST_FACTS_JSON=str(post))
+  r=sh(['bash',str(EXEC),'--execute-control-plane-sync',FP,SRC,second],w,env)
+  self.assertEqual(r.returncode,0,r.stdout+r.stderr); self.assertIn('CONTROL_PLANE_SYNC=PASS',r.stdout)
+  start=p/f's32-rollout-{FP}-CONTROL_PLANE_SYNC-{second}.start.env'; result=p/f's32-rollout-{FP}-CONTROL_PLANE_SYNC-{second}.result.env'
+  self.assertTrue(start.exists()); self.assertTrue(result.exists())
+  self.assertEqual(start.stat().st_mode&0o777,0o600); self.assertEqual(result.stat().st_mode&0o777,0o600)
+  self.assertEqual(subprocess.check_output(['git','rev-parse','HEAD'],cwd=w,text=True).strip(),second)
+
+ def test_failure_after_start_is_never_retried(self):
+  # Case L: runtime drift after START → BLOCK with START retained and no
+  # RESULT; a second attempt (even with healthy facts) blocks as
+  # INCOMPLETE_CONTROL_PLANE_SYNC before any further reset.
+  td,w,first,second=repo(); self.addCleanup(td.cleanup)
+  p=w/'progress'; p.mkdir(exist_ok=True)
+  body=('AUTHORIZATION_VERSION=1\nAUTHORIZED_ACTION=S32_PRODUCTION_ROLLOUT\nSTAGE_GROUP=CONTROL_PLANE_SYNC\n'
+   f'S32_RELEASE_FINGERPRINT={FP}\nRELEASE_SOURCE_SHA={SRC}\nCONTROL_PLANE_SHA={second}\n'
+   'EXPLICIT_APPROVAL=true\nCONSUMABLE_ONCE=true\nCAPACITY_HARD_ONLY_ACCEPTED=false\nPRODUCTION_WRITE_EXECUTED=false\n')
+  (p/f's32-rollout-authorization-{FP}-CONTROL_PLANE_SYNC-{second}-claim.env').write_text(body)
+  for f in p.glob('*.env'): f.chmod(0o600)
+  pre=pathlib.Path(td.name)/'pre.json'; drift=pathlib.Path(td.name)/'drift.json'; good=pathlib.Path(td.name)/'good.json'
+  facts(pre); facts(drift,'changed'); facts(good)
+  env=os.environ.copy(); env.update(BOOK_ID_SEARCH_REPO_ROOT=str(w))
+  # First attempt: POST facts drift → BLOCK after reset, START retained.
+  env.update(S32_SYNC_PRE_FACTS_JSON=str(pre),S32_SYNC_POST_FACTS_JSON=str(drift))
+  r1=sh(['bash',str(EXEC),'--execute-control-plane-sync',FP,SRC,second],w,env)
+  self.assertNotEqual(r1.returncode,0); self.assertIn('CONTROL_PLANE_RUNTIME_DRIFT',r1.stdout+r1.stderr)
+  start=p/f's32-rollout-{FP}-CONTROL_PLANE_SYNC-{second}.start.env'; result=p/f's32-rollout-{FP}-CONTROL_PLANE_SYNC-{second}.result.env'
+  self.assertTrue(start.exists()); self.assertFalse(result.exists())
+  self.assertEqual(subprocess.check_output(['git','rev-parse','HEAD'],cwd=w,text=True).strip(),second)
+  # Second attempt with healthy facts: still blocked as incomplete; the
+  # preflight fires before the already-at-target gate and before any reset.
+  env.update(S32_SYNC_POST_FACTS_JSON=str(good))
+  r2=sh(['bash',str(EXEC),'--execute-control-plane-sync',FP,SRC,second],w,env)
+  self.assertNotEqual(r2.returncode,0); self.assertIn('INCOMPLETE_CONTROL_PLANE_SYNC',r2.stdout+r2.stderr)
+  self.assertFalse(result.exists())
+  self.assertEqual(subprocess.check_output(['git','rev-parse','HEAD'],cwd=w,text=True).strip(),second)
 if __name__=='__main__': unittest.main()
