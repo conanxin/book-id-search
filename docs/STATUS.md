@@ -1,5 +1,16 @@
 # BOOK-ID-SEARCH status
 
+## S32 Production Rollout review fixes — PR #21 sync checkpoint
+
+- task_id: `S32_PRODUCTION_ROLLOUT_REVIEW_FIX_R1`; the previously local-only review fixes are now being synchronized onto `feat/s32-production-rollout`.
+- Capacity receipts are exact-release-bound before R2/R4/R6 start artifacts; stale fingerprint/source receipts fail closed as `CAPACITY_RELEASE_MISMATCH`.
+- R0 `MEILI_DOCUMENTS` is enforced through R2/R4/R5/R6 and R7 acceptance; count drift blocks the active stage.
+- R7 browser receipts now bind `RUNNER_VERSION=1` + control-plane source SHA and carry a canonical SHA-256 self-hash verified by terminal completion.
+- CI uses an explicitly provisioned Playwright-managed Chromium and runs the browser receipt producer regression before isolated rollout E2E.
+- Production remains untouched: `PRODUCTION_WRITE_AUTHORIZED=NO`; `PRODUCTION_CHANGED=NO`; `PRODUCTION_DEPLOYED=NO`; `M2_E_STARTED=NO`.
+- Next: exact-head CI + delta rereview. Do not merge or execute production stages from this checkpoint alone.
+
+
 ## S32 Production Rollout tooling — implementation complete on branch
 
 - task_id: `S32_PRODUCTION_ROLLOUT_EXECUTION_R1`; branch `feat/s32-production-rollout`; approved spec+plan implemented through R7 acceptance, explicit API rollback guard, and cross-stage planner.
