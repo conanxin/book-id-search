@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
+import json
 import pathlib
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DOCKERFILE = ROOT / 'apps/web/Dockerfile'
 BUILDER = ROOT / 'scripts/build-web-release-candidate.sh'
+TSCONFIG = ROOT / 'apps/web/tsconfig.json'
 
 class WebReleaseCandidateContractTests(unittest.TestCase):
     def setUp(self):
         self.dockerfile = DOCKERFILE.read_text()
         self.builder = BUILDER.read_text()
+        self.tsconfig = json.loads(TSCONFIG.read_text())
 
     def test_dockerfile_binds_source_and_s32_enablement(self):
         self.assertIn('ARG SOURCE_COMMIT', self.dockerfile)
@@ -27,6 +30,15 @@ class WebReleaseCandidateContractTests(unittest.TestCase):
     def test_builder_requires_source_reachable_from_reviewed_origin_main(self):
         self.assertIn('git merge-base --is-ancestor "$FULL_SHA" origin/main', self.builder)
         self.assertIn('source is not reachable from origin/main', self.builder)
+
+    def test_production_typecheck_excludes_test_only_sources(self):
+        excluded = set(self.tsconfig.get('exclude', []))
+        self.assertTrue({
+            'src/**/*.test.ts',
+            'src/**/*.test.tsx',
+            'src/**/*.spec.ts',
+            'src/**/*.spec.tsx',
+        }.issubset(excluded))
 
     def test_builder_records_capacity_evidence(self):
         for field in ('imageBytes', 'tarBytes', 'compressedBytes'):
