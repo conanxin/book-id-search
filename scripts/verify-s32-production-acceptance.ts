@@ -6,6 +6,7 @@ type AcceptanceOptions = {
   token: string;
   releaseFingerprint: string;
   backendOnly?: boolean;
+  expectedDocumentCount?: number;
 };
 
 export type AcceptanceResult = {
@@ -15,6 +16,7 @@ export type AcceptanceResult = {
   legacySearchRegression: "PASS";
   assessmentReplay: "PASS";
   backendAcceptance: "PASS";
+  meiliDocuments: number;
 };
 
 function trimSlash(value: string) {
@@ -64,7 +66,7 @@ async function privateRequest(
   return jsonRequest(`${base}/api/private/s32${path}`, { ...options, headers }, expected);
 }
 
-async function runLegacyChecks(apiBase: string, publicUrl: string) {
+async function runLegacyChecks(apiBase: string, publicUrl: string, expectedDocumentCount?: number) {
   const publicResponse = await fetch(publicUrl, { cache: "no-store" });
   if (!publicResponse.ok) throw new Error("PUBLIC_HTTP_FAILED");
 
@@ -74,6 +76,10 @@ async function runLegacyChecks(apiBase: string, publicUrl: string) {
   const stats = await jsonRequest(`${apiBase}/api/stats`);
   if (!stats || stats.isIndexing !== false || !Number.isFinite(stats.numberOfDocuments)) {
     throw new Error("STATS_CHECK_FAILED");
+  }
+  const documentCount = Number(stats.numberOfDocuments);
+  if (expectedDocumentCount !== undefined && documentCount !== expectedDocumentCount) {
+    throw new Error("MEILI_DOCUMENT_COUNT_DRIFT");
   }
 
   const probes = [
@@ -99,7 +105,7 @@ async function runLegacyChecks(apiBase: string, publicUrl: string) {
     }
   }
   if (!catalogBookId) throw new Error("ACCEPTANCE_CATALOG_BOOK_ID_MISSING");
-  return catalogBookId;
+  return { catalogBookId, documentCount };
 }
 
 function jsonBody(value: unknown): RequestInit {
@@ -123,14 +129,16 @@ export async function runProductionAcceptance(options: AcceptanceOptions): Promi
   const claimStatement = `Production acceptance claim ${short}.`;
   const reasoning = `Production acceptance assessment ${short}.`;
 
-  const catalogBookId = !options.backendOnly
-    ? await runLegacyChecks(apiBase, publicUrl)
+  const legacy = !options.backendOnly
+    ? await runLegacyChecks(apiBase, publicUrl, options.expectedDocumentCount)
     : await runLegacyChecks(
         apiBase,
         // Backend-only acceptance still proves the legacy API stays healthy, but skips
         // the public HTML fetch so it can run before the new Web is deployed.
         `${apiBase}/api/health`,
+        options.expectedDocumentCount,
       );
+  const catalogBookId = legacy.catalogBookId;
 
   const projects = await privateRequest(apiBase, token, "/projects");
   let project = Array.isArray(projects?.projects)
@@ -302,6 +310,7 @@ export async function runProductionAcceptance(options: AcceptanceOptions): Promi
     legacySearchRegression: "PASS",
     assessmentReplay: "PASS",
     backendAcceptance: "PASS",
+    meiliDocuments: legacy.documentCount,
   };
 }
 
@@ -314,6 +323,7 @@ export function formatAcceptanceResult(result: AcceptanceResult) {
     `LEGACY_SEARCH_REGRESSION=${result.legacySearchRegression}`,
     `ASSESSMENT_REPLAY=${result.assessmentReplay}`,
     `S32_BACKEND_ACCEPTANCE=${result.backendAcceptance}`,
+    `MEILI_DOCUMENTS=${result.meiliDocuments}`,
     "ACCEPTANCE_PROJECT_RETAINED=YES",
   ].join("\n");
 }
@@ -324,6 +334,11 @@ async function main() {
   const apiBaseUrl = process.env.S32_API_BASE_URL?.trim() || "http://127.0.0.1:3001";
   const publicUrl = process.env.S32_PUBLIC_URL?.trim() || "https://books.conanxin.com";
   const backendOnly = process.env.S32_ACCEPTANCE_BACKEND_ONLY === "true";
+  const expectedRaw = process.env.S32_EXPECTED_DOCUMENT_COUNT?.trim() || "";
+  const expectedDocumentCount = expectedRaw ? Number(expectedRaw) : undefined;
+  if (expectedRaw && (!Number.isInteger(expectedDocumentCount) || (expectedDocumentCount as number) < 0)) {
+    throw new Error("INVALID_EXPECTED_DOCUMENT_COUNT");
+  }
 
   const result = await runProductionAcceptance({
     apiBaseUrl,
@@ -331,6 +346,7 @@ async function main() {
     token,
     releaseFingerprint,
     backendOnly,
+    expectedDocumentCount,
   });
   process.stdout.write(formatAcceptanceResult(result) + "\n");
 }
