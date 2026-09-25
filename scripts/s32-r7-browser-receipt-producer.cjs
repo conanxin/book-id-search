@@ -20,6 +20,7 @@
 "use strict";
 
 const fs = require("fs");
+const { createHash } = require("crypto");
 const os = require("os");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
@@ -28,7 +29,9 @@ const MODE = process.argv[2] || "";
 const OUT = process.argv[3] || "";
 const FP = process.argv[4] || "";
 const PROJECT_ID = process.argv[5] || "";
-const RUNNER_SOURCE = process.argv[6] || "s32-r7-browser-receipt-producer";
+const RUNNER_SOURCE_SHA = process.argv[6] || process.env.S32_R7_RUNNER_SOURCE_SHA || "";
+const RUNNER_ID = "s32-r7-browser-receipt-producer";
+const RUNNER_VERSION = "1";
 
 function fail(reason) {
   process.stdout.write(`R7_BROWSER_RECEIPT=FAIL\nREASON=${reason}\n`);
@@ -38,6 +41,7 @@ function fail(reason) {
 if (!["fixture", "browser"].includes(MODE)) fail("INVALID_MODE");
 if (!/^[0-9a-f]{64}$/.test(FP)) fail("INVALID_FINGERPRINT");
 if (!/^[0-9a-f-]{36}$/.test(PROJECT_ID)) fail("INVALID_PROJECT_ID");
+if (!/^[0-9a-f]{40}$/.test(RUNNER_SOURCE_SHA)) fail("INVALID_RUNNER_SOURCE_SHA");
 if (!OUT) fail("MISSING_OUTPUT_PATH");
 
 // The receipt path must not pre-exist: producer runs are single-shot.
@@ -48,17 +52,33 @@ try {
 // Locate a Chromium binary (Playwright cache or system); drive it over the
 // DevTools protocol using Node's built-in WebSocket (no npm dependency).
 function findChromium() {
+  const override = (process.env.S32_R7_CHROMIUM || "").trim();
+  if (override) {
+    try { fs.accessSync(override, fs.constants.X_OK); return override; } catch { return null; }
+  }
+
   const home = process.env.HOME || "/root";
-  const candidates = [
-    path.join(home, ".cache/ms-playwright/chromium-1228/chrome-linux64/chrome"),
-    path.join(home, ".cache/ms-playwright/chromium_headless_shell-1228/chrome-linux64/headless_shell"),
-  ];
+  const cacheRoot = path.join(home, ".cache/ms-playwright");
+  const candidates = [];
+  try {
+    for (const entry of fs.readdirSync(cacheRoot, { withFileTypes: true })) {
+      if (!entry.isDirectory() || !/^chromium/.test(entry.name)) continue;
+      const base = path.join(cacheRoot, entry.name);
+      candidates.push(
+        path.join(base, "chrome-linux64/chrome"),
+        path.join(base, "chrome-linux/chrome"),
+        path.join(base, "chrome-headless-shell-linux64/chrome-headless-shell"),
+        path.join(base, "chrome-linux64/headless_shell"),
+      );
+    }
+  } catch { /* no Playwright cache */ }
+
   for (const p of candidates) {
     try { fs.accessSync(p, fs.constants.X_OK); return p; } catch { /* next */ }
   }
-  // Last resort: PATH.
-  const which = spawnSync("which", ["chromium", "chromium-browser", "google-chrome", "chrome"], { encoding: "utf8" });
-  if (which.status === 0) return which.stdout.trim().split("\n")[0];
+
+  const which = spawnSync("sh", ["-lc", "command -v chromium || command -v chromium-browser || command -v google-chrome || command -v chrome"], { encoding: "utf8" });
+  if (which.status === 0 && which.stdout.trim()) return which.stdout.trim().split("\n")[0];
   return null;
 }
 
@@ -214,7 +234,7 @@ async function produce() {
       const runnerSource = await evaluate(
         "document.documentElement.getAttribute('data-runner-source')",
       );
-      if (runnerSource !== RUNNER_SOURCE) fail("WRONG_RUNNER_SOURCE");
+      if (runnerSource !== RUNNER_ID) fail("WRONG_RUNNER_SOURCE");
 
       // Desktop checks (1440x900).
       await cdp.send("Emulation.setDeviceMetricsOverride", {
@@ -246,7 +266,7 @@ async function produce() {
       if (overflow.scrollWidth > overflow.clientWidth) fail("MOBILE_390_OVERFLOW");
 
       // Build the receipt purely from observed values.
-      const lines = [
+      const baseLines = [
         "STATUS=PASS",
         "STAGE=R7_WEB",
         `S32_RELEASE_FINGERPRINT=${FP}`,
@@ -254,19 +274,25 @@ async function produce() {
         "S32_WEB_ACCEPTANCE=PASS",
         "MOBILE_390x844=PASS",
         "NO_HORIZONTAL_OVERFLOW=PASS",
-        `RUNNER_SOURCE=${RUNNER_SOURCE}`,
+        `RUNNER_VERSION=${RUNNER_VERSION}`,
+        `RUNNER_SOURCE_SHA=${RUNNER_SOURCE_SHA}`,
+        `RUNNER_ID=${RUNNER_ID}`,
         `RUNNER_MODE=${MODE}`,
-        "",
       ];
 
       // Rule 3 — secret fields must never enter the receipt.
       const secretPattern = /(^|_)(TOKEN|PASSWORD|SECRET|DATABASE_URL)=/;
-      if (lines.some(l => secretPattern.test(l))) fail("SECRET_FIELD_PRESENT");
+      if (baseLines.some(l => secretPattern.test(l))) fail("SECRET_FIELD_PRESENT");
+
+      // Hash the canonical receipt body (all fields except RECEIPT_SHA256).
+      const baseBody = baseLines.join("\n") + "\n";
+      const receiptHash = createHash("sha256").update(baseBody, "utf8").digest("hex");
+      const receipt = baseBody + `RECEIPT_SHA256=${receiptHash}\n`;
 
       // Atomic write: temp file + rename, 0600.
       const dir = path.dirname(OUT);
       const tmp = path.join(dir, `.r7-web-receipt.${process.pid}.tmp`);
-      fs.writeFileSync(tmp, lines.join("\n"), { mode: 0o600 });
+      fs.writeFileSync(tmp, receipt, { mode: 0o600 });
       fs.chmodSync(tmp, 0o600);
       fs.renameSync(tmp, OUT);
 
