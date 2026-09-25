@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parent.parent
 PRODUCER = ROOT / "scripts" / "s32-r7-browser-receipt-producer.cjs"
 FP = "f" * 64
 PID = "11111111-1111-4111-8111-111111111111"
+CTRL = "c" * 40
 
 
 class ProducerTest(unittest.TestCase):
@@ -41,7 +42,7 @@ class ProducerTest(unittest.TestCase):
             import random
             env["S32_R7_FIXTURE_PORT"] = str(random.randint(20000, 29000))
         result = subprocess.run(
-            ["node", str(PRODUCER), "fixture", str(out or self.out), FP, project],
+            ["node", str(PRODUCER), "fixture", str(out or self.out), FP, project, CTRL],
             capture_output=True, text=True, env=env, timeout=120,
         )
         return result
@@ -59,23 +60,25 @@ class ProducerTest(unittest.TestCase):
         self.assertIn("S32_WEB_ACCEPTANCE=PASS", content)
         self.assertIn("MOBILE_390x844=PASS", content)
         self.assertIn("RUNNER_MODE=fixture", content)
+        self.assertIn("RUNNER_VERSION=1", content)
+        self.assertIn(f"RUNNER_SOURCE_SHA={CTRL}", content)
+        import hashlib
+        lines = content.splitlines()
+        receipt_hash = [line.split("=", 1)[1] for line in lines if line.startswith("RECEIPT_SHA256=")][0]
+        base = "\n".join(line for line in lines if not line.startswith("RECEIPT_SHA256=")) + "\n"
+        self.assertEqual(receipt_hash, hashlib.sha256(base.encode()).hexdigest())
 
-    def test_wrong_runner_source_fails_without_receipt(self):
-        # The fixture page hard-codes the default runner source; asking the
-        # producer to expect a different one must fail rule 1.
-        r = self.run_producer()
-        self.assertEqual(r.returncode, 0)
-        # Now rerun with a mismatched RUNNER_SOURCE argument.
+    def test_invalid_runner_source_sha_fails_without_receipt(self):
         out2 = Path(self.tmp.name) / "R7-b.web.env"
         env = dict(os.environ)
         import random
         env["S32_R7_FIXTURE_PORT"] = str(random.randint(20000, 29000))
         result = subprocess.run(
-            ["node", str(PRODUCER), "fixture", str(out2), FP, PID, "other-runner"],
+            ["node", str(PRODUCER), "fixture", str(out2), FP, PID, "not-a-commit"],
             capture_output=True, text=True, env=env, timeout=120,
         )
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("WRONG_RUNNER_SOURCE", result.stdout)
+        self.assertIn("INVALID_RUNNER_SOURCE_SHA", result.stdout)
         self.assertFalse(out2.exists())
 
     def test_tampered_project_id_fails_without_receipt(self):
