@@ -196,6 +196,21 @@ and writes a mode-600 `R7.api.env` partial receipt. It does **not** write the te
 
 Using the existing session-only S32 credential model, run an external real-browser acceptance against the public Web and the exact canary `PROJECT_ID` from `R7.api.env`.
 
+The reviewed receipt producer is the only supported way to emit the Web receipt. Run it from the exact control-plane checkout and bind the receipt to that commit:
+
+```bash
+S32_R7_BROWSER_URL=https://books.conanxin.com \
+node scripts/s32-r7-browser-receipt-producer.cjs \
+  browser \
+  "progress/s32-rollout-<fingerprint>-R7.web.env" \
+  "<S32_RELEASE_FINGERPRINT>" \
+  "<PROJECT_ID>" \
+  "<CONTROL_PLANE_SHA>"
+```
+
+The producer records `RUNNER_VERSION=1`, `RUNNER_SOURCE_SHA=<CONTROL_PLANE_SHA>`, and a canonical `RECEIPT_SHA256`. Terminal R7 completion recomputes that hash and rejects wrong source, project, fingerprint, or modified receipt content.
+
+
 The browser evidence must prove:
 
 ```text
