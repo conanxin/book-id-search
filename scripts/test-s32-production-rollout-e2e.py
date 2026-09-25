@@ -81,10 +81,10 @@ class RolloutE2E(unittest.TestCase):
             "WEB_CID=w1", "WEB_STARTED_AT=wt", "WEB_IMAGE=book-id-search-web:old", "WEB_IMAGE_ID=wi", "WEB_REVISION=" + "d" * 40,
             "API_CID=a1", "API_STARTED_AT=at", "API_IMAGE=book-id-search-api:old", "API_IMAGE_ID=ai", "API_REVISION=" + "e" * 40,
             "MEILISEARCH_CID=m1", "MEILISEARCH_STARTED_AT=mt", "MEILISEARCH_IMAGE_ID=mi",
-            "PUBLIC_HTTP_STATUS=200", "",
+            "MEILI_DOCUMENTS=5115734", "PUBLIC_HTTP_STATUS=200", "",
         ]))
         self.r1 = self.root / "progress/s32-r1.env"
-        self.r1.write_text(f"STATUS=PASS\nSTAGE=R1\nS32_RELEASE_FINGERPRINT={self.fp}\nCAPACITY_GATE=PASS_PREFERRED\n")
+        self.r1.write_text(f"STATUS=PASS\nSTAGE=R1\nS32_RELEASE_FINGERPRINT={self.fp}\nRELEASE_SOURCE_SHA={SRC}\nCAPACITY_GATE=PASS_PREFERRED\n")
         os.chmod(self.r0, 0o600); os.chmod(self.r1, 0o600)
         self.pg = self.root / "postgres.env"
         self.pg.write_text("S32_POSTGRES_DB=book_id_search_s32\nS32_POSTGRES_USER=s32_admin\nS32_POSTGRES_PASSWORD=ADMIN_SENTINEL\nS32_APP_PASSWORD=APP_SENTINEL\n")
@@ -120,7 +120,7 @@ class RolloutE2E(unittest.TestCase):
                 "api": {"cid":"a1","startedAt":"at","imageId":"ai"},
                 "meilisearch": {"cid":"m1","startedAt":"mt","imageId":"mi"},
             },
-            "httpStatus": 200,
+            "httpStatus": 200, "stats": {"numberOfDocuments": 5115734, "isIndexing": False},
         }))
         env = self.base_env.copy()
         env.update(
@@ -139,7 +139,7 @@ class RolloutE2E(unittest.TestCase):
 
         # R4 / R5 share one claim and exact release identity.
         self.authorize_claim("R4_R5")
-        cap4 = self.root / "r4-cap.env"; cap4.write_text("CAPACITY_GATE=PASS_PREFERRED\n")
+        cap4 = self.root / "r4-cap.env"; cap4.write_text(f"CAPACITY_GATE=PASS_PREFERRED\nS32_RELEASE_FINGERPRINT={self.fp}\nRELEASE_SOURCE_SHA={SRC}\n")
         r4post = self.root / "r4-post.json"
         r4post.write_text(json.dumps({
             "services":{
@@ -178,7 +178,7 @@ class RolloutE2E(unittest.TestCase):
 
         # R6 switches only the Web in test mode.
         self.authorize_claim("R6")
-        cap6 = self.root / "r6-cap.env"; cap6.write_text("CAPACITY_GATE=PASS_PREFERRED\n")
+        cap6 = self.root / "r6-cap.env"; cap6.write_text(f"CAPACITY_GATE=PASS_PREFERRED\nS32_RELEASE_FINGERPRINT={self.fp}\nRELEASE_SOURCE_SHA={SRC}\n")
         candidate = self.root / "web-candidate.json"
         candidate.write_text(json.dumps({
             "tag":"book-id-search-web:"+SRC, "imageId":"sha256:"+"4"*64,
@@ -201,7 +201,7 @@ class RolloutE2E(unittest.TestCase):
                 "api":{"cid":"api","startedAt":"at","imageId":"sha256:"+"2"*64,"revision":SRC},
                 "meilisearch":{"cid":"m","startedAt":"mt","imageId":"mi"},
                 "postgres":{"cid":"p","startedAt":"pt","imageId":"sha256:"+"9"*64},
-            },"httpStatus":200,
+            },"httpStatus":200, "stats":{"numberOfDocuments":5115734,"isIndexing":False},
             "searches":{k:{"status":"PASS"} for k in ("ISBN","SSID","DXID","title","author","publisher")},
         }))
         env.update(
@@ -225,6 +225,7 @@ class RolloutE2E(unittest.TestCase):
             "LEGACY_SEARCH_REGRESSION=PASS",
             "ASSESSMENT_REPLAY=PASS",
             "S32_BACKEND_ACCEPTANCE=PASS",
+            "MEILI_DOCUMENTS=5115734",
             "ACCEPTANCE_PROJECT_RETAINED=YES",
             "",
         ]))
@@ -244,7 +245,7 @@ class RolloutE2E(unittest.TestCase):
         producer = ROOT / "s32-r7-browser-receipt-producer.cjs"
         r = run([
             "node", str(producer), "fixture", str(web_receipt), self.fp,
-            "11111111-1111-4111-8111-111111111111",
+            "11111111-1111-4111-8111-111111111111", CTRL,
         ], env)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("R7_BROWSER_RECEIPT=PASS", r.stdout)
