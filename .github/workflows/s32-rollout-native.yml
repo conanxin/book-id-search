@@ -1,0 +1,69 @@
+name: S32 rollout native verification
+
+on:
+  push:
+    branches:
+      - feat/s32-production-rollout
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  verification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Install Playwright-managed Chromium
+        run: pnpm dlx playwright@1.55.0 install chromium
+      - name: Python rollout contracts
+        run: |
+          set -euo pipefail
+          python3 scripts/test-s32-release-manifest.py
+          python3 scripts/test-build-s32-api-release-candidate.py
+          python3 scripts/test-build-web-release-candidate.py
+          python3 scripts/test-s32-runtime-common.py
+          python3 scripts/test-plan-s32-production-baseline.py
+          python3 scripts/test-plan-s32-production-capacity.py
+          python3 scripts/test-s32-control-plane-sync.py
+          python3 scripts/test-s32-production-authorization.py
+          python3 scripts/test-s32-r7-browser-receipt-producer.py
+          python3 scripts/test-s32-api-rollback.py
+          python3 scripts/test-s32-production-roles.py
+          python3 scripts/test-execute-s32-r2-postgres.py
+          python3 scripts/test-execute-s32-r3-schema.py
+          python3 scripts/test-execute-s32-r4-r5.py
+          python3 scripts/test-execute-s32-r6-web.py
+          python3 scripts/test-execute-s32-r7-acceptance.py
+          python3 scripts/test-plan-s32-production-rollout.py
+          python3 scripts/test-s32-production-rollout-e2e.py
+      - name: R7 acceptance + scoped S32 suites
+        run: |
+          pnpm vitest run             scripts/verify-s32-production-acceptance.test.ts             apps/api/src/s32             apps/web/src/research
+      - name: Frozen schema static
+        run: pnpm s32:schema:static
+      - name: M2-C real PostgreSQL regression
+        run: pnpm s32:m2c:check
+      - name: M2-D real PostgreSQL gate
+        run: pnpm s32:m2d:check
+      - name: API build
+        run: pnpm --filter @book-id-search/api build
+      - name: Web build
+        run: pnpm --filter @book-id-search/web build
+      - name: Frozen SQL identity + diff check
+        run: |
+          git diff --exit-code 33448b0656e029cff50cdfe2d5b569281bd31f77..HEAD --             db/migrations/001_s32_core_schema.sql             db/tests/001_s32_schema_assertions.sql             db/tests/002_s32_negative_invariants.sql
+          git diff --check
+          echo FROZEN_SQL_CHANGED=NO
