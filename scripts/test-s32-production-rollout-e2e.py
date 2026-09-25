@@ -256,7 +256,7 @@ class RolloutE2E(unittest.TestCase):
         # The read-only planner must see the exact receipts emitted by executors.
         proc = run([
             sys.executable, str(PLANNER), "--state-dir", str(self.root/"progress"),
-            "--release-fingerprint", self.fp,
+            "--release-fingerprint", self.fp, "--release-source-sha", SRC,
         ], self.base_env)
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("STATUS=ROLLOUT_COMPLETE", proc.stdout)
