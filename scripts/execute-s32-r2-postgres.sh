@@ -51,6 +51,9 @@ case "$CAPACITY" in PASS_PREFERRED) ;; PASS_HARD_ONLY)
   [ "$(get_kv "$CLAIM" CAPACITY_HARD_ONLY_ACCEPTED || true)" = true ] || block HARD_ONLY_NOT_ACCEPTED ;;
   *) block R1_CAPACITY_NOT_ACCEPTABLE ;;
 esac
+[ "$(get_kv "$R1" S32_RELEASE_FINGERPRINT || true)" = "$FP" ] && [ "$(get_kv "$R1" RELEASE_SOURCE_SHA || true)" = "$SRC" ] || block CAPACITY_RELEASE_MISMATCH
+BASE_MEILI_DOCUMENTS="$(get_kv "$R0" MEILI_DOCUMENTS || true)"
+printf '%s' "$BASE_MEILI_DOCUMENTS" | grep -qE '^[0-9]+$' || block R0_MEILI_DOCUMENTS_INVALID
 [ "$(get_kv "$CLAIM" STAGE_GROUP || true)" = R2_R3 ] || block R2_R3_CLAIM_MISMATCH
 [ "$(get_kv "$CLAIM" S32_RELEASE_FINGERPRINT || true)" = "$FP" ] || block R2_R3_CLAIM_MISMATCH
 [ "$(get_kv "$CLAIM" RELEASE_SOURCE_SHA || true)" = "$SRC" ] || block R2_R3_CLAIM_MISMATCH
@@ -116,7 +119,8 @@ if [ -z "$POST_JSON" ]; then
   TMP_POST="$(mktemp)"; POST_JSON="$TMP_POST"
   python3 "$SCRIPT_DIR/plan-s32-production-baseline.py" --json-out "$POST_JSON" >/dev/null || block POST_R0_FAILED
 fi
-python3 - "$R0" "$POST_JSON" <<'PY' || block LEGACY_RUNTIME_DRIFT
+VERIFY_ERR="$(mktemp)"
+if ! python3 - "$R0" "$POST_JSON" 2>"$VERIFY_ERR" <<'PY'
 import json,sys
 r0={}
 for line in open(sys.argv[1]):
@@ -126,9 +130,17 @@ post=json.load(open(sys.argv[2]))
 for svc,prefix in [('web','WEB'),('api','API'),('meilisearch','MEILISEARCH')]:
  s=post['services'][svc]
  for f,k in [('cid','CID'),('startedAt','STARTED_AT'),('imageId','IMAGE_ID')]:
-  if s[f] != r0[f'{prefix}_{k}']: raise SystemExit(1)
-if post.get('httpStatus') != 200: raise SystemExit(1)
+  if s[f] != r0[f'{prefix}_{k}']: raise SystemExit('LEGACY_RUNTIME_DRIFT')
+if post.get('httpStatus') != 200: raise SystemExit('PUBLIC_HTTP_FAILED')
+if str(post.get('stats',{}).get('numberOfDocuments')) != r0.get('MEILI_DOCUMENTS'):
+ raise SystemExit('MEILI_DOCUMENT_COUNT_DRIFT')
 PY
+then
+  reason="$(tail -1 "$VERIFY_ERR")"
+  rm -f "$VERIFY_ERR"
+  block "${reason:-LEGACY_RUNTIME_DRIFT}"
+fi
+rm -f "$VERIFY_ERR"
 [ -z "$TMP_POST" ] || rm -f "$TMP_POST"
 
 if [ "${S32_R2_TEST_MODE:-false}" != true ]; then
@@ -140,7 +152,7 @@ if [ "${S32_R2_TEST_MODE:-false}" != true ]; then
 fi
 
 TMP_RESULT="$(mktemp "$ROOT/progress/.r2-result.XXXXXX")"
-printf 'STATUS=PASS\nSTAGE=R2\nR2_POSTGRES=PASS\nS32_RELEASE_FINGERPRINT=%s\nRELEASE_SOURCE_SHA=%s\nPG_IMAGE_ID=%s\nPGDATA=%s\nLEGACY_RUNTIME_UNCHANGED=PASS\n' "$FP" "$SRC" "$PG_IMAGE_ID" "$PGDATA" > "$TMP_RESULT"
+printf 'STATUS=PASS\nSTAGE=R2\nR2_POSTGRES=PASS\nS32_RELEASE_FINGERPRINT=%s\nRELEASE_SOURCE_SHA=%s\nMEILI_DOCUMENTS=%s\nPG_IMAGE_ID=%s\nPGDATA=%s\nLEGACY_RUNTIME_UNCHANGED=PASS\n' "$FP" "$SRC" "$BASE_MEILI_DOCUMENTS" "$PG_IMAGE_ID" "$PGDATA" > "$TMP_RESULT"
 chmod 600 "$TMP_RESULT"
 ln -- "$TMP_RESULT" "$RESULT" 2>/dev/null || { rm -f "$TMP_RESULT"; block RESULT_WRITE_FAILED; }
 rm -f "$TMP_RESULT"
