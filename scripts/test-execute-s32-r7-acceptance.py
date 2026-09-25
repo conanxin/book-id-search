@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import hashlib
 import os
 import pathlib
 import subprocess
@@ -51,9 +52,11 @@ class Env:
         self.man = self.root / "manifest.json"
         self.man.write_text(json.dumps(manifest()), encoding="utf-8")
         self.fp = fp(self.man)
+        self.r0 = self.root / "r0.env"
+        self.r0.write_text("MEILI_DOCUMENTS=5115734\n", encoding="utf-8")
         self.r6 = self.root / "progress" / f"s32-rollout-{self.fp}-R6.result.env"
         self.r6.write_text(
-            f"STATUS=PASS\nSTAGE=R6\nR6_WEB=PASS\nS32_RELEASE_FINGERPRINT={self.fp}\n",
+            f"STATUS=PASS\nSTAGE=R6\nR6_WEB=PASS\nS32_RELEASE_FINGERPRINT={self.fp}\nRELEASE_SOURCE_SHA={SRC}\nMEILI_DOCUMENTS=5115734\n",
             encoding="utf-8",
         )
         os.chmod(self.r6, 0o600)
@@ -73,6 +76,7 @@ class Env:
                 "LEGACY_SEARCH_REGRESSION=PASS",
                 "ASSESSMENT_REPLAY=PASS",
                 "S32_BACKEND_ACCEPTANCE=PASS",
+                "MEILI_DOCUMENTS=5115734",
                 "ACCEPTANCE_PROJECT_RETAINED=YES",
                 "",
             ]),
@@ -105,6 +109,7 @@ class Env:
         e = os.environ.copy()
         e.update(
             BOOK_ID_SEARCH_REPO_ROOT=str(self.root),
+            S32_R0_RECEIPT=str(self.r0),
             S32_RELEASE_MANIFEST_JSON=str(self.man),
             S32_API_ENV_FILE=str(self.api),
             S32_R7_TEST_MODE="true",
@@ -122,21 +127,24 @@ class Env:
             env=self.env(**extra),
         )
 
-    def write_web_receipt(self, project_id="11111111-1111-4111-8111-111111111111"):
+    def write_web_receipt(self, project_id="11111111-1111-4111-8111-111111111111", source_sha=CTRL):
         path = self.root / "progress" / f"s32-rollout-{self.fp}-R7.web.env"
-        path.write_text(
-            "\n".join([
-                "STATUS=PASS",
-                "STAGE=R7_WEB",
-                f"S32_RELEASE_FINGERPRINT={self.fp}",
-                f"PROJECT_ID={project_id}",
-                "S32_WEB_ACCEPTANCE=PASS",
-                "MOBILE_390x844=PASS",
-                "NO_HORIZONTAL_OVERFLOW=PASS",
-                "",
-            ]),
-            encoding="utf-8",
-        )
+        base_lines = [
+            "STATUS=PASS",
+            "STAGE=R7_WEB",
+            f"S32_RELEASE_FINGERPRINT={self.fp}",
+            f"PROJECT_ID={project_id}",
+            "S32_WEB_ACCEPTANCE=PASS",
+            "MOBILE_390x844=PASS",
+            "NO_HORIZONTAL_OVERFLOW=PASS",
+            "RUNNER_VERSION=1",
+            f"RUNNER_SOURCE_SHA={source_sha}",
+            "RUNNER_ID=s32-r7-browser-receipt-producer",
+            "RUNNER_MODE=fixture",
+        ]
+        base = "\n".join(base_lines) + "\n"
+        digest = hashlib.sha256(base.encode()).hexdigest()
+        path.write_text(base + f"RECEIPT_SHA256={digest}\n", encoding="utf-8")
         os.chmod(path, 0o600)
         return path
 
@@ -223,6 +231,29 @@ class R7ExecutorTests(unittest.TestCase):
         r = x.complete()
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("R7_WEB_ACCEPTANCE_CONTRACT_INVALID", r.stdout + r.stderr)
+
+    def test_r7_rejects_meili_count_drift(self):
+        x = Env(); self.addCleanup(x.close)
+        x.acceptance.write_text(x.acceptance.read_text().replace("MEILI_DOCUMENTS=5115734", "MEILI_DOCUMENTS=5115735"))
+        r = x.run_api()
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("R7_ACCEPTANCE_CONTRACT_INVALID", r.stdout + r.stderr)
+
+    def test_web_receipt_wrong_source_or_tampered_hash_blocks(self):
+        x = Env(); self.addCleanup(x.close)
+        self.assertEqual(x.run_api().returncode, 0)
+        x.write_web_receipt(source_sha="d" * 40)
+        r = x.complete()
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("R7_WEB_ACCEPTANCE_CONTRACT_INVALID", r.stdout + r.stderr)
+
+        y = Env(); self.addCleanup(y.close)
+        self.assertEqual(y.run_api().returncode, 0)
+        p = y.write_web_receipt()
+        p.write_text(p.read_text().replace("MOBILE_390x844=PASS", "MOBILE_390x844=FAIL"))
+        r = y.complete()
+        self.assertNotEqual(r.returncode, 0)
+        self.assertTrue("R7_WEB_ACCEPTANCE_CONTRACT_INVALID" in r.stdout + r.stderr or "R7_WEB_ACCEPTANCE_HASH_INVALID" in r.stdout + r.stderr)
 
     def test_no_destructive_or_global_compose_commands(self):
         text = EXEC.read_text() if EXEC.exists() else ""
