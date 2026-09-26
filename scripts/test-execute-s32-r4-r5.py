@@ -29,6 +29,7 @@ class Env:
 class T(unittest.TestCase):
  def test_r4_changes_api_only_and_s32_stays_disabled(self):
   x=Env(); self.addCleanup(x.close); r=x.r4(); self.assertEqual(r.returncode,0,r.stdout+r.stderr); self.assertIn('R4_API_DARK=PASS',r.stdout); log=x.log.read_text(); self.assertIn('--no-build --no-deps api',log); self.assertIn('S32_FEATURES_ENABLED=false',log); self.assertNotIn('TOKEN_SENTINEL',log)
+  receipt=next(x.root.glob('progress/*R4.result.env')).read_text(); self.assertIn(f'API_IMAGE_ID={x.api_observed}',receipt); self.assertIn('API_CONFIG_DIGEST=sha256:'+'2'*64,receipt); self.assertIn('API_IDENTITY_MODE=MANIFEST_DIGEST',receipt)
  def test_r4_r5_compose_env_files_preserve_production_precedence(self):
   x=Env(); self.addCleanup(x.close)
   r=x.r4(); self.assertEqual(r.returncode,0,r.stdout+r.stderr)
@@ -46,7 +47,6 @@ class T(unittest.TestCase):
   r=x.r4(); self.assertNotEqual(r.returncode,0); self.assertIn('REQUIRED_INPUT_MISSING',r.stdout+r.stderr)
   self.assertFalse(any(x.root.glob('progress/*R4.start.env')))
 
-  receipt=next(x.root.glob('progress/*R4.result.env')).read_text(); self.assertIn(f'API_IMAGE_ID={x.api_observed}',receipt); self.assertIn('API_CONFIG_DIGEST=sha256:'+'2'*64,receipt); self.assertIn('API_IDENTITY_MODE=MANIFEST_DIGEST',receipt)
  def test_r4_requires_fresh_capacity_and_exact_api_identity(self):
   x=Env(); self.addCleanup(x.close); x.cap.write_text('CAPACITY_GATE=BLOCKED_CAPACITY\n'); r=x.r4(); self.assertNotEqual(r.returncode,0); self.assertIn('R4_CAPACITY_NOT_PASS',r.stdout+r.stderr)
   y=Env(); self.addCleanup(y.close); f=json.loads(y.r4post.read_text()); f['services']['api']['revision']='f'*40; y.r4post.write_text(json.dumps(f)); r=y.r4(); self.assertNotEqual(r.returncode,0); self.assertIn('API_RELEASE_IDENTITY_MISMATCH',r.stdout+r.stderr)
