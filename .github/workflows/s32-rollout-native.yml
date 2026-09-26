@@ -44,6 +44,7 @@ jobs:
           python3 scripts/test-s32-api-rollback.py
           python3 scripts/test-s32-production-baseline-with-grace.py
           python3 scripts/test-recover-s32-api-rollback.py
+          python3 scripts/test-recover-s32-r4-after-rollback.py
           python3 scripts/test-s32-production-roles.py
           python3 scripts/test-execute-s32-r2-postgres.py
           python3 scripts/test-recover-s32-r2-postgres.py
