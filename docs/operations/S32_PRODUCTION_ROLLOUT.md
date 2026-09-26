@@ -88,6 +88,8 @@ Although CONTROL_PLANE_SYNC may repeat within one release, each CTRL authorizati
 
 An INCOMPLETE R2 (start receipt present, terminal result absent) is never auto-retried. The only permitted closure is a separately and explicitly authorized **verify-only R2 recovery** (`recover-s32-r2-postgres.sh --recover-r2-verify-only <FP> <SRC> <CTRL> <RECOVERY_TOOL_SHA>`), applicable strictly when: the R2 START exists and binds the release identity; no R2 RESULT exists; PostgreSQL is already healthy on the exact image with no host ports; PGDATA is already initialized; and no R3 artifact exists. The recovery re-verifies everything read-only (canonical receipts, manifest, image identity incl. RepoDigests, container by compose labels, legacy runtime vs canonical R0, empty S32 DB state) and its single write is the terminal `R2.result.env` marked `R2_RECOVERY_MODE=VERIFY_ONLY` with the START sha256 and the reviewed recovery-tool SHA. It must never restart, rebuild, or modify the database.
 
+For an in-flight incident whose retained R2 START and R2_R3 claim are bound to the current control-plane SHA, **do not merge or CONTROL_PLANE_SYNC recovery tooling first**. Review the exact recovery-tool head, explicitly authorize the verify-only recovery, and execute that tool from an external exact-head bundle while the production checkout remains at the START/claim `CONTROL_PLANE_SHA`. After the missing R2 terminal receipt is safely closed, STOP. Any R3 continuation needs its own explicit decision; merge/sync of the recovery tooling belongs later, before the next rollout stage that requires it.
+
 ## R0 / R1 read-only preflight
 
 R0 must freshly record:
