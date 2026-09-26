@@ -3,9 +3,9 @@ set -euo pipefail
 block(){ printf 'STATUS=BLOCKED\nBLOCK_REASON=%s\nR4_API_DARK=BLOCKED\n' "$1"; exit 1; }
 [ "$#" -eq 4 ] && [ "$1" = --execute-r4 ] || block INVALID_ARGUMENTS
 FP="$2"; SRC="$3"; CTRL="$4"; SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"; ROOT="${BOOK_ID_SEARCH_REPO_ROOT:-/opt/book-id-search}"
-R0="${S32_R0_RECEIPT:-$ROOT/progress/s32-r0.env}"; R3="${S32_R3_RECEIPT:-$ROOT/progress/s32-rollout-${FP}-R3.result.env}"; CAP="${S32_R4_CAPACITY_RECEIPT:-$ROOT/progress/s32-r4-capacity.env}"; MAN="${S32_RELEASE_MANIFEST_JSON:-$ROOT/progress/s32-release-manifest.json}"; PG_ENV="${S32_POSTGRES_ENV_FILE:-/opt/book-id-search-runtime/s32/${FP}/postgres.env}"; CLAIM="$ROOT/progress/s32-rollout-authorization-${FP}-R4_R5-claim.env"; START="$ROOT/progress/s32-rollout-${FP}-R4.start.env"; RESULT="$ROOT/progress/s32-rollout-${FP}-R4.result.env"
+R0="${S32_R0_RECEIPT:-$ROOT/progress/s32-r0.env}"; R3="${S32_R3_RECEIPT:-$ROOT/progress/s32-rollout-${FP}-R3.result.env}"; CAP="${S32_R4_CAPACITY_RECEIPT:-$ROOT/progress/s32-r4-capacity.env}"; MAN="${S32_RELEASE_MANIFEST_JSON:-$ROOT/progress/s32-release-manifest.json}"; PROD_ENV="${S32_PRODUCTION_ENV_FILE:-$ROOT/.env}"; PG_ENV="${S32_POSTGRES_ENV_FILE:-/opt/book-id-search-runtime/s32/${FP}/postgres.env}"; CLAIM="$ROOT/progress/s32-rollout-authorization-${FP}-R4_R5-claim.env"; START="$ROOT/progress/s32-rollout-${FP}-R4.start.env"; RESULT="$ROOT/progress/s32-rollout-${FP}-R4.result.env"
 get(){ local f="$1" k="$2" n; n="$(grep -cE "^${k}=" "$f" 2>/dev/null||true)"; [ "$n" = 1 ] || return 1; grep -E "^${k}=" "$f"|head -1|cut -d= -f2-; }
-for f in "$R0" "$R3" "$CAP" "$MAN" "$CLAIM" "$PG_ENV"; do [ -f "$f" ] && [ ! -L "$f" ] || block REQUIRED_INPUT_MISSING; done
+for f in "$R0" "$R3" "$CAP" "$MAN" "$CLAIM" "$PROD_ENV" "$PG_ENV"; do [ -f "$f" ] && [ ! -L "$f" ] || block REQUIRED_INPUT_MISSING; done
 [ "$(stat -c '%a' "$CLAIM")" = 600 ] || block R4_R5_CLAIM_UNSAFE_MODE
 [ "$(stat -c '%a' "$PG_ENV")" = 600 ] || block POSTGRES_ENV_UNSAFE
 [ "$(get "$R3" R3_SCHEMA || true)" = PASS ] && [ "$(get "$R3" S32_RELEASE_FINGERPRINT || true)" = "$FP" ] || block R3_NOT_PASS
@@ -34,7 +34,7 @@ else
   case "$API_IDENTITY_MODE" in CONFIG_DIGEST|MANIFEST_DIGEST) ;; *) block API_RELEASE_IDENTITY_MISMATCH;; esac
 fi
 umask 077; T="$(mktemp "$ROOT/progress/.r4-start.XXXXXX")"; printf 'STATUS=STARTED\nSTAGE=R4\nS32_RELEASE_FINGERPRINT=%s\n' "$FP">"$T"; chmod 600 "$T"; ln -- "$T" "$START" || { rm -f "$T"; block INCOMPLETE_R4; }; rm -f "$T"
-CMD=(docker compose --project-directory "$ROOT" --env-file "$PG_ENV" -f "$ROOT/docker-compose.yml" -f "$ROOT/docker-compose.override.yml" -f "$API_OVERRIDE" -f "$WEB_OVERRIDE" -f "$OVERRIDE" up -d --no-build --no-deps api)
+CMD=(docker compose --project-directory "$ROOT" --env-file "$PROD_ENV" --env-file "$PG_ENV" -f "$ROOT/docker-compose.yml" -f "$ROOT/docker-compose.override.yml" -f "$API_OVERRIDE" -f "$WEB_OVERRIDE" -f "$OVERRIDE" up -d --no-build --no-deps api)
 if [ "${S32_R4_R5_TEST_MODE:-false}" = true ]; then printf 'S32_FEATURES_ENABLED=false S32_API_IMAGE=%s ' "$API_TAG" >>"${S32_R4_R5_COMMAND_LOG:?}"; printf '%q ' "${CMD[@]}" >>"$S32_R4_R5_COMMAND_LOG"; printf '\n' >>"$S32_R4_R5_COMMAND_LOG"; POST="${S32_R4_POST_FACTS_JSON:?}"; else sudo -n env S32_FEATURES_ENABLED=false S32_DATABASE_URL= S32_PRIVATE_API_TOKEN= "S32_API_IMAGE=$API_TAG" "S32_POSTGRES_IMAGE=$PG_IMAGE" "${CMD[@]}"; POST="$(mktemp)"; python3 "$SCRIPT_DIR/plan-s32-production-baseline.py" --json-out "$POST" >/dev/null || block R4_POST_BASELINE_FAILED; code="$(curl -sS -o /dev/null -w '%{http_code}' https://books.conanxin.com/api/private/s32/projects || true)"; [ "$code" = 404 ] || block S32_NOT_DISABLED; fi
 VERIFY_ERR="$(mktemp)"
 if ! python3 - "$R0" "$POST" "$API_OBSERVED_ID" "$SRC" 2>"$VERIFY_ERR" <<'PY'
