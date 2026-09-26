@@ -10,6 +10,7 @@ class Env:
  def __init__(self):
   self.t=tempfile.TemporaryDirectory(); self.root=pathlib.Path(self.t.name); (self.root/'progress').mkdir(); (self.root/'deploy').mkdir(); (self.root/'docker-compose.yml').write_text('services: {}\n'); (self.root/'docker-compose.override.yml').write_text('services: {}\n'); (self.root/'deploy/s32-production.override.yml').write_text('services: {}\n')
   self.man=self.root/'manifest.json'; self.man.write_text(json.dumps(manifest())); self.fp=fp(self.man)
+  self.prod=self.root/'.env'; self.prod.write_text('MEILI_MASTER_KEY=PROD_MEILI_KEY\nMEILI_INDEX=books\nWEREAD_OVERLAY_ENABLED=true\n')
   self.r0=self.root/'r0.env'; self.r0.write_text('\n'.join(['R0_FINAL=PASS','WEB_CID=w1','WEB_STARTED_AT=wt','WEB_IMAGE_ID=wi','WEB_REVISION='+'d'*40,'API_CID=a1','API_STARTED_AT=at','API_IMAGE=book-id-search-api:old','API_IMAGE_ID=oldai','API_REVISION='+'e'*40,'MEILISEARCH_CID=m1','MEILISEARCH_STARTED_AT=mt','MEILISEARCH_IMAGE_ID=mi','MEILI_DOCUMENTS=5115734','PUBLIC_HTTP_STATUS=200'])+'\n')
   self.r3=self.root/'progress'/f's32-rollout-{self.fp}-R3.result.env'; self.r3.write_text(f'STATUS=PASS\nR3_SCHEMA=PASS\nS32_RELEASE_FINGERPRINT={self.fp}\n'); os.chmod(self.r3,0o600)
   self.cap=self.root/'r4-cap.env'; self.cap.write_text(f'CAPACITY_GATE=PASS_PREFERRED\nS32_RELEASE_FINGERPRINT={self.fp}\nRELEASE_SOURCE_SHA={SRC}\n')
@@ -22,13 +23,30 @@ class Env:
   self.log=self.root/'cmd.log'
  def close(self): self.t.cleanup()
  def env(self):
-  e=os.environ.copy(); e.update(BOOK_ID_SEARCH_REPO_ROOT=str(self.root),S32_R0_RECEIPT=str(self.r0),S32_R3_RECEIPT=str(self.r3),S32_R4_CAPACITY_RECEIPT=str(self.cap),S32_RELEASE_MANIFEST_JSON=str(self.man),S32_POSTGRES_ENV_FILE=str(self.pg),S32_API_ENV_FILE=str(self.api),S32_R4_R5_TEST_MODE='true',S32_R4_POST_FACTS_JSON=str(self.r4post),S32_R5_POST_FACTS_JSON=str(self.r5post),S32_R4_R5_COMMAND_LOG=str(self.log),S32_R4_R5_FAKE_API_OBSERVED_ID=self.api_observed,S32_R4_R5_FAKE_API_IDENTITY_MODE='MANIFEST_DIGEST'); return e
+  e=os.environ.copy(); e.update(BOOK_ID_SEARCH_REPO_ROOT=str(self.root),S32_PRODUCTION_ENV_FILE=str(self.prod),S32_R0_RECEIPT=str(self.r0),S32_R3_RECEIPT=str(self.r3),S32_R4_CAPACITY_RECEIPT=str(self.cap),S32_RELEASE_MANIFEST_JSON=str(self.man),S32_POSTGRES_ENV_FILE=str(self.pg),S32_API_ENV_FILE=str(self.api),S32_R4_R5_TEST_MODE='true',S32_R4_POST_FACTS_JSON=str(self.r4post),S32_R5_POST_FACTS_JSON=str(self.r5post),S32_R4_R5_COMMAND_LOG=str(self.log),S32_R4_R5_FAKE_API_OBSERVED_ID=self.api_observed,S32_R4_R5_FAKE_API_IDENTITY_MODE='MANIFEST_DIGEST'); return e
  def r4(self): return subprocess.run(['bash',str(R4),'--execute-r4',self.fp,SRC,CTRL],text=True,capture_output=True,env=self.env())
  def r5(self): return subprocess.run(['bash',str(R5),'--execute-r5',self.fp,SRC,CTRL],text=True,capture_output=True,env=self.env())
 class T(unittest.TestCase):
  def test_r4_changes_api_only_and_s32_stays_disabled(self):
   x=Env(); self.addCleanup(x.close); r=x.r4(); self.assertEqual(r.returncode,0,r.stdout+r.stderr); self.assertIn('R4_API_DARK=PASS',r.stdout); log=x.log.read_text(); self.assertIn('--no-build --no-deps api',log); self.assertIn('S32_FEATURES_ENABLED=false',log); self.assertNotIn('TOKEN_SENTINEL',log)
   receipt=next(x.root.glob('progress/*R4.result.env')).read_text(); self.assertIn(f'API_IMAGE_ID={x.api_observed}',receipt); self.assertIn('API_CONFIG_DIGEST=sha256:'+'2'*64,receipt); self.assertIn('API_IDENTITY_MODE=MANIFEST_DIGEST',receipt)
+ def test_r4_r5_compose_env_files_preserve_production_precedence(self):
+  x=Env(); self.addCleanup(x.close)
+  r=x.r4(); self.assertEqual(r.returncode,0,r.stdout+r.stderr)
+  line=x.log.read_text().splitlines()[0]
+  self.assertIn(str(x.prod),line); self.assertIn(str(x.pg),line)
+  self.assertLess(line.index(str(x.prod)),line.index(str(x.pg)))
+  r=x.r5(); self.assertEqual(r.returncode,0,r.stdout+r.stderr)
+  line=x.log.read_text().splitlines()[-1]
+  self.assertIn(str(x.prod),line); self.assertIn(str(x.pg),line); self.assertIn(str(x.api),line)
+  self.assertLess(line.index(str(x.prod)),line.index(str(x.pg)))
+  self.assertLess(line.index(str(x.pg)),line.index(str(x.api)))
+
+ def test_r4_blocks_if_production_env_is_missing_before_start(self):
+  x=Env(); self.addCleanup(x.close); x.prod.unlink()
+  r=x.r4(); self.assertNotEqual(r.returncode,0); self.assertIn('REQUIRED_INPUT_MISSING',r.stdout+r.stderr)
+  self.assertFalse(any(x.root.glob('progress/*R4.start.env')))
+
  def test_r4_requires_fresh_capacity_and_exact_api_identity(self):
   x=Env(); self.addCleanup(x.close); x.cap.write_text('CAPACITY_GATE=BLOCKED_CAPACITY\n'); r=x.r4(); self.assertNotEqual(r.returncode,0); self.assertIn('R4_CAPACITY_NOT_PASS',r.stdout+r.stderr)
   y=Env(); self.addCleanup(y.close); f=json.loads(y.r4post.read_text()); f['services']['api']['revision']='f'*40; y.r4post.write_text(json.dumps(f)); r=y.r4(); self.assertNotEqual(r.returncode,0); self.assertIn('API_RELEASE_IDENTITY_MISMATCH',r.stdout+r.stderr)

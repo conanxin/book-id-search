@@ -188,6 +188,9 @@ Release-scoped secret files:
 
 Both secret files must be regular, non-symlink, mode-600 files. R2–R5 use the same release-scoped `postgres.env`; do not create an alternate repo-local PostgreSQL secret file.
 
+
+For R4/R5 Compose interpolation, the existing production project `.env` remains the base environment and must be supplied explicitly before the release-scoped env files. R4 uses `.env -> postgres.env`; R5 uses `.env -> postgres.env -> api.env`. This preserves existing production values such as Meilisearch/WeRead settings while allowing later S32-specific env files to override only their scoped keys. Supplying a release env file alone must never cause production interpolation to fall back to development defaults.
+
 - no host PostgreSQL port;
 - no auto-created bind path;
 - `s32_admin` is bootstrap/admin only;

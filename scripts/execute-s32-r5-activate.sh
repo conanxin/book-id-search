@@ -2,7 +2,7 @@
 set -euo pipefail
 block(){ printf 'STATUS=BLOCKED\nBLOCK_REASON=%s\nR5_S32_ACTIVATION=BLOCKED\n' "$1"; exit 1; }
 [ "$#" -eq 4 ] && [ "$1" = --execute-r5 ] || block INVALID_ARGUMENTS
-FP="$2"; SRC="$3"; CTRL="$4"; SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"; ROOT="${BOOK_ID_SEARCH_REPO_ROOT:-/opt/book-id-search}"; R0="${S32_R0_RECEIPT:-$ROOT/progress/s32-r0.env}"; R4="$ROOT/progress/s32-rollout-${FP}-R4.result.env"; CLAIM="$ROOT/progress/s32-rollout-authorization-${FP}-R4_R5-claim.env"; MAN="${S32_RELEASE_MANIFEST_JSON:-$ROOT/progress/s32-release-manifest.json}"; PG_ENV="${S32_POSTGRES_ENV_FILE:-/opt/book-id-search-runtime/s32/${FP}/postgres.env}"; API_ENV="${S32_API_ENV_FILE:-/opt/book-id-search-runtime/s32/${FP}/api.env}"; START="$ROOT/progress/s32-rollout-${FP}-R5.start.env"; RESULT="$ROOT/progress/s32-rollout-${FP}-R5.result.env"
+FP="$2"; SRC="$3"; CTRL="$4"; SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"; ROOT="${BOOK_ID_SEARCH_REPO_ROOT:-/opt/book-id-search}"; R0="${S32_R0_RECEIPT:-$ROOT/progress/s32-r0.env}"; R4="$ROOT/progress/s32-rollout-${FP}-R4.result.env"; CLAIM="$ROOT/progress/s32-rollout-authorization-${FP}-R4_R5-claim.env"; MAN="${S32_RELEASE_MANIFEST_JSON:-$ROOT/progress/s32-release-manifest.json}"; PROD_ENV="${S32_PRODUCTION_ENV_FILE:-$ROOT/.env}"; PG_ENV="${S32_POSTGRES_ENV_FILE:-/opt/book-id-search-runtime/s32/${FP}/postgres.env}"; API_ENV="${S32_API_ENV_FILE:-/opt/book-id-search-runtime/s32/${FP}/api.env}"; START="$ROOT/progress/s32-rollout-${FP}-R5.start.env"; RESULT="$ROOT/progress/s32-rollout-${FP}-R5.result.env"
 get(){ local f="$1" k="$2" n; n="$(grep -cE "^${k}=" "$f" 2>/dev/null||true)"; [ "$n" = 1 ] || return 1; grep -E "^${k}=" "$f"|head -1|cut -d= -f2-; }; secret(){ get "$API_ENV" "$1"; }
 [ -f "$R0" ] && [ ! -L "$R0" ] || block R0_RECEIPT_MISSING
 [ -f "$R4" ] && [ ! -L "$R4" ] || block R4_RECEIPT_MISSING
@@ -11,6 +11,7 @@ get(){ local f="$1" k="$2" n; n="$(grep -cE "^${k}=" "$f" 2>/dev/null||true)"; [
 [ "$(get "$CLAIM" STAGE_GROUP || true)" = R4_R5 ] && [ "$(get "$CLAIM" S32_RELEASE_FINGERPRINT || true)" = "$FP" ] && [ "$(get "$CLAIM" RELEASE_SOURCE_SHA || true)" = "$SRC" ] && [ "$(get "$CLAIM" CONTROL_PLANE_SHA || true)" = "$CTRL" ] || block R4_R5_CLAIM_MISMATCH
 BASE_MEILI_DOCUMENTS="$(get "$R0" MEILI_DOCUMENTS || true)"; printf '%s' "$BASE_MEILI_DOCUMENTS" | grep -qE '^[0-9]+$' || block R0_MEILI_DOCUMENTS_INVALID
 [ -f "$API_ENV" ] && [ ! -L "$API_ENV" ] && [ "$(stat -c '%a' "$API_ENV")" = 600 ] || block API_ENV_UNSAFE
+[ -f "$PROD_ENV" ] && [ ! -L "$PROD_ENV" ] || block PRODUCTION_ENV_UNSAFE
 [ -f "$PG_ENV" ] && [ ! -L "$PG_ENV" ] && [ "$(stat -c '%a' "$PG_ENV")" = 600 ] || block POSTGRES_ENV_UNSAFE
 [ -f "$MAN" ] && [ ! -L "$MAN" ] || block RELEASE_MANIFEST_MISSING
 [ ! -e "$START" ] && [ ! -e "$RESULT" ] || block INCOMPLETE_OR_TERMINAL_R5
@@ -37,7 +38,7 @@ fi
 BASE_API_REV="$(get "$R0" API_REVISION)"; BASE_WEB_REV="$(get "$R0" WEB_REVISION)"; API_OVERRIDE="/opt/book-id-search-runtime/s31/${BASE_API_REV}/api-production.override.yml"; WEB_OVERRIDE="/opt/book-id-search-runtime/s32/${BASE_WEB_REV}/web-production.override.yml"
 if [ "${S32_R4_R5_TEST_MODE:-false}" = true ]; then API_OVERRIDE="$ROOT/api-production.override.yml"; WEB_OVERRIDE="$ROOT/web-production.override.yml"; :>"$API_OVERRIDE"; :>"$WEB_OVERRIDE"; fi
 umask 077; T="$(mktemp "$ROOT/progress/.r5-start.XXXXXX")"; printf 'STATUS=STARTED\nSTAGE=R5\nS32_RELEASE_FINGERPRINT=%s\n' "$FP">"$T"; chmod 600 "$T"; ln -- "$T" "$START"; rm -f "$T"
-CMD=(docker compose --project-directory "$ROOT" --env-file "$PG_ENV" --env-file "$API_ENV" -f "$ROOT/docker-compose.yml" -f "$ROOT/docker-compose.override.yml" -f "$API_OVERRIDE" -f "$WEB_OVERRIDE" -f "$OVERRIDE" up -d --no-build --no-deps api)
+CMD=(docker compose --project-directory "$ROOT" --env-file "$PROD_ENV" --env-file "$PG_ENV" --env-file "$API_ENV" -f "$ROOT/docker-compose.yml" -f "$ROOT/docker-compose.override.yml" -f "$API_OVERRIDE" -f "$WEB_OVERRIDE" -f "$OVERRIDE" up -d --no-build --no-deps api)
 if [ "${S32_R4_R5_TEST_MODE:-false}" = true ]; then printf 'S32_FEATURES_ENABLED=true S32_API_IMAGE=%s ' "$API_TAG" >>"${S32_R4_R5_COMMAND_LOG:?}"; printf '%q ' "${CMD[@]}" >>"$S32_R4_R5_COMMAND_LOG"; printf '\n' >>"$S32_R4_R5_COMMAND_LOG"; POST="${S32_R5_POST_FACTS_JSON:?}"; else sudo -n env S32_FEATURES_ENABLED=true "S32_API_IMAGE=$API_TAG" "S32_POSTGRES_IMAGE=$PG_IMAGE" "${CMD[@]}"; env S32_PRIVATE_API_TOKEN="$TOKEN" S32_RELEASE_FINGERPRINT="$FP" S32_ACCEPTANCE_BACKEND_ONLY=true pnpm s32:production:acceptance >/dev/null || block BACKEND_ACCEPTANCE_FAILED; POST="$(mktemp)"; python3 "$SCRIPT_DIR/plan-s32-production-baseline.py" --json-out "$POST" >/dev/null || block R5_POST_BASELINE_FAILED; fi
 python3 - "$POST" "$R4_API_OBSERVED_ID" "$SRC" "$R0" <<'PY' || block R5_POSTVERIFY_FAILED
 import json,sys
