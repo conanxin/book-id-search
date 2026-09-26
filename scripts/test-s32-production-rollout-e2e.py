@@ -42,6 +42,8 @@ class RolloutE2E(unittest.TestCase):
             (self.root / p).mkdir(parents=True, exist_ok=True)
         (self.root / "docker-compose.yml").write_text("services: {}\n")
         (self.root / "docker-compose.override.yml").write_text("services: {}\n")
+        self.prod = self.root / ".env"
+        self.prod.write_text("MEILI_MASTER_KEY=PROD_MEILI_KEY\nMEILI_INDEX=books\nWEREAD_OVERLAY_ENABLED=true\n")
         self.migration = self.root / "db/migrations/001_s32_core_schema.sql"
         self.migration.write_text("BEGIN; CREATE SCHEMA core; CREATE SCHEMA ops; CREATE SCHEMA derived; COMMIT;\n")
         (self.root / "db/tests/001_s32_schema_assertions.sql").write_text("SELECT 1;\n")
@@ -96,6 +98,7 @@ class RolloutE2E(unittest.TestCase):
         self.base_env = os.environ.copy()
         self.base_env.update(
             BOOK_ID_SEARCH_REPO_ROOT=str(self.root),
+            S32_PRODUCTION_ENV_FILE=str(self.prod),
             S32_RELEASE_MANIFEST_JSON=str(self.manifest),
             S32_POSTGRES_ENV_FILE=str(self.pg),
             S32_API_ENV_FILE=str(self.api),
