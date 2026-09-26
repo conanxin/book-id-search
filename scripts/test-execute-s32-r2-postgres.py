@@ -9,6 +9,22 @@ def valid_manifest():
  return {'version':1,'sourceSha':SRC,'pnpmLockSha256':'1'*64,'apiImageTag':'book-id-search-api:s32-'+SRC,'apiImageId':'sha256:'+'2'*64,'apiOciRevision':SRC,'apiBaseDigest':'node@sha256:'+'3'*64,'webImageTag':'book-id-search-web:'+SRC,'webImageId':'sha256:'+'4'*64,'webOciRevision':SRC,'webStaticManifestSha256':'5'*64,'webS32Enabled':True,'webNodeBaseDigest':'node@sha256:'+'6'*64,'webNginxBaseDigest':'nginx@sha256:'+'7'*64,'pgImageRef':'postgres@sha256:'+'8'*64,'pgImageId':'sha256:'+'9'*64,'migrationPath':'db/migrations/001_s32_core_schema.sql','migrationSha256':'a1'*32,'roleBootstrapPath':'deploy/s32-production-roles.sql','roleBootstrapSha256':'b2'*32,'s32OverridePath':'deploy/s32-production.override.yml','s32OverrideSha256':'c3'*32}
 def fp(d):
  out=subprocess.check_output([sys.executable,str(MAN),str(d)],text=True); return [x.split('=',1)[1] for x in out.splitlines() if x.startswith('S32_RELEASE_FINGERPRINT=')][0]
+
+FAKE_DOCKER = '''#!/usr/bin/env python3
+import os,sys
+args=sys.argv[1:]
+if not args or args[0] != 'compose':
+    raise SystemExit(90)
+for key in ('S32_POSTGRES_IMAGE','S32_API_IMAGE','S32_PG_DATA_DIR'):
+    if not os.environ.get(key):
+        print('MISSING_INTERPOLATION_VAR='+key, file=sys.stderr)
+        raise SystemExit(91)
+with open(os.environ['S32_R2_FAKE_COMPOSE_LOG'],'a',encoding='utf-8') as f:
+    f.write('|'.join([os.environ['S32_POSTGRES_IMAGE'],os.environ['S32_API_IMAGE'],os.environ['S32_PG_DATA_DIR'],' '.join(args)])+'\\n')
+if 'ps' in args:
+    sys.stdout.write('fake-postgres-cid')
+'''
+
 class Env:
  def __init__(self, hard=False):
   self.t=tempfile.TemporaryDirectory(); self.root=pathlib.Path(self.t.name); (self.root/'progress').mkdir(); (self.root/'deploy').mkdir(); (self.root/'docker-compose.yml').write_text('services: {}\n'); (self.root/'docker-compose.override.yml').write_text('services: {}\n'); (self.root/'deploy'/'s32-production.override.yml').write_text('services: {}\n')
@@ -19,19 +35,36 @@ class Env:
   self.pgdata=self.root/'pgdata'; self.secrets=self.root/'postgres.env'; self.secrets.write_text('S32_POSTGRES_DB=book_id_search_s32\nS32_POSTGRES_USER=s32_admin\nS32_POSTGRES_PASSWORD=dummy\n'); os.chmod(self.secrets,0o600)
   self.post=self.root/'post.json'; self.post.write_text(json.dumps({'services':{'web':{'cid':'w1','startedAt':'wt','imageId':'wi'},'api':{'cid':'a1','startedAt':'at','imageId':'ai'},'meilisearch':{'cid':'m1','startedAt':'mt','imageId':'mi'}},'httpStatus':200,'stats':{'numberOfDocuments':5115734,'isIndexing':False}}))
   self.log=self.root/'cmd.log'
+  self.compose_log=self.root/'compose-assert.log'
+  self.docker=self.root/'fake-docker.py'; self.docker.write_text(FAKE_DOCKER); self.docker.chmod(0o755)
  def close(self): self.t.cleanup()
  def env(self):
-  e=os.environ.copy(); e.update(BOOK_ID_SEARCH_REPO_ROOT=str(self.root),S32_R0_RECEIPT=str(self.r0),S32_R1_RECEIPT=str(self.r1),S32_RELEASE_MANIFEST_JSON=str(self.man),S32_POSTGRES_ENV_FILE=str(self.secrets),S32_PG_DATA_DIR=str(self.pgdata),S32_R2_TEST_MODE='true',S32_R2_COMMAND_LOG=str(self.log),S32_R2_FAKE_PG_UID=str(os.getuid()),S32_R2_FAKE_PG_GID=str(os.getgid()),S32_R2_POST_FACTS_JSON=str(self.post)); return e
+  e=os.environ.copy(); e.update(BOOK_ID_SEARCH_REPO_ROOT=str(self.root),S32_R0_RECEIPT=str(self.r0),S32_R1_RECEIPT=str(self.r1),S32_RELEASE_MANIFEST_JSON=str(self.man),S32_POSTGRES_ENV_FILE=str(self.secrets),S32_PG_DATA_DIR=str(self.pgdata),S32_R2_TEST_MODE='true',S32_R2_COMMAND_LOG=str(self.log),S32_R2_FAKE_PG_UID=str(os.getuid()),S32_R2_FAKE_PG_GID=str(os.getgid()),S32_R2_POST_FACTS_JSON=str(self.post),S32_R2_DOCKER_CMD=str(self.docker),S32_R2_FAKE_COMPOSE_LOG=str(self.compose_log)); return e
  def run(self): return subprocess.run(['bash',str(EXEC),'--execute-r2',self.fp,SRC,CTRL],text=True,capture_output=True,env=self.env())
-class T(unittest.TestCase):
 
+class T(unittest.TestCase):
  def test_default_postgres_secret_path_is_release_scoped_runtime_path(self):
   text=EXEC.read_text()
-  self.assertIn('/opt/book-id-search-runtime/s32/${FP}/postgres.env', text)
+  self.assertIn('/opt/book-id-search-runtime/s32/${FP}/postgres.env'.replace('\\',''), text)
   self.assertNotIn('$ROOT/.s32-postgres.env', text)
 
  def test_success_targets_postgres_only_and_writes_receipt(self):
-  x=Env(); self.addCleanup(x.close); r=x.run(); self.assertEqual(r.returncode,0,r.stdout+r.stderr); self.assertIn('R2_POSTGRES=PASS',r.stdout); cmd=x.log.read_text(); self.assertIn('--no-build --no-deps postgres',cmd); self.assertNotIn(' web',cmd); self.assertTrue(any(x.root.glob('progress/*R2.result.env')))
+  x=Env(); self.addCleanup(x.close); r=x.run(); self.assertEqual(r.returncode,0,r.stdout+r.stderr); self.assertIn('R2_POSTGRES=PASS',r.stdout)
+  cmd=x.log.read_text(); self.assertIn('up -d --no-build --no-deps postgres',cmd); self.assertNotIn(' up -d --no-build --no-deps web',cmd)
+  self.assertIn('ps -q postgres',cmd); self.assertTrue(any(x.root.glob('progress/*R2.result.env')))
+
+ def test_compose_interpolation_vars_reach_both_up_and_ps_dynamically(self):
+  x=Env(); self.addCleanup(x.close); r=x.run(); self.assertEqual(r.returncode,0,r.stdout+r.stderr)
+  rows=x.compose_log.read_text().splitlines()
+  self.assertEqual(len(rows),2,rows)
+  for row in rows:
+   pg,api,data,args=row.split('|',3)
+   self.assertEqual(pg,'postgres@sha256:'+'8'*64)
+   self.assertEqual(api,'book-id-search-api:old')
+   self.assertEqual(data,str(x.pgdata))
+  self.assertIn(' up -d --no-build --no-deps postgres',' '+rows[0].split('|',3)[3])
+  self.assertIn(' ps -q postgres',' '+rows[1].split('|',3)[3])
+
  def test_nonempty_or_symlink_pgdata_blocks_before_command(self):
   x=Env(); self.addCleanup(x.close); x.pgdata.mkdir(); (x.pgdata/'x').write_text('x'); r=x.run(); self.assertNotEqual(r.returncode,0); self.assertIn('PGDATA_NOT_EMPTY',r.stdout+r.stderr); self.assertFalse(x.log.exists())
   y=Env(); self.addCleanup(y.close); target=y.root/'target'; target.mkdir(); y.pgdata.symlink_to(target); r=y.run(); self.assertNotEqual(r.returncode,0); self.assertIn('PGDATA_SYMLINK',r.stdout+r.stderr)
@@ -48,31 +81,22 @@ class T(unittest.TestCase):
  def test_incomplete_attempt_never_retries(self):
   x=Env(); self.addCleanup(x.close); start=x.root/'progress'/f's32-rollout-{x.fp}-R2.start.env'; start.write_text('STATUS=STARTED\n'); os.chmod(start,0o600); r=x.run(); self.assertNotEqual(r.returncode,0); self.assertIn('INCOMPLETE_R2',r.stdout+r.stderr); self.assertFalse(x.log.exists())
  def test_identity_contract_accepts_classic_and_containerd_ids(self):
-  # Contract: the non-test-mode identity gate must accept exactly two
-  # observed host IDs (manifest pgImageId OR the manifest digest itself)
-  # and require RepoDigest proof of the exact expected manifest digest.
   text=EXEC.read_text()
-  self.assertIn('EXPECTED_MANIFEST_DIGEST="${PG_IMAGE##*@}"',text)
+  self.assertIn('EXPECTED_MANIFEST_DIGEST="${PG_IMAGE##*@}"'.replace('\\',''),text)
   self.assertIn('"$PG_IMAGE_ID"|"$EXPECTED_MANIFEST_DIGEST")',text)
   self.assertIn('PG_IMAGE_REPODIGEST_MISMATCH',text)
   self.assertIn('*"$EXPECTED_MANIFEST_DIGEST")',text)
-  # Registry-name normalization must not defeat digest comparison.
   self.assertNotIn('"$REPO_DIGEST_PROOF" = "$PG_IMAGE"',text)
  def test_receipt_records_host_observed_id_and_manifest_digest(self):
   x=Env(); self.addCleanup(x.close); r=x.run(); self.assertEqual(r.returncode,0,r.stdout+r.stderr)
   result=next(x.root.glob('progress/*R2.result.env')); body=result.read_text()
-  # Test mode records the manifest pgImageId as the host-observed ID.
   self.assertIn('PG_IMAGE_ID=sha256:'+'9'*64,body)
   self.assertIn('PG_MANIFEST_DIGEST=sha256:'+'8'*64,body)
  def test_r3_reads_r2_host_binding_not_manifest_id(self):
-  # R3 must keep binding to the R2 receipt's PG_IMAGE_ID (same-host
-  # runtime binding), never re-compare against the manifest config ID.
   r3=(ROOT/'execute-s32-r3-schema.sh').read_text()
   self.assertIn('get_kv "$R2" PG_IMAGE_ID',r3)
   self.assertNotIn('get_kv "$MANIFEST" PG_IMAGE_ID',r3)
  def test_identity_gate_precedes_any_mutation(self):
-  # The identity contract must run before R2.start.env is published and
-  # before PGDATA creation, so a mismatch cannot leave partial state.
   text=EXEC.read_text()
   self.assertLess(text.index('PG_IMAGE_ID_MISMATCH'),text.index('TMP_START="$(mktemp'))
   self.assertLess(text.index('PG_IMAGE_REPODIGEST_MISMATCH'),text.index('mkdir -p "$PGDATA"'))
