@@ -32,6 +32,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/test-s32-release-manifest.py
+          python3 scripts/test-s32-image-identity.py
           python3 scripts/test-build-s32-api-release-candidate.py
           python3 scripts/test-build-web-release-candidate.py
           python3 scripts/test-s32-runtime-common.py
