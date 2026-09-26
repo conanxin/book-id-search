@@ -3,12 +3,13 @@ set -euo pipefail
 block(){ printf 'STATUS=BLOCKED\nBLOCK_REASON=%s\nR6_WEB=BLOCKED\n' "$1"; exit 1; }
 [ "$#" -eq 4 ] && [ "$1" = --execute-r6 ] || block INVALID_ARGUMENTS
 FP="$2"; SRC="$3"; CTRL="$4"; SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"; ROOT="${BOOK_ID_SEARCH_REPO_ROOT:-/opt/book-id-search}"
-R0="${S32_R0_RECEIPT:-$ROOT/progress/s32-r0.env}"; R5="${S32_R5_RECEIPT:-$ROOT/progress/s32-rollout-${FP}-R5.result.env}"; CAP="${S32_R6_CAPACITY_RECEIPT:-$ROOT/progress/s32-r6-capacity.env}"; CLAIM="$ROOT/progress/s32-rollout-authorization-${FP}-R6-claim.env"; MAN="${S32_RELEASE_MANIFEST_JSON:-$ROOT/progress/s32-release-manifest.json}"; CAND="${S32_R6_CANDIDATE_JSON:-$ROOT/progress/web-release-candidate-${SRC}/candidate.json}"; STATIC="${S32_R6_STATIC_DIR:-$ROOT/progress/web-release-candidate-${SRC}/static}"; API_ENV="${S32_API_ENV_FILE:-/opt/book-id-search-runtime/s32/${FP}/api.env}"; START="$ROOT/progress/s32-rollout-${FP}-R6.start.env"; RESULT="$ROOT/progress/s32-rollout-${FP}-R6.result.env"
+R0="${S32_R0_RECEIPT:-$ROOT/progress/s32-r0.env}"; R2="${S32_R2_RECEIPT:-$ROOT/progress/s32-rollout-${FP}-R2.result.env}"; R5="${S32_R5_RECEIPT:-$ROOT/progress/s32-rollout-${FP}-R5.result.env}"; CAP="${S32_R6_CAPACITY_RECEIPT:-$ROOT/progress/s32-r6-capacity.env}"; CLAIM="$ROOT/progress/s32-rollout-authorization-${FP}-R6-claim.env"; MAN="${S32_RELEASE_MANIFEST_JSON:-$ROOT/progress/s32-release-manifest.json}"; CAND="${S32_R6_CANDIDATE_JSON:-$ROOT/progress/web-release-candidate-${SRC}/candidate.json}"; STATIC="${S32_R6_STATIC_DIR:-$ROOT/progress/web-release-candidate-${SRC}/static}"; API_ENV="${S32_API_ENV_FILE:-/opt/book-id-search-runtime/s32/${FP}/api.env}"; START="$ROOT/progress/s32-rollout-${FP}-R6.start.env"; RESULT="$ROOT/progress/s32-rollout-${FP}-R6.result.env"
 get(){ local f="$1" k="$2" n; n="$(grep -cE "^${k}=" "$f" 2>/dev/null||true)"; [ "$n" = 1 ] || return 1; grep -E "^${k}=" "$f"|head -1|cut -d= -f2-; }
-for f in "$R0" "$R5" "$CAP" "$CLAIM" "$MAN" "$CAND" "$API_ENV"; do [ -f "$f" ] && [ ! -L "$f" ] || block REQUIRED_INPUT_MISSING; done
+for f in "$R0" "$R2" "$R5" "$CAP" "$CLAIM" "$MAN" "$CAND" "$API_ENV"; do [ -f "$f" ] && [ ! -L "$f" ] || block REQUIRED_INPUT_MISSING; done
 [ "$(stat -c '%a' "$CLAIM")" = 600 ] || block R6_CLAIM_UNSAFE_MODE
 [ "$(stat -c '%a' "$API_ENV")" = 600 ] || block API_ENV_UNSAFE
-[ "$(get "$R5" R5_S32_ACTIVATION || true)" = PASS ] && [ "$(get "$R5" S32_RELEASE_FINGERPRINT || true)" = "$FP" ] || block R5_NOT_PASS
+[ "$(get "$R2" STATUS || true)" = PASS ] && [ "$(get "$R2" R2_POSTGRES || true)" = PASS ] && [ "$(get "$R2" S32_RELEASE_FINGERPRINT || true)" = "$FP" ] || block R2_NOT_PASS
+[ "$(get "$R5" STATUS || true)" = PASS ] && [ "$(get "$R5" R5_S32_ACTIVATION || true)" = PASS ] && [ "$(get "$R5" S32_RELEASE_FINGERPRINT || true)" = "$FP" ] && [ "$(get "$R5" RELEASE_SOURCE_SHA || true)" = "$SRC" ] || block R5_NOT_PASS
 case "$(get "$CAP" CAPACITY_GATE || true)" in PASS_PREFERRED) ;; PASS_HARD_ONLY) [ "$(get "$CLAIM" CAPACITY_HARD_ONLY_ACCEPTED || true)" = true ] || block HARD_ONLY_NOT_ACCEPTED ;; *) block R6_CAPACITY_NOT_PASS;; esac
 [ "$(get "$CAP" S32_RELEASE_FINGERPRINT || true)" = "$FP" ] && [ "$(get "$CAP" RELEASE_SOURCE_SHA || true)" = "$SRC" ] || block CAPACITY_RELEASE_MISMATCH
 BASE_MEILI_DOCUMENTS="$(get "$R0" MEILI_DOCUMENTS || true)"; printf '%s' "$BASE_MEILI_DOCUMENTS" | grep -qE '^[0-9]+$' || block R0_MEILI_DOCUMENTS_INVALID
@@ -23,9 +24,13 @@ raise SystemExit(0 if all(checks) else 1)
 PY
 then block WEB_CANDIDATE_MISMATCH; fi
 readarray -t WM < <(python3 - "$MAN" <<'PY'
-import json,sys;m=json.load(open(sys.argv[1]));print(m['webImageTag']);print(m['webImageId']);print(m['apiImageId']);print(m['pgImageId'])
+import json,sys;m=json.load(open(sys.argv[1]));print(m['webImageTag']);print(m['webImageId']);print(m['apiImageId'])
 PY
-); WEB_TAG="${WM[0]}"; WEB_ID="${WM[1]}"; API_ID="${WM[2]}"; PG_ID="${WM[3]}"
+); WEB_TAG="${WM[0]}"; WEB_CONFIG_ID="${WM[1]}"; API_CONFIG_ID="${WM[2]}"
+API_HOST_ID="$(get "$R5" API_IMAGE_ID || true)"; API_RECEIPT_CONFIG="$(get "$R5" API_CONFIG_DIGEST || true)"; PG_HOST_ID="$(get "$R2" PG_IMAGE_ID || true)"
+printf '%s' "$API_HOST_ID"|grep -qE '^sha256:[0-9a-f]{64}$' || block API_RELEASE_PARITY_REQUIRED
+printf '%s' "$PG_HOST_ID"|grep -qE '^sha256:[0-9a-f]{64}$' || block API_RELEASE_PARITY_REQUIRED
+[ "$API_RECEIPT_CONFIG" = "$API_CONFIG_ID" ] || block API_RELEASE_PARITY_REQUIRED
 TOKEN="$(get "$API_ENV" S32_PRIVATE_API_TOKEN || true)"; [ -n "$TOKEN" ] || block PRIVATE_TOKEN_MISSING; [ -d "$STATIC" ] || block WEB_STATIC_TREE_MISSING; if grep -R -q -F -- "$TOKEN" "$STATIC"; then block PRIVATE_TOKEN_IN_WEB_BUNDLE; fi
 capture_live(){ local out="$1" cid vals; python3 "$SCRIPT_DIR/plan-s32-production-baseline.py" --json-out "$out" >/dev/null || return 1; cid="$(sudo -n docker ps --filter label=com.docker.compose.service=postgres --format '{{.ID}}' | head -1)"; [ -n "$cid" ] || return 1; vals="$(sudo -n docker inspect "$cid" --format '{{.Id}}|{{.State.StartedAt}}|{{.Image}}')"; python3 - "$out" "$vals" <<'PY'
 import json,sys
@@ -33,14 +38,23 @@ p=sys.argv[1]; cid,started,image=sys.argv[2].split('|'); d=json.load(open(p)); d
 PY
 }
 if [ "${S32_R6_TEST_MODE:-false}" = true ]; then PRE="${S32_R6_PRE_FACTS_JSON:?}"; else PRE="$(mktemp)"; capture_live "$PRE" || block R6_PRE_FACTS_FAILED; fi
-python3 - "$PRE" "$SRC" "$API_ID" "$PG_ID" <<'PY' || block API_RELEASE_PARITY_REQUIRED
+python3 - "$PRE" "$SRC" "$API_HOST_ID" "$PG_HOST_ID" <<'PY' || block API_RELEASE_PARITY_REQUIRED
 import json,sys;d=json.load(open(sys.argv[1])); a=d['services']['api']; p=d['services'].get('postgres',{})
 if a.get('revision')!=sys.argv[2] or a.get('imageId')!=sys.argv[3] or p.get('imageId')!=sys.argv[4]: raise SystemExit(1)
 PY
-if [ "${S32_R6_TEST_MODE:-false}" != true ]; then ACT="$(sudo -n docker image inspect "$WEB_TAG" --format '{{.Id}}')" || block WEB_IMAGE_NOT_LOCAL; REV="$(sudo -n docker image inspect "$WEB_TAG" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"; [ "$ACT" = "$WEB_ID" ] && [ "$REV" = "$SRC" ] || block WEB_RELEASE_IDENTITY_MISMATCH; fi
+WEB_OBSERVED_ID=""; WEB_IDENTITY_MODE=""
+if [ "${S32_R6_TEST_MODE:-false}" = true ]; then
+  WEB_OBSERVED_ID="${S32_R6_FAKE_WEB_OBSERVED_ID:-$WEB_CONFIG_ID}"; WEB_IDENTITY_MODE="${S32_R6_FAKE_WEB_IDENTITY_MODE:-CONFIG_DIGEST}"
+else
+  IMG_OUT="$(bash "$SCRIPT_DIR/verify-s32-local-image.sh" "$WEB_TAG" "$WEB_CONFIG_ID" "$SRC" 2>&1)" || block WEB_RELEASE_IDENTITY_MISMATCH
+  WEB_OBSERVED_ID="$(printf '%s\n' "$IMG_OUT"|awk -F= '$1=="OBSERVED_IMAGE_ID"{print $2;exit}')"
+  WEB_IDENTITY_MODE="$(printf '%s\n' "$IMG_OUT"|awk -F= '$1=="BACKEND_IDENTITY_MODE"{print $2;exit}')"
+fi
+printf '%s' "$WEB_OBSERVED_ID"|grep -qE '^sha256:[0-9a-f]{64}$' || block WEB_RELEASE_IDENTITY_MISMATCH
+case "$WEB_IDENTITY_MODE" in CONFIG_DIGEST|MANIFEST_DIGEST) ;; *) block WEB_RELEASE_IDENTITY_MISMATCH;; esac
 umask 077; T="$(mktemp "$ROOT/progress/.r6-start.XXXXXX")"; printf 'STATUS=STARTED\nSTAGE=R6\nS32_RELEASE_FINGERPRINT=%s\n' "$FP">"$T"; chmod 600 "$T"; ln -- "$T" "$START"; rm -f "$T"
 if [ "${S32_R6_TEST_MODE:-false}" = true ]; then printf 'BOOK_ID_SEARCH_WEB_IMAGE=%s docker compose up -d --no-build --no-deps web\n' "$WEB_TAG" >"${S32_R6_COMMAND_LOG:?}"; POST="${S32_R6_POST_FACTS_JSON:?}"; else BOOK_ID_SEARCH_WEB_IMAGE="$WEB_TAG" bash "$ROOT/scripts/deploy-web-release-candidate.sh" "$WEB_TAG" >/dev/null || block WEB_DEPLOY_FAILED; POST="$(mktemp)"; capture_live "$POST" || block R6_POST_FACTS_FAILED; fi
-VERIFY_ERR="$(mktemp)"; if ! python3 - "$PRE" "$POST" "$WEB_ID" "$SRC" "$R0" 2>"$VERIFY_ERR" <<'PY'
+VERIFY_ERR="$(mktemp)"; if ! python3 - "$PRE" "$POST" "$WEB_OBSERVED_ID" "$SRC" "$R0" 2>"$VERIFY_ERR" <<'PY'
 import json,sys
 pre=json.load(open(sys.argv[1])); post=json.load(open(sys.argv[2])); w=post['services']['web']
 if w.get('imageId')!=sys.argv[3] or w.get('revision')!=sys.argv[4]: raise SystemExit('WEB_RELEASE_IDENTITY_MISMATCH')
@@ -58,4 +72,4 @@ for k in ('ISBN','SSID','DXID','title','author','publisher'):
 PY
 then reason="$(tail -1 "$VERIFY_ERR")"; rm -f "$VERIFY_ERR"; block "${reason:-R6_POSTVERIFY_FAILED}"; fi; rm -f "$VERIFY_ERR"
 if [ "${S32_R6_TEST_MODE:-false}" != true ]; then rm -f "$PRE" "$POST"; fi
-T="$(mktemp "$ROOT/progress/.r6-result.XXXXXX")"; printf 'STATUS=PASS\nSTAGE=R6\nR6_WEB=PASS\nS32_RELEASE_FINGERPRINT=%s\nRELEASE_SOURCE_SHA=%s\nMEILI_DOCUMENTS=%s\nWEB_IMAGE_ID=%s\nWEB_REVISION=%s\nAPI_WEB_PARITY=PASS\n' "$FP" "$SRC" "$BASE_MEILI_DOCUMENTS" "$WEB_ID" "$SRC">"$T"; chmod 600 "$T"; ln -- "$T" "$RESULT"; rm -f "$T"; printf 'STATUS=PASS\nR6_WEB=PASS\nAPI_WEB_PARITY=PASS\n'
+T="$(mktemp "$ROOT/progress/.r6-result.XXXXXX")"; printf 'STATUS=PASS\nSTAGE=R6\nR6_WEB=PASS\nS32_RELEASE_FINGERPRINT=%s\nRELEASE_SOURCE_SHA=%s\nMEILI_DOCUMENTS=%s\nWEB_IMAGE_ID=%s\nWEB_CONFIG_DIGEST=%s\nWEB_IDENTITY_MODE=%s\nWEB_REVISION=%s\nAPI_WEB_PARITY=PASS\n' "$FP" "$SRC" "$BASE_MEILI_DOCUMENTS" "$WEB_OBSERVED_ID" "$WEB_CONFIG_ID" "$WEB_IDENTITY_MODE" "$SRC">"$T"; chmod 600 "$T"; ln -- "$T" "$RESULT"; rm -f "$T"; printf 'STATUS=PASS\nR6_WEB=PASS\nAPI_WEB_PARITY=PASS\n'
