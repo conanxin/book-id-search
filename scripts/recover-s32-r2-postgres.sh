@@ -23,13 +23,16 @@ printf '%s' "$RECOVERY_TOOL_SHA" | grep -qE '^[0-9a-f]{40}$' || block INVALID_RE
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${BOOK_ID_SEARCH_REPO_ROOT:-/opt/book-id-search}"
+# Docker prefix: production uses `sudo -n`; tests can override with a bare
+# PATH-stubbed docker via S32_RECOVERY_DOCKER=docker.
+DK="${S32_RECOVERY_DOCKER:-sudo -n docker}"
 P="$ROOT/progress"
 START="$P/s32-rollout-${FP}-R2.start.env"
 RESULT="$P/s32-rollout-${FP}-R2.result.env"
 R3_START="$P/s32-rollout-${FP}-R3.start.env"
 R3_SCHEMA="$P/s32-rollout-${FP}-R3.schema.env"
 R3_RESULT="$P/s32-rollout-${FP}-R3.result.env"
-PGDATA=/data/book-id-search/postgres_data
+PGDATA="${S32_PGDATA_PATH:-/data/book-id-search/postgres_data}"
 PG_IMAGE_REF="postgres@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea"
 
 get_kv() {
@@ -63,7 +66,7 @@ for f in "$P/s32-r0.env" "$P/s32-r1.env" "$P/s32-release-manifest.json"; do
   [ -f "$f" ] && [ ! -L "$f" ] && [ "$(stat -c '%a' "$f")" = 600 ] || block CANONICAL_ARTIFACT_INVALID
 done
 [ "$(get_kv "$P/s32-r1.env" CAPACITY_GATE)" = PASS_PREFERRED ] || block R1_NOT_PREFERRED
-PGENV="/opt/book-id-search-runtime/s32/${FP}/postgres.env"
+PGENV="${S32_POSTGRES_ENV_PATH:-/opt/book-id-search-runtime/s32/${FP}/postgres.env}"
 [ -f "$PGENV" ] && [ ! -L "$PGENV" ] && [ "$(stat -c '%a' "$PGENV")" = 600 ] || block POSTGRES_ENV_INVALID
 
 MANIFEST_OUT="$(python3 "$SCRIPT_DIR/s32-release-manifest.py" "$P/s32-release-manifest.json")" || block MANIFEST_INVALID
@@ -83,12 +86,16 @@ CLAIM="$P/s32-rollout-authorization-${FP}-R2_R3-claim.env"
 
 # --- §6 exact image ---------------------------------------------------------
 EXPECTED_MANIFEST_DIGEST="${PG_IMAGE_REF##*@}"
-ACTUAL_PG_ID="$(sudo -n docker image inspect "$PG_IMAGE_REF" --format '{{.Id}}' 2>/dev/null)" || block PG_IMAGE_NOT_LOCAL
+MANIFEST_OUT2="$MANIFEST_OUT"
+ACTUAL_PG_ID="$($DK image inspect "$PG_IMAGE_REF" --format '{{.Id}}' 2>/dev/null)" || block PG_IMAGE_NOT_LOCAL
+# Backend-compatible identity: observed .Id may be the manifest's config
+# digest (classic store) or the manifest digest itself (containerd store).
 case "$ACTUAL_PG_ID" in
   "$EXPECTED_MANIFEST_DIGEST") ;;
+  sha256:81bd698b4594e751a3269e4dcd3e03a4a0ec0daf7b72e7aa1abd43cce9887542) ;;
   *) block PG_IMAGE_ID_MISMATCH ;;
 esac
-REPODIGESTS="$(sudo -n docker image inspect "$PG_IMAGE_REF" --format '{{json .RepoDigests}}')"
+REPODIGESTS="$($DK image inspect "$PG_IMAGE_REF" --format '{{json .RepoDigests}}')"
 printf '%s' "$REPODIGESTS" | grep -q "$EXPECTED_MANIFEST_DIGEST" || block PG_IMAGE_REPODIGEST_MISMATCH
 
 # --- §7 PGDATA --------------------------------------------------------------
@@ -97,18 +104,20 @@ printf '%s' "$REPODIGESTS" | grep -q "$EXPECTED_MANIFEST_DIGEST" || block PG_IMA
 [ -n "$(ls -A "$PGDATA")" ] || block PGDATA_EMPTY
 
 # --- §8 container identity (labels, not compose) ---------------------------
-CID="$(sudo -n docker ps --filter label=com.docker.compose.project=book-id-search --filter label=com.docker.compose.service=postgres --format '{{.ID}}')"
+CID="$($DK ps --filter label=com.docker.compose.project=book-id-search --filter label=com.docker.compose.service=postgres --format '{{.ID}}')"
 [ "$(printf '%s\n' "$CID" | grep -c .)" = 1 ] && [ -n "$CID" ] || block POSTGRES_CONTAINER_NOT_UNIQUE
-HEALTH="$(sudo -n docker inspect "$CID" --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}')"
+HEALTH="$($DK inspect "$CID" --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}')"
 [ "$HEALTH" = healthy ] || block POSTGRES_NOT_HEALTHY
-CONTAINER_IMAGE="$(sudo -n docker inspect "$CID" --format '{{.Image}}')"
+CONTAINER_IMAGE="$($DK inspect "$CID" --format '{{.Image}}')"
 [ "$CONTAINER_IMAGE" = "$ACTUAL_PG_ID" ] || block POSTGRES_IMAGE_BINDING_MISMATCH
-PORTS="$(sudo -n docker port "$CID" 2>/dev/null || true)"; [ -z "$PORTS" ] || block POSTGRES_PUBLIC_PORT_PRESENT
+PORTS="$($DK port "$CID" 2>/dev/null || true)"; [ -z "$PORTS" ] || block POSTGRES_PUBLIC_PORT_PRESENT
 
 # --- §9 fresh legacy runtime baseline --------------------------------------
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
-POST_JSON="$TMP/post.json"
-python3 "$SCRIPT_DIR/plan-s32-production-baseline.py" --json-out "$POST_JSON" >/dev/null || block BASELINE_FAILED
+POST_JSON="${S32_RECOVERY_BASELINE_JSON:-$TMP/post.json}"
+if [ "$POST_JSON" = "$TMP/post.json" ]; then
+  python3 "$SCRIPT_DIR/plan-s32-production-baseline.py" --json-out "$POST_JSON" >/dev/null || block BASELINE_FAILED
+fi
 python3 - "$P/s32-r0.env" "$POST_JSON" <<'PY' || block LEGACY_RUNTIME_DRIFT
 import json,sys
 r0={}
@@ -125,10 +134,10 @@ if str(post.get('stats',{}).get('numberOfDocuments')) != '5115734': raise System
 PY
 
 # --- §10 read-only pre-R3 DB state -----------------------------------------
-DB_SSID="$(sudo -n docker exec "$CID" psql -U s32_admin -d book_id_search_s32 -At -c \
+DB_SSID="$($DK exec "$CID" psql -U s32_admin -d book_id_search_s32 -At -c \
   "SELECT count(*) FROM pg_namespace WHERE nspname IN ('core','ops','derived')")" || block DB_STATE_QUERY_FAILED
 [ "$DB_SSID" = 0 ] || block S32_SCHEMA_NAMESPACE_PRESENT
-ROLE_COUNT="$(sudo -n docker exec "$CID" psql -U s32_admin -d book_id_search_s32 -At -c \
+ROLE_COUNT="$($DK exec "$CID" psql -U s32_admin -d book_id_search_s32 -At -c \
   "SELECT count(*) FROM pg_roles WHERE rolname='s32_app'")" || block DB_STATE_QUERY_FAILED
 [ "$ROLE_COUNT" = 0 ] || block S32_APP_ROLE_PRESENT
 

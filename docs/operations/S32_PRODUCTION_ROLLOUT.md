@@ -86,6 +86,8 @@ Each sync execution is itself one-shot and forward-only. The executor writes `s3
 
 Although CONTROL_PLANE_SYNC may repeat within one release, each CTRL authorization yields exactly one execution attempt: START without RESULT = incomplete/unknown (no retry); a terminal RESULT = consumed (no second execution); control-plane movement is only allowed from the current HEAD to a descendant target; and old retained claims never constitute rollback authorization.
 
+An INCOMPLETE R2 (start receipt present, terminal result absent) is never auto-retried. The only permitted closure is a separately and explicitly authorized **verify-only R2 recovery** (`recover-s32-r2-postgres.sh --recover-r2-verify-only <FP> <SRC> <CTRL> <RECOVERY_TOOL_SHA>`), applicable strictly when: the R2 START exists and binds the release identity; no R2 RESULT exists; PostgreSQL is already healthy on the exact image with no host ports; PGDATA is already initialized; and no R3 artifact exists. The recovery re-verifies everything read-only (canonical receipts, manifest, image identity incl. RepoDigests, container by compose labels, legacy runtime vs canonical R0, empty S32 DB state) and its single write is the terminal `R2.result.env` marked `R2_RECOVERY_MODE=VERIFY_ONLY` with the START sha256 and the reviewed recovery-tool SHA. It must never restart, rebuild, or modify the database.
+
 ## R0 / R1 read-only preflight
 
 R0 must freshly record:
