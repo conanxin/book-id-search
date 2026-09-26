@@ -199,6 +199,7 @@ class Env:
         self.bin=self.base/"bin"; self.bin.mkdir()
         self.sudo=self.bin/"sudo"; self.sudo.write_text(FAKE_SUDO); self.sudo.chmod(0o755)
         self.docker=self.bin/"docker"; self.docker.write_text(FAKE_DOCKER); self.docker.chmod(0o755)
+        self.curl=self.bin/"curl"; self.curl.write_text("#!/usr/bin/env bash\nprintf '404'\n"); self.curl.chmod(0o755)
         self.state=self.base/"baseline-state"
         self.log=self.base/"docker.log"
 
