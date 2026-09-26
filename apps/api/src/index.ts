@@ -64,6 +64,7 @@ import {
 import { createS32Router } from "./s32/register.js";
 import { readS32Config } from "./s32/config.js";
 import { createProjectItemNoteBodyParser } from "./s32/routes/project-item-note-routes.js";
+import { createResearchV0Router } from "./research-v0/routes.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(currentDir, "../../../");
@@ -136,6 +137,21 @@ app.use(
     getCatalogDocument: (id) => index.getDocument(id),
   }),
 );
+
+if (process.env.RESEARCH_V0_ENABLED === "true") {
+  app.use(
+    "/api/research/v0",
+    createResearchV0Router({
+      catalog: {
+        getDocument: (id) => index.getDocument(id),
+        search: async (query, limit) => {
+          const result = await index.search(query, { limit });
+          return result.hits;
+        },
+      },
+    }),
+  );
+}
 
 // ---------------------------------------------------------------------------
 // S27H: lightweight in-memory rate limiter for the private reading-map
