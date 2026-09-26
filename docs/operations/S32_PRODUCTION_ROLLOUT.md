@@ -244,6 +244,26 @@ Sequence for an incident is: review exact recovery-tool head → explicit verify
 
 Post-recreate API verification uses bounded baseline boot grace. A transient first probe during process startup may be retried for a small bounded number of attempts; exhaustion remains fail-closed and never authorizes an automatic second rollout/rollback.
 
+## INCOMPLETE R4 after successful API→R0 rollback
+
+If R4 has START but no RESULT and an explicitly authorized API→R0 rollback has since terminalized successfully, ordinary R4 execution remains forbidden because the original START is retained. The reviewed closure is a one-shot R4 recovery, not an ordinary retry.
+
+The recovery:
+- runs while production remains on the incident control-plane SHA bound by the retained R4_R5 claim;
+- requires terminal rollback PASS and hashes that rollback RESULT plus the original R4 START;
+- verifies current runtime is canonical R0 before mutation;
+- verifies the exact S32 API image using backend-neutral identity;
+- renders the repaired Compose chain `.env -> postgres.env` before mutation and proves the rendered API Meilisearch key hash matches the running Meilisearch key without exposing either secret;
+- writes a dedicated mode-600 `R4.recovery.start.env` immediately before the single API-dark recreate;
+- performs exactly one `up -d --no-build --no-deps api`;
+- uses bounded post-recreate baseline grace;
+- verifies Web/Meili/Postgres/R3 state, six legacy searches, S32 route=404, dark S32 env values, exact image/revision, and 26/26 empty core+ops tables;
+- on success atomically creates the missing canonical R4 RESULT with `R4_RECOVERY_MODE=AFTER_API_TO_R0_ROLLBACK`, original R4 START hash, terminal rollback RESULT hash, and recovery-tool SHA.
+
+A recovery START without terminal R4 RESULT is itself incomplete and must never be re-run automatically.
+
+Because R4 and R5 share one `R4_R5` authorization claim, do not CONTROL_PLANE_SYNC between recovered R4 and R5. Close the R4/R5 authorization group on the same incident CTRL first; only then merge/sync newer control-plane tooling before R6.
+
 ## Rollback identities
 
 R0 is the rollback reference.
