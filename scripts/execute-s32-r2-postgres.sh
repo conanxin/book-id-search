@@ -130,7 +130,11 @@ compose_pg() {
       printf '%q ' "${compose_args[@]}"
       printf '\n'
     } >> "${S32_R2_COMMAND_LOG:?}"
-    env "S32_POSTGRES_IMAGE=$PG_IMAGE" "S32_API_IMAGE=$BASE_API_IMAGE" "S32_PG_DATA_DIR=$PGDATA"       "${S32_R2_DOCKER_CMD:?}" "${compose_args[@]}"
+    if [ -n "${S32_R2_DOCKER_CMD:-}" ]; then
+      env "S32_POSTGRES_IMAGE=$PG_IMAGE" "S32_API_IMAGE=$BASE_API_IMAGE" "S32_PG_DATA_DIR=$PGDATA" "$S32_R2_DOCKER_CMD" "${compose_args[@]}"
+    elif [ "${1:-}" = ps ]; then
+      printf '%s' "${S32_R2_FAKE_CID:-test-postgres-cid}"
+    fi
   else
     sudo -n env "S32_POSTGRES_IMAGE=$PG_IMAGE" "S32_API_IMAGE=$BASE_API_IMAGE" "S32_PG_DATA_DIR=$PGDATA"       docker "${compose_args[@]}"
   fi
