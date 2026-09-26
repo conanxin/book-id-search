@@ -117,6 +117,37 @@ MAX_USED_PERCENT=80
 
 `PASS_HARD_ONLY` is not enough by itself; it requires explicit hard-only acceptance recorded in the release/authorization chain.
 
+## Runtime image identity across Docker backends
+
+The release manifest remains the immutable build identity. Its `apiImageId`, `webImageId`, and `pgImageId` fields are config digests produced by the release builders.
+
+Docker image stores do not expose a single portable `.Id` representation:
+
+- classic Docker stores commonly expose the config digest;
+- Docker with the containerd image store may expose the OCI manifest digest for the same loaded image.
+
+Runtime executors must therefore never weaken identity to tag/revision-only checks and must never require `.Id == manifest config digest` across backends.
+
+For API/Web images the reviewed verifier follows a fail-closed proof chain:
+
+1. require the exact manifest-pinned tag and OCI revision;
+2. if host-observed `.Id` equals the frozen config digest, accept `CONFIG_DIGEST` mode;
+3. otherwise export the exact local tag with `docker image save` and parse the archive;
+4. require the saved OCI manifest digest to equal the host-observed `.Id`;
+5. require that manifest's config descriptor/blob digest to equal the frozen manifest config digest;
+6. verify the config revision label and every referenced layer blob digest;
+7. reject any other observed ID or archive ambiguity.
+
+No release-manifest key or fingerprint changes for this backend representation difference.
+
+Stage receipts distinguish the two identities:
+
+- R4/R5: `API_CONFIG_DIGEST` = frozen manifest config digest; `API_IMAGE_ID` = same-host observed runtime ID.
+- R6: `WEB_CONFIG_DIGEST` = frozen manifest config digest; `WEB_IMAGE_ID` = same-host observed runtime ID.
+- R6 API parity consumes the R5 observed `API_IMAGE_ID`; PostgreSQL parity consumes the R2 observed `PG_IMAGE_ID`.
+
+This keeps later-stage runtime comparisons on one host representation while preserving cryptographic linkage to the frozen release bytes.
+
 ## PostgreSQL / schema
 
 Canonical PGDATA:
