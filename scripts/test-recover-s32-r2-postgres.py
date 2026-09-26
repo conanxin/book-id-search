@@ -140,7 +140,7 @@ class Env:
  def make_canonical(self,capacity='PASS_PREFERRED',r1_fp=FP,r1_src=SRC,meili='5115734'):
   r0=self.p/'s32-r0.env'
   r0.write_text('R0_FINAL=PASS\nS32_RELEASE_FINGERPRINT=%s\nWEB_CID=w1\nWEB_STARTED_AT=t1\nWEB_IMAGE_ID=i1\nAPI_CID=a1\nAPI_STARTED_AT=t2\nAPI_IMAGE_ID=i2\nMEILISEARCH_CID=m1\nMEILISEARCH_STARTED_AT=t3\nMEILISEARCH_IMAGE_ID=i3\nMEILI_DOCUMENTS=%s\n'%(FP,meili)); r0.chmod(0o600)
-  r1=self.p/'s32-r1.env'; r1.write_text('CAPACITY_GATE=%s\nS32_RELEASE_FINGERPRINT=%s\nRELEASE_SOURCE_SHA=%s\n'%(capacity,r1_fp,r1_src)); r1.chmod(0o600)
+  r1=self.p/'s32-r1.env'; r1.write_text('STATUS=PASS\\nCAPACITY_GATE=%s\nS32_RELEASE_FINGERPRINT=%s\nRELEASE_SOURCE_SHA=%s\n'%(capacity,r1_fp,r1_src)); r1.chmod(0o600)
   m=self.p/'s32-release-manifest.json'; m.write_text(json.dumps(MANIFEST)); m.chmod(0o600)
  def make_start(self,fp=FP,src=SRC,ctrl=None):
   ctrl=ctrl or self.head
@@ -261,7 +261,7 @@ class T(unittest.TestCase):
    self.assertNotIn(bad,text,bad)
   for needed in ('R2_RECOVERY_MODE=VERIFY_ONLY','R2_START_SHA256','RECOVERY_TOOL_SHA','pgImageRef','pgImageId','MEILI_DOCUMENTS'):
    self.assertIn(needed,text)
-  self.assertNotIn('/home/conanxin/',pathlib.Path(__file__).read_text())
+  self.assertNotIn('/home/'+'conanxin/',pathlib.Path(__file__).read_text())
 
 if __name__=='__main__':
  unittest.main()
