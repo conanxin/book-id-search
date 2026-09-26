@@ -125,11 +125,21 @@ mkdir -p "$PGDATA"
 chmod 700 "$PGDATA"
 if [ "${S32_R2_TEST_MODE:-false}" != true ]; then sudo -n chown "$PG_UID:$PG_GID" "$PGDATA"; fi
 
+# Every docker compose invocation that resolves the S32 override must carry
+# the same interpolation variables, or Compose model interpolation fails
+# (the R2 INCOMPLETE root cause: `up` passed them, `ps` did not).
+compose_pg() {
+  sudo -n env "S32_POSTGRES_IMAGE=$PG_IMAGE" "S32_API_IMAGE=$BASE_API_IMAGE" "S32_PG_DATA_DIR=$PGDATA" \
+    docker compose --project-directory "$ROOT" --env-file "$PG_ENV" \
+    -f "$ROOT/docker-compose.yml" -f "$ROOT/docker-compose.override.yml" \
+    -f "$API_OVERRIDE" -f "$WEB_OVERRIDE" -f "$OVERRIDE" "$@"
+}
+
 CMD=(docker compose --project-directory "$ROOT" --env-file "$PG_ENV" -f "$ROOT/docker-compose.yml" -f "$ROOT/docker-compose.override.yml" -f "$API_OVERRIDE" -f "$WEB_OVERRIDE" -f "$OVERRIDE" up -d --no-build --no-deps postgres)
 if [ "${S32_R2_TEST_MODE:-false}" = true ]; then
   printf 'S32_POSTGRES_IMAGE=%s S32_API_IMAGE=%s S32_PG_DATA_DIR=%s ' "$PG_IMAGE" "$BASE_API_IMAGE" "$PGDATA" > "${S32_R2_COMMAND_LOG:?}"
-  printf '%q ' "${CMD[@]}" >> "${S32_R2_COMMAND_LOG}"
-  printf '\n' >> "${S32_R2_COMMAND_LOG}"
+  printf '%q ' "${CMD[@]}" >> "${S32_R2_COMMAND_LOG:?}"
+  printf '\n' >> "${S32_R2_COMMAND_LOG:?}"
 else
   sudo -n env "S32_POSTGRES_IMAGE=$PG_IMAGE" "S32_API_IMAGE=$BASE_API_IMAGE" "S32_PG_DATA_DIR=$PGDATA" "${CMD[@]}"
 fi
@@ -165,7 +175,7 @@ rm -f "$VERIFY_ERR"
 [ -z "$TMP_POST" ] || rm -f "$TMP_POST"
 
 if [ "${S32_R2_TEST_MODE:-false}" != true ]; then
-  CID="$(sudo -n docker compose --project-directory "$ROOT" --env-file "$PG_ENV" -f "$ROOT/docker-compose.yml" -f "$ROOT/docker-compose.override.yml" -f "$API_OVERRIDE" -f "$WEB_OVERRIDE" -f "$OVERRIDE" ps -q postgres)"
+  CID="$(compose_pg ps -q postgres)"
   [ -n "$CID" ] || block POSTGRES_CONTAINER_MISSING
   HEALTH="$(sudo -n docker inspect "$CID" --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}')"
   [ "$HEALTH" = healthy ] || block POSTGRES_NOT_HEALTHY
