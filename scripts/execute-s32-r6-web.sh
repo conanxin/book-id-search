@@ -28,7 +28,9 @@ import json,sys;m=json.load(open(sys.argv[1]));print(m['webImageTag']);print(m['
 PY
 ); WEB_TAG="${WM[0]}"; WEB_CONFIG_ID="${WM[1]}"; API_CONFIG_ID="${WM[2]}"
 API_HOST_ID="$(get "$R5" API_IMAGE_ID || true)"; API_RECEIPT_CONFIG="$(get "$R5" API_CONFIG_DIGEST || true)"; PG_HOST_ID="$(get "$R2" PG_IMAGE_ID || true)"
-printf '%s' "$API_HOST_ID"|grep -qE '^sha256:[0-9a-f]{64}
+printf '%s' "$API_HOST_ID"|grep -qE '^sha256:[0-9a-f]{64}$' || block API_RELEASE_PARITY_REQUIRED
+printf '%s' "$PG_HOST_ID"|grep -qE '^sha256:[0-9a-f]{64}$' || block API_RELEASE_PARITY_REQUIRED
+[ "$API_RECEIPT_CONFIG" = "$API_CONFIG_ID" ] || block API_RELEASE_PARITY_REQUIRED
 TOKEN="$(get "$API_ENV" S32_PRIVATE_API_TOKEN || true)"; [ -n "$TOKEN" ] || block PRIVATE_TOKEN_MISSING; [ -d "$STATIC" ] || block WEB_STATIC_TREE_MISSING; if grep -R -q -F -- "$TOKEN" "$STATIC"; then block PRIVATE_TOKEN_IN_WEB_BUNDLE; fi
 capture_live(){ local out="$1" cid vals; python3 "$SCRIPT_DIR/plan-s32-production-baseline.py" --json-out "$out" >/dev/null || return 1; cid="$(sudo -n docker ps --filter label=com.docker.compose.service=postgres --format '{{.ID}}' | head -1)"; [ -n "$cid" ] || return 1; vals="$(sudo -n docker inspect "$cid" --format '{{.Id}}|{{.State.StartedAt}}|{{.Image}}')"; python3 - "$out" "$vals" <<'PY'
 import json,sys
@@ -48,7 +50,8 @@ else
   WEB_OBSERVED_ID="$(printf '%s\n' "$IMG_OUT"|awk -F= '$1=="OBSERVED_IMAGE_ID"{print $2;exit}')"
   WEB_IDENTITY_MODE="$(printf '%s\n' "$IMG_OUT"|awk -F= '$1=="BACKEND_IDENTITY_MODE"{print $2;exit}')"
 fi
-printf '%s' "$WEB_OBSERVED_ID"|grep -qE '^sha256:[0-9a-f]{64}
+printf '%s' "$WEB_OBSERVED_ID"|grep -qE '^sha256:[0-9a-f]{64}$' || block WEB_RELEASE_IDENTITY_MISMATCH
+case "$WEB_IDENTITY_MODE" in CONFIG_DIGEST|MANIFEST_DIGEST) ;; *) block WEB_RELEASE_IDENTITY_MISMATCH;; esac
 umask 077; T="$(mktemp "$ROOT/progress/.r6-start.XXXXXX")"; printf 'STATUS=STARTED\nSTAGE=R6\nS32_RELEASE_FINGERPRINT=%s\n' "$FP">"$T"; chmod 600 "$T"; ln -- "$T" "$START"; rm -f "$T"
 if [ "${S32_R6_TEST_MODE:-false}" = true ]; then printf 'BOOK_ID_SEARCH_WEB_IMAGE=%s docker compose up -d --no-build --no-deps web\n' "$WEB_TAG" >"${S32_R6_COMMAND_LOG:?}"; POST="${S32_R6_POST_FACTS_JSON:?}"; else BOOK_ID_SEARCH_WEB_IMAGE="$WEB_TAG" bash "$ROOT/scripts/deploy-web-release-candidate.sh" "$WEB_TAG" >/dev/null || block WEB_DEPLOY_FAILED; POST="$(mktemp)"; capture_live "$POST" || block R6_POST_FACTS_FAILED; fi
 VERIFY_ERR="$(mktemp)"; if ! python3 - "$PRE" "$POST" "$WEB_OBSERVED_ID" "$SRC" "$R0" 2>"$VERIFY_ERR" <<'PY'
@@ -70,165 +73,3 @@ PY
 then reason="$(tail -1 "$VERIFY_ERR")"; rm -f "$VERIFY_ERR"; block "${reason:-R6_POSTVERIFY_FAILED}"; fi; rm -f "$VERIFY_ERR"
 if [ "${S32_R6_TEST_MODE:-false}" != true ]; then rm -f "$PRE" "$POST"; fi
 T="$(mktemp "$ROOT/progress/.r6-result.XXXXXX")"; printf 'STATUS=PASS\nSTAGE=R6\nR6_WEB=PASS\nS32_RELEASE_FINGERPRINT=%s\nRELEASE_SOURCE_SHA=%s\nMEILI_DOCUMENTS=%s\nWEB_IMAGE_ID=%s\nWEB_CONFIG_DIGEST=%s\nWEB_IDENTITY_MODE=%s\nWEB_REVISION=%s\nAPI_WEB_PARITY=PASS\n' "$FP" "$SRC" "$BASE_MEILI_DOCUMENTS" "$WEB_OBSERVED_ID" "$WEB_CONFIG_ID" "$WEB_IDENTITY_MODE" "$SRC">"$T"; chmod 600 "$T"; ln -- "$T" "$RESULT"; rm -f "$T"; printf 'STATUS=PASS\nR6_WEB=PASS\nAPI_WEB_PARITY=PASS\n'
- || block API_RELEASE_PARITY_REQUIRED
-printf '%s' "$PG_HOST_ID"|grep -qE '^sha256:[0-9a-f]{64}
-TOKEN="$(get "$API_ENV" S32_PRIVATE_API_TOKEN || true)"; [ -n "$TOKEN" ] || block PRIVATE_TOKEN_MISSING; [ -d "$STATIC" ] || block WEB_STATIC_TREE_MISSING; if grep -R -q -F -- "$TOKEN" "$STATIC"; then block PRIVATE_TOKEN_IN_WEB_BUNDLE; fi
-capture_live(){ local out="$1" cid vals; python3 "$SCRIPT_DIR/plan-s32-production-baseline.py" --json-out "$out" >/dev/null || return 1; cid="$(sudo -n docker ps --filter label=com.docker.compose.service=postgres --format '{{.ID}}' | head -1)"; [ -n "$cid" ] || return 1; vals="$(sudo -n docker inspect "$cid" --format '{{.Id}}|{{.State.StartedAt}}|{{.Image}}')"; python3 - "$out" "$vals" <<'PY'
-import json,sys
-p=sys.argv[1]; cid,started,image=sys.argv[2].split('|'); d=json.load(open(p)); d['services']['postgres']={'cid':cid,'startedAt':started,'imageId':image}; open(p,'w').write(json.dumps(d))
-PY
-}
-if [ "${S32_R6_TEST_MODE:-false}" = true ]; then PRE="${S32_R6_PRE_FACTS_JSON:?}"; else PRE="$(mktemp)"; capture_live "$PRE" || block R6_PRE_FACTS_FAILED; fi
-python3 - "$PRE" "$SRC" "$API_ID" "$PG_ID" <<'PY' || block API_RELEASE_PARITY_REQUIRED
-import json,sys;d=json.load(open(sys.argv[1])); a=d['services']['api']; p=d['services'].get('postgres',{})
-if a.get('revision')!=sys.argv[2] or a.get('imageId')!=sys.argv[3] or p.get('imageId')!=sys.argv[4]: raise SystemExit(1)
-PY
-if [ "${S32_R6_TEST_MODE:-false}" != true ]; then ACT="$(sudo -n docker image inspect "$WEB_TAG" --format '{{.Id}}')" || block WEB_IMAGE_NOT_LOCAL; REV="$(sudo -n docker image inspect "$WEB_TAG" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"; [ "$ACT" = "$WEB_ID" ] && [ "$REV" = "$SRC" ] || block WEB_RELEASE_IDENTITY_MISMATCH; fi
-umask 077; T="$(mktemp "$ROOT/progress/.r6-start.XXXXXX")"; printf 'STATUS=STARTED\nSTAGE=R6\nS32_RELEASE_FINGERPRINT=%s\n' "$FP">"$T"; chmod 600 "$T"; ln -- "$T" "$START"; rm -f "$T"
-if [ "${S32_R6_TEST_MODE:-false}" = true ]; then printf 'BOOK_ID_SEARCH_WEB_IMAGE=%s docker compose up -d --no-build --no-deps web\n' "$WEB_TAG" >"${S32_R6_COMMAND_LOG:?}"; POST="${S32_R6_POST_FACTS_JSON:?}"; else BOOK_ID_SEARCH_WEB_IMAGE="$WEB_TAG" bash "$ROOT/scripts/deploy-web-release-candidate.sh" "$WEB_TAG" >/dev/null || block WEB_DEPLOY_FAILED; POST="$(mktemp)"; capture_live "$POST" || block R6_POST_FACTS_FAILED; fi
-VERIFY_ERR="$(mktemp)"; if ! python3 - "$PRE" "$POST" "$WEB_ID" "$SRC" "$R0" 2>"$VERIFY_ERR" <<'PY'
-import json,sys
-pre=json.load(open(sys.argv[1])); post=json.load(open(sys.argv[2])); w=post['services']['web']
-if w.get('imageId')!=sys.argv[3] or w.get('revision')!=sys.argv[4]: raise SystemExit('WEB_RELEASE_IDENTITY_MISMATCH')
-for svc in ('api','meilisearch','postgres'):
- for f in ('cid','startedAt','imageId'):
-  if post['services'][svc].get(f)!=pre['services'][svc].get(f): raise SystemExit('UNINTENDED_SERVICE_DRIFT')
-if post.get('httpStatus')!=200: raise SystemExit('PUBLIC_HTTP_FAILED')
-r0={}
-for line in open(sys.argv[5]):
- if '=' in line:
-  k,v=line.rstrip('\n').split('=',1); r0[k]=v
-if str(post.get('stats',{}).get('numberOfDocuments')) != r0.get('MEILI_DOCUMENTS'): raise SystemExit('MEILI_DOCUMENT_COUNT_DRIFT')
-for k in ('ISBN','SSID','DXID','title','author','publisher'):
- if post.get('searches',{}).get(k,{}).get('status')!='PASS': raise SystemExit('LEGACY_SEARCH_REGRESSION')
-PY
-then reason="$(tail -1 "$VERIFY_ERR")"; rm -f "$VERIFY_ERR"; block "${reason:-R6_POSTVERIFY_FAILED}"; fi; rm -f "$VERIFY_ERR"
-if [ "${S32_R6_TEST_MODE:-false}" != true ]; then rm -f "$PRE" "$POST"; fi
-T="$(mktemp "$ROOT/progress/.r6-result.XXXXXX")"; printf 'STATUS=PASS\nSTAGE=R6\nR6_WEB=PASS\nS32_RELEASE_FINGERPRINT=%s\nRELEASE_SOURCE_SHA=%s\nMEILI_DOCUMENTS=%s\nWEB_IMAGE_ID=%s\nWEB_REVISION=%s\nAPI_WEB_PARITY=PASS\n' "$FP" "$SRC" "$BASE_MEILI_DOCUMENTS" "$WEB_ID" "$SRC">"$T"; chmod 600 "$T"; ln -- "$T" "$RESULT"; rm -f "$T"; printf 'STATUS=PASS\nR6_WEB=PASS\nAPI_WEB_PARITY=PASS\n'
- || block API_RELEASE_PARITY_REQUIRED
-[ "$API_RECEIPT_CONFIG" = "$API_CONFIG_ID" ] || block API_RELEASE_PARITY_REQUIRED
-TOKEN="$(get "$API_ENV" S32_PRIVATE_API_TOKEN || true)"; [ -n "$TOKEN" ] || block PRIVATE_TOKEN_MISSING; [ -d "$STATIC" ] || block WEB_STATIC_TREE_MISSING; if grep -R -q -F -- "$TOKEN" "$STATIC"; then block PRIVATE_TOKEN_IN_WEB_BUNDLE; fi
-capture_live(){ local out="$1" cid vals; python3 "$SCRIPT_DIR/plan-s32-production-baseline.py" --json-out "$out" >/dev/null || return 1; cid="$(sudo -n docker ps --filter label=com.docker.compose.service=postgres --format '{{.ID}}' | head -1)"; [ -n "$cid" ] || return 1; vals="$(sudo -n docker inspect "$cid" --format '{{.Id}}|{{.State.StartedAt}}|{{.Image}}')"; python3 - "$out" "$vals" <<'PY'
-import json,sys
-p=sys.argv[1]; cid,started,image=sys.argv[2].split('|'); d=json.load(open(p)); d['services']['postgres']={'cid':cid,'startedAt':started,'imageId':image}; open(p,'w').write(json.dumps(d))
-PY
-}
-if [ "${S32_R6_TEST_MODE:-false}" = true ]; then PRE="${S32_R6_PRE_FACTS_JSON:?}"; else PRE="$(mktemp)"; capture_live "$PRE" || block R6_PRE_FACTS_FAILED; fi
-python3 - "$PRE" "$SRC" "$API_ID" "$PG_ID" <<'PY' || block API_RELEASE_PARITY_REQUIRED
-import json,sys;d=json.load(open(sys.argv[1])); a=d['services']['api']; p=d['services'].get('postgres',{})
-if a.get('revision')!=sys.argv[2] or a.get('imageId')!=sys.argv[3] or p.get('imageId')!=sys.argv[4]: raise SystemExit(1)
-PY
-if [ "${S32_R6_TEST_MODE:-false}" != true ]; then ACT="$(sudo -n docker image inspect "$WEB_TAG" --format '{{.Id}}')" || block WEB_IMAGE_NOT_LOCAL; REV="$(sudo -n docker image inspect "$WEB_TAG" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"; [ "$ACT" = "$WEB_ID" ] && [ "$REV" = "$SRC" ] || block WEB_RELEASE_IDENTITY_MISMATCH; fi
-umask 077; T="$(mktemp "$ROOT/progress/.r6-start.XXXXXX")"; printf 'STATUS=STARTED\nSTAGE=R6\nS32_RELEASE_FINGERPRINT=%s\n' "$FP">"$T"; chmod 600 "$T"; ln -- "$T" "$START"; rm -f "$T"
-if [ "${S32_R6_TEST_MODE:-false}" = true ]; then printf 'BOOK_ID_SEARCH_WEB_IMAGE=%s docker compose up -d --no-build --no-deps web\n' "$WEB_TAG" >"${S32_R6_COMMAND_LOG:?}"; POST="${S32_R6_POST_FACTS_JSON:?}"; else BOOK_ID_SEARCH_WEB_IMAGE="$WEB_TAG" bash "$ROOT/scripts/deploy-web-release-candidate.sh" "$WEB_TAG" >/dev/null || block WEB_DEPLOY_FAILED; POST="$(mktemp)"; capture_live "$POST" || block R6_POST_FACTS_FAILED; fi
-VERIFY_ERR="$(mktemp)"; if ! python3 - "$PRE" "$POST" "$WEB_ID" "$SRC" "$R0" 2>"$VERIFY_ERR" <<'PY'
-import json,sys
-pre=json.load(open(sys.argv[1])); post=json.load(open(sys.argv[2])); w=post['services']['web']
-if w.get('imageId')!=sys.argv[3] or w.get('revision')!=sys.argv[4]: raise SystemExit('WEB_RELEASE_IDENTITY_MISMATCH')
-for svc in ('api','meilisearch','postgres'):
- for f in ('cid','startedAt','imageId'):
-  if post['services'][svc].get(f)!=pre['services'][svc].get(f): raise SystemExit('UNINTENDED_SERVICE_DRIFT')
-if post.get('httpStatus')!=200: raise SystemExit('PUBLIC_HTTP_FAILED')
-r0={}
-for line in open(sys.argv[5]):
- if '=' in line:
-  k,v=line.rstrip('\n').split('=',1); r0[k]=v
-if str(post.get('stats',{}).get('numberOfDocuments')) != r0.get('MEILI_DOCUMENTS'): raise SystemExit('MEILI_DOCUMENT_COUNT_DRIFT')
-for k in ('ISBN','SSID','DXID','title','author','publisher'):
- if post.get('searches',{}).get(k,{}).get('status')!='PASS': raise SystemExit('LEGACY_SEARCH_REGRESSION')
-PY
-then reason="$(tail -1 "$VERIFY_ERR")"; rm -f "$VERIFY_ERR"; block "${reason:-R6_POSTVERIFY_FAILED}"; fi; rm -f "$VERIFY_ERR"
-if [ "${S32_R6_TEST_MODE:-false}" != true ]; then rm -f "$PRE" "$POST"; fi
-T="$(mktemp "$ROOT/progress/.r6-result.XXXXXX")"; printf 'STATUS=PASS\nSTAGE=R6\nR6_WEB=PASS\nS32_RELEASE_FINGERPRINT=%s\nRELEASE_SOURCE_SHA=%s\nMEILI_DOCUMENTS=%s\nWEB_IMAGE_ID=%s\nWEB_REVISION=%s\nAPI_WEB_PARITY=PASS\n' "$FP" "$SRC" "$BASE_MEILI_DOCUMENTS" "$WEB_ID" "$SRC">"$T"; chmod 600 "$T"; ln -- "$T" "$RESULT"; rm -f "$T"; printf 'STATUS=PASS\nR6_WEB=PASS\nAPI_WEB_PARITY=PASS\n'
- || block WEB_RELEASE_IDENTITY_MISMATCH
-umask 077; T="$(mktemp "$ROOT/progress/.r6-start.XXXXXX")"; printf 'STATUS=STARTED\nSTAGE=R6\nS32_RELEASE_FINGERPRINT=%s\n' "$FP">"$T"; chmod 600 "$T"; ln -- "$T" "$START"; rm -f "$T"
-if [ "${S32_R6_TEST_MODE:-false}" = true ]; then printf 'BOOK_ID_SEARCH_WEB_IMAGE=%s docker compose up -d --no-build --no-deps web\n' "$WEB_TAG" >"${S32_R6_COMMAND_LOG:?}"; POST="${S32_R6_POST_FACTS_JSON:?}"; else BOOK_ID_SEARCH_WEB_IMAGE="$WEB_TAG" bash "$ROOT/scripts/deploy-web-release-candidate.sh" "$WEB_TAG" >/dev/null || block WEB_DEPLOY_FAILED; POST="$(mktemp)"; capture_live "$POST" || block R6_POST_FACTS_FAILED; fi
-VERIFY_ERR="$(mktemp)"; if ! python3 - "$PRE" "$POST" "$WEB_ID" "$SRC" "$R0" 2>"$VERIFY_ERR" <<'PY'
-import json,sys
-pre=json.load(open(sys.argv[1])); post=json.load(open(sys.argv[2])); w=post['services']['web']
-if w.get('imageId')!=sys.argv[3] or w.get('revision')!=sys.argv[4]: raise SystemExit('WEB_RELEASE_IDENTITY_MISMATCH')
-for svc in ('api','meilisearch','postgres'):
- for f in ('cid','startedAt','imageId'):
-  if post['services'][svc].get(f)!=pre['services'][svc].get(f): raise SystemExit('UNINTENDED_SERVICE_DRIFT')
-if post.get('httpStatus')!=200: raise SystemExit('PUBLIC_HTTP_FAILED')
-r0={}
-for line in open(sys.argv[5]):
- if '=' in line:
-  k,v=line.rstrip('\n').split('=',1); r0[k]=v
-if str(post.get('stats',{}).get('numberOfDocuments')) != r0.get('MEILI_DOCUMENTS'): raise SystemExit('MEILI_DOCUMENT_COUNT_DRIFT')
-for k in ('ISBN','SSID','DXID','title','author','publisher'):
- if post.get('searches',{}).get(k,{}).get('status')!='PASS': raise SystemExit('LEGACY_SEARCH_REGRESSION')
-PY
-then reason="$(tail -1 "$VERIFY_ERR")"; rm -f "$VERIFY_ERR"; block "${reason:-R6_POSTVERIFY_FAILED}"; fi; rm -f "$VERIFY_ERR"
-if [ "${S32_R6_TEST_MODE:-false}" != true ]; then rm -f "$PRE" "$POST"; fi
-T="$(mktemp "$ROOT/progress/.r6-result.XXXXXX")"; printf 'STATUS=PASS\nSTAGE=R6\nR6_WEB=PASS\nS32_RELEASE_FINGERPRINT=%s\nRELEASE_SOURCE_SHA=%s\nMEILI_DOCUMENTS=%s\nWEB_IMAGE_ID=%s\nWEB_REVISION=%s\nAPI_WEB_PARITY=PASS\n' "$FP" "$SRC" "$BASE_MEILI_DOCUMENTS" "$WEB_ID" "$SRC">"$T"; chmod 600 "$T"; ln -- "$T" "$RESULT"; rm -f "$T"; printf 'STATUS=PASS\nR6_WEB=PASS\nAPI_WEB_PARITY=PASS\n'
- || block API_RELEASE_PARITY_REQUIRED
-printf '%s' "$PG_HOST_ID"|grep -qE '^sha256:[0-9a-f]{64}
-TOKEN="$(get "$API_ENV" S32_PRIVATE_API_TOKEN || true)"; [ -n "$TOKEN" ] || block PRIVATE_TOKEN_MISSING; [ -d "$STATIC" ] || block WEB_STATIC_TREE_MISSING; if grep -R -q -F -- "$TOKEN" "$STATIC"; then block PRIVATE_TOKEN_IN_WEB_BUNDLE; fi
-capture_live(){ local out="$1" cid vals; python3 "$SCRIPT_DIR/plan-s32-production-baseline.py" --json-out "$out" >/dev/null || return 1; cid="$(sudo -n docker ps --filter label=com.docker.compose.service=postgres --format '{{.ID}}' | head -1)"; [ -n "$cid" ] || return 1; vals="$(sudo -n docker inspect "$cid" --format '{{.Id}}|{{.State.StartedAt}}|{{.Image}}')"; python3 - "$out" "$vals" <<'PY'
-import json,sys
-p=sys.argv[1]; cid,started,image=sys.argv[2].split('|'); d=json.load(open(p)); d['services']['postgres']={'cid':cid,'startedAt':started,'imageId':image}; open(p,'w').write(json.dumps(d))
-PY
-}
-if [ "${S32_R6_TEST_MODE:-false}" = true ]; then PRE="${S32_R6_PRE_FACTS_JSON:?}"; else PRE="$(mktemp)"; capture_live "$PRE" || block R6_PRE_FACTS_FAILED; fi
-python3 - "$PRE" "$SRC" "$API_ID" "$PG_ID" <<'PY' || block API_RELEASE_PARITY_REQUIRED
-import json,sys;d=json.load(open(sys.argv[1])); a=d['services']['api']; p=d['services'].get('postgres',{})
-if a.get('revision')!=sys.argv[2] or a.get('imageId')!=sys.argv[3] or p.get('imageId')!=sys.argv[4]: raise SystemExit(1)
-PY
-if [ "${S32_R6_TEST_MODE:-false}" != true ]; then ACT="$(sudo -n docker image inspect "$WEB_TAG" --format '{{.Id}}')" || block WEB_IMAGE_NOT_LOCAL; REV="$(sudo -n docker image inspect "$WEB_TAG" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"; [ "$ACT" = "$WEB_ID" ] && [ "$REV" = "$SRC" ] || block WEB_RELEASE_IDENTITY_MISMATCH; fi
-umask 077; T="$(mktemp "$ROOT/progress/.r6-start.XXXXXX")"; printf 'STATUS=STARTED\nSTAGE=R6\nS32_RELEASE_FINGERPRINT=%s\n' "$FP">"$T"; chmod 600 "$T"; ln -- "$T" "$START"; rm -f "$T"
-if [ "${S32_R6_TEST_MODE:-false}" = true ]; then printf 'BOOK_ID_SEARCH_WEB_IMAGE=%s docker compose up -d --no-build --no-deps web\n' "$WEB_TAG" >"${S32_R6_COMMAND_LOG:?}"; POST="${S32_R6_POST_FACTS_JSON:?}"; else BOOK_ID_SEARCH_WEB_IMAGE="$WEB_TAG" bash "$ROOT/scripts/deploy-web-release-candidate.sh" "$WEB_TAG" >/dev/null || block WEB_DEPLOY_FAILED; POST="$(mktemp)"; capture_live "$POST" || block R6_POST_FACTS_FAILED; fi
-VERIFY_ERR="$(mktemp)"; if ! python3 - "$PRE" "$POST" "$WEB_ID" "$SRC" "$R0" 2>"$VERIFY_ERR" <<'PY'
-import json,sys
-pre=json.load(open(sys.argv[1])); post=json.load(open(sys.argv[2])); w=post['services']['web']
-if w.get('imageId')!=sys.argv[3] or w.get('revision')!=sys.argv[4]: raise SystemExit('WEB_RELEASE_IDENTITY_MISMATCH')
-for svc in ('api','meilisearch','postgres'):
- for f in ('cid','startedAt','imageId'):
-  if post['services'][svc].get(f)!=pre['services'][svc].get(f): raise SystemExit('UNINTENDED_SERVICE_DRIFT')
-if post.get('httpStatus')!=200: raise SystemExit('PUBLIC_HTTP_FAILED')
-r0={}
-for line in open(sys.argv[5]):
- if '=' in line:
-  k,v=line.rstrip('\n').split('=',1); r0[k]=v
-if str(post.get('stats',{}).get('numberOfDocuments')) != r0.get('MEILI_DOCUMENTS'): raise SystemExit('MEILI_DOCUMENT_COUNT_DRIFT')
-for k in ('ISBN','SSID','DXID','title','author','publisher'):
- if post.get('searches',{}).get(k,{}).get('status')!='PASS': raise SystemExit('LEGACY_SEARCH_REGRESSION')
-PY
-then reason="$(tail -1 "$VERIFY_ERR")"; rm -f "$VERIFY_ERR"; block "${reason:-R6_POSTVERIFY_FAILED}"; fi; rm -f "$VERIFY_ERR"
-if [ "${S32_R6_TEST_MODE:-false}" != true ]; then rm -f "$PRE" "$POST"; fi
-T="$(mktemp "$ROOT/progress/.r6-result.XXXXXX")"; printf 'STATUS=PASS\nSTAGE=R6\nR6_WEB=PASS\nS32_RELEASE_FINGERPRINT=%s\nRELEASE_SOURCE_SHA=%s\nMEILI_DOCUMENTS=%s\nWEB_IMAGE_ID=%s\nWEB_REVISION=%s\nAPI_WEB_PARITY=PASS\n' "$FP" "$SRC" "$BASE_MEILI_DOCUMENTS" "$WEB_ID" "$SRC">"$T"; chmod 600 "$T"; ln -- "$T" "$RESULT"; rm -f "$T"; printf 'STATUS=PASS\nR6_WEB=PASS\nAPI_WEB_PARITY=PASS\n'
- || block API_RELEASE_PARITY_REQUIRED
-[ "$API_RECEIPT_CONFIG" = "$API_CONFIG_ID" ] || block API_RELEASE_PARITY_REQUIRED
-TOKEN="$(get "$API_ENV" S32_PRIVATE_API_TOKEN || true)"; [ -n "$TOKEN" ] || block PRIVATE_TOKEN_MISSING; [ -d "$STATIC" ] || block WEB_STATIC_TREE_MISSING; if grep -R -q -F -- "$TOKEN" "$STATIC"; then block PRIVATE_TOKEN_IN_WEB_BUNDLE; fi
-capture_live(){ local out="$1" cid vals; python3 "$SCRIPT_DIR/plan-s32-production-baseline.py" --json-out "$out" >/dev/null || return 1; cid="$(sudo -n docker ps --filter label=com.docker.compose.service=postgres --format '{{.ID}}' | head -1)"; [ -n "$cid" ] || return 1; vals="$(sudo -n docker inspect "$cid" --format '{{.Id}}|{{.State.StartedAt}}|{{.Image}}')"; python3 - "$out" "$vals" <<'PY'
-import json,sys
-p=sys.argv[1]; cid,started,image=sys.argv[2].split('|'); d=json.load(open(p)); d['services']['postgres']={'cid':cid,'startedAt':started,'imageId':image}; open(p,'w').write(json.dumps(d))
-PY
-}
-if [ "${S32_R6_TEST_MODE:-false}" = true ]; then PRE="${S32_R6_PRE_FACTS_JSON:?}"; else PRE="$(mktemp)"; capture_live "$PRE" || block R6_PRE_FACTS_FAILED; fi
-python3 - "$PRE" "$SRC" "$API_ID" "$PG_ID" <<'PY' || block API_RELEASE_PARITY_REQUIRED
-import json,sys;d=json.load(open(sys.argv[1])); a=d['services']['api']; p=d['services'].get('postgres',{})
-if a.get('revision')!=sys.argv[2] or a.get('imageId')!=sys.argv[3] or p.get('imageId')!=sys.argv[4]: raise SystemExit(1)
-PY
-if [ "${S32_R6_TEST_MODE:-false}" != true ]; then ACT="$(sudo -n docker image inspect "$WEB_TAG" --format '{{.Id}}')" || block WEB_IMAGE_NOT_LOCAL; REV="$(sudo -n docker image inspect "$WEB_TAG" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"; [ "$ACT" = "$WEB_ID" ] && [ "$REV" = "$SRC" ] || block WEB_RELEASE_IDENTITY_MISMATCH; fi
-umask 077; T="$(mktemp "$ROOT/progress/.r6-start.XXXXXX")"; printf 'STATUS=STARTED\nSTAGE=R6\nS32_RELEASE_FINGERPRINT=%s\n' "$FP">"$T"; chmod 600 "$T"; ln -- "$T" "$START"; rm -f "$T"
-if [ "${S32_R6_TEST_MODE:-false}" = true ]; then printf 'BOOK_ID_SEARCH_WEB_IMAGE=%s docker compose up -d --no-build --no-deps web\n' "$WEB_TAG" >"${S32_R6_COMMAND_LOG:?}"; POST="${S32_R6_POST_FACTS_JSON:?}"; else BOOK_ID_SEARCH_WEB_IMAGE="$WEB_TAG" bash "$ROOT/scripts/deploy-web-release-candidate.sh" "$WEB_TAG" >/dev/null || block WEB_DEPLOY_FAILED; POST="$(mktemp)"; capture_live "$POST" || block R6_POST_FACTS_FAILED; fi
-VERIFY_ERR="$(mktemp)"; if ! python3 - "$PRE" "$POST" "$WEB_ID" "$SRC" "$R0" 2>"$VERIFY_ERR" <<'PY'
-import json,sys
-pre=json.load(open(sys.argv[1])); post=json.load(open(sys.argv[2])); w=post['services']['web']
-if w.get('imageId')!=sys.argv[3] or w.get('revision')!=sys.argv[4]: raise SystemExit('WEB_RELEASE_IDENTITY_MISMATCH')
-for svc in ('api','meilisearch','postgres'):
- for f in ('cid','startedAt','imageId'):
-  if post['services'][svc].get(f)!=pre['services'][svc].get(f): raise SystemExit('UNINTENDED_SERVICE_DRIFT')
-if post.get('httpStatus')!=200: raise SystemExit('PUBLIC_HTTP_FAILED')
-r0={}
-for line in open(sys.argv[5]):
- if '=' in line:
-  k,v=line.rstrip('\n').split('=',1); r0[k]=v
-if str(post.get('stats',{}).get('numberOfDocuments')) != r0.get('MEILI_DOCUMENTS'): raise SystemExit('MEILI_DOCUMENT_COUNT_DRIFT')
-for k in ('ISBN','SSID','DXID','title','author','publisher'):
- if post.get('searches',{}).get(k,{}).get('status')!='PASS': raise SystemExit('LEGACY_SEARCH_REGRESSION')
-PY
-then reason="$(tail -1 "$VERIFY_ERR")"; rm -f "$VERIFY_ERR"; block "${reason:-R6_POSTVERIFY_FAILED}"; fi; rm -f "$VERIFY_ERR"
-if [ "${S32_R6_TEST_MODE:-false}" != true ]; then rm -f "$PRE" "$POST"; fi
-T="$(mktemp "$ROOT/progress/.r6-result.XXXXXX")"; printf 'STATUS=PASS\nSTAGE=R6\nR6_WEB=PASS\nS32_RELEASE_FINGERPRINT=%s\nRELEASE_SOURCE_SHA=%s\nMEILI_DOCUMENTS=%s\nWEB_IMAGE_ID=%s\nWEB_REVISION=%s\nAPI_WEB_PARITY=PASS\n' "$FP" "$SRC" "$BASE_MEILI_DOCUMENTS" "$WEB_ID" "$SRC">"$T"; chmod 600 "$T"; ln -- "$T" "$RESULT"; rm -f "$T"; printf 'STATUS=PASS\nR6_WEB=PASS\nAPI_WEB_PARITY=PASS\n'
