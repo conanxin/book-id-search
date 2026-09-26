@@ -79,6 +79,7 @@ ACTUAL_BASE_ID="$($DK image inspect "$BASE_API_IMAGE" --format '{{.Id}}' 2>/dev/
 
 POST_JSON="${S32_ROLLBACK_RECOVERY_BASELINE_JSON:-}"
 TMP=""
+trap '[ -z "${TMP:-}" ] || rm -f "$TMP"' EXIT
 if [ -z "$POST_JSON" ]; then
   TMP="$(mktemp)"; POST_JSON="$TMP"
   BOOK_ID_SEARCH_REPO_ROOT="$ROOT" python3 "$SCRIPT_DIR/plan-s32-production-baseline-with-grace.py" --json-out "$POST_JSON" >/dev/null || block BASELINE_FAILED
@@ -149,7 +150,7 @@ FLAGS="$($DK exec "$pg_cids" psql -U "$DB_ADMIN" -d "$DB_NAME" -At -F, -c "SELEC
 TABLES="$($DK exec "$pg_cids" psql -U "$DB_ADMIN" -d "$DB_NAME" -At -c "SELECT count(*) FROM information_schema.tables WHERE table_schema IN ('core','ops') AND table_type='BASE TABLE'")" || block DB_STATE_QUERY_FAILED
 [ "$NS" = 3 ] && [ "$ROLE" = 1 ] && [ "$FLAGS" = "0,0,0,0" ] && [ "$TABLES" = 26 ] || block R3_DB_STATE_DRIFT
 
-[ -z "$TMP" ] || rm -f "$TMP"
+[ -z "$TMP" ] || { rm -f "$TMP"; TMP=""; }
 
 umask 077
 TMP_RESULT="$(mktemp "$P/.api-rollback-recovery.XXXXXX")"
