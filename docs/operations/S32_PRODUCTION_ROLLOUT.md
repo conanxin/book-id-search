@@ -264,6 +264,27 @@ A recovery START without terminal R4 RESULT is itself incomplete and must never 
 
 Because R4 and R5 share one `R4_R5` authorization claim, do not CONTROL_PLANE_SYNC between recovered R4 and R5. Close the R4/R5 authorization group on the same incident CTRL first; only then merge/sync newer control-plane tooling before R6.
 
+## External R5 activation while the R4_R5 claim is bound to an older incident CTRL
+
+When R4 has been terminalized through the reviewed after-rollback recovery, R5 must still complete under the same retained `R4_R5` authorization/claim before any control-plane sync. Do not re-authorize or re-claim the stage group.
+
+If production intentionally remains on the older incident CTRL while the reviewed R5 fixes live only on a later exact tool head, use the reviewed external R5 activation tool rather than the production checkout's older executor.
+
+The external activation:
+- requires canonical R4 PASS and the retained R4_R5 claim bound to the incident CTRL;
+- consumes the already-materialized release-scoped `api.env` without ever printing secrets;
+- validates `s32_app@postgres/book_id_search_s32`, token format and read-only app-role connectivity before mutation;
+- renders the repaired `.env -> postgres.env -> api.env` Compose chain and proves the rendered Meili key hash matches the running Meili key;
+- writes one canonical R5 START;
+- performs exactly one API-only `up -d --no-build --no-deps api` with S32 enabled;
+- waits with bounded boot grace;
+- verifies private auth semantics: disabled state is replaced by enabled unauthenticated 401, wrong token 403, correct token 200;
+- runs the retained backend production acceptance, requiring legacy search PASS, assessment replay PASS, backend acceptance PASS, and retained acceptance project evidence;
+- verifies Web/Meili/Postgres container invariance, R3 schema/role invariants and that the previously empty core/ops store now has persisted acceptance data;
+- atomically writes the canonical R5 RESULT with execution-tool SHA, claim SHA, security-status evidence, acceptance IDs and replay evidence.
+
+R5 START without R5 RESULT is incomplete and must never be auto-retried. After R5 terminal PASS, the shared R4_R5 stage group is closed; only then merge/sync newer control-plane tooling before R6.
+
 ## Rollback identities
 
 R0 is the rollback reference.
