@@ -110,8 +110,8 @@ BASE_WEB_REV="$(get "$R0" WEB_REVISION || true)"
 BASE_MEILI_DOCUMENTS="$(get "$R0" MEILI_DOCUMENTS || true)"
 [ -n "$BASE_API_IMAGE" ] && [ -n "$BASE_API_ID" ] && [ -n "$BASE_API_REV" ] && [ -n "$BASE_WEB_REV" ] || block R0_API_IDENTITY_INVALID
 printf '%s' "$BASE_MEILI_DOCUMENTS"|grep -qE '^[0-9]+$' || block R0_MEILI_DOCUMENTS_INVALID
-API_OVERRIDE="/opt/book-id-search-runtime/s31/${BASE_API_REV}/api-production.override.yml"
-WEB_OVERRIDE="/opt/book-id-search-runtime/s32/${BASE_WEB_REV}/web-production.override.yml"
+API_OVERRIDE="${S32_R4_RECOVERY_API_OVERRIDE:-/opt/book-id-search-runtime/s31/${BASE_API_REV}/api-production.override.yml}"
+WEB_OVERRIDE="${S32_R4_RECOVERY_WEB_OVERRIDE:-/opt/book-id-search-runtime/s32/${BASE_WEB_REV}/web-production.override.yml}"
 for f in "$API_OVERRIDE" "$WEB_OVERRIDE"; do [ -f "$f" ] && [ ! -L "$f" ] || block BASELINE_OVERRIDE_INVALID; done
 
 TMPDIR="$(mktemp -d)"
