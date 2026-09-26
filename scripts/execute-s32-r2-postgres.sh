@@ -90,20 +90,11 @@ if [ "${S32_R2_TEST_MODE:-false}" = true ]; then
   EXPECTED_MANIFEST_DIGEST="${PG_IMAGE##*@}"
 else
   ACTUAL_PG_ID="$(sudo -n docker image inspect "$PG_IMAGE" --format '{{.Id}}' 2>/dev/null)" || block PG_IMAGE_NOT_LOCAL
-  # Backend-compatible identity contract (fail-closed):
-  #   EXPECTED_MANIFEST_DIGEST is the immutable digest suffix of pgImageRef.
-  #   Valid observed host IDs are exactly two:
-  #     (a) manifest pgImageId (classic image store: config digest), or
-  #     (b) EXPECTED_MANIFEST_DIGEST (containerd image store target digest).
-  # Expected manifest digest = the @-suffix of pgImageRef (already sha256:…).
   EXPECTED_MANIFEST_DIGEST="${PG_IMAGE##*@}"
   case "$ACTUAL_PG_ID" in
     "$PG_IMAGE_ID"|"$EXPECTED_MANIFEST_DIGEST") ;;
     *) block PG_IMAGE_ID_MISMATCH ;;
   esac
-  # Digest/reference proof: local image RepoDigests must carry the exact
-  # expected manifest digest (registry names may normalize to
-  # docker.io/library/postgres@..., so compare the @-suffix only).
   REPO_DIGEST_PROOF="$(sudo -n docker image inspect "$PG_IMAGE" --format '{{join .RepoDigests " "}}' 2>/dev/null)" || block PG_IMAGE_REPODIGEST_MISMATCH
   DIGEST_SEEN=false
   for REF in $REPO_DIGEST_PROOF; do
@@ -126,23 +117,26 @@ chmod 700 "$PGDATA"
 if [ "${S32_R2_TEST_MODE:-false}" != true ]; then sudo -n chown "$PG_UID:$PG_GID" "$PGDATA"; fi
 
 # Every docker compose invocation that resolves the S32 override must carry
-# the same interpolation variables, or Compose model interpolation fails
-# (the R2 INCOMPLETE root cause: `up` passed them, `ps` did not).
+# the same interpolation variables. This is the exact R2-INCOMPLETE incident
+# contract: both up and the later ps must see all three values.
 compose_pg() {
-  sudo -n env "S32_POSTGRES_IMAGE=$PG_IMAGE" "S32_API_IMAGE=$BASE_API_IMAGE" "S32_PG_DATA_DIR=$PGDATA" \
-    docker compose --project-directory "$ROOT" --env-file "$PG_ENV" \
-    -f "$ROOT/docker-compose.yml" -f "$ROOT/docker-compose.override.yml" \
-    -f "$API_OVERRIDE" -f "$WEB_OVERRIDE" -f "$OVERRIDE" "$@"
+  local -a compose_args
+  compose_args=(compose --project-directory "$ROOT" --env-file "$PG_ENV"
+    -f "$ROOT/docker-compose.yml" -f "$ROOT/docker-compose.override.yml"
+    -f "$API_OVERRIDE" -f "$WEB_OVERRIDE" -f "$OVERRIDE" "$@")
+  if [ "${S32_R2_TEST_MODE:-false}" = true ]; then
+    {
+      printf 'S32_POSTGRES_IMAGE=%s S32_API_IMAGE=%s S32_PG_DATA_DIR=%s ' "$PG_IMAGE" "$BASE_API_IMAGE" "$PGDATA"
+      printf '%q ' "${compose_args[@]}"
+      printf '\n'
+    } >> "${S32_R2_COMMAND_LOG:?}"
+    env "S32_POSTGRES_IMAGE=$PG_IMAGE" "S32_API_IMAGE=$BASE_API_IMAGE" "S32_PG_DATA_DIR=$PGDATA"       "${S32_R2_DOCKER_CMD:?}" "${compose_args[@]}"
+  else
+    sudo -n env "S32_POSTGRES_IMAGE=$PG_IMAGE" "S32_API_IMAGE=$BASE_API_IMAGE" "S32_PG_DATA_DIR=$PGDATA"       docker "${compose_args[@]}"
+  fi
 }
 
-CMD=(docker compose --project-directory "$ROOT" --env-file "$PG_ENV" -f "$ROOT/docker-compose.yml" -f "$ROOT/docker-compose.override.yml" -f "$API_OVERRIDE" -f "$WEB_OVERRIDE" -f "$OVERRIDE" up -d --no-build --no-deps postgres)
-if [ "${S32_R2_TEST_MODE:-false}" = true ]; then
-  printf 'S32_POSTGRES_IMAGE=%s S32_API_IMAGE=%s S32_PG_DATA_DIR=%s ' "$PG_IMAGE" "$BASE_API_IMAGE" "$PGDATA" > "${S32_R2_COMMAND_LOG:?}"
-  printf '%q ' "${CMD[@]}" >> "${S32_R2_COMMAND_LOG:?}"
-  printf '\n' >> "${S32_R2_COMMAND_LOG:?}"
-else
-  sudo -n env "S32_POSTGRES_IMAGE=$PG_IMAGE" "S32_API_IMAGE=$BASE_API_IMAGE" "S32_PG_DATA_DIR=$PGDATA" "${CMD[@]}"
-fi
+compose_pg up -d --no-build --no-deps postgres
 
 POST_JSON="${S32_R2_POST_FACTS_JSON:-}"
 TMP_POST=""
@@ -174,9 +168,9 @@ fi
 rm -f "$VERIFY_ERR"
 [ -z "$TMP_POST" ] || rm -f "$TMP_POST"
 
+CID="$(compose_pg ps -q postgres)"
+[ -n "$CID" ] || block POSTGRES_CONTAINER_MISSING
 if [ "${S32_R2_TEST_MODE:-false}" != true ]; then
-  CID="$(compose_pg ps -q postgres)"
-  [ -n "$CID" ] || block POSTGRES_CONTAINER_MISSING
   HEALTH="$(sudo -n docker inspect "$CID" --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}')"
   [ "$HEALTH" = healthy ] || block POSTGRES_NOT_HEALTHY
   PORTS="$(sudo -n docker port "$CID" 2>/dev/null || true)"; [ -z "$PORTS" ] || block POSTGRES_PUBLIC_PORT_PRESENT
