@@ -1,11 +1,38 @@
 #!/usr/bin/env python3
-import json,os,pathlib,subprocess,tempfile,unittest,sys
+import hashlib,io,json,os,pathlib,subprocess,tarfile,tempfile,unittest,sys
 ROOT=pathlib.Path(__file__).resolve().parent
-R4=ROOT/'execute-s32-r4-api-dark.sh'; R5=ROOT/'execute-s32-r5-activate.sh'; MAN=ROOT/'s32-release-manifest.py'; SRC='b'*40; CTRL='c'*40
+R4=ROOT/'execute-s32-r4-api-dark.sh'; R5=ROOT/'execute-s32-r5-activate.sh'; MAN=ROOT/'s32-release-manifest.py'; VERIFY=ROOT/'verify-s32-api-image-archive.py'; SRC='b'*40; CTRL='c'*40
 
 def manifest(): return {'version':1,'sourceSha':SRC,'pnpmLockSha256':'1'*64,'apiImageTag':'book-id-search-api:s32-'+SRC,'apiImageId':'sha256:'+'2'*64,'apiOciRevision':SRC,'apiBaseDigest':'node@sha256:'+'3'*64,'webImageTag':'book-id-search-web:'+SRC,'webImageId':'sha256:'+'4'*64,'webOciRevision':SRC,'webStaticManifestSha256':'5'*64,'webS32Enabled':True,'webNodeBaseDigest':'node@sha256:'+'6'*64,'webNginxBaseDigest':'nginx@sha256:'+'7'*64,'pgImageRef':'postgres@sha256:'+'8'*64,'pgImageId':'sha256:'+'9'*64,'migrationPath':'db/migrations/001_s32_core_schema.sql','migrationSha256':'a1'*32,'roleBootstrapPath':'deploy/s32-production-roles.sql','roleBootstrapSha256':'b2'*32,'s32OverridePath':'deploy/s32-production.override.yml','s32OverrideSha256':'c3'*32}
 def fp(path):
  out=subprocess.check_output([sys.executable,str(MAN),str(path)],text=True); return [x.split('=',1)[1] for x in out.splitlines() if x.startswith('S32_RELEASE_FINGERPRINT=')][0]
+
+def digest(data): return 'sha256:'+hashlib.sha256(data).hexdigest()
+
+def oci_archive(path, revision=SRC, tamper_layer=False):
+ config=json.dumps({'config':{'Labels':{'org.opencontainers.image.revision':revision}}},sort_keys=True,separators=(',',':')).encode()
+ config_digest=digest(config)
+ layer=b'layer-bytes-for-s32-api-test'
+ layer_digest=digest(layer)
+ manifest=json.dumps({
+  'schemaVersion':2,
+  'config':{'mediaType':'application/vnd.oci.image.config.v1+json','digest':config_digest,'size':len(config)},
+  'layers':[{'mediaType':'application/vnd.oci.image.layer.v1.tar','digest':layer_digest,'size':len(layer)}],
+ },sort_keys=True,separators=(',',':')).encode()
+ manifest_digest=digest(manifest)
+ index=json.dumps({
+  'schemaVersion':2,
+  'manifests':[{'mediaType':'application/vnd.oci.image.manifest.v1+json','digest':manifest_digest,'size':len(manifest)}],
+ },sort_keys=True,separators=(',',':')).encode()
+ with tarfile.open(path,'w') as tf:
+  for name,data in [
+   ('index.json',index),
+   ('blobs/sha256/'+manifest_digest.split(':',1)[1],manifest),
+   ('blobs/sha256/'+config_digest.split(':',1)[1],config),
+   ('blobs/sha256/'+layer_digest.split(':',1)[1],layer+b'X' if tamper_layer else layer),
+  ]:
+   info=tarfile.TarInfo(name); info.size=len(data); tf.addfile(info,io.BytesIO(data))
+ return manifest_digest,config_digest
 class Env:
  def __init__(self):
   self.t=tempfile.TemporaryDirectory(); self.root=pathlib.Path(self.t.name); (self.root/'progress').mkdir(); (self.root/'deploy').mkdir(); (self.root/'docker-compose.yml').write_text('services: {}\n'); (self.root/'docker-compose.override.yml').write_text('services: {}\n'); (self.root/'deploy/s32-production.override.yml').write_text('services: {}\n')
@@ -20,11 +47,57 @@ class Env:
   self.r5post=self.root/'r5post.json'; self.r5post.write_text(json.dumps({'services':{'web':{'cid':'w1','startedAt':'wt','imageId':'wi'},'api':{'cid':'newapi2','startedAt':'newt2','imageId':'sha256:'+'2'*64,'revision':SRC},'meilisearch':{'cid':'m1','startedAt':'mt','imageId':'mi'}},'httpStatus':200,'postgresPresent':True,'s32EnvNames':['S32_FEATURES_ENABLED','S32_DATABASE_URL','S32_PRIVATE_API_TOKEN'],'stats':{'numberOfDocuments':5115734,'isIndexing':False},'searches':{k:{'status':'PASS'} for k in ['ISBN','SSID','DXID','title','author','publisher']},'backendAcceptance':'PASS'}))
   self.log=self.root/'cmd.log'
  def close(self): self.t.cleanup()
- def env(self):
-  e=os.environ.copy(); e.update(BOOK_ID_SEARCH_REPO_ROOT=str(self.root),S32_R0_RECEIPT=str(self.r0),S32_R3_RECEIPT=str(self.r3),S32_R4_CAPACITY_RECEIPT=str(self.cap),S32_RELEASE_MANIFEST_JSON=str(self.man),S32_POSTGRES_ENV_FILE=str(self.pg),S32_API_ENV_FILE=str(self.api),S32_R4_R5_TEST_MODE='true',S32_R4_POST_FACTS_JSON=str(self.r4post),S32_R5_POST_FACTS_JSON=str(self.r5post),S32_R4_R5_COMMAND_LOG=str(self.log)); return e
- def r4(self): return subprocess.run(['bash',str(R4),'--execute-r4',self.fp,SRC,CTRL],text=True,capture_output=True,env=self.env())
- def r5(self): return subprocess.run(['bash',str(R5),'--execute-r5',self.fp,SRC,CTRL],text=True,capture_output=True,env=self.env())
+ def env(self,**kw):
+  e=os.environ.copy(); e.update(BOOK_ID_SEARCH_REPO_ROOT=str(self.root),S32_R0_RECEIPT=str(self.r0),S32_R3_RECEIPT=str(self.r3),S32_R4_CAPACITY_RECEIPT=str(self.cap),S32_RELEASE_MANIFEST_JSON=str(self.man),S32_POSTGRES_ENV_FILE=str(self.pg),S32_API_ENV_FILE=str(self.api),S32_R4_R5_TEST_MODE='true',S32_R4_POST_FACTS_JSON=str(self.r4post),S32_R5_POST_FACTS_JSON=str(self.r5post),S32_R4_R5_COMMAND_LOG=str(self.log)); e.update({k:str(v) for k,v in kw.items()}); return e
+ def r4(self,**kw): return subprocess.run(['bash',str(R4),'--execute-r4',self.fp,SRC,CTRL],text=True,capture_output=True,env=self.env(**kw))
+ def r5(self,**kw): return subprocess.run(['bash',str(R5),'--execute-r5',self.fp,SRC,CTRL],text=True,capture_output=True,env=self.env(**kw))
 class T(unittest.TestCase):
+ def test_archive_identity_verifier_accepts_manifest_config_and_layers(self):
+  x=tempfile.TemporaryDirectory(); self.addCleanup(x.cleanup); archive=pathlib.Path(x.name)/'image.tar'
+  manifest_digest,config_digest=oci_archive(archive)
+  with archive.open('rb') as fh:
+   r=subprocess.run([sys.executable,str(VERIFY),'--expected-manifest-digest',manifest_digest,'--expected-config-digest',config_digest,'--expected-revision',SRC],stdin=fh,text=True,capture_output=True)
+  self.assertEqual(r.returncode,0,r.stdout+r.stderr); self.assertIn('IMAGE_ARCHIVE_IDENTITY=PASS',r.stdout); self.assertIn('LAYER_COUNT=1',r.stdout)
+
+ def test_archive_identity_verifier_fails_closed_on_config_revision_or_layer_tamper(self):
+  x=tempfile.TemporaryDirectory(); self.addCleanup(x.cleanup); archive=pathlib.Path(x.name)/'image.tar'
+  manifest_digest,config_digest=oci_archive(archive)
+  with archive.open('rb') as fh:
+   r=subprocess.run([sys.executable,str(VERIFY),'--expected-manifest-digest',manifest_digest,'--expected-config-digest','sha256:'+'f'*64,'--expected-revision',SRC],stdin=fh,text=True,capture_output=True)
+  self.assertNotEqual(r.returncode,0); self.assertIn('CONFIG_DIGEST_MISMATCH',r.stdout+r.stderr)
+  with archive.open('rb') as fh:
+   r=subprocess.run([sys.executable,str(VERIFY),'--expected-manifest-digest',manifest_digest,'--expected-config-digest',config_digest,'--expected-revision','f'*40],stdin=fh,text=True,capture_output=True)
+  self.assertNotEqual(r.returncode,0); self.assertIn('OCI_REVISION_MISMATCH',r.stdout+r.stderr)
+  bad=pathlib.Path(x.name)/'bad.tar'; oci_archive(bad,tamper_layer=True)
+  with bad.open('rb') as fh:
+   r=subprocess.run([sys.executable,str(VERIFY),'--expected-manifest-digest',manifest_digest,'--expected-config-digest',config_digest,'--expected-revision',SRC],stdin=fh,text=True,capture_output=True)
+  self.assertNotEqual(r.returncode,0); self.assertIn('BLOB_DIGEST_MISMATCH',r.stdout+r.stderr)
+
+ def test_r4_r5_accept_containerd_host_id_and_bind_receipts_to_it(self):
+  x=Env(); self.addCleanup(x.close); host_id='sha256:'+'a'*64
+  f=json.loads(x.r4post.read_text()); f['services']['api']['imageId']=host_id; x.r4post.write_text(json.dumps(f))
+  f=json.loads(x.r5post.read_text()); f['services']['api']['imageId']=host_id; x.r5post.write_text(json.dumps(f))
+  r=x.r4(S32_R4_R5_FAKE_API_HOST_ID=host_id); self.assertEqual(r.returncode,0,r.stdout+r.stderr)
+  receipt=next(x.root.glob('progress/*R4.result.env')).read_text()
+  self.assertIn('API_IMAGE_ID='+host_id,receipt)
+  self.assertIn('API_CONFIG_DIGEST=sha256:'+'2'*64,receipt)
+  self.assertIn('API_IDENTITY_MODE=OCI_MANIFEST',receipt)
+  r=x.r5(S32_R4_R5_FAKE_API_HOST_ID=host_id); self.assertEqual(r.returncode,0,r.stdout+r.stderr)
+  r5=next(x.root.glob('progress/*R5.result.env')).read_text()
+  self.assertIn('API_IMAGE_ID='+host_id,r5)
+  self.assertIn('API_CONFIG_DIGEST=sha256:'+'2'*64,r5)
+
+ def test_backend_identity_gate_is_archive_proven_and_r5_binds_r4_host_id(self):
+  r4=R4.read_text(); r5=R5.read_text()
+  self.assertIn('docker image save "$API_TAG"',r4)
+  self.assertIn('verify-s32-api-image-archive.py',r4)
+  self.assertIn('API_IMAGE_ARCHIVE_IDENTITY_MISMATCH',r4)
+  self.assertIn('API_CONFIG_DIGEST=%s',r4)
+  self.assertIn('get "$R4" API_IMAGE_ID',r5)
+  self.assertIn('get "$R4" API_CONFIG_DIGEST',r5)
+  self.assertIn('API_RUNTIME_BINDING_MISMATCH',r5)
+  self.assertIn('verify-s32-api-image-archive.py',r5)
+
  def test_r4_changes_api_only_and_s32_stays_disabled(self):
   x=Env(); self.addCleanup(x.close); r=x.r4(); self.assertEqual(r.returncode,0,r.stdout+r.stderr); self.assertIn('R4_API_DARK=PASS',r.stdout); log=x.log.read_text(); self.assertIn('--no-build --no-deps api',log); self.assertIn('S32_FEATURES_ENABLED=false',log); self.assertNotIn('TOKEN_SENTINEL',log)
  def test_r4_requires_fresh_capacity_and_exact_api_identity(self):
