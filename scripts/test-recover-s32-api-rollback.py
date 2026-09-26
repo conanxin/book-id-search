@@ -39,7 +39,7 @@ if a and a[0]=="exec":
     if "pg_namespace" in sql: print("3")
     elif "count(*) FROM pg_roles" in sql: print("1")
     elif "rolsuper" in sql: print("0,0,0,0")
-    elif "table_schema||'.'||table_name" in sql: print("core.t1\\ncore.t2\\ncore.t3\\ncore.t4\\ncore.t5\\ncore.t6\\ncore.t7\\ncore.t8\\ncore.t9\\ncore.t10\\ncore.t11\\ncore.t12\\ncore.t13\\ncore.t14\\ncore.t15\\ncore.t16\\ncore.t17\\ncore.t18\\ncore.t19\\ncore.t20\\ncore.t21\\ncore.t22\\ncore.t23\\ncore.t24\\ncore.t25\\ncore.t26")
+    elif "table_schema||'.'||table_name" in sql: print("\n".join(["core.t1","core.t2","core.t3","core.t4","core.t5","core.t6","core.t7","core.t8","core.t9","core.t10","core.t11","core.t12","core.t13","core.t14","core.t15","core.t16","core.t17","core.t18","core.t19","core.t20","core.t21","core.t22","core.t23","core.t24","core.t25","core.t26"]))
     elif "SELECT EXISTS" in sql: print("f")
     else: raise SystemExit(71)
     raise SystemExit(0)
