@@ -147,7 +147,7 @@ DB_ADMIN="$(get "$PGENV" S32_POSTGRES_USER || true)"
 NS="$($DK exec "$pg_cids" psql -U "$DB_ADMIN" -d "$DB_NAME" -At -c "SELECT count(*) FROM pg_namespace WHERE nspname IN ('core','ops','derived')")" || block DB_STATE_QUERY_FAILED
 ROLE="$($DK exec "$pg_cids" psql -U "$DB_ADMIN" -d "$DB_NAME" -At -c "SELECT count(*) FROM pg_roles WHERE rolname='s32_app'")" || block DB_STATE_QUERY_FAILED
 FLAGS="$($DK exec "$pg_cids" psql -U "$DB_ADMIN" -d "$DB_NAME" -At -F, -c "SELECT rolsuper::int,rolcreaterole::int,rolcreatedb::int,rolreplication::int FROM pg_roles WHERE rolname='s32_app'")" || block DB_STATE_QUERY_FAILED
-TABLE_LIST="$($DK exec "$pg_cids" psql -U "$DB_ADMIN" -d "$DB_NAME" -At -c "SELECT table_schema||'.'||table_name FROM information_schema.tables WHERE table_schema IN ('core','ops') AND table_type='BASE TABLE' ORDER BY table_schema,table_name)" || block DB_STATE_QUERY_FAILED
+TABLE_LIST="$($DK exec "$pg_cids" psql -U "$DB_ADMIN" -d "$DB_NAME" -At -c "SELECT table_schema||'.'||table_name FROM information_schema.tables WHERE table_schema IN ('core','ops') AND table_type='BASE TABLE' ORDER BY table_schema,table_name")" || block DB_STATE_QUERY_FAILED
 TABLES="$(printf '%s\n' "$TABLE_LIST"|grep -c .)"
 [ "$NS" = 3 ] && [ "$ROLE" = 1 ] && [ "$FLAGS" = "0,0,0,0" ] && [ "$TABLES" = 26 ] || block R3_DB_STATE_DRIFT
 while IFS= read -r table; do
