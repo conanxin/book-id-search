@@ -108,9 +108,13 @@ raise SystemExit(72)
 HOST_HELPER = r'''#!/usr/bin/env python3
 import os, subprocess, sys
 a=sys.argv[1:]
-if a and a[0] == "find" and os.environ.get("FAKE_PRIV_FIND") == "1":
-    sys.stdout.write(a[1]+"/PG_VERSION\n")
-    raise SystemExit(0)
+if os.environ.get("FAKE_PRIV_FIND") == "1":
+    if a and a[0] == "find":
+        sys.stdout.write(a[1]+"/PG_VERSION\n")
+        raise SystemExit(0)
+    if len(a) >= 4 and a[0] == "stat" and a[1:3] == ["-c", "%a"]:
+        sys.stdout.write("700\n")
+        raise SystemExit(0)
 raise SystemExit(subprocess.run(a).returncode)
 '''
 
