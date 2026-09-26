@@ -147,40 +147,12 @@ DB_ADMIN="$(get "$PGENV" S32_POSTGRES_USER || true)"
 NS="$($DK exec "$pg_cids" psql -U "$DB_ADMIN" -d "$DB_NAME" -At -c "SELECT count(*) FROM pg_namespace WHERE nspname IN ('core','ops','derived')")" || block DB_STATE_QUERY_FAILED
 ROLE="$($DK exec "$pg_cids" psql -U "$DB_ADMIN" -d "$DB_NAME" -At -c "SELECT count(*) FROM pg_roles WHERE rolname='s32_app'")" || block DB_STATE_QUERY_FAILED
 FLAGS="$($DK exec "$pg_cids" psql -U "$DB_ADMIN" -d "$DB_NAME" -At -F, -c "SELECT rolsuper::int,rolcreaterole::int,rolcreatedb::int,rolreplication::int FROM pg_roles WHERE rolname='s32_app'")" || block DB_STATE_QUERY_FAILED
-TABLE_LIST="$($DK exec "$pg_cids" psql -U "$DB_ADMIN" -d "$DB_NAME" -At -c "SELECT table_schema||'.'||table_name FROM information_schema.tables WHERE table_schema IN ('core','ops') AND table_type='BASE TABLE' ORDER BY table_schema,table_name")" || block DB_STATE_QUERY_FAILED
+TABLE_LIST="$($DK exec "$pg_cids" psql -U "$DB_ADMIN" -d "$DB_NAME" -At -c "SELECT table_schema||'.'||table_name FROM information_schema.tables WHERE table_schema IN ('core','ops') AND table_type='BASE TABLE' ORDER BY table_schema,table_name)" || block DB_STATE_QUERY_FAILED
 TABLES="$(printf '%s\n' "$TABLE_LIST"|grep -c .)"
 [ "$NS" = 3 ] && [ "$ROLE" = 1 ] && [ "$FLAGS" = "0,0,0,0" ] && [ "$TABLES" = 26 ] || block R3_DB_STATE_DRIFT
 while IFS= read -r table; do
   [ -n "$table" ] || continue
-  printf '%s' "$table"|grep -qE '^(core|ops)\.[A-Za-z_][A-Za-z0-9_]*
-
-umask 077
-TMP_RESULT="$(mktemp "$P/.api-rollback-recovery.XXXXXX")"
-cat >"$TMP_RESULT" <<EOF
-STATUS=PASS
-ROLLBACK_SCOPE=API_TO_R0
-API_ROLLBACK=PASS
-S32_RELEASE_FINGERPRINT=$FP
-RELEASE_SOURCE_SHA=$SRC
-CONTROL_PLANE_SHA=$CTRL
-BASELINE_API_IMAGE=$BASE_API_IMAGE
-BASELINE_API_IMAGE_ID=$BASE_API_ID
-BASELINE_API_REVISION=$BASE_API_REV
-POSTGRES_DATA_RETAINED=YES
-MEILI_UNCHANGED=YES
-AUTO_RETRY=NO
-ROLLBACK_RECOVERY_MODE=VERIFY_ONLY
-ROLLBACK_START_SHA256=$ROLLBACK_START_SHA256
-R4_START_SHA256=$R4_START_SHA256
-RECOVERY_TOOL_SHA=$RECOVERY_TOOL_SHA
-LEGACY_RUNTIME_RESTORED=PASS
-EOF
-chmod 600 "$TMP_RESULT"
-ln -- "$TMP_RESULT" "$RESULT" 2>/dev/null || { rm -f "$TMP_RESULT"; block RESULT_WRITE_FAILED; }
-rm -f "$TMP_RESULT"
-
-printf 'STATUS=PASS\nROLLBACK_RECOVERY=VERIFY_ONLY_PASS\nCONTROL_PLANE_SHA=%s\nROLLBACK_START_SHA256=%s\nR4_START_SHA256=%s\nRECOVERY_TOOL_SHA=%s\nWRITE_EXECUTED=YES\n' "$CTRL" "$ROLLBACK_START_SHA256" "$R4_START_SHA256" "$RECOVERY_TOOL_SHA"
- || block DB_TABLE_NAME_INVALID
+  printf '%s' "$table" | grep -qE "^(core|ops)\.[A-Za-z_][A-Za-z0-9_]*$" || block DB_TABLE_NAME_INVALID
   HAS_ROWS="$($DK exec "$pg_cids" psql -U "$DB_ADMIN" -d "$DB_NAME" -At -c "SELECT EXISTS (SELECT 1 FROM $table LIMIT 1)")" || block DB_STATE_QUERY_FAILED
   [ "$HAS_ROWS" = f ] || block R3_DB_NOT_EMPTY
 done <<< "$TABLE_LIST"
