@@ -87,6 +87,23 @@ Each sync execution is itself one-shot and forward-only. The executor writes `s3
 Although CONTROL_PLANE_SYNC may repeat within one release, each CTRL authorization yields exactly one execution attempt: START without RESULT = incomplete/unknown (no retry); a terminal RESULT = consumed (no second execution); control-plane movement is only allowed from the current HEAD to a descendant target; and old retained claims never constitute rollback authorization.
 
 An INCOMPLETE R2 (start receipt present, terminal result absent) is never auto-retried. The only permitted closure is a separately and explicitly authorized **verify-only R2 recovery** (`recover-s32-r2-postgres.sh --recover-r2-verify-only <FP> <SRC> <CTRL> <RECOVERY_TOOL_SHA>`), applicable strictly when: the R2 START exists and binds the release identity; no R2 RESULT exists; PostgreSQL is already healthy on the exact image with no host ports; PGDATA is already initialized; and no R3 artifact exists. The recovery re-verifies everything read-only (canonical receipts, manifest, image identity incl. RepoDigests, container by compose labels, legacy runtime vs canonical R0, empty S32 DB state) and its single write is the terminal `R2.result.env` marked `R2_RECOVERY_MODE=VERIFY_ONLY` with the START sha256 and the reviewed recovery-tool SHA. It must never restart, rebuild, or modify the database.
+### INCOMPLETE-R2 recovery sequencing
+
+Recovery tooling may be reviewed on an unmerged PR head, but the in-flight incident identity stays bound to the **existing production control-plane SHA** recorded in `R2.start.env` and the `R2_R3` claim.
+
+For an incident like the 2026-09-26 R2 interruption, the only valid order is:
+
+1. review one exact recovery-tool head and its CI evidence;
+2. keep the production checkout at the existing `CONTROL_PLANE_SHA` bound by START/claim;
+3. obtain explicit authorization for **verify-only recovery**;
+4. execute the reviewed recovery script from an external exact-head tool bundle, with `BOOK_ID_SEARCH_REPO_ROOT` pointing at the unchanged production checkout and `RECOVERY_TOOL_SHA` bound to that reviewed tool head;
+5. after `R2.result.env` is safely terminalized, **STOP** — recovery does not authorize R3;
+6. resume R3 only under a separate explicit decision after re-planning reports `READY_FOR_R3`;
+7. only after the in-flight R2/R3 chain is safely closed may the tooling PR be merged and a later forward-only `CONTROL_PLANE_SYNC` move production to that merge before R4.
+
+Do **not** merge or CONTROL_PLANE_SYNC the recovery PR before recovery. Doing so changes production HEAD while the retained R2 START/claim still bind the older CTRL, making the incident identity unsatisfiable rather than fixing it.
+
+The recovery evidence must also prove: R1 FP/SRC identity; release-scoped `postgres.env` DB/admin contract without printing secrets; backend-compatible image identity derived from the validated manifest; privileged read-only PGDATA non-empty/mode/owner checks; running-container postgres UID/GID equality; exact bind mount from canonical PGDATA to `/var/lib/postgresql/data`; canonical R0 Meilisearch count; and empty pre-R3 schema/runtime-role state.
 
 For an in-flight incident whose retained R2 START and R2_R3 claim are bound to the current control-plane SHA, **do not merge or CONTROL_PLANE_SYNC recovery tooling first**. Review the exact recovery-tool head, explicitly authorize the verify-only recovery, and execute that tool from an external exact-head bundle while the production checkout remains at the START/claim `CONTROL_PLANE_SHA`. After the missing R2 terminal receipt is safely closed, STOP. Any R3 continuation needs its own explicit decision; merge/sync of the recovery tooling belongs later, before the next rollout stage that requires it.
 
