@@ -148,6 +148,8 @@ Stage receipts distinguish the two identities:
 
 This keeps later-stage runtime comparisons on one host representation while preserving cryptographic linkage to the frozen release bytes.
 
+This identity layer is compatible with the retained R2 verify-only recovery tooling merged after the incident; it does not alter R2 recovery receipt semantics or replay policy.
+
 ## PostgreSQL / schema
 
 Canonical PGDATA:
