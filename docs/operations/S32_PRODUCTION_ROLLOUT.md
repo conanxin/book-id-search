@@ -223,6 +223,27 @@ INCOMPLETE / UNKNOWN
 
 Do not auto-resume or auto-retry. Inspect production state first.
 
+## INCOMPLETE API rollback recovery
+
+An API→R0 rollback START without a terminal RESULT is INCOMPLETE/UNKNOWN even when the runtime later proves healthy. Never execute the rollback a second time and never fabricate/delete incident receipts.
+
+The reviewed closure is verify-only recovery:
+
+```bash
+scripts/recover-s32-api-rollback.sh \
+  --recover-api-to-r0-verify-only \
+  <S32_RELEASE_FINGERPRINT> \
+  <RELEASE_SOURCE_SHA> \
+  <INCIDENT_CONTROL_PLANE_SHA> \
+  <RECOVERY_TOOL_SHA>
+```
+
+Recovery must run while production remains on the incident control-plane SHA bound by the rollback authorization. It requires rollback auth/claim/START plus the original R4 START, requires rollback RESULT/R4 RESULT/later-stage artifacts to remain absent, and re-proves that API is exactly canonical R0, S32 env is absent, public/legacy search is healthy, API↔Meilisearch key hashes match without printing secrets, and PostgreSQL/R3 state is intact. Its only write is the atomic no-overwrite rollback terminal RESULT marked `ROLLBACK_RECOVERY_MODE=VERIFY_ONLY`, including rollback/R4 START hashes and the reviewed recovery-tool SHA.
+
+Sequence for an incident is: review exact recovery-tool head → explicit verify-only recovery authorization → execute external exact-head recovery against the unchanged incident checkout → STOP → only then merge/sync newer rollout tooling. Do not CONTROL_PLANE_SYNC first, because that would move production HEAD away from the CTRL bound by the retained rollback authorization/evidence.
+
+Post-recreate API verification uses bounded baseline boot grace. A transient first probe during process startup may be retried for a small bounded number of attempts; exhaustion remains fail-closed and never authorizes an automatic second rollout/rollback.
+
 ## Rollback identities
 
 R0 is the rollback reference.
