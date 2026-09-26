@@ -178,6 +178,8 @@ class T(unittest.TestCase):
         self.assertFalse((x.p/f"s32-rollback-{FP}-API_TO_R0.result.env").exists())
 
     def test_static_verify_only_boundary(self):
+        syntax=subprocess.run(["bash","-n",str(SCRIPT)],text=True,capture_output=True)
+        self.assertEqual(syntax.returncode,0,syntax.stdout+syntax.stderr)
         text=SCRIPT.read_text()
         for bad in ("docker compose up","compose down","docker restart","docker run","docker pull","docker load","docker build","docker rm","docker rmi"):
             self.assertNotIn(bad,text)
