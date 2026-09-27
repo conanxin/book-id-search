@@ -223,6 +223,11 @@ class ProducerTest(unittest.TestCase):
         self.assertIn("MOBILE_390_OVERFLOW", r.stdout)
         self.assertFalse(self.out.exists())
 
+    def test_browser_token_is_removed_from_chromium_child_env(self):
+        text = PRODUCER.read_text()
+        self.assertIn("delete chromeEnv.S32_R7_BROWSER_TOKEN", text)
+        self.assertIn("env: chromeEnv", text)
+
 
 if __name__ == "__main__":
     unittest.main()
