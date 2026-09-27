@@ -2,7 +2,7 @@
 
 **Status:** Implementation plan ready for review; execution blocked until R7 terminal PASS  
 **Task ID:** `S32_M2E_ISSUE_RESOLUTION_IMPLEMENTATION_PLAN_R1`  
-**Written spec:** `59e56dcf0f6e43979cd10e14d0ace6f1adfb5ec0`  
+**Written spec:** latest canonical spec on this planning branch (post-review lifecycle/replay corrections)  
 **Source baseline for planning:** `main@d8e6d96672e9cef6a2bab5a35c604fbd83ec83d9`  
 **Planning branch:** `plan/s32-m2e-issue-resolution`
 
@@ -66,8 +66,8 @@ POST Resolution
   -> validate preferred Claim same-Issue membership
   -> validate optional frozen Manifest visibility/integrity
   -> INSERT append-only IssueResolution
-  -> UPDATE ResearchIssue.current_resolution_id
-  -> OPEN -> RESOLVED
+  -> UPDATE ResearchIssue.current_resolution_id + updated_at
+  -> preserve existing OPEN/RESOLVED lifecycle
   -> canonical read-back
   -> complete idempotency receipt
   -> COMMIT
@@ -342,7 +342,7 @@ Do not lock all candidate Claims or all Assessment history.
 
 ### Lifecycle
 
-Require:
+Require for a **new** Resolution command:
 
 ```text
 Project ACTIVE
@@ -351,7 +351,21 @@ Issue OPEN | RESOLVED
 
 ARCHIVED Project/Issue fail closed.
 
-### CAS
+Creating a Resolution does not mutate Issue lifecycle. OPEN remains OPEN; RESOLVED remains RESOLVED. M2-E v1 is a working-conclusion layer, not the explicit resolve/reopen lifecycle command.
+
+### Replay before CAS
+
+Follow the proven M2-A/M2-B/M2-D authority rule:
+
+1. attempt idempotency reservation;
+2. if the key already exists, lock/read the receipt;
+3. same hash + COMPLETED -> canonical-read and replay the original Resolution immediately;
+4. do **not** apply current-pointer or later lifecycle checks to a completed replay;
+5. only a genuinely new reservation proceeds to scope locking/CAS.
+
+This guarantees response-unknown retry still recovers the original command even if another Resolution later advanced the Issue pointer or the Issue later became read-only.
+
+### CAS for new commands
 
 After locking the Issue:
 
@@ -410,8 +424,9 @@ Malformed completed receipt -> integrity error, never duplicate write.
 4. validate preferred Claim / optional Manifest;
 5. insert IssueResolution;
 6. update ResearchIssue:
-   - `current_resolution_id = new ID`
-   - `lifecycle_state='RESOLVED'`;
+   - `current_resolution_id = new ID`;
+   - `updated_at = now()`;
+   - preserve the existing lifecycle_state unchanged;
 7. canonical read-back;
 8. complete receipt;
 9. COMMIT.
@@ -420,10 +435,11 @@ Malformed completed receipt -> integrity error, never duplicate write.
 
 Pin:
 
-- first Resolution from OPEN;
-- next Resolution from RESOLVED;
+- first Resolution from OPEN advances pointer, updates updated_at, and leaves lifecycle OPEN;
+- Resolution from RESOLVED advances pointer, updates updated_at, and leaves lifecycle RESOLVED;
 - stale pointer;
-- same-key replay;
+- same-key completed replay after later pointer drift still returns the original Resolution without pointer mutation;
+- same-key completed replay after later read-only lifecycle drift still returns the original Resolution;
 - changed request conflict;
 - cross-Issue Claim;
 - archived Project;
@@ -741,7 +757,7 @@ Use disposable PostgreSQL 16 with the existing ownership-label/tmpfs/random-loop
 - UPDATE/DELETE Resolution rejected by trigger;
 - optional Manifest visibility;
 - existing M2-D Assessment/Manifest rows preserved;
-- `research_issues.lifecycle_state` becomes/stays RESOLVED;
+- `research_issues.lifecycle_state` is preserved exactly while `updated_at` advances on new pointer writes;
 - idempotency receipt exact.
 
 Suggested commit:
@@ -831,10 +847,10 @@ Project
 -> Research Issue
 -> candidate Claims
 -> existing Assessments
--> create PREFERRED_CLAIM Resolution
--> current conclusion appears
+-> create PREFERRED_CLAIM Resolution while Issue remains OPEN
+-> current conclusion appears and new Candidate Claim creation remains available
 -> create second INSUFFICIENT_EVIDENCE Resolution
--> current pointer changes
+-> current pointer changes without lifecycle mutation
 -> first Resolution remains in history
 -> reload
 -> history/current survive
