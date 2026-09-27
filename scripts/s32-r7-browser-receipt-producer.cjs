@@ -191,6 +191,12 @@ async function produce() {
   if (MODE === "fixture") fixtureServer = await startFixtureServer();
 
   const port = 10000 + (process.pid % 50000);
+  const chromeEnv = {
+    ...process.env,
+    NO_PROXY: "127.0.0.1,localhost",
+    no_proxy: "127.0.0.1,localhost",
+  };
+  delete chromeEnv.S32_R7_BROWSER_TOKEN;
   const chrome = spawn(CHROMIUM, [
     "--headless=new",
     "--no-sandbox",
@@ -201,11 +207,7 @@ async function produce() {
   ], {
     stdio: ["ignore", "ignore", "ignore"],
     detached: true,
-    env: {
-      ...process.env,
-      NO_PROXY: "127.0.0.1,localhost",
-      no_proxy: "127.0.0.1,localhost",
-    },
+    env: chromeEnv,
   });
 
   const killChrome = () => {
