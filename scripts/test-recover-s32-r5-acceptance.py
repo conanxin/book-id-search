@@ -39,6 +39,8 @@ if a and a[0]=="port":
     raise SystemExit(0)
 if a and a[0]=="exec":
     sql=a[-1]
+    if ":'" in sql:
+        raise SystemExit(70)
     if "pg_namespace" in sql: print("3")
     elif "count(*) FROM pg_roles" in sql: print("1")
     elif "rolsuper" in sql: print("0,0,0,0")
@@ -212,6 +214,12 @@ class T(unittest.TestCase):
         text=SCRIPT.read_text()
         for bad in ("compose ","docker restart","docker run","docker pull","docker load","docker build","docker rm","docker rmi"):
             self.assertNotIn(bad,text)
+        self.assertNotIn(":'pid'",text)
+        self.assertNotIn(":'aid'",text)
+        self.assertNotIn("-v pid=",text)
+        self.assertNotIn("-v aid=",text)
+        self.assertIn("id::text='$PROJECT_ID'",text)
+        self.assertIn("id::text='$ASSESSMENT_ID'",text)
         self.assertIn("R5_EXECUTION_MODE=EXTERNAL_ACCEPTANCE_RECOVERY",text)
         self.assertIn("IDEMPOTENCY_RECEIPT_DB_PROOF=PASS",text)
 
