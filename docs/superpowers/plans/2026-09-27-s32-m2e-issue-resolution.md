@@ -376,8 +376,9 @@ For `PREFERRED_CLAIM`:
 
 If `evidenceManifestId != null`:
 
-- reuse M2-D Project evidence authorization/integrity helpers where possible;
-- require the Manifest to be currently visible from the same Project/Issue context;
+- require the Manifest to belong to an Assessment whose Claim is a candidate of this exact Issue;
+- reuse M2-D Project evidence authorization/integrity helpers;
+- require that Assessment/Manifest to be currently visible in the same Project context;
 - do not copy Manifest/items;
 - do not alter Manifest metadata/hash.
 
