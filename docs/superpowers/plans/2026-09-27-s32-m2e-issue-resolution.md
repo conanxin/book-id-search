@@ -94,7 +94,8 @@ The read path is Project-scoped, privacy-safe, and must never infer current from
 
 `002_s32_m2e_issue_resolution.sql` must add only:
 
-1. same-Issue preferred Claim FK:
+1. a fail-closed compatibility preflight over existing IssueResolution rows;
+2. same-Issue preferred Claim FK:
    ```sql
    ALTER TABLE core.issue_resolutions
    ADD CONSTRAINT fk_ir_preferred_claim_same_issue
@@ -103,11 +104,13 @@ The read path is Project-scoped, privacy-safe, and must never infer current from
    ON DELETE RESTRICT;
    ```
 
-2. append-only trigger function for `core.issue_resolutions`;
+3. append-only trigger function for `core.issue_resolutions`;
 
-3. UPDATE trigger;
+4. UPDATE trigger;
 
-4. DELETE trigger.
+5. DELETE trigger.
+
+The compatibility preflight must reject any existing `PREFERRED_CLAIM` Resolution whose `(issue_id,preferred_claim_id)` membership is absent from `core.research_issue_claims`. Use a stable M2-E-specific exception marker. Do not repair or reinterpret existing research data in the migration.
 
 Do not add tables, columns, enums, indexes, `supersedes_resolution_id`, or generalized framework code.
 
@@ -165,10 +168,21 @@ empty PG16
 ```text
 empty PG16
 -> 001
--> seed representative M2-A/B/C/D rows
+-> seed representative valid M2-A/B/C/D rows
 -> 002
 -> verify rows unchanged
 -> verify new constraints active
+```
+
+Also run a negative upgrade fixture:
+
+```text
+empty PG16
+-> 001
+-> seed legacy PREFERRED_CLAIM Resolution pointing to a Claim outside its Issue
+-> 002
+-> require stable fail-closed migration error
+-> require no automatic data repair
 ```
 
 This upgrade-path test is mandatory because production already runs schema v1.
@@ -208,6 +222,8 @@ feat(s32): add issue resolution invariants
 - keyset cursor precision pattern from Assessment history.
 
 ### Domain types
+
+Define M2-E v1 write input strictly, while keeping read DTOs compatible with the executable schema. In particular, canonical read records use `rationale: string | null`; the create input still requires normalized non-null rationale.
 
 Define:
 
@@ -303,7 +319,22 @@ Provide:
 
 - list history;
 - get detail/current;
+- issue-wide eligible evidence-basis list;
 - current Resolution may be null.
+
+The history response must include authoritative Issue state:
+
+```ts
+issue: {
+  id: string;
+  lifecycleState: "OPEN" | "RESOLVED" | "ARCHIVED";
+  currentResolutionId: string | null;
+  updatedAt: string;
+}
+currentResolution: IssueResolutionSummary | null;
+```
+
+The browser uses this pointer for the next create CAS. It must never infer the pointer from history order.
 
 Suggested commit:
 
@@ -442,6 +473,12 @@ Same key + same request -> replay exact ID.
 Same key + changed request -> conflict.  
 Malformed completed receipt -> integrity error, never duplicate write.
 
+### v1 attribution boundary
+
+Do not add IssueResolution attribution as an incidental side effect of M2-E.
+
+Current schema has no `issue_resolutions.actor_id`, and `contributions.target_type` does not allow `ISSUE_RESOLUTION`. M2-E v1 therefore creates human-local but canonically unattributed Resolution rows. Do not fake a Contribution against the Issue or Claim. Attribution requires a later explicit design/migration.
+
 ### Write sequence
 
 1. reserve idempotency row;
@@ -501,9 +538,12 @@ Validate:
 - Project owns exact Issue;
 - current pointer belongs to same Issue;
 - preferred Claim belongs to same Issue;
-- optional Manifest visibility/integrity before returning protected evidence metadata.
+- optional Manifest visibility/integrity before returning protected evidence metadata;
+- schema-valid historical `rationale=NULL` is readable and returned as null rather than treated as corruption.
 
 ### Current semantics
+
+The history response returns both the authoritative `currentResolutionId` and the exact current Resolution object (or null), independently of the requested history page.
 
 Current is:
 
@@ -620,9 +660,11 @@ feat(s32): expose issue resolution routes
 
 Add strict DTO validators for:
 
-- Resolution record;
+- Resolution record, with `rationale: string | null` on reads;
+- authoritative Issue pointer state;
 - current Resolution;
 - history page;
+- eligible evidence-basis page;
 - detail;
 - created/replayed response.
 
@@ -711,6 +753,7 @@ Rules:
 - load optional evidence-basis choices from the dedicated issue-wide endpoint, not N per-Claim history requests;
 - PREFERRED_CLAIM cannot submit without Claim;
 - other types send preferredClaimId=null;
+- `expectedCurrentResolutionId` comes only from the authoritative Resolution API pointer state, never from the newest history row;
 - stale pointer keeps user rationale/selection and asks for reload/review;
 - response-unknown preserves exact pending receipt for same-key retry;
 - archived Project/Issue disables composer.
@@ -800,6 +843,8 @@ Use disposable PostgreSQL 16 with the existing ownership-label/tmpfs/random-loop
 - stale concurrent command loses without partial write;
 - same key concurrent calls -> one durable Resolution, create/replay semantic pair;
 - cross-Issue preferred Claim rejected by real DB;
+- valid v1 upgrade 001->002 preserves existing M2-A/B/C/D rows;
+- deliberately invalid legacy cross-Issue preferred Resolution makes 002 fail closed without repair;
 - UPDATE/DELETE Resolution rejected by trigger;
 - optional Manifest visibility;
 - evidence basis must map to exactly one visible Assessment whose Claim belongs to the exact Issue;
