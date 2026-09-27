@@ -36,7 +36,7 @@ function fail(reason) {
 
 if (!["fixture", "browser"].includes(MODE)) fail("INVALID_MODE");
 if (!/^[0-9a-f]{64}$/.test(FP)) fail("INVALID_FINGERPRINT");
-if (!/^[0-9a-f-]{36}$/.test(PROJECT_ID)) fail("INVALID_PROJECT_ID");
+if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(PROJECT_ID)) fail("INVALID_PROJECT_ID");
 if (!/^[0-9a-f]{40}$/.test(RUNNER_SOURCE_SHA)) fail("INVALID_RUNNER_SOURCE_SHA");
 if (!OUT) fail("MISSING_OUTPUT_PATH");
 
@@ -95,18 +95,31 @@ function findChromium() {
   return null;
 }
 
-const CHROMIUM = findChromium();
-if (!CHROMIUM) fail("CHROMIUM_UNAVAILABLE");
-
 const FIXTURE_PORT = Number(process.env.S32_R7_FIXTURE_PORT || 4789);
 const TARGET_URL = MODE === "fixture"
   ? `http://127.0.0.1:${FIXTURE_PORT}/`
   : (process.env.S32_R7_BROWSER_URL || "");
 
+let BROWSER_TARGET = null;
 if (MODE === "browser") {
-  if (!/^https?:\/\//.test(TARGET_URL)) fail("MISSING_BROWSER_URL");
   if (!BROWSER_TOKEN) fail("MISSING_BROWSER_TOKEN");
+  try {
+    BROWSER_TARGET = new URL(TARGET_URL);
+  } catch {
+    fail("MISSING_BROWSER_URL");
+  }
+  const normalizedPath = BROWSER_TARGET.pathname.replace(/\/+$/, "");
+  if (normalizedPath !== "/research/projects") fail("BROWSER_URL_NOT_PROJECT_LIST");
+  const loopback = BROWSER_TARGET.hostname === "127.0.0.1" || BROWSER_TARGET.hostname === "localhost";
+  if (!loopback) {
+    if (BROWSER_TARGET.protocol !== "https:" || BROWSER_TARGET.origin !== "https://books.conanxin.com") {
+      fail("BROWSER_URL_UNTRUSTED_ORIGIN");
+    }
+  }
 }
+
+const CHROMIUM = findChromium();
+if (!CHROMIUM) fail("CHROMIUM_UNAVAILABLE");
 
 const FIXTURE_PROJECT_ID = "11111111-1111-4111-8111-111111111111";
 let fixtureServer = null;
@@ -341,11 +354,8 @@ async function produce() {
         if (desktop.webResult !== "PASS") fail("WEB_ACCEPTANCE_NOT_PASS");
         observedProjectId = desktop.projectId;
       } else {
-        const target = new URL(TARGET_URL);
-        const expectedListPath = "/research/projects";
-        if (target.pathname.replace(/\/+$/, "") !== expectedListPath) {
-          fail("BROWSER_URL_NOT_PROJECT_LIST");
-        }
+        const target = BROWSER_TARGET;
+        if (!target) fail("MISSING_BROWSER_URL");
 
         await evaluate(
           `sessionStorage.setItem(${JSON.stringify(TOKEN_KEY)}, ${JSON.stringify(BROWSER_TOKEN)}); true`,
