@@ -198,21 +198,40 @@ Project ARCHIVED -> PROJECT_READ_ONLY
 Issue ARCHIVED   -> RESEARCH_ISSUE_READ_ONLY
 ```
 
-Successful create runs in one SERIALIZABLE transaction:
+Successful **new** create runs in one SERIALIZABLE transaction:
 
 1. reserve/resolve idempotency key;
-2. lock exact ResearchIssue;
-3. compare expected current pointer;
-4. validate lifecycle and preferred Claim membership;
-5. validate optional Manifest visibility/integrity;
-6. insert IssueResolution;
-7. CAS-update `research_issues.current_resolution_id`;
-8. set `lifecycle_state='RESOLVED'`;
-9. canonical read-back;
-10. complete idempotency receipt;
-11. COMMIT.
+2. if an existing COMPLETED same-key/same-hash receipt exists, canonical-read and replay the original Resolution **before** current-pointer/lifecycle checks;
+3. for a genuinely new command, lock exact ResearchIssue;
+4. compare expected current pointer;
+5. validate lifecycle and preferred Claim membership;
+6. validate optional Manifest visibility/integrity;
+7. insert IssueResolution;
+8. CAS-update `research_issues.current_resolution_id` and `updated_at=now()`;
+9. leave `research_issues.lifecycle_state` unchanged;
+10. canonical read-back;
+11. complete idempotency receipt;
+12. COMMIT.
 
-M2-E v1 has no reopen command. A future explicit reopen workflow is separate.
+### Resolution is not the lifecycle transition
+
+M2-E v1 deliberately separates:
+
+```text
+IssueResolution = current working conclusion
+Issue.lifecycle_state = OPEN | RESOLVED | ARCHIVED
+```
+
+Creating a Resolution does **not** automatically change OPEN to RESOLVED.
+
+Consequences:
+
+- an OPEN Issue may have a current working conclusion and still accept new Candidate Claims under the existing M2-B contract;
+- a RESOLVED Issue stays RESOLVED if a new Resolution is appended from an allowed existing candidate set;
+- ARCHIVED remains read-only;
+- an explicit resolve/reopen lifecycle command remains a later, separate design problem.
+
+This avoids turning the first working conclusion into a one-way lock, because existing M2-B correctly rejects new Candidate Claims on RESOLVED Issues.
 
 ## 8. Concurrency
 
@@ -253,6 +272,15 @@ Canonical request hash includes:
 
 Same key + same hash returns the exact prior Resolution ID.  
 Same key + different hash returns `409 IDEMPOTENCY_CONFLICT`.
+
+Completed replay semantics are intentionally stronger than new-write lifecycle/CAS semantics:
+
+- replay is resolved before `expectedCurrentResolutionId` comparison;
+- replay remains valid if a later Resolution has advanced the current pointer;
+- replay remains valid if Project/Issue lifecycle later becomes read-only, provided the original canonical Resolution still belongs to the requested Project/Issue and passes integrity checks;
+- replay never creates a second Resolution or moves the current pointer again.
+
+This matches the already-proven M2-A/M2-B/M2-D response-unknown contract: a completed command can be recovered even after later state drift.
 
 ## 10. Rationale normalization
 
