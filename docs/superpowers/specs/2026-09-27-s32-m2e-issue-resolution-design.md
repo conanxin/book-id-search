@@ -149,6 +149,31 @@ Requirements:
 - `preferred_claim_id = NULL`;
 - rationale is required.
 
+### 5.4 v1 attribution boundary
+
+The executable `core.issue_resolutions` row has no `actor_id`, and the current `core.contributions.target_type` allowlist does not include `ISSUE_RESOLUTION`.
+
+Therefore M2-E v1 is deliberately **human-local but canonically unattributed**:
+
+- the private S32 interaction is a user-initiated action;
+- M2-E does not invent a system Actor;
+- M2-E does not write a fake Contribution against another target type;
+- M2-E does not expand the Contribution allowlist in the same migration merely to add attribution.
+
+Actor/Contribution attribution for IssueResolution is a later explicit schema/product decision.
+
+### 5.5 Strict write, schema-compatible read
+
+M2-E v1 writes require normalized non-empty rationale, but the executable schema currently permits `issue_resolutions.rationale IS NULL`.
+
+Therefore the read model must remain schema-compatible:
+
+- M2-E-created rows: `rationale` is always normalized non-null text;
+- pre-existing/schema-valid rows with `rationale=NULL`: readable, not corruption;
+- API read DTO uses `rationale: string | null`;
+- Web renders a neutral “未记录理由” state for NULL;
+- replay of an M2-E v1 command must still prove its persisted rationale matches the original normalized command and therefore cannot accept NULL for that newly-created resource.
+
 ## 6. Evidence basis
 
 M2-E v1 does not create a second Issue-level Evidence Selection subsystem.
@@ -327,6 +352,24 @@ It returns a compact, privacy-safe page of eligible visible Assessment/Manifest 
 
 Ordering is `assessment.created_at DESC, assessment.id DESC`; default limit 20, max 50; opaque microsecond-safe cursor; no total count.
 
+The Resolution history endpoint must also return authoritative Issue pointer state, not force the browser to infer it from history:
+
+```ts
+{
+  issue: {
+    id,
+    lifecycleState,
+    currentResolutionId: string | null,
+    updatedAt
+  },
+  currentResolution: IssueResolutionSummary | null,
+  resolutions: IssueResolutionSummary[],
+  nextCursor: string | null
+}
+```
+
+`currentResolution` is loaded by exact `current_resolution_id`, even if that row would fall outside the requested history page. This response is the browser's source for `expectedCurrentResolutionId`.
+
 Create body:
 
 ```json
@@ -369,6 +412,8 @@ Resolution History
 
 The current card reads the exact row referenced by `current_resolution_id`.
 
+The browser must never derive `expectedCurrentResolutionId` from “latest history row”. It uses the authoritative `issue.currentResolutionId` returned by the Resolution read model.
+
 History:
 
 - keyset pagination;
@@ -404,11 +449,14 @@ There is no automatic preferred-Claim inference from Assessment stance or confid
 
 Before product implementation, add an additive post-v1 migration covering:
 
-1. same-Issue preferred Claim composite FK;
-2. IssueResolution UPDATE rejection;
-3. IssueResolution DELETE rejection;
-4. schema assertions;
-5. negative invariant tests.
+1. fail-closed preflight over existing `PREFERRED_CLAIM` rows;
+2. same-Issue preferred Claim composite FK;
+3. IssueResolution UPDATE rejection;
+4. IssueResolution DELETE rejection;
+5. schema assertions;
+6. negative invariant tests.
+
+Before adding the composite FK, the migration must explicitly detect any existing row where `preferred_claim_id` is non-null but `(issue_id, preferred_claim_id)` is absent from `research_issue_claims`. If any exist, abort the migration with a stable M2-E-specific error. Do **not** auto-create candidate membership, rewrite the Resolution, null the preferred Claim, or otherwise repair epistemic data inside the migration.
 
 Required DB tests include:
 
@@ -417,7 +465,9 @@ Required DB tests include:
 - Resolution DELETE rejected;
 - cross-Issue current Resolution remains rejected;
 - non-PREFERRED Resolution + NULL preferred passes;
-- PREFERRED_CLAIM + NULL preferred remains rejected.
+- PREFERRED_CLAIM + NULL preferred remains rejected;
+- valid existing v1 rows upgrade successfully;
+- deliberately seeded legacy cross-Issue preferred Claim causes 002 to fail closed before adding the FK, with no automatic repair.
 
 Historical `001_s32_core_schema.sql` remains byte-for-byte unchanged.
 
@@ -439,11 +489,13 @@ Fresh implementation evidence must cover:
 12. current pointer never inferred from timestamps;
 13. history pagination;
 14. issue-wide eligible evidence-basis pagination with bounded query count / no N+1;
-15. real PostgreSQL 16 transaction/concurrency tests;
-16. Web create -> current -> history -> detail;
-17. response-unknown same-key replay;
-18. 390x844 no-horizontal-overflow;
-19. targeted API/Web + builds + migration/schema tests + relevant regression suite.
+15. schema-compatible read of legacy `rationale=null`;
+16. authoritative current pointer/current object returned independently of history-page position;
+17. real PostgreSQL 16 transaction/concurrency tests;
+18. Web create -> current -> history -> detail;
+19. response-unknown same-key replay;
+20. 390x844 no-horizontal-overflow;
+21. targeted API/Web + builds + migration/schema tests + relevant regression suite.
 
 ## 16. Hard sequencing gate
 
