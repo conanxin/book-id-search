@@ -28,6 +28,10 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Install Playwright-managed Chromium
         run: pnpm dlx playwright@1.55.0 install chromium
+      - name: R5 acceptance recovery contract
+        run: |
+          set -euo pipefail
+          python3 scripts/test-recover-s32-r5-acceptance.py
       - name: External R5 activation contract
         run: |
           set -euo pipefail
