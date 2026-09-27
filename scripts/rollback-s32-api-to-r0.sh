@@ -81,7 +81,7 @@ else
   sudo -n "${CMD[@]}"
   POST="$(mktemp)"
   trap 'rm -f "$POST"' EXIT INT TERM
-  python3 "$SCRIPT_DIR/plan-s32-production-baseline.py" --json-out "$POST" >/dev/null || block POST_ROLLBACK_BASELINE_FAILED
+  python3 "$SCRIPT_DIR/plan-s32-production-baseline-with-grace.py" --json-out "$POST" >/dev/null || block POST_ROLLBACK_BASELINE_FAILED
 fi
 
 python3 - "$POST" "$R0" <<'PY' || block POST_ROLLBACK_VERIFY_FAILED

@@ -223,6 +223,87 @@ INCOMPLETE / UNKNOWN
 
 Do not auto-resume or auto-retry. Inspect production state first.
 
+## INCOMPLETE API rollback recovery
+
+An API→R0 rollback START without a terminal RESULT is INCOMPLETE/UNKNOWN even when the runtime later proves healthy. Never execute the rollback a second time and never fabricate/delete incident receipts.
+
+The reviewed closure is verify-only recovery:
+
+```bash
+scripts/recover-s32-api-rollback.sh \
+  --recover-api-to-r0-verify-only \
+  <S32_RELEASE_FINGERPRINT> \
+  <RELEASE_SOURCE_SHA> \
+  <INCIDENT_CONTROL_PLANE_SHA> \
+  <RECOVERY_TOOL_SHA>
+```
+
+Recovery must run while production remains on the incident control-plane SHA bound by the rollback authorization. It requires rollback auth/claim/START plus the original R4 START, requires rollback RESULT/R4 RESULT/later-stage artifacts to remain absent, and re-proves that API is exactly canonical R0, S32 env is absent, public/legacy search is healthy, API↔Meilisearch key hashes match without printing secrets, and PostgreSQL/R3 state is intact. Its only write is the atomic no-overwrite rollback terminal RESULT marked `ROLLBACK_RECOVERY_MODE=VERIFY_ONLY`, including rollback/R4 START hashes and the reviewed recovery-tool SHA.
+
+Sequence for an incident is: review exact recovery-tool head → explicit verify-only recovery authorization → execute external exact-head recovery against the unchanged incident checkout → STOP → only then merge/sync newer rollout tooling. Do not CONTROL_PLANE_SYNC first, because that would move production HEAD away from the CTRL bound by the retained rollback authorization/evidence.
+
+Post-recreate API verification uses bounded baseline boot grace. A transient first probe during process startup may be retried for a small bounded number of attempts; exhaustion remains fail-closed and never authorizes an automatic second rollout/rollback.
+
+## INCOMPLETE R4 after successful API→R0 rollback
+
+If R4 has START but no RESULT and an explicitly authorized API→R0 rollback has since terminalized successfully, ordinary R4 execution remains forbidden because the original START is retained. The reviewed closure is a one-shot R4 recovery, not an ordinary retry.
+
+The recovery:
+- runs while production remains on the incident control-plane SHA bound by the retained R4_R5 claim;
+- requires terminal rollback PASS and hashes that rollback RESULT plus the original R4 START;
+- verifies current runtime is canonical R0 before mutation;
+- verifies the exact S32 API image using backend-neutral identity;
+- renders the repaired Compose chain `.env -> postgres.env` before mutation and proves the rendered API Meilisearch key hash matches the running Meilisearch key without exposing either secret;
+- writes a dedicated mode-600 `R4.recovery.start.env` immediately before the single API-dark recreate;
+- performs exactly one `up -d --no-build --no-deps api`;
+- uses bounded post-recreate baseline grace;
+- verifies Web/Meili/Postgres/R3 state, six legacy searches, S32 route=404, dark S32 env values, exact image/revision, and 26/26 empty core+ops tables;
+- on success atomically creates the missing canonical R4 RESULT with `R4_RECOVERY_MODE=AFTER_API_TO_R0_ROLLBACK`, original R4 START hash, terminal rollback RESULT hash, and recovery-tool SHA.
+
+A recovery START without terminal R4 RESULT is itself incomplete and must never be re-run automatically.
+
+Because R4 and R5 share one `R4_R5` authorization claim, do not CONTROL_PLANE_SYNC between recovered R4 and R5. Close the R4/R5 authorization group on the same incident CTRL first; only then merge/sync newer control-plane tooling before R6.
+
+## External R5 activation while the R4_R5 claim is bound to an older incident CTRL
+
+When R4 has been terminalized through the reviewed after-rollback recovery, R5 must still complete under the same retained `R4_R5` authorization/claim before any control-plane sync. Do not re-authorize or re-claim the stage group.
+
+If production intentionally remains on the older incident CTRL while the reviewed R5 fixes live only on a later exact tool head, use the reviewed external R5 activation tool rather than the production checkout's older executor.
+
+The external activation:
+- requires canonical R4 PASS and the retained R4_R5 claim bound to the incident CTRL;
+- consumes the already-materialized release-scoped `api.env` without ever printing secrets;
+- validates `s32_app@postgres/book_id_search_s32`, token format and read-only app-role connectivity before mutation;
+- renders the repaired `.env -> postgres.env -> api.env` Compose chain and proves the rendered Meili key hash matches the running Meili key;
+- writes one canonical R5 START;
+- performs exactly one API-only `up -d --no-build --no-deps api` with S32 enabled;
+- waits with bounded boot grace;
+- verifies private auth semantics: disabled state is replaced by enabled unauthenticated 401, wrong token 403, correct token 200;
+- runs the retained backend production acceptance, requiring legacy search PASS, assessment replay PASS, backend acceptance PASS, and retained acceptance project evidence;
+- verifies Web/Meili/Postgres container invariance, R3 schema/role invariants and that the previously empty core/ops store now has persisted acceptance data;
+- atomically writes the canonical R5 RESULT with execution-tool SHA, claim SHA, security-status evidence, acceptance IDs and replay evidence.
+
+R5 START without R5 RESULT is incomplete and must never be auto-retried. After R5 terminal PASS, the shared R4_R5 stage group is closed; only then merge/sync newer control-plane tooling before R6.
+
+## R5 acceptance recovery after activation succeeded but production-side pnpm is unavailable
+
+If R5 START exists, the API is already active, R5 RESULT is absent, and the only failure was the production host lacking `pnpm` for the acceptance harness, do not recreate the API and do not retry the R5 executor.
+
+Use a split recovery:
+1. Run the exact reviewed `verify-s32-production-acceptance.ts` from a local reviewed checkout/worktree using local `pnpm/tsx`, targeting the production HTTPS API. Read the frozen production private token only into the local process environment; never print or persist it.
+2. Require the acceptance stdout receipt to report STATUS=PASS, LEGACY_SEARCH_REGRESSION=PASS, ASSESSMENT_REPLAY=PASS, S32_BACKEND_ACCEPTANCE=PASS, MEILI_DOCUMENTS matching R0, and ACCEPTANCE_PROJECT_RETAINED=YES. Capture PROJECT_ID and ASSESSMENT_ID.
+3. Stream the reviewed `recover-s32-r5-acceptance.sh` into production. It performs no container mutation. It re-proves the active runtime, 401/403/200 private-auth behavior, R3 schema/role invariants, exact 26-table structure and persisted data.
+4. The recovery independently proves the acceptance IDs exist in `core.projects` and `core.assessments`, and that exactly one completed `ops.idempotency_keys` assessment receipt points to the same Assessment.
+5. Only then atomically create the missing canonical R5 RESULT with `R5_EXECUTION_MODE=EXTERNAL_ACCEPTANCE_RECOVERY`, R5 START hash, retained claim hash, recovery-tool SHA, acceptance IDs, replay PASS and DB idempotency proof.
+
+R5 START without RESULT remains incomplete until this recovery terminalizes it. No second API activation, rollback, restart, merge or control-plane sync is allowed before terminal R5 PASS.
+
+## R5 acceptance finalizer SQL rule
+
+The R5 acceptance finalizer must not rely on psql-variable interpolation inside `psql -c`. Although forms such as `:'name'` are valid psql interpolation syntax in normal psql input, `-c` requires a command that is directly parseable by the server and does not perform psql-variable interpolation. Therefore `-v name=value -c "… :'name' …"` sends the colon expression to PostgreSQL and fails.
+
+For the R5 finalizer, PROJECT_ID and ASSESSMENT_ID are validated against a strict UUID regex before use, and the acceptance project name is derived only from a fixed prefix plus the strict-hex release fingerprint prefix. The finalizer therefore uses ordinary server-parseable SQL literals such as `id::text='$PROJECT_ID'` and never psql interpolation inside `-c`.
+
 ## Rollback identities
 
 R0 is the rollback reference.
