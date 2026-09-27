@@ -354,7 +354,8 @@ pnpm s32:production:acceptance
 
 The private token must never be printed or persisted. Store only the non-secret
 acceptance stdout in a temporary mode-600 file and transfer that evidence file
-to production.
+to production. The production recorder accepts exactly the nine documented
+acceptance fields and rejects extra secret-bearing fields.
 
 Production records it with:
 
@@ -376,7 +377,8 @@ recorder.
 
 Run the reviewed browser producer from the exact reviewed local checkout. In
 browser mode the producer validates the **real** S32 UI rather than test-only
-DOM markers:
+DOM markers. Before token injection, any non-loopback target is fail-closed
+unless it is exactly `https://books.conanxin.com/research/projects`:
 
 1. open `/research/projects`;
 2. inject the private token only into browser `sessionStorage` under
