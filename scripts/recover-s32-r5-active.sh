@@ -172,7 +172,7 @@ unset APP_PASSWORD
 
 ACCEPT="$(
 python3 - "$API_ENV" "$FP" <<'PY'
-import hashlib,json,pathlib,secrets,sys,urllib.error,urllib.parse,urllib.request
+import hashlib,json,os,pathlib,secrets,sys,urllib.error,urllib.parse,urllib.request
 
 api_env={}
 for raw in pathlib.Path(sys.argv[1]).read_text().splitlines():
@@ -183,7 +183,7 @@ for raw in pathlib.Path(sys.argv[1]).read_text().splitlines():
 token=api_env.get("S32_PRIVATE_API_TOKEN","")
 if not token: raise SystemExit("token missing")
 fp=sys.argv[2]
-base="http://127.0.0.1:3001"
+base=os.environ.get("S32_R5_RECOVERY_HTTP_BASE","http://127.0.0.1:3001").rstrip("/")
 private=base+"/api/private/s32"
 
 def request(method,url,body=None,headers=None,expected=(200,)):
