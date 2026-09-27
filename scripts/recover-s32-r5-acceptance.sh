@@ -153,8 +153,8 @@ done <<< "$TABLE_LIST"
 PROJECT_NAME="[S32 Production Acceptance] ${FP:0:12}"
 # PROJECT_ID / ASSESSMENT_ID are strict UUID-regex validated above, and the
 # project-name suffix is derived only from strict hex FP.  Use plain
-# server-parseable SQL literals here: psql -c does not perform psql-variable
-# interpolation such as :'pid'.
+# server-parseable SQL literals here: psql -c must not depend on client-side
+# psql variable interpolation.
 PROJECT_MATCH="$($DK exec "$PG_CID" psql -U "$DB_ADMIN" -d "$DB_NAME" -At -c "SELECT count(*) FROM core.projects WHERE id::text='$PROJECT_ID' AND name='$PROJECT_NAME'")" || block DB_ACCEPTANCE_QUERY_FAILED
 [ "$PROJECT_MATCH" = 1 ] || block ACCEPTANCE_PROJECT_DB_MISMATCH
 
