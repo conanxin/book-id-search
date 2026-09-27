@@ -358,6 +358,10 @@ class R7ExecutorTests(unittest.TestCase):
         text = EXEC.read_text() if EXEC.exists() else ""
         for bad in ("docker compose down", "docker system prune", "rm -rf", "DROP DATABASE", "DROP SCHEMA"):
             self.assertNotIn(bad, text)
+        self.assertNotIn("pnpm ", text)
+        self.assertNotIn("tsx ", text)
+        self.assertIn("PRODUCTION_HEAD_MISMATCH", text)
+        self.assertIn('git -C "$ROOT" rev-parse HEAD', text)
 
 if __name__ == "__main__":
     unittest.main()
