@@ -127,8 +127,8 @@ class Env:
             env=self.env(**extra),
         )
 
-    def write_web_receipt(self, project_id="11111111-1111-4111-8111-111111111111", source_sha=CTRL):
-        path = self.root / "progress" / f"s32-rollout-{self.fp}-R7.web.env"
+    def write_web_receipt(self, project_id="11111111-1111-4111-8111-111111111111", source_sha=CTRL, out=None):
+        path = out or (self.root / "progress" / f"s32-rollout-{self.fp}-R7.web.env")
         base_lines = [
             "STATUS=PASS",
             "STAGE=R7_WEB",
@@ -310,7 +310,7 @@ class R7ExecutorTests(unittest.TestCase):
         self.assertTrue(api_receipt.is_file())
         self.assertIn("IDEMPOTENCY_RECEIPT_DB_PROOF=PASS", api_receipt.read_text())
 
-        web = x.write_web_receipt()
+        web = x.write_web_receipt(out=x.root / "external-web.env")
         text = web.read_text().replace("RUNNER_MODE=fixture", "RUNNER_MODE=browser")
         lines = [line for line in text.splitlines() if not line.startswith("RECEIPT_SHA256=")]
         base = "\n".join(lines) + "\n"
@@ -342,7 +342,10 @@ class R7ExecutorTests(unittest.TestCase):
         x = Env(); self.addCleanup(x.close)
         self.assertEqual(x.begin_external().returncode, 0)
         self.assertEqual(x.record_api_external().returncode, 0)
-        web = x.write_web_receipt(project_id="99999999-9999-4999-8999-999999999999")
+        web = x.write_web_receipt(
+            project_id="99999999-9999-4999-8999-999999999999",
+            out=x.root / "external-web.env",
+        )
         text = web.read_text().replace("RUNNER_MODE=fixture", "RUNNER_MODE=browser")
         lines = [line for line in text.splitlines() if not line.startswith("RECEIPT_SHA256=")]
         base = "\n".join(lines) + "\n"
