@@ -6,7 +6,7 @@ block() {
   exit 1
 }
 
-MODE="${{1:-}"
+MODE="${1:-}"
 case "$MODE" in
   --begin-r7-external|--execute-r7-api|--complete-r7)
     [ "$#" -eq 4 ] || block INVALID_ARGUMENTS
@@ -19,30 +19,30 @@ case "$MODE" in
     ;;
 esac
 
-FP="$2"; SRC="$3"; CTRL="$4"; EVIDENCE="${{5:-}"
+FP="$2"; SRC="$3"; CTRL="$4"; EVIDENCE="${5:-}"
 printf '%s' "$FP" | grep -qE '^[0-9a-f]{64}$' || block INVALID_RELEASE_FINGERPRINT
 printf '%s' "$SRC" | grep -qE '^[0-9a-f]{40}$' || block INVALID_SOURCE_SHA
 printf '%s' "$CTRL" | grep -qE '^[0-9a-f]{40}$' || block INVALID_CONTROL_PLANE_SHA
 
-SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${{BASH_SOURCE[0]}")" && pwd)"
-ROOT="${{BOOK_ID_SEARCH_REPO_ROOT:-/opt/book-id-search}"
-R0="${{S32_R0_RECEIPT:-$ROOT/progress/s32-r0.env}"
-R6="${{S32_R6_RECEIPT:-$ROOT/progress/s32-rollout-${{FP}-R6.result.env}"
-CLAIM="$ROOT/progress/s32-rollout-authorization-${{FP}-R7-claim.env"
-MANIFEST="${{S32_RELEASE_MANIFEST_JSON:-$ROOT/progress/s32-release-manifest.json}"
-API_ENV="${{S32_API_ENV_FILE:-/opt/book-id-search-runtime/s32/${{FP}/api.env}"
-PG_ENV="${{S32_POSTGRES_ENV_FILE:-/opt/book-id-search-runtime/s32/${{FP}/postgres.env}"
-START="$ROOT/progress/s32-rollout-${{FP}-R7.start.env"
-API_RESULT="$ROOT/progress/s32-rollout-${{FP}-R7.api.env"
-WEB_RESULT="${{S32_R7_WEB_ACCEPTANCE_RECEIPT:-$ROOT/progress/s32-rollout-${{FP}-R7.web.env}"
-RESULT="$ROOT/progress/s32-rollout-${{FP}-R7.result.env"
-DK="${{S32_R7_DOCKER:-sudo -n docker}"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="${BOOK_ID_SEARCH_REPO_ROOT:-/opt/book-id-search}"
+R0="${S32_R0_RECEIPT:-$ROOT/progress/s32-r0.env}"
+R6="${S32_R6_RECEIPT:-$ROOT/progress/s32-rollout-${FP}-R6.result.env}"
+CLAIM="$ROOT/progress/s32-rollout-authorization-${FP}-R7-claim.env"
+MANIFEST="${S32_RELEASE_MANIFEST_JSON:-$ROOT/progress/s32-release-manifest.json}"
+API_ENV="${S32_API_ENV_FILE:-/opt/book-id-search-runtime/s32/${FP}/api.env}"
+PG_ENV="${S32_POSTGRES_ENV_FILE:-/opt/book-id-search-runtime/s32/${FP}/postgres.env}"
+START="$ROOT/progress/s32-rollout-${FP}-R7.start.env"
+API_RESULT="$ROOT/progress/s32-rollout-${FP}-R7.api.env"
+WEB_RESULT="${S32_R7_WEB_ACCEPTANCE_RECEIPT:-$ROOT/progress/s32-rollout-${FP}-R7.web.env}"
+RESULT="$ROOT/progress/s32-rollout-${FP}-R7.result.env"
+DK="${S32_R7_DOCKER:-sudo -n docker}"
 
 get_kv() {
   local file="$1" key="$2" count
-  count="$(grep -cE "^${{key}=" "$file" 2>/dev/null || true)"
+  count="$(grep -cE "^${key}=" "$file" 2>/dev/null || true)"
   [ "$count" = 1 ] || return 1
-  grep -E "^${{key}=" "$file" | head -1 | cut -d= -f2-
+  grep -E "^${key}=" "$file" | head -1 | cut -d= -f2-
 }
 
 regular600() {
@@ -75,7 +75,7 @@ validate_common() {
     EXPLICIT_APPROVAL CONSUMABLE_ONCE CAPACITY_HARD_ONLY_ACCEPTED \
     PRODUCTION_WRITE_EXECUTED
   do
-    [ "$(grep -cE "^${{key}=" "$CLAIM" 2>/dev/null || true)" = 1 ] \
+    [ "$(grep -cE "^${key}=" "$CLAIM" 2>/dev/null || true)" = 1 ] \
       || block R7_CLAIM_INVALID
   done
 
@@ -110,14 +110,14 @@ validate_start() {
 
 validate_api_acceptance() {
   local file="$1" expected_project key
-  expected_project="[S32 Production Acceptance] ${{FP:0:12}"
+  expected_project="[S32 Production Acceptance] ${FP:0:12}"
   local required=(
     STATUS PROJECT_ID PROJECT_NAME ASSESSMENT_ID
     LEGACY_SEARCH_REGRESSION ASSESSMENT_REPLAY
     S32_BACKEND_ACCEPTANCE MEILI_DOCUMENTS ACCEPTANCE_PROJECT_RETAINED
   )
-  for key in "${{required[@]}"; do
-    [ "$(grep -cE "^${{key}=" "$file" 2>/dev/null || true)" = 1 ] || return 1
+  for key in "${required[@]}"; do
+    [ "$(grep -cE "^${key}=" "$file" 2>/dev/null || true)" = 1 ] || return 1
   done
   [ "$(get_kv "$file" STATUS || true)" = PASS ] \
     && [ "$(get_kv "$file" PROJECT_NAME || true)" = "$expected_project" ] \
@@ -169,8 +169,8 @@ verify_api_db_proof() {
   local source="$1" project_id assessment_id project_name pg_cid db_name db_admin
   local project_match assessment_match receipt_match
 
-  if [ "${{S32_R7_TEST_MODE:-false}" = true ]; then
-    [ "${{S32_R7_FAKE_DB_PROOF:-PASS}" = PASS ] || block R7_API_DB_PROOF_FAILED
+  if [ "${S32_R7_TEST_MODE:-false}" = true ]; then
+    [ "${S32_R7_FAKE_DB_PROOF:-PASS}" = PASS ] || block R7_API_DB_PROOF_FAILED
     return 0
   fi
 
@@ -211,7 +211,7 @@ verify_api_db_proof() {
 }
 
 validate_web_receipt() {
-  local file="$1" expected_mode="${{2:-browser}" key expected_hash actual_hash project_id token
+  local file="$1" expected_mode="${2:-browser}" key expected_hash actual_hash project_id token
   if grep -Eq '(^|_)(TOKEN|PASSWORD|SECRET|DATABASE_URL)=' "$file"; then
     return 1
   fi
@@ -220,8 +220,8 @@ validate_web_receipt() {
     S32_WEB_ACCEPTANCE MOBILE_390x844 NO_HORIZONTAL_OVERFLOW
     RUNNER_VERSION RUNNER_SOURCE_SHA RUNNER_ID RUNNER_MODE RECEIPT_SHA256
   )
-  for key in "${{required[@]}"; do
-    [ "$(grep -cE "^${{key}=" "$file" 2>/dev/null || true)" = 1 ] || return 1
+  for key in "${required[@]}"; do
+    [ "$(grep -cE "^${key}=" "$file" 2>/dev/null || true)" = 1 ] || return 1
   done
   project_id="$(get_kv "$API_RESULT" PROJECT_ID || true)"
   [ "$(get_kv "$file" STATUS || true)" = PASS ] \
@@ -280,13 +280,13 @@ if [ "$MODE" = --begin-r7-external ]; then
 fi
 
 if [ "$MODE" = --execute-r7-api ]; then
-  if [ "${{S32_R7_TEST_MODE:-false}" != true ]; then
+  if [ "${S32_R7_TEST_MODE:-false}" != true ]; then
     block EXTERNAL_ACCEPTANCE_REQUIRED
   fi
   [ ! -e "$START" ] && [ ! -L "$START" ] || block INCOMPLETE_R7
   [ ! -e "$API_RESULT" ] && [ ! -L "$API_RESULT" ] || block R7_API_ALREADY_COMPLETE
-  [ -f "${{S32_R7_ACCEPTANCE_OUTPUT_FILE:?}" ] || block R7_ACCEPTANCE_FIXTURE_MISSING
-  [ "${{S32_R7_FAKE_ACCEPTANCE_EXIT:-0}" = 0 ] || block R7_ACCEPTANCE_FAILED
+  [ -f "${S32_R7_ACCEPTANCE_OUTPUT_FILE:?}" ] || block R7_ACCEPTANCE_FIXTURE_MISSING
+  [ "${S32_R7_FAKE_ACCEPTANCE_EXIT:-0}" = 0 ] || block R7_ACCEPTANCE_FAILED
 
   umask 077
   TMP_START="$(mktemp "$ROOT/progress/.r7-start.XXXXXX")"
@@ -358,7 +358,7 @@ regular600 "$WEB_RESULT" || block R7_WEB_ACCEPTANCE_MISSING
   || block R7_API_RECEIPT_INVALID
 
 EXPECTED_WEB_MODE=browser
-if [ "${{S32_R7_TEST_MODE:-false}" = true ]; then
+if [ "${S32_R7_TEST_MODE:-false}" = true ]; then
   case "$(get_kv "$WEB_RESULT" RUNNER_MODE || true)" in
     fixture|browser) EXPECTED_WEB_MODE="$(get_kv "$WEB_RESULT" RUNNER_MODE)" ;;
     *) block R7_WEB_ACCEPTANCE_CONTRACT_INVALID ;;
@@ -369,7 +369,7 @@ validate_web_receipt "$WEB_RESULT" "$EXPECTED_WEB_MODE" \
 
 PROJECT_ID="$(get_kv "$API_RESULT" PROJECT_ID || true)"
 ASSESSMENT_ID="$(get_kv "$API_RESULT" ASSESSMENT_ID || true)"
-EXPECTED_PROJECT="[S32 Production Acceptance] ${{FP:0:12}"
+EXPECTED_PROJECT="[S32 Production Acceptance] ${FP:0:12}"
 
 umask 077
 TMP_RESULT="$(mktemp "$ROOT/progress/.r7-result.XXXXXX")"
