@@ -298,6 +298,12 @@ Use a split recovery:
 
 R5 START without RESULT remains incomplete until this recovery terminalizes it. No second API activation, rollback, restart, merge or control-plane sync is allowed before terminal R5 PASS.
 
+## R5 acceptance finalizer SQL rule
+
+The R5 acceptance finalizer must not rely on psql-variable interpolation inside `psql -c`. Although forms such as `:'name'` are valid psql interpolation syntax in normal psql input, `-c` requires a command that is directly parseable by the server and does not perform psql-variable interpolation. Therefore `-v name=value -c "… :'name' …"` sends the colon expression to PostgreSQL and fails.
+
+For the R5 finalizer, PROJECT_ID and ASSESSMENT_ID are validated against a strict UUID regex before use, and the acceptance project name is derived only from a fixed prefix plus the strict-hex release fingerprint prefix. The finalizer therefore uses ordinary server-parseable SQL literals such as `id::text='$PROJECT_ID'` and never psql interpolation inside `-c`.
+
 ## Rollback identities
 
 R0 is the rollback reference.
