@@ -162,6 +162,8 @@ If present, the Manifest must satisfy **both**:
 
 The Web should offer only eligible frozen Manifests from visible Assessments on this Issue.
 
+For M2-E v1, an eligible Manifest must resolve to **exactly one** canonical Assessment. This matches the M2-D invariant that every independent Assessment command creates a fresh Manifest. Zero matching Assessments means the Manifest is not an Assessment evidence basis; multiple matching Assessments are canonical-integrity ambiguity and fail closed for new writes.
+
 M2-E does not:
 
 - mutate a Manifest;
@@ -302,7 +304,28 @@ Proposed endpoints:
 POST /api/private/s32/projects/:projectId/issues/:issueId/resolutions
 GET  /api/private/s32/projects/:projectId/issues/:issueId/resolutions
 GET  /api/private/s32/projects/:projectId/issues/:issueId/resolutions/:resolutionId
+GET  /api/private/s32/projects/:projectId/issues/:issueId/resolution-evidence-bases
 ```
+
+The issue-wide `resolution-evidence-bases` read exists so the browser does not N+1 through every Claim's paginated Assessment history.
+
+It returns a compact, privacy-safe page of eligible visible Assessment/Manifest summaries, for example:
+
+```ts
+{
+  assessmentId,
+  claimId,
+  claimStatementExcerpt,
+  stance,
+  confidenceLevel,
+  manifestId,
+  manifestSha256,
+  itemCount,
+  assessmentCreatedAt
+}
+```
+
+Ordering is `assessment.created_at DESC, assessment.id DESC`; default limit 20, max 50; opaque microsecond-safe cursor; no total count.
 
 Create body:
 
@@ -406,20 +429,21 @@ Fresh implementation evidence must cover:
 2. same-Issue preferred Claim invariant;
 3. all three Resolution types;
 4. append-only DB invariant;
-5. OPEN -> RESOLVED atomic write;
-6. RESOLVED -> new Resolution pointer advance;
+5. OPEN Issue create advances current pointer + updatedAt while lifecycle stays OPEN;
+6. RESOLVED Issue create advances current pointer + updatedAt while lifecycle stays RESOLVED;
 7. stale pointer -> 409 with zero partial write;
-8. exact idempotency replay;
+8. exact idempotency replay, including replay after later pointer/lifecycle drift;
 9. changed command under same key -> conflict;
 10. Project/Issue lifecycle gates;
 11. optional existing Manifest visibility/integrity;
 12. current pointer never inferred from timestamps;
 13. history pagination;
-14. real PostgreSQL 16 transaction/concurrency tests;
-15. Web create -> current -> history -> detail;
-16. response-unknown same-key replay;
-17. 390x844 no-horizontal-overflow;
-18. targeted API/Web + builds + migration/schema tests + relevant regression suite.
+14. issue-wide eligible evidence-basis pagination with bounded query count / no N+1;
+15. real PostgreSQL 16 transaction/concurrency tests;
+16. Web create -> current -> history -> detail;
+17. response-unknown same-key replay;
+18. 390x844 no-horizontal-overflow;
+19. targeted API/Web + builds + migration/schema tests + relevant regression suite.
 
 ## 16. Hard sequencing gate
 
