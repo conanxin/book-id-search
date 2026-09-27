@@ -114,7 +114,32 @@ validate_start() {
 
 validate_api_acceptance() {
   local file="$1" expected_project key
+  API_ACCEPTANCE_ERROR=R7_ACCEPTANCE_CONTRACT_INVALID
   expected_project="[S32 Production Acceptance] ${FP:0:12}"
+
+  if grep -Eq '(^|_)(TOKEN|PASSWORD|SECRET|DATABASE_URL)=' "$file"; then
+    API_ACCEPTANCE_ERROR=R7_EXTERNAL_API_EVIDENCE_SECRET_FIELD
+    return 1
+  fi
+
+  python3 - "$file" <<'PY' || return 1
+import pathlib,sys
+allowed={
+    "STATUS","PROJECT_ID","PROJECT_NAME","ASSESSMENT_ID",
+    "LEGACY_SEARCH_REGRESSION","ASSESSMENT_REPLAY",
+    "S32_BACKEND_ACCEPTANCE","MEILI_DOCUMENTS","ACCEPTANCE_PROJECT_RETAINED",
+}
+lines=[line for line in pathlib.Path(sys.argv[1]).read_text(encoding="utf-8").splitlines() if line]
+pairs=[]
+for line in lines:
+    if "=" not in line:
+        raise SystemExit(1)
+    pairs.append(line.split("=",1))
+keys=[k for k,_ in pairs]
+if len(keys)!=len(allowed) or len(set(keys))!=len(keys) or set(keys)!=allowed:
+    raise SystemExit(1)
+PY
+
   local required=(
     STATUS PROJECT_ID PROJECT_NAME ASSESSMENT_ID
     LEGACY_SEARCH_REGRESSION ASSESSMENT_REPLAY
@@ -261,6 +286,10 @@ PY
     return 1
   fi
 
+  if [ "${S32_R7_TEST_MODE:-false}" != true ] && ! regular600 "$API_ENV"; then
+    WEB_RECEIPT_ERROR=API_ENV_INVALID
+    return 1
+  fi
   if regular600 "$API_ENV"; then
     token="$(get_kv "$API_ENV" S32_PRIVATE_API_TOKEN || true)"
     if [ -n "$token" ] && grep -F -q -- "$token" "$file"; then
@@ -314,7 +343,7 @@ if [ "$MODE" = --execute-r7-api ]; then
 
   [ "${S32_R7_FAKE_ACCEPTANCE_EXIT:-0}" = 0 ] || block R7_ACCEPTANCE_FAILED
   validate_api_acceptance "$S32_R7_ACCEPTANCE_OUTPUT_FILE" \
-    || block R7_ACCEPTANCE_CONTRACT_INVALID
+    || block "${API_ACCEPTANCE_ERROR:-R7_ACCEPTANCE_CONTRACT_INVALID}"
   verify_api_db_proof "$S32_R7_ACCEPTANCE_OUTPUT_FILE"
   write_api_result "$S32_R7_ACCEPTANCE_OUTPUT_FILE"
 
@@ -327,7 +356,7 @@ if [ "$MODE" = --record-r7-api-external ]; then
   validate_start
   [ ! -e "$API_RESULT" ] && [ ! -L "$API_RESULT" ] || block R7_API_ALREADY_COMPLETE
   regular600 "$EVIDENCE" || block R7_EXTERNAL_API_EVIDENCE_INVALID
-  validate_api_acceptance "$EVIDENCE" || block R7_ACCEPTANCE_CONTRACT_INVALID
+  validate_api_acceptance "$EVIDENCE" || block "${API_ACCEPTANCE_ERROR:-R7_ACCEPTANCE_CONTRACT_INVALID}"
   verify_api_db_proof "$EVIDENCE"
   write_api_result "$EVIDENCE"
   printf 'STATUS=PASS\nR7_API_ACCEPTANCE=PASS\nR7_ACCEPTANCE=PENDING_WEB\nS32_RELEASE_FINGERPRINT=%s\nPROJECT_ID=%s\nAUTO_RETRY=NO\n' \
