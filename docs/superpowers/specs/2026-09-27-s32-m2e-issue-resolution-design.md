@@ -155,7 +155,12 @@ M2-E v1 does not create a second Issue-level Evidence Selection subsystem.
 
 `issue_resolutions.evidence_manifest_id` remains nullable.
 
-If present, it must reference an already-existing immutable EvidenceManifest that is currently visible in the Project/Issue context. The Web should normally offer frozen manifests associated with currently visible Assessments.
+If present, the Manifest must satisfy **both**:
+
+1. it is the frozen Manifest of an Assessment whose Claim is a candidate of this exact Research Issue;
+2. that Assessment/Manifest is currently visible under the same Project-scoped M2-D visibility rules.
+
+The Web should offer only eligible frozen Manifests from visible Assessments on this Issue.
 
 M2-E does not:
 
@@ -164,7 +169,18 @@ M2-E does not:
 - change Manifest SHA;
 - create an additional Issue-level Manifest solely for Resolution.
 
-Resolution visibility must not leak a Manifest that is no longer authorized in the current Project context.
+### Resolution visibility after evidence-access drift
+
+IssueResolution is Project/Issue-scoped research history, unlike the globally Claim-scoped Assessment. Therefore losing current authorization to the optional evidence basis does **not** hide the entire Resolution.
+
+If a referenced Manifest later becomes unavailable because Project evidence authorization changes:
+
+- the Resolution row, type, preferred Claim, rationale, createdAt, and current/history status remain visible to the owning Project;
+- evidence metadata/items are not returned;
+- the read model exposes `evidenceBasisAvailable=false`;
+- direct attempts to open the unavailable evidence basis remain privacy-safe and do not leak hidden target identifiers.
+
+This preserves the Project's own conclusion history while keeping protected evidence access separate.
 
 ## 7. Lifecycle
 
