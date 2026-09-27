@@ -1,27 +1,20 @@
 #!/usr/bin/env node
 /**
- * S32 R7 browser receipt producer — produces the R7.web.env acceptance
- * receipt ONLY from a real browser run. Two modes:
+ * S32 R7 browser receipt producer.
  *
- *   fixture  — headless Chromium against a local synthetic acceptance page
- *              (used by the isolated E2E and CI; no production access).
- *   browser  — headless Chromium against the real deployment URL.
+ * fixture mode validates the producer/receipt mechanics against a synthetic
+ * local page. browser mode validates the real frozen production Web surface:
+ * token -> sessionStorage -> project list -> exact retained acceptance project
+ * -> project detail -> mobile overflow.
  *
- * Fail-closed receipt contract (a receipt is written only if every rule
- * passes; ANY violation => exit non-zero, no receipt file):
- *   1. wrong runner source    → fail (page must report its runner id)
- *   2. tampered receipt       → fail (receipt content is built from the
- *                               observed run, never from caller input)
- *   3. secret field present   → fail (scanned before write)
- *   4. desktop fails          → fail (all desktop checks must pass)
- *   5. 390x844 overflow       → fail (no horizontal overflow at 390x844)
+ * The browser token is process-memory/sessionStorage only. It is never written
+ * to the receipt.
  */
 
 "use strict";
 
 const fs = require("fs");
 const { createHash } = require("crypto");
-const os = require("os");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 
@@ -32,9 +25,12 @@ const PROJECT_ID = process.argv[5] || "";
 const RUNNER_SOURCE_SHA = process.argv[6] || process.env.S32_R7_RUNNER_SOURCE_SHA || "";
 const RUNNER_ID = "s32-r7-browser-receipt-producer";
 const RUNNER_VERSION = "1";
+const TOKEN_KEY = "book-id-search:s32-private-token:v1";
+const PROJECT_NAME = `[S32 Production Acceptance] ${{FP.slice(0, 12)}`;
+const BROWSER_TOKEN = (process.env.S32_R7_BROWSER_TOKEN || "").trim();
 
 function fail(reason) {
-  process.stdout.write(`R7_BROWSER_RECEIPT=FAIL\nREASON=${reason}\n`);
+  process.stdout.write(`R7_BROWSER_RECEIPT=FAIL\nREASON=${{reason}\n`);
   process.exit(1);
 }
 
@@ -44,17 +40,21 @@ if (!/^[0-9a-f-]{36}$/.test(PROJECT_ID)) fail("INVALID_PROJECT_ID");
 if (!/^[0-9a-f]{40}$/.test(RUNNER_SOURCE_SHA)) fail("INVALID_RUNNER_SOURCE_SHA");
 if (!OUT) fail("MISSING_OUTPUT_PATH");
 
-// The receipt path must not pre-exist: producer runs are single-shot.
 try {
   if (fs.existsSync(OUT)) fail("RECEIPT_PATH_EXISTS");
-} catch { fail("RECEIPT_PATH_UNREADABLE"); }
+} catch {
+  fail("RECEIPT_PATH_UNREADABLE");
+}
 
-// Locate a Chromium binary (Playwright cache or system); drive it over the
-// DevTools protocol using Node's built-in WebSocket (no npm dependency).
 function findChromium() {
   const override = (process.env.S32_R7_CHROMIUM || "").trim();
   if (override) {
-    try { fs.accessSync(override, fs.constants.X_OK); return override; } catch { return null; }
+    try {
+      fs.accessSync(override, fs.constants.X_OK);
+      return override;
+    } catch {
+      return null;
+    }
   }
 
   const home = process.env.HOME || "/root";
@@ -71,37 +71,46 @@ function findChromium() {
         path.join(base, "chrome-linux64/headless_shell"),
       );
     }
-  } catch { /* no Playwright cache */ }
-
-  for (const p of candidates) {
-    try { fs.accessSync(p, fs.constants.X_OK); return p; } catch { /* next */ }
+  } catch {
+    // no Playwright cache
   }
 
-  const which = spawnSync("sh", ["-lc", "command -v chromium || command -v chromium-browser || command -v google-chrome || command -v chrome"], { encoding: "utf8" });
-  if (which.status === 0 && which.stdout.trim()) return which.stdout.trim().split("\n")[0];
+  for (const candidate of candidates) {
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK);
+      return candidate;
+    } catch {
+      // next
+    }
+  }
+
+  const which = spawnSync(
+    "sh",
+    ["-lc", "command -v chromium || command -v chromium-browser || command -v google-chrome || command -v chrome"],
+    { encoding: "utf8" },
+  );
+  if (which.status === 0 && which.stdout.trim()) {
+    return which.stdout.trim().split("\n")[0];
+  }
   return null;
 }
 
 const CHROMIUM = findChromium();
 if (!CHROMIUM) fail("CHROMIUM_UNAVAILABLE");
 
-// Fixture mode serves a synthetic acceptance page locally; browser mode
-// points at the deployment. The page contract is identical: it must render
-// data-runner-source and the acceptance markers.
 const FIXTURE_PORT = Number(process.env.S32_R7_FIXTURE_PORT || 4789);
 const TARGET_URL = MODE === "fixture"
-  ? `http://127.0.0.1:${FIXTURE_PORT}/`
+  ? `http://127.0.0.1:${{FIXTURE_PORT}/`
   : (process.env.S32_R7_BROWSER_URL || "");
 
-if (MODE === "browser" && !/^https?:\/\//.test(TARGET_URL)) fail("MISSING_BROWSER_URL");
+if (MODE === "browser") {
+  if (!/^https?:\/\//.test(TARGET_URL)) fail("MISSING_BROWSER_URL");
+  if (!BROWSER_TOKEN) fail("MISSING_BROWSER_TOKEN");
+}
 
-// --- fixture server ----------------------------------------------------
-// The fixture page is deliberately callER-argument-free: it renders a fixed
-// synthetic acceptance surface. Whatever the producer was asked to expect
-// is compared against this observed reality — that is the point of rules
-// 1 and 2 (wrong runner source / tampered identity must fail, not render).
 const FIXTURE_PROJECT_ID = "11111111-1111-4111-8111-111111111111";
 let fixtureServer = null;
+
 function startFixtureServer() {
   const http = require("http");
   const page = `<!doctype html>
@@ -110,11 +119,12 @@ function startFixtureServer() {
 <style>body{margin:0;font-family:sans-serif}.panel{padding:16px}</style></head>
 <body>
 <main class="panel" id="acceptance-root">
-  <h1>[S32 Production Acceptance] ${FP.slice(0, 12)}</h1>
-  <p data-acceptance="project-id">${FIXTURE_PROJECT_ID}</p>
+  <h1>[S32 Production Acceptance] ${{FP.slice(0, 12)}</h1>
+  <p data-acceptance="project-id">${{FIXTURE_PROJECT_ID}</p>
   <p data-acceptance="web" data-result="PASS">WEB_ACCEPTANCE=PASS</p>
 </main>
 </body></html>`;
+
   return new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
       if (req.url.startsWith("/")) {
@@ -122,25 +132,32 @@ function startFixtureServer() {
         res.end(page);
         return;
       }
-      res.writeHead(404); res.end();
+      res.writeHead(404);
+      res.end();
     });
     server.listen(FIXTURE_PORT, "127.0.0.1", () => resolve(server));
     server.on("error", reject);
   });
 }
 
-// --- minimal CDP client over the built-in WebSocket --------------------
 class Cdp {
-  constructor(ws) { this.ws = ws; this.seq = 0; this.pending = new Map(); this.events = [];
-    ws.addEventListener("message", ev => {
-      const msg = JSON.parse(ev.data);
+  constructor(ws) {
+    this.ws = ws;
+    this.seq = 0;
+    this.pending = new Map();
+    this.events = [];
+    ws.addEventListener("message", (event) => {
+      const msg = JSON.parse(event.data);
       if (msg.id && this.pending.has(msg.id)) {
         const { resolve, reject } = this.pending.get(msg.id);
         this.pending.delete(msg.id);
         msg.error ? reject(new Error(msg.error.message)) : resolve(msg.result);
-      } else if (msg.method) { this.events.push(msg); }
+      } else if (msg.method) {
+        this.events.push(msg);
+      }
     });
   }
+
   static async connect(url) {
     const ws = new WebSocket(url);
     await new Promise((resolve, reject) => {
@@ -149,13 +166,19 @@ class Cdp {
     });
     return new Cdp(ws);
   }
+
   send(method, params = {}) {
     const id = ++this.seq;
     this.ws.send(JSON.stringify({ id, method, params }));
     return new Promise((resolve, reject) => this.pending.set(id, { resolve, reject }));
   }
-  close() { this.ws.close(); }
+
+  close() {
+    this.ws.close();
+  }
 }
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function withTimeout(promise, ms, label) {
   return Promise.race([
@@ -164,145 +187,259 @@ async function withTimeout(promise, ms, label) {
   ]);
 }
 
-// --- receipt content is derived ONLY from the observed run --------------
 async function produce() {
   if (MODE === "fixture") fixtureServer = await startFixtureServer();
 
-  // Launch Chromium with a loopback-only debugging port. Node's fetch honors
-// proxy env vars on this host, which hijacks 127.0.0.1; the producer never
-// needs a proxy, so dispatch explicitly.
   const port = 10000 + (process.pid % 50000);
   const chrome = spawn(CHROMIUM, [
     "--headless=new",
     "--no-sandbox",
     "--disable-gpu",
-    `--remote-debugging-port=${port}`,
+    `--remote-debugging-port=${{port}`,
     "--remote-debugging-address=127.0.0.1",
     "about:blank",
-  ], { stdio: ["ignore", "ignore", "ignore"], detached: true, env: { ...process.env, NO_PROXY: "127.0.0.1,localhost", no_proxy: "127.0.0.1,localhost" } });
-  // Kill the whole process group (chrome leaves renderer/gpu children).
-  const killChrome = () => { try { process.kill(-chrome.pid, "SIGKILL"); } catch { /* already gone */ } };
-  // Hard watchdog: no run may exceed 90s.
-  const watchdog = setTimeout(() => { killChrome(); fail("WATCHDOG_TIMEOUT"); }, 90000);
+  ], {
+    stdio: ["ignore", "ignore", "ignore"],
+    detached: true,
+    env: {
+      ...process.env,
+      NO_PROXY: "127.0.0.1,localhost",
+      no_proxy: "127.0.0.1,localhost",
+    },
+  });
+
+  const killChrome = () => {
+    try {
+      process.kill(-chrome.pid, "SIGKILL");
+    } catch {
+      // already gone
+    }
+  };
+
+  const watchdog = setTimeout(() => {
+    killChrome();
+    fail("WATCHDOG_TIMEOUT");
+  }, 90000);
   watchdog.unref?.();
 
   const localFetch = (url) => fetch(url, {
-    // Bypass any inherited proxy for the loopback DevTools endpoint.
     dispatcher: undefined,
     signal: AbortSignal.timeout(2000),
   }).catch(() => null);
 
   try {
-    // Wait for the DevTools endpoint.
-    let targets = null;
+    let target = null;
     for (let i = 0; i < 60; i += 1) {
       try {
-        const res = await localFetch(`http://127.0.0.1:${port}/json/list`);
-        if (!res) throw new Error("unreachable");
-        const list = await res.json();
-        const page = list.find(t => t.type === "page");
-        if (page) { targets = page; break; }
-      } catch { /* retry */ }
-      await new Promise(r => setTimeout(r, 250));
+        const response = await localFetch(`http://127.0.0.1:${{port}/json/list`);
+        if (!response) throw new Error("unreachable");
+        const list = await response.json();
+        const page = list.find((entry) => entry.type === "page");
+        if (page) {
+          target = page;
+          break;
+        }
+      } catch {
+        // retry
+      }
+      await sleep(250);
     }
-    if (!targets) fail("DEVTOOLS_ENDPOINT_TIMEOUT");
+    if (!target) fail("DEVTOOLS_ENDPOINT_TIMEOUT");
 
-    const cdp = await withTimeout(Cdp.connect(targets.webSocketDebuggerUrl), 10000, "CDP_CONNECT_TIMEOUT");
+    const cdp = await withTimeout(
+      Cdp.connect(target.webSocketDebuggerUrl),
+      10000,
+      "CDP_CONNECT_TIMEOUT",
+    );
+
     try {
       await cdp.send("Page.enable");
       await cdp.send("Runtime.enable");
 
-      // Navigate.
-      const loaded = new Promise(resolve => {
-        const poll = setInterval(async () => {
-          if (cdp.events.some(e => e.method === "Page.loadEventFired")) { clearInterval(poll); resolve(); }
-        }, 50);
-        setTimeout(() => { clearInterval(poll); resolve(); }, 25000);
-      });
-      await cdp.send("Page.navigate", { url: TARGET_URL });
-      await withTimeout(loaded, 30000, "PAGE_LOAD_TIMEOUT");
-
       async function evaluate(expression) {
         const result = await cdp.send("Runtime.evaluate", {
-          expression, returnByValue: true, awaitPromise: true,
+          expression,
+          returnByValue: true,
+          awaitPromise: true,
         });
-        if (result.exceptionDetails) throw new Error(`EVAL_FAILED:${result.exceptionDetails.text}`);
+        if (result.exceptionDetails) {
+          throw new Error(`EVAL_FAILED:${{result.exceptionDetails.text}`);
+        }
         return result.result.value;
       }
 
-      // Rule 1 — runner source must match the producer identity.
-      const runnerSource = await evaluate(
-        "document.documentElement.getAttribute('data-runner-source')",
-      );
-      if (runnerSource !== RUNNER_ID) fail("WRONG_RUNNER_SOURCE");
+      async function navigate(url) {
+        const before = cdp.events.filter((event) => event.method === "Page.loadEventFired").length;
+        await cdp.send("Page.navigate", { url });
+        for (let i = 0; i < 120; i += 1) {
+          const count = cdp.events.filter((event) => event.method === "Page.loadEventFired").length;
+          if (count > before) {
+            const ready = await evaluate("document.readyState");
+            if (ready === "complete" || ready === "interactive") return;
+          }
+          await sleep(250);
+        }
+        throw new Error("PAGE_LOAD_TIMEOUT");
+      }
 
-      // Desktop checks (1440x900).
-      await cdp.send("Emulation.setDeviceMetricsOverride", {
-        width: 1440, height: 900, deviceScaleFactor: 1, mobile: false,
-      });
-      const desktop = await evaluate(`(() => {
-        const root = document.querySelector('#acceptance-root, main');
-        if (!root) return { ok: false, reason: 'ACCEPTANCE_ROOT_MISSING' };
-        const projectId = root.querySelector("[data-acceptance='project-id']");
-        const web = root.querySelector("[data-acceptance='web']");
-        return {
-          ok: Boolean(projectId && web),
-          reason: projectId && web ? null : 'ACCEPTANCE_MARKERS_MISSING',
-          projectId: projectId ? projectId.textContent.trim() : null,
-          webResult: web ? web.getAttribute('data-result') : null,
-        };
-      })()`);
-      if (!desktop.ok) fail(desktop.reason || "DESKTOP_CHECK_FAILED");   // Rule 4
-      if (desktop.projectId !== PROJECT_ID) fail("PROJECT_ID_MISMATCH");  // Rule 2 (tamper)
-      if (desktop.webResult !== "PASS") fail("WEB_ACCEPTANCE_NOT_PASS");  // Rule 4
+      async function reload() {
+        const before = cdp.events.filter((event) => event.method === "Page.loadEventFired").length;
+        await cdp.send("Page.reload", { ignoreCache: true });
+        for (let i = 0; i < 120; i += 1) {
+          const count = cdp.events.filter((event) => event.method === "Page.loadEventFired").length;
+          if (count > before) {
+            const ready = await evaluate("document.readyState");
+            if (ready === "complete" || ready === "interactive") return;
+          }
+          await sleep(250);
+        }
+        throw new Error("PAGE_RELOAD_TIMEOUT");
+      }
 
-      // Rule 5 — 390x844 must not scroll horizontally.
+      async function waitForState(expression, label) {
+        let last = null;
+        for (let i = 0; i < 100; i += 1) {
+          last = await evaluate(expression);
+          if (last && last.ready === true) return last;
+          await sleep(250);
+        }
+        throw new Error(`${{label}:${{JSON.stringify(last)}`);
+      }
+
       await cdp.send("Emulation.setDeviceMetricsOverride", {
-        width: 390, height: 844, deviceScaleFactor: 2, mobile: true,
+        width: 1440,
+        height: 900,
+        deviceScaleFactor: 1,
+        mobile: false,
       });
+      await navigate(TARGET_URL);
+
+      let observedProjectId = null;
+
+      if (MODE === "fixture") {
+        const runnerSource = await evaluate(
+          "document.documentElement.getAttribute('data-runner-source')",
+        );
+        if (runnerSource !== RUNNER_ID) fail("WRONG_RUNNER_SOURCE");
+
+        const desktop = await evaluate(`(() => {
+          const root = document.querySelector('#acceptance-root, main');
+          if (!root) return { ok: false, reason: 'ACCEPTANCE_ROOT_MISSING' };
+          const projectId = root.querySelector("[data-acceptance='project-id']");
+          const web = root.querySelector("[data-acceptance='web']");
+          return {
+            ok: Boolean(projectId && web),
+            reason: projectId && web ? null : 'ACCEPTANCE_MARKERS_MISSING',
+            projectId: projectId ? projectId.textContent.trim() : null,
+            webResult: web ? web.getAttribute('data-result') : null,
+          };
+        })()`);
+        if (!desktop.ok) fail(desktop.reason || "DESKTOP_CHECK_FAILED");
+        if (desktop.projectId !== PROJECT_ID) fail("PROJECT_ID_MISMATCH");
+        if (desktop.webResult !== "PASS") fail("WEB_ACCEPTANCE_NOT_PASS");
+        observedProjectId = desktop.projectId;
+      } else {
+        const target = new URL(TARGET_URL);
+        const expectedListPath = "/research/projects";
+        if (target.pathname.replace(/\/+$/, "") !== expectedListPath) {
+          fail("BROWSER_URL_NOT_PROJECT_LIST");
+        }
+
+        await evaluate(
+          `sessionStorage.setItem(${{JSON.stringify(TOKEN_KEY)}, ${{JSON.stringify(BROWSER_TOKEN)}); true`,
+        );
+        await reload();
+
+        const projectPath = `/research/projects/${{encodeURIComponent(PROJECT_ID)}`;
+        const listExpression = `(() => {
+          const heading = Array.from(document.querySelectorAll("h1"))
+            .find((node) => node.textContent.trim() === "\u6211\u7684\u7814\u7a76\u9879\u76ee");
+          const expectedName = ${{JSON.stringify(PROJECT_NAME)};
+          const expectedPath = ${{JSON.stringify(projectPath)};
+          const link = Array.from(document.querySelectorAll("a[href]")).find((node) => {
+            try {
+              return new URL(node.href, location.href).pathname === expectedPath
+                && node.textContent.includes(expectedName);
+            } catch {
+              return false;
+            }
+          });
+          return {
+            ready: Boolean(heading && link),
+            heading: heading ? heading.textContent.trim() : null,
+            projectFound: Boolean(link),
+          };
+        })()`;
+        await waitForState(listExpression, "PROJECT_LIST_TIMEOUT");
+
+        const detailUrl = new URL(projectPath, target.origin).href;
+        await navigate(detailUrl);
+        const detailExpression = `(() => {
+          const expectedName = ${{JSON.stringify(PROJECT_NAME)};
+          const h1 = Array.from(document.querySelectorAll("h1"))
+            .find((node) => node.textContent.trim() === expectedName);
+          const detail = document.querySelector(".research-detail, .research-panel");
+          return {
+            ready: Boolean(h1 && detail),
+            h1: h1 ? h1.textContent.trim() : null,
+            detail: Boolean(detail),
+          };
+        })()`;
+        await waitForState(detailExpression, "PROJECT_DETAIL_TIMEOUT");
+        observedProjectId = PROJECT_ID;
+      }
+
+      await cdp.send("Emulation.setDeviceMetricsOverride", {
+        width: 390,
+        height: 844,
+        deviceScaleFactor: 2,
+        mobile: true,
+      });
+      await sleep(250);
       const overflow = await evaluate(
         "({ scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth })",
       );
       if (overflow.scrollWidth > overflow.clientWidth) fail("MOBILE_390_OVERFLOW");
 
-      // Build the receipt purely from observed values.
       const baseLines = [
         "STATUS=PASS",
         "STAGE=R7_WEB",
-        `S32_RELEASE_FINGERPRINT=${FP}`,
-        `PROJECT_ID=${desktop.projectId}`,
+        `S32_RELEASE_FINGERPRINT=${{FP}`,
+        `PROJECT_ID=${{observedProjectId}`,
         "S32_WEB_ACCEPTANCE=PASS",
         "MOBILE_390x844=PASS",
         "NO_HORIZONTAL_OVERFLOW=PASS",
-        `RUNNER_VERSION=${RUNNER_VERSION}`,
-        `RUNNER_SOURCE_SHA=${RUNNER_SOURCE_SHA}`,
-        `RUNNER_ID=${RUNNER_ID}`,
-        `RUNNER_MODE=${MODE}`,
+        `RUNNER_VERSION=${{RUNNER_VERSION}`,
+        `RUNNER_SOURCE_SHA=${{RUNNER_SOURCE_SHA}`,
+        `RUNNER_ID=${{RUNNER_ID}`,
+        `RUNNER_MODE=${{MODE}`,
       ];
 
-      // Rule 3 — secret fields must never enter the receipt.
       const secretPattern = /(^|_)(TOKEN|PASSWORD|SECRET|DATABASE_URL)=/;
-      if (baseLines.some(l => secretPattern.test(l))) fail("SECRET_FIELD_PRESENT");
+      if (baseLines.some((line) => secretPattern.test(line))) {
+        fail("SECRET_FIELD_PRESENT");
+      }
 
-      // Hash the canonical receipt body (all fields except RECEIPT_SHA256).
       const baseBody = baseLines.join("\n") + "\n";
       const receiptHash = createHash("sha256").update(baseBody, "utf8").digest("hex");
-      const receipt = baseBody + `RECEIPT_SHA256=${receiptHash}\n`;
+      const receipt = baseBody + `RECEIPT_SHA256=${{receiptHash}\n`;
+      if (MODE === "browser" && receipt.includes(BROWSER_TOKEN)) {
+        fail("SECRET_VALUE_PRESENT");
+      }
 
-      // Atomic write: temp file + rename, 0600.
       const dir = path.dirname(OUT);
-      const tmp = path.join(dir, `.r7-web-receipt.${process.pid}.tmp`);
+      const tmp = path.join(dir, `.r7-web-receipt.${{process.pid}.tmp`);
       fs.writeFileSync(tmp, receipt, { mode: 0o600 });
       fs.chmodSync(tmp, 0o600);
       fs.renameSync(tmp, OUT);
 
-      process.stdout.write(`R7_BROWSER_RECEIPT=PASS\nRUNNER_MODE=${MODE}\nRECEIPT=${OUT}\n`);
+      process.stdout.write(`R7_BROWSER_RECEIPT=PASS\nRUNNER_MODE=${{MODE}\nRECEIPT=${{OUT}\n`);
       process.exit(0);
     } finally {
       cdp.close();
     }
   } catch (error) {
-    fail(`BROWSER_RUN_FAILED:${String(error && error.message).slice(0, 120)}`);
+    fail(`BROWSER_RUN_FAILED:${{String(error && error.message).slice(0, 160)}`);
   } finally {
     clearTimeout(watchdog);
     killChrome();
