@@ -313,12 +313,35 @@ feat(s32): add issue resolution service contracts
 
 ---
 
-# Task 4 — Implement SERIALIZABLE Resolution command store
+# Task 4 — Share canonical Project/Issue scope, then implement SERIALIZABLE Resolution command store
+
+### Modify
+
+- `apps/api/src/s32/postgres/project-evidence-authorization.ts`
+- `apps/api/src/s32/postgres/project-evidence-authorization.test.ts`
+- M2-D callers/tests only as required by the extraction; behavior must remain unchanged.
 
 ### Create
 
 - `apps/api/src/s32/postgres/issue-resolution-command-store.ts`
 - `apps/api/src/s32/postgres/issue-resolution-command-store.test.ts`
+
+### Shared Issue scope
+
+Add/export `loadProjectIssueScope(...)` with the existing M2-A/M2-B/M2-D single-owner fail-closed semantics:
+
+- exact Project;
+- exact ResearchIssue;
+- exactly one `ProjectBinding(target_type='RESEARCH_ISSUE')`;
+- binding owner must equal requested Project;
+- binding_role NULL;
+- binding metadata canonical object;
+- dangling / zero-owner / multi-owner corruption fails closed;
+- Project and Issue lifecycle/timestamps canonical.
+
+Refactor `loadProjectClaimScope(...)` to build on the shared Issue scope plus exact `research_issue_claims` + Claim validation, rather than duplicating owner semantics.
+
+Run M2-D scope/Assessment regression tests after extraction.
 
 ### Reuse patterns from
 
@@ -390,9 +413,12 @@ For `PREFERRED_CLAIM`:
 
 If `evidenceManifestId != null`:
 
-- require the Manifest to belong to an Assessment whose Claim is a candidate of this exact Issue;
+- require the Manifest to resolve to exactly one canonical Assessment under the current M2-D write model;
+- require that Assessment's Claim to be a candidate of this exact Issue;
 - reuse M2-D Project evidence authorization/integrity helpers;
 - require that Assessment/Manifest to be currently visible in the same Project context;
+- zero matching Assessment -> not an eligible evidence basis;
+- multiple matching Assessments -> canonical-integrity error for the new command;
 - do not copy Manifest/items;
 - do not alter Manifest metadata/hash.
 
@@ -468,6 +494,8 @@ feat(s32): implement issue resolution command store
 
 Use `REPEATABLE READ, READ ONLY`.
 
+The read store also exposes an issue-wide `listEvidenceBases` query for the Resolution Composer. It must batch across candidate Claims/Assessments and must not fetch each Claim's Assessment history separately.
+
 Validate:
 
 - Project owns exact Issue;
@@ -499,6 +527,21 @@ A deliberately newer historical row that is not current must remain non-current 
 - opaque keyset cursor;
 - no total count;
 - mark `isCurrent` by pointer comparison.
+
+### Eligible evidence-basis list
+
+Return compact rows from visible Assessments across all candidate Claims of this exact Issue:
+
+- assessmentId;
+- claimId + statement excerpt;
+- stance/confidence;
+- manifest ID/SHA/itemCount;
+- assessmentCreatedAt.
+
+Ordering: `assessment.created_at DESC, assessment.id DESC`.  
+Default 20 / max 50 / microsecond-safe opaque cursor / no total count.
+
+Visibility filtering must occur before pagination. Query count must remain bounded independently of result N; add a no-N+1 test.
 
 ### Visibility
 
@@ -536,6 +579,7 @@ feat(s32): add issue resolution read model
 POST /projects/:projectId/issues/:issueId/resolutions
 GET  /projects/:projectId/issues/:issueId/resolutions
 GET  /projects/:projectId/issues/:issueId/resolutions/:resolutionId
+GET  /projects/:projectId/issues/:issueId/resolution-evidence-bases
 ```
 
 They are mounted under the existing private S32 project router prefix.
@@ -588,6 +632,7 @@ Add:
 createIssueResolution(...)
 listIssueResolutions(...)
 getIssueResolution(...)
+listIssueResolutionEvidenceBases(...)
 ```
 
 Map M2-E error codes to user-facing Chinese messages without weakening strict response validation.
@@ -663,6 +708,7 @@ Render inside Research Issue detail:
 Rules:
 
 - no automatic preferred Claim selection from Assessment stance;
+- load optional evidence-basis choices from the dedicated issue-wide endpoint, not N per-Claim history requests;
 - PREFERRED_CLAIM cannot submit without Claim;
 - other types send preferredClaimId=null;
 - stale pointer keeps user rationale/selection and asks for reload/review;
@@ -749,13 +795,15 @@ Use disposable PostgreSQL 16 with the existing ownership-label/tmpfs/random-loop
 
 ### Real PG cases
 
-- first Resolution atomic commit;
+- first Resolution atomic commit while preserving OPEN lifecycle and advancing Issue.updated_at;
 - second Resolution moves pointer and keeps first row;
 - stale concurrent command loses without partial write;
 - same key concurrent calls -> one durable Resolution, create/replay semantic pair;
 - cross-Issue preferred Claim rejected by real DB;
 - UPDATE/DELETE Resolution rejected by trigger;
 - optional Manifest visibility;
+- evidence basis must map to exactly one visible Assessment whose Claim belongs to the exact Issue;
+- issue-wide evidence-basis pagination and no-N+1 behavior;
 - existing M2-D Assessment/Manifest rows preserved;
 - `research_issues.lifecycle_state` is preserved exactly while `updated_at` advances on new pointer writes;
 - idempotency receipt exact.
