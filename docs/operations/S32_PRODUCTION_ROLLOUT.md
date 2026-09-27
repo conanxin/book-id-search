@@ -316,66 +316,108 @@ R0 is the rollback reference.
 
 ## R7 acceptance
 
-R7 is two-phase and consumes the already-claimed `R7` stage authorization.
+R7 uses an **external evidence** model. Production never runs Node package-manager
+commands for the real acceptance path.
 
-### Phase 1 — API canary
+### Phase 1 — begin R7 before acceptance writes
 
-Run the guarded R7 executor in API mode:
+After the R7 stage authorization has been claimed, begin the stage on production:
 
 ```bash
 scripts/execute-s32-r7-acceptance.sh \
-  --execute-r7-api \
+  --begin-r7-external \
   <S32_RELEASE_FINGERPRINT> \
   <RELEASE_SOURCE_SHA> \
   <CONTROL_PLANE_SHA>
 ```
 
-This creates/reuses exactly one retained project:
+This validates R0/R6/claim/manifest identity and atomically writes the mode-600
+R7 START receipt. It performs no acceptance-data write.
 
-```text
-[S32 Production Acceptance] <fingerprint-short>
-```
+The legacy `--execute-r7-api` production path is deliberately fail-closed with
+`EXTERNAL_ACCEPTANCE_REQUIRED`. It remains available only in explicit test
+mode for deterministic CI fixtures.
 
-and writes a mode-600 `R7.api.env` partial receipt. It does **not** write the terminal R7 receipt.
+### Phase 2 — local HTTPS API acceptance, production DB proof
 
-### Phase 2 — real Web/mobile evidence
-
-Using the existing session-only S32 credential model, run an external real-browser acceptance against the public Web and the exact canary `PROJECT_ID` from `R7.api.env`.
-
-The reviewed receipt producer is the only supported way to emit the Web receipt. Run it from the exact control-plane checkout and bind the receipt to that commit:
+Run the exact reviewed `verify-s32-production-acceptance.ts` from a local
+checkout that matches the reviewed control-plane head:
 
 ```bash
-S32_R7_BROWSER_URL=https://books.conanxin.com \
+S32_PRIVATE_API_TOKEN="<process-memory only>" \
+S32_RELEASE_FINGERPRINT="<fingerprint>" \
+S32_EXPECTED_DOCUMENT_COUNT=5115734 \
+S32_API_BASE_URL=https://books.conanxin.com \
+S32_PUBLIC_URL=https://books.conanxin.com \
+pnpm s32:production:acceptance
+```
+
+The private token must never be printed or persisted. Store only the non-secret
+acceptance stdout in a temporary mode-600 file and transfer that evidence file
+to production.
+
+Production records it with:
+
+```bash
+scripts/execute-s32-r7-acceptance.sh \
+  --record-r7-api-external \
+  <S32_RELEASE_FINGERPRINT> \
+  <RELEASE_SOURCE_SHA> \
+  <CONTROL_PLANE_SHA> \
+  <MODE_600_ACCEPTANCE_EVIDENCE>
+```
+
+Before writing `R7.api.env`, production validates the acceptance contract and
+independently proves the exact project, assessment, and COMPLETED assessment
+idempotency receipt in PostgreSQL. No direct DB mutation is performed by the
+recorder.
+
+### Phase 3 — real browser acceptance
+
+Run the reviewed browser producer from the exact reviewed local checkout. In
+browser mode the producer validates the **real** S32 UI rather than test-only
+DOM markers:
+
+1. open `/research/projects`;
+2. inject the private token only into browser `sessionStorage` under
+   `book-id-search:s32-private-token:v1`;
+3. reload and require the retained
+   `[S32 Production Acceptance] <fingerprint-short>` project to be visible;
+4. navigate to the exact Project ID and require the real project detail H1;
+5. require no horizontal overflow at 390x844.
+
+Example:
+
+```bash
+S32_R7_BROWSER_URL=https://books.conanxin.com/research/projects \
+S32_R7_BROWSER_TOKEN="<process-memory only>" \
 node scripts/s32-r7-browser-receipt-producer.cjs \
   browser \
-  "progress/s32-rollout-<fingerprint>-R7.web.env" \
+  "<LOCAL_MODE_600_RECEIPT>" \
   "<S32_RELEASE_FINGERPRINT>" \
   "<PROJECT_ID>" \
   "<CONTROL_PLANE_SHA>"
 ```
 
-The producer records `RUNNER_VERSION=1`, `RUNNER_SOURCE_SHA=<CONTROL_PLANE_SHA>`, and a canonical `RECEIPT_SHA256`. Terminal R7 completion recomputes that hash and rejects wrong source, project, fingerprint, or modified receipt content.
+The receipt is secret-free and self-authenticating with `RECEIPT_SHA256`.
+Transfer only that receipt to a mode-600 production temporary path and record it:
 
-
-The browser evidence must prove:
-
-```text
-S32_WEB_ACCEPTANCE=PASS
-MOBILE_390x844=PASS
-NO_HORIZONTAL_OVERFLOW=PASS
+```bash
+scripts/execute-s32-r7-acceptance.sh \
+  --record-r7-web-external \
+  <S32_RELEASE_FINGERPRINT> \
+  <RELEASE_SOURCE_SHA> \
+  <CONTROL_PLANE_SHA> \
+  <MODE_600_BROWSER_RECEIPT>
 ```
 
-and write a mode-600, non-secret receipt:
+The recorder binds the receipt to the canonical R7 API Project ID, fingerprint,
+control-plane SHA, runner ID/mode, and receipt hash before atomically publishing
+`R7.web.env`.
 
-```text
-progress/s32-rollout-<fingerprint>-R7.web.env
-```
+### Phase 4 — terminal completion
 
-bound to the same fingerprint and Project ID. The browser receipt must not contain token/password/database-url fields.
-
-### Phase 3 — terminal completion
-
-Only after both partial receipts exist:
+Only after START + API + Web evidence exist:
 
 ```bash
 scripts/execute-s32-r7-acceptance.sh \
@@ -385,9 +427,13 @@ scripts/execute-s32-r7-acceptance.sh \
   <CONTROL_PLANE_SHA>
 ```
 
-The executor validates API canary identity plus the Web/mobile receipt and only then writes `R7.result.env`. The cross-stage planner cannot report `ROLLOUT_COMPLETE` before that terminal receipt exists.
+The terminal result requires backend acceptance, assessment replay, retained
+project evidence, browser acceptance, 390x844 no-overflow, and matching release
+identity. START without terminal RESULT remains incomplete and is never
+auto-retried.
 
-The acceptance project is retained as persistence/audit evidence. Do not automatically delete it.
+The acceptance project is retained as persistence/audit evidence. Do not
+automatically delete it.
 
 ## Current execution boundary
 
