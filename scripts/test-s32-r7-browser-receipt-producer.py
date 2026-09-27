@@ -41,6 +41,7 @@ def production_like_server(*, overflow=False):
 <html>
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BOOK-ID-SEARCH</title>
 <style>
 * {{ box-sizing: border-box; }}
