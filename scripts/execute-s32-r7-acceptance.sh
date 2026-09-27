@@ -50,6 +50,10 @@ regular600() {
 }
 
 validate_common() {
+  if [ "${S32_R7_TEST_MODE:-false}" != true ]; then
+    [ "$(git -C "$ROOT" branch --show-current 2>/dev/null)" = main ] || block NOT_MAIN_BRANCH
+    [ "$(git -C "$ROOT" rev-parse HEAD 2>/dev/null)" = "$CTRL" ] || block PRODUCTION_HEAD_MISMATCH
+  fi
   for f in "$R0" "$R6" "$CLAIM" "$MANIFEST"; do
     [ -f "$f" ] && [ ! -L "$f" ] || {
       [ "$f" = "$CLAIM" ] && block R7_CLAIM_MISSING
@@ -266,6 +270,10 @@ PY
   fi
 }
 
+if [ "$MODE" = --execute-r7-api ] && [ "${S32_R7_TEST_MODE:-false}" != true ]; then
+  block EXTERNAL_ACCEPTANCE_REQUIRED
+fi
+
 validate_common
 
 if [ "$MODE" = --begin-r7-external ]; then
@@ -289,9 +297,6 @@ if [ "$MODE" = --begin-r7-external ]; then
 fi
 
 if [ "$MODE" = --execute-r7-api ]; then
-  if [ "${S32_R7_TEST_MODE:-false}" != true ]; then
-    block EXTERNAL_ACCEPTANCE_REQUIRED
-  fi
   [ ! -e "$START" ] && [ ! -L "$START" ] || block INCOMPLETE_R7
   [ ! -e "$API_RESULT" ] && [ ! -L "$API_RESULT" ] || block R7_API_ALREADY_COMPLETE
   [ -f "${S32_R7_ACCEPTANCE_OUTPUT_FILE:?}" ] || block R7_ACCEPTANCE_FIXTURE_MISSING
