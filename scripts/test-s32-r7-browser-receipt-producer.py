@@ -223,6 +223,37 @@ class ProducerTest(unittest.TestCase):
         self.assertIn("MOBILE_390_OVERFLOW", r.stdout)
         self.assertFalse(self.out.exists())
 
+    def test_browser_mode_rejects_untrusted_non_loopback_origin_before_token_injection(self):
+        env = dict(os.environ)
+        env["S32_R7_BROWSER_URL"] = "https://example.com/research/projects"
+        env["S32_R7_BROWSER_TOKEN"] = "TOKEN_SENTINEL"
+        r = subprocess.run(
+            ["node", str(PRODUCER), "browser", str(self.out), FP, PID, CTRL],
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=120,
+        )
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("BROWSER_URL_UNTRUSTED_ORIGIN", r.stdout)
+        self.assertFalse(self.out.exists())
+
+    def test_browser_mode_rejects_wrong_project_list_path(self):
+        with production_like_server() as base:
+            env = dict(os.environ)
+            env["S32_R7_BROWSER_URL"] = f"{base}/wrong"
+            env["S32_R7_BROWSER_TOKEN"] = "TOKEN_SENTINEL"
+            r = subprocess.run(
+                ["node", str(PRODUCER), "browser", str(self.out), FP, PID, CTRL],
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=120,
+            )
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("BROWSER_URL_NOT_PROJECT_LIST", r.stdout)
+        self.assertFalse(self.out.exists())
+
     def test_browser_token_is_removed_from_chromium_child_env(self):
         text = PRODUCER.read_text()
         self.assertIn("delete chromeEnv.S32_R7_BROWSER_TOKEN", text)
