@@ -26,11 +26,11 @@ const RUNNER_SOURCE_SHA = process.argv[6] || process.env.S32_R7_RUNNER_SOURCE_SH
 const RUNNER_ID = "s32-r7-browser-receipt-producer";
 const RUNNER_VERSION = "1";
 const TOKEN_KEY = "book-id-search:s32-private-token:v1";
-const PROJECT_NAME = `[S32 Production Acceptance] ${{FP.slice(0, 12)}`;
+const PROJECT_NAME = `[S32 Production Acceptance] ${FP.slice(0, 12)}`;
 const BROWSER_TOKEN = (process.env.S32_R7_BROWSER_TOKEN || "").trim();
 
 function fail(reason) {
-  process.stdout.write(`R7_BROWSER_RECEIPT=FAIL\nREASON=${{reason}\n`);
+  process.stdout.write(`R7_BROWSER_RECEIPT=FAIL\nREASON=${reason}\n`);
   process.exit(1);
 }
 
@@ -100,7 +100,7 @@ if (!CHROMIUM) fail("CHROMIUM_UNAVAILABLE");
 
 const FIXTURE_PORT = Number(process.env.S32_R7_FIXTURE_PORT || 4789);
 const TARGET_URL = MODE === "fixture"
-  ? `http://127.0.0.1:${{FIXTURE_PORT}/`
+  ? `http://127.0.0.1:${FIXTURE_PORT}/`
   : (process.env.S32_R7_BROWSER_URL || "");
 
 if (MODE === "browser") {
@@ -119,8 +119,8 @@ function startFixtureServer() {
 <style>body{margin:0;font-family:sans-serif}.panel{padding:16px}</style></head>
 <body>
 <main class="panel" id="acceptance-root">
-  <h1>[S32 Production Acceptance] ${{FP.slice(0, 12)}</h1>
-  <p data-acceptance="project-id">${{FIXTURE_PROJECT_ID}</p>
+  <h1>[S32 Production Acceptance] ${FP.slice(0, 12)}</h1>
+  <p data-acceptance="project-id">${FIXTURE_PROJECT_ID}</p>
   <p data-acceptance="web" data-result="PASS">WEB_ACCEPTANCE=PASS</p>
 </main>
 </body></html>`;
@@ -195,7 +195,7 @@ async function produce() {
     "--headless=new",
     "--no-sandbox",
     "--disable-gpu",
-    `--remote-debugging-port=${{port}`,
+    `--remote-debugging-port=${port}`,
     "--remote-debugging-address=127.0.0.1",
     "about:blank",
   ], {
@@ -231,7 +231,7 @@ async function produce() {
     let target = null;
     for (let i = 0; i < 60; i += 1) {
       try {
-        const response = await localFetch(`http://127.0.0.1:${{port}/json/list`);
+        const response = await localFetch(`http://127.0.0.1:${port}/json/list`);
         if (!response) throw new Error("unreachable");
         const list = await response.json();
         const page = list.find((entry) => entry.type === "page");
@@ -263,7 +263,7 @@ async function produce() {
           awaitPromise: true,
         });
         if (result.exceptionDetails) {
-          throw new Error(`EVAL_FAILED:${{result.exceptionDetails.text}`);
+          throw new Error(`EVAL_FAILED:${result.exceptionDetails.text}`);
         }
         return result.result.value;
       }
@@ -303,7 +303,7 @@ async function produce() {
           if (last && last.ready === true) return last;
           await sleep(250);
         }
-        throw new Error(`${{label}:${{JSON.stringify(last)}`);
+        throw new Error(`${label}:${JSON.stringify(last)}`);
       }
 
       await cdp.send("Emulation.setDeviceMetricsOverride", {
@@ -346,16 +346,16 @@ async function produce() {
         }
 
         await evaluate(
-          `sessionStorage.setItem(${{JSON.stringify(TOKEN_KEY)}, ${{JSON.stringify(BROWSER_TOKEN)}); true`,
+          `sessionStorage.setItem(${JSON.stringify(TOKEN_KEY)}, ${JSON.stringify(BROWSER_TOKEN)}); true`,
         );
         await reload();
 
-        const projectPath = `/research/projects/${{encodeURIComponent(PROJECT_ID)}`;
+        const projectPath = `/research/projects/${encodeURIComponent(PROJECT_ID)}`;
         const listExpression = `(() => {
           const heading = Array.from(document.querySelectorAll("h1"))
             .find((node) => node.textContent.trim() === "\u6211\u7684\u7814\u7a76\u9879\u76ee");
-          const expectedName = ${{JSON.stringify(PROJECT_NAME)};
-          const expectedPath = ${{JSON.stringify(projectPath)};
+          const expectedName = ${JSON.stringify(PROJECT_NAME)};
+          const expectedPath = ${JSON.stringify(projectPath)};
           const link = Array.from(document.querySelectorAll("a[href]")).find((node) => {
             try {
               return new URL(node.href, location.href).pathname === expectedPath
@@ -375,7 +375,7 @@ async function produce() {
         const detailUrl = new URL(projectPath, target.origin).href;
         await navigate(detailUrl);
         const detailExpression = `(() => {
-          const expectedName = ${{JSON.stringify(PROJECT_NAME)};
+          const expectedName = ${JSON.stringify(PROJECT_NAME)};
           const h1 = Array.from(document.querySelectorAll("h1"))
             .find((node) => node.textContent.trim() === expectedName);
           const detail = document.querySelector(".research-detail, .research-panel");
@@ -404,15 +404,15 @@ async function produce() {
       const baseLines = [
         "STATUS=PASS",
         "STAGE=R7_WEB",
-        `S32_RELEASE_FINGERPRINT=${{FP}`,
-        `PROJECT_ID=${{observedProjectId}`,
+        `S32_RELEASE_FINGERPRINT=${FP}`,
+        `PROJECT_ID=${observedProjectId}`,
         "S32_WEB_ACCEPTANCE=PASS",
         "MOBILE_390x844=PASS",
         "NO_HORIZONTAL_OVERFLOW=PASS",
-        `RUNNER_VERSION=${{RUNNER_VERSION}`,
-        `RUNNER_SOURCE_SHA=${{RUNNER_SOURCE_SHA}`,
-        `RUNNER_ID=${{RUNNER_ID}`,
-        `RUNNER_MODE=${{MODE}`,
+        `RUNNER_VERSION=${RUNNER_VERSION}`,
+        `RUNNER_SOURCE_SHA=${RUNNER_SOURCE_SHA}`,
+        `RUNNER_ID=${RUNNER_ID}`,
+        `RUNNER_MODE=${MODE}`,
       ];
 
       const secretPattern = /(^|_)(TOKEN|PASSWORD|SECRET|DATABASE_URL)=/;
@@ -422,24 +422,24 @@ async function produce() {
 
       const baseBody = baseLines.join("\n") + "\n";
       const receiptHash = createHash("sha256").update(baseBody, "utf8").digest("hex");
-      const receipt = baseBody + `RECEIPT_SHA256=${{receiptHash}\n`;
+      const receipt = baseBody + `RECEIPT_SHA256=${receiptHash}\n`;
       if (MODE === "browser" && receipt.includes(BROWSER_TOKEN)) {
         fail("SECRET_VALUE_PRESENT");
       }
 
       const dir = path.dirname(OUT);
-      const tmp = path.join(dir, `.r7-web-receipt.${{process.pid}.tmp`);
+      const tmp = path.join(dir, `.r7-web-receipt.${process.pid}.tmp`);
       fs.writeFileSync(tmp, receipt, { mode: 0o600 });
       fs.chmodSync(tmp, 0o600);
       fs.renameSync(tmp, OUT);
 
-      process.stdout.write(`R7_BROWSER_RECEIPT=PASS\nRUNNER_MODE=${{MODE}\nRECEIPT=${{OUT}\n`);
+      process.stdout.write(`R7_BROWSER_RECEIPT=PASS\nRUNNER_MODE=${MODE}\nRECEIPT=${OUT}\n`);
       process.exit(0);
     } finally {
       cdp.close();
     }
   } catch (error) {
-    fail(`BROWSER_RUN_FAILED:${{String(error && error.message).slice(0, 160)}`);
+    fail(`BROWSER_RUN_FAILED:${String(error && error.message).slice(0, 160)}`);
   } finally {
     clearTimeout(watchdog);
     killChrome();
