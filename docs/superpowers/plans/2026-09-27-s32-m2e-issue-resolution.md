@@ -85,10 +85,24 @@ The read path is Project-scoped, privacy-safe, and must never infer current from
 - `db/tests/003_s32_m2e_schema_assertions.sql`
 - `db/tests/004_s32_m2e_negative_invariants.sql`
 
+### Create
+
+- `scripts/s32-migration-chain.ts`
+- `scripts/s32-migration-chain.test.ts`
+
 ### Modify
 
 - `scripts/s32-schema-check.ts`
 - `scripts/s32-schema-contract.test.ts`
+- `scripts/s32-m1a-integration-check.ts`
+- `scripts/s32-m1b-integration-check.ts`
+- `scripts/s32-m1c-integration-check.ts`
+- `scripts/s32-m1d-integration-check.ts`
+- `scripts/s32-m1e-integration-check.ts`
+- `scripts/s32-m2a-integration-check.ts`
+- `scripts/s32-m2b-integration-check.ts`
+- `scripts/s32-m2c-integration-check.ts`
+- `scripts/s32-m2d-integration-check.ts`
 
 ### Migration contents
 
@@ -116,16 +130,32 @@ Do not add tables, columns, enums, indexes, `supersedes_resolution_id`, or gener
 
 ### Migration-chain harness change
 
-Current `scripts/s32-schema-check.ts` applies only `001_s32_core_schema.sql`.
+The audit found **10 current real-PG/schema runners** hard-code only `001_s32_core_schema.sql`: schema-check plus M1-A/B/C/D/E and M2-A/B/C/D.
 
-Refactor it to apply an ordered migration list:
+Do not fix this by copying a second hard-coded list into every runner.
+
+Create one shared source of truth, for example `scripts/s32-migration-chain.ts`:
 
 ```ts
-const MIGRATIONS = [
+export const S32_MIGRATION_PATHS = [
   "db/migrations/001_s32_core_schema.sql",
   "db/migrations/002_s32_m2e_issue_resolution.sql",
-];
+] as const;
+
+export function readS32MigrationChain(root: string): string[] { ... }
 ```
+
+Requirements:
+
+- deterministic numeric order;
+- explicit list, no filesystem glob ordering;
+- fail if any configured migration is missing;
+- helper contains paths only, no Docker/psql side effects;
+- all current S32 disposable-PG runners import/reuse this helper;
+- historical 001 migration bytes remain unchanged;
+- future migration additions have one canonical list to update.
+
+Refactor `scripts/s32-schema-check.ts` and every M1-A..M2-D real-PG runner to apply the complete ordered chain before fixtures/tests.
 
 Then run the complete assertion chain:
 
@@ -139,6 +169,12 @@ Then run the complete assertion chain:
 Keep fail-closed semantics and cleanup behavior unchanged.
 
 ### RED tests first
+
+Add migration-chain tests proving:
+
+- exact ordered list is 001 then 002;
+- missing configured migration fails closed;
+- every current S32 real-PG runner imports/uses the shared chain rather than directly reading `001_s32_core_schema.sql`.
 
 Add static tests proving:
 
@@ -900,17 +936,24 @@ Assessment components
 
 ### Database
 
-Run:
+Run the full current migration-compatible S32 real-PG matrix:
 
 ```bash
 pnpm s32:schema:static
 pnpm s32:schema:check
+pnpm s32:m1a:check
+pnpm s32:m1b:check
+pnpm s32:m1c:check
+pnpm s32:m1d:check
+pnpm s32:m1e:check
+pnpm s32:m2a:check
+pnpm s32:m2b:check
 pnpm s32:m2c:check
 pnpm s32:m2d:check
 pnpm s32:m2e:check
 ```
 
-Update M2-D integration runner if necessary so all post-v1 integration tests run against the migration chain rather than silently testing only 001.
+All of these must apply the shared current migration chain. Historical test results remain historical; fresh M2-E verification must not claim compatibility from runners that still apply only 001.
 
 ### Builds
 
