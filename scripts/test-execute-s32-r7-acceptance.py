@@ -354,6 +354,51 @@ class R7ExecutorTests(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("R7_WEB_ACCEPTANCE_CONTRACT_INVALID", r.stdout + r.stderr)
 
+    def test_external_api_evidence_rejects_secret_or_extra_fields(self):
+        x = Env(); self.addCleanup(x.close)
+        self.assertEqual(x.begin_external().returncode, 0)
+
+        x.acceptance.write_text(x.acceptance.read_text() + "S32_PRIVATE_API_TOKEN=SHOULD_NOT_TRANSFER\n")
+        os.chmod(x.acceptance, 0o600)
+        r = x.record_api_external()
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("R7_EXTERNAL_API_EVIDENCE_SECRET_FIELD", r.stdout + r.stderr)
+        self.assertFalse((x.root / "progress" / f"s32-rollout-{x.fp}-R7.api.env").exists())
+
+        y = Env(); self.addCleanup(y.close)
+        self.assertEqual(y.begin_external().returncode, 0)
+        y.acceptance.write_text(y.acceptance.read_text() + "UNEXPECTED_FIELD=value\n")
+        os.chmod(y.acceptance, 0o600)
+        r = y.record_api_external()
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("R7_ACCEPTANCE_CONTRACT_INVALID", r.stdout + r.stderr)
+        self.assertFalse((y.root / "progress" / f"s32-rollout-{y.fp}-R7.api.env").exists())
+
+    def test_external_api_record_is_single_shot(self):
+        x = Env(); self.addCleanup(x.close)
+        self.assertEqual(x.begin_external().returncode, 0)
+        first = x.record_api_external()
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        second = x.record_api_external()
+        self.assertNotEqual(second.returncode, 0)
+        self.assertIn("R7_API_ALREADY_COMPLETE", second.stdout + second.stderr)
+
+    def test_external_web_secret_field_blocks(self):
+        x = Env(); self.addCleanup(x.close)
+        self.assertEqual(x.begin_external().returncode, 0)
+        self.assertEqual(x.record_api_external().returncode, 0)
+        web = x.write_web_receipt(out=x.root / "external-web.env")
+        text = web.read_text().replace("RUNNER_MODE=fixture", "RUNNER_MODE=browser")
+        lines = [line for line in text.splitlines() if not line.startswith("RECEIPT_SHA256=")]
+        lines.append("S32_PRIVATE_API_TOKEN=SHOULD_NOT_TRANSFER")
+        base = "\n".join(lines) + "\n"
+        web.write_text(base + f"RECEIPT_SHA256={hashlib.sha256(base.encode()).hexdigest()}\n")
+        os.chmod(web, 0o600)
+        r = x.record_web_external(web)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("R7_WEB_ACCEPTANCE_SECRET_FIELD", r.stdout + r.stderr)
+        self.assertFalse((x.root / "progress" / f"s32-rollout-{x.fp}-R7.web.env").exists())
+
     def test_no_destructive_or_global_compose_commands(self):
         text = EXEC.read_text() if EXEC.exists() else ""
         for bad in ("docker compose down", "docker system prune", "rm -rf", "DROP DATABASE", "DROP SCHEMA"):
