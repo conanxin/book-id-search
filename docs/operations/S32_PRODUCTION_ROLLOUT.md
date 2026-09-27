@@ -285,6 +285,19 @@ The external activation:
 
 R5 START without R5 RESULT is incomplete and must never be auto-retried. After R5 terminal PASS, the shared R4_R5 stage group is closed; only then merge/sync newer control-plane tooling before R6.
 
+## R5 acceptance recovery after activation succeeded but production-side pnpm is unavailable
+
+If R5 START exists, the API is already active, R5 RESULT is absent, and the only failure was the production host lacking `pnpm` for the acceptance harness, do not recreate the API and do not retry the R5 executor.
+
+Use a split recovery:
+1. Run the exact reviewed `verify-s32-production-acceptance.ts` from a local reviewed checkout/worktree using local `pnpm/tsx`, targeting the production HTTPS API. Read the frozen production private token only into the local process environment; never print or persist it.
+2. Require the acceptance stdout receipt to report STATUS=PASS, LEGACY_SEARCH_REGRESSION=PASS, ASSESSMENT_REPLAY=PASS, S32_BACKEND_ACCEPTANCE=PASS, MEILI_DOCUMENTS matching R0, and ACCEPTANCE_PROJECT_RETAINED=YES. Capture PROJECT_ID and ASSESSMENT_ID.
+3. Stream the reviewed `recover-s32-r5-acceptance.sh` into production. It performs no container mutation. It re-proves the active runtime, 401/403/200 private-auth behavior, R3 schema/role invariants, exact 26-table structure and persisted data.
+4. The recovery independently proves the acceptance IDs exist in `core.projects` and `core.assessments`, and that exactly one completed `ops.idempotency_keys` assessment receipt points to the same Assessment.
+5. Only then atomically create the missing canonical R5 RESULT with `R5_EXECUTION_MODE=EXTERNAL_ACCEPTANCE_RECOVERY`, R5 START hash, retained claim hash, recovery-tool SHA, acceptance IDs, replay PASS and DB idempotency proof.
+
+R5 START without RESULT remains incomplete until this recovery terminalizes it. No second API activation, rollback, restart, merge or control-plane sync is allowed before terminal R5 PASS.
+
 ## Rollback identities
 
 R0 is the rollback reference.
