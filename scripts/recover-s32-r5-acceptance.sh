@@ -151,13 +151,17 @@ done <<< "$TABLE_LIST"
 [ "$NONEMPTY" -ge 1 ] || block ACCEPTANCE_PERSISTENCE_MISSING
 
 PROJECT_NAME="[S32 Production Acceptance] ${FP:0:12}"
-PROJECT_MATCH="$($DK exec "$PG_CID" psql -U "$DB_ADMIN" -d "$DB_NAME" -At -v pid="$PROJECT_ID" -v pname="$PROJECT_NAME" -c "SELECT count(*) FROM core.projects WHERE id=:'pid'::uuid AND name=:'pname'")" || block DB_ACCEPTANCE_QUERY_FAILED
+# PROJECT_ID / ASSESSMENT_ID are strict UUID-regex validated above, and the
+# project-name suffix is derived only from strict hex FP.  Use plain
+# server-parseable SQL literals here: psql -c does not perform psql-variable
+# interpolation such as :'pid'.
+PROJECT_MATCH="$($DK exec "$PG_CID" psql -U "$DB_ADMIN" -d "$DB_NAME" -At -c "SELECT count(*) FROM core.projects WHERE id::text='$PROJECT_ID' AND name='$PROJECT_NAME'")" || block DB_ACCEPTANCE_QUERY_FAILED
 [ "$PROJECT_MATCH" = 1 ] || block ACCEPTANCE_PROJECT_DB_MISMATCH
 
-ASSESSMENT_MATCH="$($DK exec "$PG_CID" psql -U "$DB_ADMIN" -d "$DB_NAME" -At -v aid="$ASSESSMENT_ID" -c "SELECT count(*) FROM core.assessments WHERE id=:'aid'::uuid")" || block DB_ACCEPTANCE_QUERY_FAILED
+ASSESSMENT_MATCH="$($DK exec "$PG_CID" psql -U "$DB_ADMIN" -d "$DB_NAME" -At -c "SELECT count(*) FROM core.assessments WHERE id::text='$ASSESSMENT_ID'")" || block DB_ACCEPTANCE_QUERY_FAILED
 [ "$ASSESSMENT_MATCH" = 1 ] || block ACCEPTANCE_ASSESSMENT_DB_MISMATCH
 
-RECEIPT_MATCH="$($DK exec "$PG_CID" psql -U "$DB_ADMIN" -d "$DB_NAME" -At -v aid="$ASSESSMENT_ID" -c "SELECT count(*) FROM ops.idempotency_keys WHERE status='COMPLETED' AND resource_type='ASSESSMENT' AND resource_id=:'aid'::uuid AND result_payload->>'assessmentId'=:'aid'")" || block DB_ACCEPTANCE_QUERY_FAILED
+RECEIPT_MATCH="$($DK exec "$PG_CID" psql -U "$DB_ADMIN" -d "$DB_NAME" -At -c "SELECT count(*) FROM ops.idempotency_keys WHERE status='COMPLETED' AND resource_type='ASSESSMENT' AND resource_id::text='$ASSESSMENT_ID' AND result_payload->>'assessmentId'='$ASSESSMENT_ID'")" || block DB_ACCEPTANCE_QUERY_FAILED
 [ "$RECEIPT_MATCH" = 1 ] || block ACCEPTANCE_IDEMPOTENCY_DB_MISMATCH
 
 BASE_MEILI_DOCUMENTS="$(get "$R0" MEILI_DOCUMENTS || true)"
