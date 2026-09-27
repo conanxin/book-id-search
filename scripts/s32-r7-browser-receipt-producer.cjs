@@ -15,6 +15,7 @@
 
 const fs = require("fs");
 const { createHash } = require("crypto");
+const os = require("os");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 
@@ -204,6 +205,7 @@ async function produce() {
   if (MODE === "fixture") fixtureServer = await startFixtureServer();
 
   const port = 10000 + (process.pid % 50000);
+  const chromeProfileDir = fs.mkdtempSync(path.join(os.tmpdir(), "s32-r7-chrome-profile-"));
   const chromeEnv = {
     ...process.env,
     NO_PROXY: "127.0.0.1,localhost",
@@ -214,6 +216,7 @@ async function produce() {
     "--headless=new",
     "--no-sandbox",
     "--disable-gpu",
+    `--user-data-dir=${chromeProfileDir}`,
     `--remote-debugging-port=${port}`,
     "--remote-debugging-address=127.0.0.1",
     "about:blank",
@@ -455,6 +458,11 @@ async function produce() {
   } finally {
     clearTimeout(watchdog);
     killChrome();
+    try {
+      fs.rmSync(chromeProfileDir, { recursive: true, force: true });
+    } catch {
+      // best-effort cleanup after Chromium termination
+    }
     if (fixtureServer) fixtureServer.close();
   }
 }
