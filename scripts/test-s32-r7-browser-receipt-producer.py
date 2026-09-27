@@ -259,6 +259,12 @@ class ProducerTest(unittest.TestCase):
         self.assertIn("delete chromeEnv.S32_R7_BROWSER_TOKEN", text)
         self.assertIn("env: chromeEnv", text)
 
+    def test_chromium_uses_isolated_nondefault_user_data_dir(self):
+        text = PRODUCER.read_text()
+        self.assertIn('fs.mkdtempSync(path.join(os.tmpdir(), "s32-r7-chrome-profile-"))', text)
+        self.assertIn('--user-data-dir=${chromeProfileDir}', text)
+        self.assertIn('fs.rmSync(chromeProfileDir, { recursive: true, force: true })', text)
+
 
 if __name__ == "__main__":
     unittest.main()
