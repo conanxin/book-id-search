@@ -240,7 +240,10 @@ validate_web_receipt() {
     || return 1
 
   expected_hash="$(get_kv "$file" RECEIPT_SHA256 || true)"
-  if ! printf '%s' "$expected_hash" | grep -qE '^[0-9a-f]{64}
+  if ! printf '%s' "$expected_hash" | grep -qE '^[0-9a-f]{64}$'; then
+    WEB_RECEIPT_ERROR=R7_WEB_ACCEPTANCE_HASH_INVALID
+    return 1
+  fi
   actual_hash="$(python3 - "$file" <<'PY'
 import hashlib,pathlib,sys
 raw=pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
@@ -498,7 +501,7 @@ if [ "$MODE" = --record-r7-web-external ]; then
   regular600 "$API_RESULT" || block R7_API_RECEIPT_MISSING
   [ ! -e "$WEB_RESULT" ] && [ ! -L "$WEB_RESULT" ] || block R7_WEB_ACCEPTANCE_ALREADY_COMPLETE
   regular600 "$EVIDENCE" || block R7_EXTERNAL_WEB_EVIDENCE_INVALID
-  validate_web_receipt "$EVIDENCE" browser || block R7_WEB_ACCEPTANCE_CONTRACT_INVALID
+  validate_web_receipt "$EVIDENCE" browser || block "${WEB_RECEIPT_ERROR:-R7_WEB_ACCEPTANCE_CONTRACT_INVALID}"
 
   umask 077
   TMP_WEB="$(mktemp "$ROOT/progress/.r7-web.XXXXXX")"
@@ -537,7 +540,7 @@ if [ "${S32_R7_TEST_MODE:-false}" = true ]; then
   esac
 fi
 validate_web_receipt "$WEB_RESULT" "$EXPECTED_WEB_MODE" \
-  || block R7_WEB_ACCEPTANCE_CONTRACT_INVALID
+  || block "${WEB_RECEIPT_ERROR:-R7_WEB_ACCEPTANCE_CONTRACT_INVALID}"
 
 PROJECT_ID="$(get_kv "$API_RESULT" PROJECT_ID || true)"
 ASSESSMENT_ID="$(get_kv "$API_RESULT" ASSESSMENT_ID || true)"
