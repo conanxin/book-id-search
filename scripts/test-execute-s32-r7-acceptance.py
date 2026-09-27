@@ -127,8 +127,8 @@ class Env:
             env=self.env(**extra),
         )
 
-    def write_web_receipt(self, project_id="11111111-1111-4111-8111-111111111111", source_sha=CTRL):
-        path = self.root / "progress" / f"s32-rollout-{self.fp}-R7.web.env"
+    def write_web_receipt(self, project_id="11111111-1111-4111-8111-111111111111", source_sha=CTRL, out=None):
+        path = out or (self.root / "progress" / f"s32-rollout-{self.fp}-R7.web.env")
         base_lines = [
             "STATUS=PASS",
             "STAGE=R7_WEB",
@@ -151,6 +151,32 @@ class Env:
     def complete(self, **extra):
         return subprocess.run(
             ["bash", str(EXEC), "--complete-r7", self.fp, SRC, CTRL],
+            text=True,
+            capture_output=True,
+            env=self.env(**extra),
+        )
+
+    def begin_external(self, **extra):
+        return subprocess.run(
+            ["bash", str(EXEC), "--begin-r7-external", self.fp, SRC, CTRL],
+            text=True,
+            capture_output=True,
+            env=self.env(**extra),
+        )
+
+    def record_api_external(self, **extra):
+        os.chmod(self.acceptance, 0o600)
+        return subprocess.run(
+            ["bash", str(EXEC), "--record-r7-api-external", self.fp, SRC, CTRL, str(self.acceptance)],
+            text=True,
+            capture_output=True,
+            env=self.env(**extra),
+        )
+
+    def record_web_external(self, receipt, **extra):
+        os.chmod(receipt, 0o600)
+        return subprocess.run(
+            ["bash", str(EXEC), "--record-r7-web-external", self.fp, SRC, CTRL, str(receipt)],
             text=True,
             capture_output=True,
             env=self.env(**extra),
@@ -255,10 +281,132 @@ class R7ExecutorTests(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("R7_WEB_ACCEPTANCE_HASH_INVALID", r.stdout + r.stderr)
 
+    def test_real_execute_mode_requires_external_acceptance_before_start(self):
+        x = Env(); self.addCleanup(x.close)
+        env = x.env()
+        env.pop("S32_R7_TEST_MODE", None)
+        env.pop("S32_R7_ACCEPTANCE_OUTPUT_FILE", None)
+        env.pop("S32_R7_FAKE_ACCEPTANCE_EXIT", None)
+        r = subprocess.run(
+            ["bash", str(EXEC), "--execute-r7-api", x.fp, SRC, CTRL],
+            text=True, capture_output=True, env=env,
+        )
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("EXTERNAL_ACCEPTANCE_REQUIRED", r.stdout + r.stderr)
+        self.assertFalse((x.root / "progress" / f"s32-rollout-{x.fp}-R7.start.env").exists())
+        script = EXEC.read_text()
+        self.assertNotIn("pnpm ", script)
+        self.assertNotIn("tsx ", script)
+
+    def test_external_begin_api_web_complete_happy_path(self):
+        x = Env(); self.addCleanup(x.close)
+        begun = x.begin_external()
+        self.assertEqual(begun.returncode, 0, begun.stdout + begun.stderr)
+        self.assertIn("R7_EXTERNAL_BEGIN=PASS", begun.stdout)
+
+        api = x.record_api_external(S32_R7_FAKE_DB_PROOF="PASS")
+        self.assertEqual(api.returncode, 0, api.stdout + api.stderr)
+        api_receipt = x.root / "progress" / f"s32-rollout-{x.fp}-R7.api.env"
+        self.assertTrue(api_receipt.is_file())
+        self.assertIn("IDEMPOTENCY_RECEIPT_DB_PROOF=PASS", api_receipt.read_text())
+
+        web = x.write_web_receipt(out=x.root / "external-web.env")
+        text = web.read_text().replace("RUNNER_MODE=fixture", "RUNNER_MODE=browser")
+        lines = [line for line in text.splitlines() if not line.startswith("RECEIPT_SHA256=")]
+        base = "\n".join(lines) + "\n"
+        digest = hashlib.sha256(base.encode()).hexdigest()
+        web.write_text(base + f"RECEIPT_SHA256={digest}\n")
+        rec = x.record_web_external(web)
+        self.assertEqual(rec.returncode, 0, rec.stdout + rec.stderr)
+
+        done = x.complete()
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("R7_ACCEPTANCE=PASS", done.stdout)
+
+    def test_external_api_db_proof_failure_blocks_without_api_receipt(self):
+        x = Env(); self.addCleanup(x.close)
+        self.assertEqual(x.begin_external().returncode, 0)
+        r = x.record_api_external(S32_R7_FAKE_DB_PROOF="FAIL")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("R7_API_DB_PROOF_FAILED", r.stdout + r.stderr)
+        self.assertFalse((x.root / "progress" / f"s32-rollout-{x.fp}-R7.api.env").exists())
+
+    def test_external_begin_is_single_shot(self):
+        x = Env(); self.addCleanup(x.close)
+        self.assertEqual(x.begin_external().returncode, 0)
+        second = x.begin_external()
+        self.assertNotEqual(second.returncode, 0)
+        self.assertIn("INCOMPLETE_R7", second.stdout + second.stderr)
+
+    def test_external_web_project_mismatch_blocks(self):
+        x = Env(); self.addCleanup(x.close)
+        self.assertEqual(x.begin_external().returncode, 0)
+        self.assertEqual(x.record_api_external().returncode, 0)
+        web = x.write_web_receipt(
+            project_id="99999999-9999-4999-8999-999999999999",
+            out=x.root / "external-web.env",
+        )
+        text = web.read_text().replace("RUNNER_MODE=fixture", "RUNNER_MODE=browser")
+        lines = [line for line in text.splitlines() if not line.startswith("RECEIPT_SHA256=")]
+        base = "\n".join(lines) + "\n"
+        web.write_text(base + f"RECEIPT_SHA256={hashlib.sha256(base.encode()).hexdigest()}\n")
+        r = x.record_web_external(web)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("R7_WEB_ACCEPTANCE_CONTRACT_INVALID", r.stdout + r.stderr)
+
+    def test_external_api_evidence_rejects_secret_or_extra_fields(self):
+        x = Env(); self.addCleanup(x.close)
+        self.assertEqual(x.begin_external().returncode, 0)
+
+        x.acceptance.write_text(x.acceptance.read_text() + "S32_PRIVATE_API_TOKEN=SHOULD_NOT_TRANSFER\n")
+        os.chmod(x.acceptance, 0o600)
+        r = x.record_api_external()
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("R7_EXTERNAL_API_EVIDENCE_SECRET_FIELD", r.stdout + r.stderr)
+        self.assertFalse((x.root / "progress" / f"s32-rollout-{x.fp}-R7.api.env").exists())
+
+        y = Env(); self.addCleanup(y.close)
+        self.assertEqual(y.begin_external().returncode, 0)
+        y.acceptance.write_text(y.acceptance.read_text() + "UNEXPECTED_FIELD=value\n")
+        os.chmod(y.acceptance, 0o600)
+        r = y.record_api_external()
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("R7_ACCEPTANCE_CONTRACT_INVALID", r.stdout + r.stderr)
+        self.assertFalse((y.root / "progress" / f"s32-rollout-{y.fp}-R7.api.env").exists())
+
+    def test_external_api_record_is_single_shot(self):
+        x = Env(); self.addCleanup(x.close)
+        self.assertEqual(x.begin_external().returncode, 0)
+        first = x.record_api_external()
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        second = x.record_api_external()
+        self.assertNotEqual(second.returncode, 0)
+        self.assertIn("R7_API_ALREADY_COMPLETE", second.stdout + second.stderr)
+
+    def test_external_web_secret_field_blocks(self):
+        x = Env(); self.addCleanup(x.close)
+        self.assertEqual(x.begin_external().returncode, 0)
+        self.assertEqual(x.record_api_external().returncode, 0)
+        web = x.write_web_receipt(out=x.root / "external-web.env")
+        text = web.read_text().replace("RUNNER_MODE=fixture", "RUNNER_MODE=browser")
+        lines = [line for line in text.splitlines() if not line.startswith("RECEIPT_SHA256=")]
+        lines.append("S32_PRIVATE_API_TOKEN=SHOULD_NOT_TRANSFER")
+        base = "\n".join(lines) + "\n"
+        web.write_text(base + f"RECEIPT_SHA256={hashlib.sha256(base.encode()).hexdigest()}\n")
+        os.chmod(web, 0o600)
+        r = x.record_web_external(web)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("R7_WEB_ACCEPTANCE_SECRET_FIELD", r.stdout + r.stderr)
+        self.assertFalse((x.root / "progress" / f"s32-rollout-{x.fp}-R7.web.env").exists())
+
     def test_no_destructive_or_global_compose_commands(self):
         text = EXEC.read_text() if EXEC.exists() else ""
         for bad in ("docker compose down", "docker system prune", "rm -rf", "DROP DATABASE", "DROP SCHEMA"):
             self.assertNotIn(bad, text)
+        self.assertNotIn("pnpm ", text)
+        self.assertNotIn("tsx ", text)
+        self.assertIn("PRODUCTION_HEAD_MISMATCH", text)
+        self.assertIn('git -C "$ROOT" rev-parse HEAD', text)
 
 if __name__ == "__main__":
     unittest.main()

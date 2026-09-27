@@ -11,12 +11,16 @@ Covers the fail-closed receipt contract:
   - pre-existing receipt   -> fail (single-shot producer)
 """
 
+import hashlib
+import http.server
 import os
 import re
 import stat
 import subprocess
 import tempfile
+import threading
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -24,6 +28,69 @@ PRODUCER = ROOT / "scripts" / "s32-r7-browser-receipt-producer.cjs"
 FP = "f" * 64
 PID = "11111111-1111-4111-8111-111111111111"
 CTRL = "c" * 40
+
+
+@contextmanager
+def production_like_server(*, overflow=False):
+    project_name = f"[S32 Production Acceptance] {FP[:12]}"
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            wide = '<div style="width:900px">wide</div>' if overflow else ""
+            page = f"""<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BOOK-ID-SEARCH</title>
+<style>
+* {{ box-sizing: border-box; }}
+body {{ margin: 0; }}
+main {{ max-width: 100%; padding: 16px; }}
+a {{ overflow-wrap: anywhere; }}
+</style>
+</head>
+<body>
+<script>
+const token = sessionStorage.getItem("book-id-search:s32-private-token:v1");
+const projectId = {PID!r};
+const projectName = {project_name!r};
+const listPath = "/research/projects";
+const detailPath = "/research/projects/" + projectId;
+if (location.pathname === listPath) {{
+  document.body.innerHTML = token
+    ? '<main><h1>我的研究项目</h1><a href="' + detailPath + '">' + projectName + '</a></main>'
+    : '<main><h1>我的研究项目</h1></main>';
+}} else if (location.pathname === detailPath) {{
+  document.body.innerHTML = token
+    ? '<main class="research-detail"><h1>' + projectName + '</h1>{wide}</main>'
+    : '<main><h1>需要凭据</h1></main>';
+}} else {{
+  document.body.innerHTML = '<main><h1>404</h1></main>';
+}}
+</script>
+</body>
+</html>"""
+            encoded = page.encode("utf-8")
+            self.send_response(200)
+            self.send_header("content-type", "text/html; charset=utf-8")
+            self.send_header("content-length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+
+        def log_message(self, format, *args):
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        host, port = server.server_address
+        yield f"http://{host}:{port}"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
 
 
 class ProducerTest(unittest.TestCase):
@@ -46,6 +113,18 @@ class ProducerTest(unittest.TestCase):
             capture_output=True, text=True, env=env, timeout=120,
         )
         return result
+
+    def run_browser_producer(self, base_url, *, project=PID, token="TOKEN_SENTINEL"):
+        env = dict(os.environ)
+        env["S32_R7_BROWSER_URL"] = f"{base_url}/research/projects"
+        env["S32_R7_BROWSER_TOKEN"] = token
+        return subprocess.run(
+            ["node", str(PRODUCER), "browser", str(self.out), FP, project, CTRL],
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=120,
+        )
 
     def test_happy_path_writes_receipt(self):
         r = self.run_producer()
@@ -112,6 +191,73 @@ class ProducerTest(unittest.TestCase):
         self.assertEqual(r.returncode, 0)
         content = self.out.read_text()
         self.assertIsNone(re.search(r"(^|_)(TOKEN|PASSWORD|SECRET|DATABASE_URL)=", content, re.M))
+
+    def test_browser_mode_validates_real_project_list_and_detail(self):
+        with production_like_server() as base:
+            r = self.run_browser_producer(base)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        content = self.out.read_text()
+        self.assertIn("RUNNER_MODE=browser", content)
+        self.assertIn(f"PROJECT_ID={PID}", content)
+        self.assertIn("S32_WEB_ACCEPTANCE=PASS", content)
+        self.assertIn("MOBILE_390x844=PASS", content)
+        self.assertIn("NO_HORIZONTAL_OVERFLOW=PASS", content)
+        self.assertNotIn("TOKEN_SENTINEL", content)
+        lines = content.splitlines()
+        expected = next(line.split("=", 1)[1] for line in lines if line.startswith("RECEIPT_SHA256="))
+        base_body = "\n".join(line for line in lines if not line.startswith("RECEIPT_SHA256=")) + "\n"
+        self.assertEqual(expected, hashlib.sha256(base_body.encode()).hexdigest())
+
+    def test_browser_mode_wrong_project_blocks_without_receipt(self):
+        wrong = "22222222-2222-4222-8222-222222222222"
+        with production_like_server() as base:
+            r = self.run_browser_producer(base, project=wrong)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("PROJECT_LIST_TIMEOUT", r.stdout)
+        self.assertFalse(self.out.exists())
+
+    def test_browser_mode_mobile_overflow_blocks_without_receipt(self):
+        with production_like_server(overflow=True) as base:
+            r = self.run_browser_producer(base)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("MOBILE_390_OVERFLOW", r.stdout)
+        self.assertFalse(self.out.exists())
+
+    def test_browser_mode_rejects_untrusted_non_loopback_origin_before_token_injection(self):
+        env = dict(os.environ)
+        env["S32_R7_BROWSER_URL"] = "https://example.com/research/projects"
+        env["S32_R7_BROWSER_TOKEN"] = "TOKEN_SENTINEL"
+        r = subprocess.run(
+            ["node", str(PRODUCER), "browser", str(self.out), FP, PID, CTRL],
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=120,
+        )
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("BROWSER_URL_UNTRUSTED_ORIGIN", r.stdout)
+        self.assertFalse(self.out.exists())
+
+    def test_browser_mode_rejects_wrong_project_list_path(self):
+        with production_like_server() as base:
+            env = dict(os.environ)
+            env["S32_R7_BROWSER_URL"] = f"{base}/wrong"
+            env["S32_R7_BROWSER_TOKEN"] = "TOKEN_SENTINEL"
+            r = subprocess.run(
+                ["node", str(PRODUCER), "browser", str(self.out), FP, PID, CTRL],
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=120,
+            )
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("BROWSER_URL_NOT_PROJECT_LIST", r.stdout)
+        self.assertFalse(self.out.exists())
+
+    def test_browser_token_is_removed_from_chromium_child_env(self):
+        text = PRODUCER.read_text()
+        self.assertIn("delete chromeEnv.S32_R7_BROWSER_TOKEN", text)
+        self.assertIn("env: chromeEnv", text)
 
 
 if __name__ == "__main__":
