@@ -1,13 +1,13 @@
 #!/bin/sh
-# The supported recovery execution entrypoint. Non-interactive /bin/sh does
-# not evaluate NODE_OPTIONS before this guard. Never launch recovery through
-# `node --require`, `node --import`, or a shell with startup hooks instead.
+# Internal second stage, reached only through the reviewed static ELF launcher.
+# Do not invoke this dynamic shell directly with credentials in its environment.
 set +x
 set -eu
 block() {
   printf 'R7_BROWSER_RECEIPT=FAIL\nREASON=%s\n' "$1"
   exit 1
 }
+[ "${S32_R7_RECOVERY_STATIC_LAUNCHER-}" = STATIC_V1 ] || block RECOVERY_STATIC_LAUNCHER_REQUIRED
 # Reject rather than silently overriding injected runtimes/trust settings.
 # Values (including credentials) must never enter output or command arguments.
 [ -z "${NODE_OPTIONS-}${NODE_PATH-}${NODE_EXTRA_CA_CERTS-}${NODE_TLS_REJECT_UNAUTHORIZED-}${NODE_ICU_DATA-}${NODE_REPL_EXTERNAL_MODULE-}${NODE_USE_ENV_PROXY-}${LD_PRELOAD-}${LD_LIBRARY_PATH-}${LD_AUDIT-}${DYLD_INSERT_LIBRARIES-}${DYLD_LIBRARY_PATH-}${BASH_ENV-}${ENV-}${OPENSSL_CONF-}${OPENSSL_MODULES-}" ] \

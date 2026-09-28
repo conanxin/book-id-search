@@ -5,9 +5,11 @@ import importlib.util
 import os
 from pathlib import Path
 import socket
+import shutil
 import sys
 sys.dont_write_bytecode = True
 import subprocess
+import tempfile
 import unittest
 
 HERE = Path(__file__).resolve().parent
@@ -30,6 +32,16 @@ def write(p, body): p.write_text(body); p.chmod(0o600)
 def body(fields): return ''.join(f'{k}={v}\n' for k,v in fields.items())
 
 class RecoveryTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.launcher_dir = tempfile.TemporaryDirectory(prefix='s32-static-test-')
+        cls.addClassCleanup(cls.launcher_dir.cleanup)
+        cls.launcher = Path(cls.launcher_dir.name) / 'recover-browser'
+        env = dict(os.environ)
+        env.pop('S32_R7_BROWSER_TOKEN', None); env.pop('S32_PRIVATE_API_TOKEN', None)
+        subprocess.run([sys.executable, str(HERE / 'build-s32-r7-recovery-launcher.py'), str(cls.launcher)],
+                       env=env, check=True, capture_output=True, text=True)
+
     def setUp(self):
         self.x = executor.Env(); self.addCleanup(self.x.close)
         self.state = self.x.root / 'progress'; self.state.chmod(0o700)
@@ -72,7 +84,7 @@ class RecoveryTests(unittest.TestCase):
         with socket.socket() as s:
             s.bind(('127.0.0.1',0));env['S32_R7_FIXTURE_PORT']=str(s.getsockname()[1])
         env.update(extra)
-        entry=['/bin/sh',str(LAUNCHER),'--local-browser-fixture'] if mode=='recovery-browser' else ['node',str(PRODUCER),mode]
+        entry=[str(self.launcher),'--local-browser-fixture'] if mode=='recovery-browser' else ['node',str(PRODUCER),mode]
         return subprocess.run([*entry,str(self.out),self.x.fp,PID,executor.CTRL],
                               env=env,capture_output=True,text=True,timeout=120)
 
@@ -132,6 +144,43 @@ class RecoveryTests(unittest.TestCase):
         self.assertIn('RECOVERY_RUNTIME_INJECTION_REJECTED',r.stdout)
         self.assertFalse(self.claim.exists());self.assertFalse(self.out.exists());self.assert_unchanged()
 
+    def test_static_launcher_blocks_real_loader_constructor_before_shell(self):
+        source=self.x.root/'hook.c';library=self.x.root/'hook.so';marker=self.x.root/'loader-ran'
+        source.write_text('#include <stdlib.h>\n#include <stdio.h>\n'
+            '__attribute__((constructor)) static void hook(void){const char *p=getenv("LOADER_MARKER");'
+            'if(p){FILE *f=fopen(p,"w");if(f){fputs("executed",f);fclose(f);}}}\n')
+        subprocess.run(['/usr/bin/cc','-shared','-fPIC',str(source),'-o',str(library)],check=True)
+        self.authorize_fixture()
+        for key in ['LD_PRELOAD','LD_AUDIT']:
+            with self.subTest(loader=key):
+                r=self.produce(mode='recovery-browser',url='http://127.0.0.1:1',
+                               LOADER_MARKER=str(marker),**{key:str(library)})
+                self.assertFalse(marker.exists(), 'loader constructor ran before entrypoint guard')
+                self.assertNotEqual(r.returncode,0)
+                self.assertIn('RECOVERY_RUNTIME_INJECTION_REJECTED',r.stdout)
+                self.assertFalse(self.claim.exists());self.assertFalse(self.out.exists())
+        self.assert_unchanged()
+
+    def test_supported_launcher_is_static_and_direct_shell_is_rejected(self):
+        program=subprocess.check_output(['/usr/bin/readelf','-lW',str(self.launcher)],text=True)
+        dynamic=subprocess.check_output(['/usr/bin/readelf','-dW',str(self.launcher)],text=True)
+        self.assertNotIn('INTERP',program);self.assertNotIn('NEEDED',dynamic)
+        env=dict(os.environ);env.pop('S32_R7_RECOVERY_STATIC_LAUNCHER',None)
+        r=subprocess.run(['/bin/sh',str(LAUNCHER)],env=env,capture_output=True,text=True)
+        self.assertNotEqual(r.returncode,0)
+        self.assertIn('RECOVERY_STATIC_LAUNCHER_REQUIRED',r.stdout)
+
+    def test_static_builder_requires_fresh_output_and_no_credential(self):
+        before=digest(self.launcher)
+        builder=[sys.executable,str(HERE/'build-s32-r7-recovery-launcher.py')]
+        r=subprocess.run([*builder,str(self.launcher)],capture_output=True,text=True)
+        self.assertNotEqual(r.returncode,0);self.assertEqual(digest(self.launcher),before)
+        out=self.x.root/'must-not-build'
+        r=subprocess.run([*builder,str(out)],env=dict(os.environ,S32_R7_BROWSER_TOKEN='LOCAL_BUILD_SENTINEL'),
+                         capture_output=True,text=True)
+        self.assertNotEqual(r.returncode,0);self.assertFalse(out.exists())
+        self.assertNotIn('LOCAL_BUILD_SENTINEL',r.stdout+r.stderr)
+
     def test_other_runtime_injection_settings_fail_before_claim(self):
         self.authorize_fixture()
         with browser.production_like_server() as url:
@@ -163,6 +212,42 @@ class RecoveryTests(unittest.TestCase):
         self.assertIn('RECOVERY_AUTHORIZATION_REQUIRED',r.stdout)
         self.assertFalse(self.out.exists());self.assertFalse(self.claim.exists());self.assert_unchanged()
 
+    def test_authorization_precedes_chromium_discovery_without_login_shell(self):
+        marker=self.x.root/'lookup-shell-ran'
+        fakebin=self.x.root/'fake-bin';fakebin.mkdir()
+        lookup=fakebin/'sh'
+        lookup.write_text(f'#!/bin/sh\nprintf invoked > {marker}\nprintf /bin/true\\n')
+        lookup.chmod(0o700)
+        env={k:v for k,v in os.environ.items() if not k.startswith('GIT_')}
+        env.update(HOME=str(self.x.root),PATH=str(fakebin)+':/usr/bin:/bin',
+                   S32_R7_RECOVERY_LAUNCHER='SHELL_V1',S32_R7_RECOVERY_STATIC_LAUNCHER='STATIC_V1',
+                   S32_R7_BROWSER_URL='http://127.0.0.1:1/research/projects',
+                   S32_R7_BROWSER_TOKEN='LOCAL_RECOVERY_SENTINEL',
+                   S32_R7_RECOVERY_STATE_DIR=str(self.state),S32_R7_RECOVERY_TOOL_SHA=self.head)
+        env.pop('S32_R7_CHROMIUM',None)
+        r=subprocess.run([shutil.which('node'),str(PRODUCER),'recovery-browser-fixture',
+                          str(self.out),self.x.fp,PID,executor.CTRL],env=env,capture_output=True,text=True,timeout=10)
+        self.assertFalse(marker.exists(), 'lookup shell executed before authorization')
+        self.assertIn('RECOVERY_AUTHORIZATION_REQUIRED',r.stdout)
+        self.assertFalse(self.claim.exists());self.assertFalse(self.out.exists())
+
+    def test_path_discovery_executes_chromium_without_lookup_shell(self):
+        fakebin=self.x.root/'path-bin';fakebin.mkdir()
+        shell_marker=self.x.root/'shell-ran';chrome_marker=self.x.root/'chrome-ran'
+        for name,marker in [('sh',shell_marker),('chromium',chrome_marker)]:
+            file=fakebin/name
+            file.write_text(f'#!/bin/sh\nprintf invoked > {marker}\nexit 0\n')
+            file.chmod(0o700)
+        env=dict(os.environ,HOME=str(self.x.root),PATH=str(fakebin)+':/usr/bin:/bin',S32_R7_CHROMIUM='')
+        env.pop('S32_R7_BROWSER_TOKEN',None);env.pop('S32_PRIVATE_API_TOKEN',None)
+        with socket.socket() as s:
+            s.bind(('127.0.0.1',0));env['S32_R7_FIXTURE_PORT']=str(s.getsockname()[1])
+        r=subprocess.run([shutil.which('node'),str(PRODUCER),'fixture',str(self.out),self.x.fp,PID,executor.CTRL],
+                         env=env,capture_output=True,text=True,timeout=40)
+        self.assertTrue(chrome_marker.exists());self.assertFalse(shell_marker.exists())
+        self.assertIn('DEVTOOLS_ENDPOINT_TIMEOUT',r.stdout)
+        self.assertFalse(self.out.exists())
+
     def test_git_repository_overrides_are_rejected_before_claim(self):
         self.authorize_fixture()
         with browser.production_like_server() as url:
@@ -182,7 +267,7 @@ class RecoveryTests(unittest.TestCase):
             env = dict(os.environ, S32_R7_BROWSER_URL=url+'/research/projects',
                        S32_R7_BROWSER_TOKEN='LOCAL_RECOVERY_SENTINEL',
                        S32_R7_RECOVERY_STATE_DIR=str(self.state), S32_R7_RECOVERY_TOOL_SHA=self.head)
-            r = subprocess.run(['/bin/sh', str(LAUNCHER), '--recover-browser', str(self.out),
+            r = subprocess.run([str(self.launcher), '--recover-browser', str(self.out),
                                 self.x.fp, PID, executor.CTRL], env=env, capture_output=True, text=True, timeout=10)
         self.assertNotEqual(r.returncode, 0)
         self.assertIn('RECOVERY_PRODUCTION_URL_REQUIRED', r.stdout)

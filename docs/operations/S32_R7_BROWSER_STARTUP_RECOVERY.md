@@ -79,19 +79,36 @@ Only after new explicit authorization may an operator create mode600
 AUTHORIZED_ACTION=S32_R7_BROWSER_STARTUP_RECOVERY, EXPLICIT_APPROVAL=true,
 CONSUMABLE_ONCE=true, RECOVERY_TOOL_SHA=<approved SHA>,
 INCIDENT_SHA256=<incident file hash>, RECOVERY_BROWSER_INVOCATIONS=1.
-Set `S32_R7_RECOVERY_STATE_DIR` and `S32_R7_RECOVERY_TOOL_SHA`, then use only the
-non-Node entrypoint `scripts/recover-s32-r7-browser-acceptance.sh --recover-browser
-OUT FP PROJECT_ID CTRL` (direct executable or `/bin/sh`, never a shell with
-startup hooks). It rejects NODE_OPTIONS, NODE_PATH, runtime loader injections,
-Node trust overrides and shell startup hooks **before Node starts**. It passes
-no caller-selected Node flags. Git repository/configuration environment overrides
-are rejected so identity checks cover the executing checkout. Production recovery
+Before loading any credential, build the supported static ELF entrypoint with
+`python3 scripts/build-s32-r7-recovery-launcher.py /absolute/fresh/private/launcher`.
+Build in an already-trusted, credential-free development process using the local
+trusted compiler. The builder verifies no ELF interpreter or dynamic dependency,
+publishes mode0700 exclusively, and prints its SHA256. Record that binary hash,
+exact tool HEAD and checkout path in the future authorization packet; verify them
+again before invocation. Keep the binary outside the clean checkout. Its embedded
+script path binds it to that checkout; rebuild/review if the checkout moves.
+
+Set `S32_R7_RECOVERY_STATE_DIR` and `S32_R7_RECOVERY_TOOL_SHA`, then invoke the
+verified static binary directly as `launcher --recover-browser OUT FP PROJECT_ID
+CTRL`. Do not invoke its internal `.sh` second stage directly or wrap the launcher
+in a newly started shell with the credential/injection environment. The static
+entrypoint cannot load LD_PRELOAD/LD_AUDIT constructors. It rejects loader, Node
+and shell injection settings before executing any dynamic program; the internal
+non-login shell then supplies fixed Node arguments. The token remains inherited
+process memory, not command-line arguments. Dynamic shared-library constructor
+regressions verify rejection before injected code can execute.
+
+All nonempty `GIT_*` environment variables must be removed during credential-free
+readiness (including the Codex shell's `GIT_PAGER`). Overrides are rejected so
+identity checks cover the executing checkout. Recovery state/authorization checks
+precede Chromium discovery, which inspects PATH without running a lookup shell.
+Production recovery
 is pinned to `https://books.conanxin.com/research/projects`; any different URL
 is rejected before consuming a claim. Direct Node recovery is rejected; fixture mode
 remains separate. Installed Node/Chrome, PATH and the local filesystem must be
 trusted; this is not cryptographic attestation against a malicious local owner.
 Production credential handling remains process memory/sessionStorage only.
-The launcher disables shell tracing and retains the token in the environment,
+The internal shell disables tracing and retains the token in the environment,
 never as an env(1) assignment on argv. Never persist credentials in state files.
 
 Before Chrome starts, browser recovery hard-links that authorization to the

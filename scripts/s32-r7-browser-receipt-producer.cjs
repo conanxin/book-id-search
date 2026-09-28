@@ -16,7 +16,7 @@
 const fs = require("fs");
 const { createHash } = require("crypto");
 const path = require("path");
-const { spawn, spawnSync } = require("child_process");
+const { spawn } = require("child_process");
 
 const REQUESTED_MODE = process.argv[2] || "";
 const LOCAL_RECOVERY_BROWSER = REQUESTED_MODE === "recovery-browser-fixture";
@@ -99,13 +99,18 @@ function findChromium() {
     }
   }
 
-  const which = spawnSync(
-    "sh",
-    ["-lc", "command -v chromium || command -v chromium-browser || command -v google-chrome || command -v chrome"],
-    { encoding: "utf8" },
-  );
-  if (which.status === 0 && which.stdout.trim()) {
-    return which.stdout.trim().split("\n")[0];
+  // Inspect PATH directly. A login shell could execute unreviewed profile code
+  // with the token in its environment before the recovery authorization gate.
+  for (const name of ["chromium", "chromium-browser", "google-chrome", "chrome"]) {
+    for (const directory of (process.env.PATH || "").split(path.delimiter)) {
+      if (!path.isAbsolute(directory)) continue;
+      const candidate = path.join(directory, name);
+      try {
+        if (!fs.statSync(candidate).isFile()) continue;
+        fs.accessSync(candidate, fs.constants.X_OK);
+        return candidate;
+      } catch { /* next PATH entry */ }
+    }
   }
   return null;
 }
@@ -139,9 +144,6 @@ if (MODE === "browser") {
   }
 }
 
-const CHROMIUM = findChromium();
-if (!CHROMIUM) fail("CHROMIUM_UNAVAILABLE");
-
 let recoveryProvenance = [];
 if (RECOVERY) {
   if (MODE === "browser" && process.env.S32_R7_RECOVERY_LAUNCHER !== "SHELL_V1") {
@@ -159,6 +161,9 @@ if (RECOVERY) {
     fail(error.code || error.message);
   }
 }
+
+const CHROMIUM = findChromium();
+if (!CHROMIUM) fail("CHROMIUM_UNAVAILABLE");
 
 const FIXTURE_PROJECT_ID = "11111111-1111-4111-8111-111111111111";
 let fixtureServer = null;
