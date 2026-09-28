@@ -235,3 +235,10 @@ it.each([null, "bad-owner-id"])("Claim scope does not disguise malformed owner %
   await expect(scopeModule.loadProjectClaimScope(scopeClient([issueScopeRow({ owner_project_id })]), P, ISSUE, CLAIM))
     .rejects.toBeInstanceOf(scopeModule.ProjectEvidenceIntegrityError);
 });
+
+it.each([P, SOURCE])("legacy Claim scope retains nonempty canonical owner metadata under Project %s", async owner_project_id => {
+  const c = scopeClient([issueScopeRow({ owner_project_id, issue_binding_metadata: { source: "legacy" } })]);
+  const result = await scopeModule.loadProjectClaimScope(c, P, ISSUE, CLAIM);
+  if (owner_project_id === P) expect(result?.claim).toEqual({ id: CLAIM, statement: "Candidate", lifecycleState: "ACTIVE" });
+  else expect(result).toBeNull();
+});

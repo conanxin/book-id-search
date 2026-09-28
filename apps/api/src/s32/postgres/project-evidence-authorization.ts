@@ -73,7 +73,7 @@ export async function loadProjectIssueScope(
   client: PoolClient,
   projectId: string,
   issueId: string,
-  options: { lock?: boolean } = {},
+  options: { lock?: boolean; legacyClaimMetadata?: boolean } = {},
 ): Promise<ProjectIssueScope | null> {
   if (options.lock) {
     const project = await client.query("SELECT id FROM core.projects WHERE id=$1 FOR UPDATE", [projectId]);
@@ -124,7 +124,7 @@ export async function loadProjectIssueScope(
   if (row.issue_binding_role !== null) integrity("ISSUE_OWNER_BINDING_ROLE_INVALID");
   if (!row.issue_binding_metadata || typeof row.issue_binding_metadata !== "object"
     || Array.isArray(row.issue_binding_metadata) || Object.getPrototypeOf(row.issue_binding_metadata) !== Object.prototype
-    || Object.keys(row.issue_binding_metadata).length !== 0) {
+    || (!options.legacyClaimMetadata && Object.keys(row.issue_binding_metadata).length !== 0)) {
     integrity("ISSUE_BINDING_METADATA_INVALID");
   }
   if (!validDate(row.issue_binding_created_at)) integrity("ISSUE_BINDING_TIMESTAMP_INVALID");
@@ -160,7 +160,9 @@ export async function loadProjectClaimScope(
   readCandidateClaimId(claimId);
   let scope: ProjectIssueScope | null;
   try {
-    scope = await loadProjectIssueScope(client, projectId, issueId, options);
+    // M2-C/D historically accept canonical nonempty owner metadata. Keep
+    // that read/write contract while new Resolution scope defaults to {}.
+    scope = await loadProjectIssueScope(client, projectId, issueId, { ...options, legacyClaimMetadata: true });
   } catch (error) {
     // Preserve M2-C/D's existing cross-project privacy contract.
     if (error instanceof ProjectEvidenceIntegrityError && error.message === "ISSUE_OWNER_PROJECT_MISMATCH") return null;
