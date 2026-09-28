@@ -292,9 +292,40 @@ async function produce() {
   }
 
   let watchdogTriggered = false;
+  let terminationSignal = null;
+  let resolveTerminationSignal;
+  const terminationSignalPromise = new Promise((resolve) => {
+    resolveTerminationSignal = resolve;
+  });
   let deferredFailure = null;
   let cleanupFailure = null;
   let pendingReceiptPath = null;
+
+  const requestTermination = (signal) => {
+    if (terminationSignal) return;
+    terminationSignal = signal;
+    resolveTerminationSignal(signal);
+    try {
+      signalChromeGroup();
+    } catch {
+      // Final teardown performs the authoritative fail-closed check.
+    }
+  };
+  const onSigint = () => requestTermination("SIGINT");
+  const onSigterm = () => requestTermination("SIGTERM");
+  process.once("SIGINT", onSigint);
+  process.once("SIGTERM", onSigterm);
+
+  const abortOnTermination = async (promise) => Promise.race([
+    promise,
+    terminationSignalPromise.then((signal) => {
+      throw new RuntimeFailure(`TERMINATED_BY_${signal}`);
+    }),
+  ]);
+
+  const checkTermination = () => {
+    if (terminationSignal) runtimeFail(`TERMINATED_BY_${terminationSignal}`);
+  };
   const watchdog = setTimeout(() => {
     watchdogTriggered = true;
     try {
@@ -334,11 +365,12 @@ async function produce() {
 
     let target = null;
     for (let i = 0; i < 60; i += 1) {
+      checkTermination();
       if (spawnError) {
         runtimeFail(`CHROMIUM_SPAWN_FAILED:${spawnError.code || "UNKNOWN"}`);
       }
       try {
-        const response = await localFetch(`http://127.0.0.1:${port}/json/list`);
+        const response = await abortOnTermination(localFetch(`http://127.0.0.1:${port}/json/list`));
         if (!response) throw new Error("unreachable");
         const list = await response.json();
         const page = list.find((entry) => entry.type === "page");
@@ -349,30 +381,30 @@ async function produce() {
       } catch {
         // retry
       }
-      await sleep(250);
+      await abortOnTermination(sleep(250));
     }
+    checkTermination();
     if (spawnError) {
       runtimeFail(`CHROMIUM_SPAWN_FAILED:${spawnError.code || "UNKNOWN"}`);
     }
     if (!target) runtimeFail("DEVTOOLS_ENDPOINT_TIMEOUT");
 
-    const cdp = await withTimeout(
+    const cdp = await abortOnTermination(withTimeout(
       Cdp.connect(target.webSocketDebuggerUrl),
       10000,
       "CDP_CONNECT_TIMEOUT",
-    );
+    ));
 
     try {
-      await cdp.send("Page.enable");
-      await cdp.send("Runtime.enable");
+      await abortOnTermination(cdp.send("Page.enable"));
+      await abortOnTermination(cdp.send("Runtime.enable"));
 
       async function evaluate(expression) {
-        const result = await cdp.send("Runtime.evaluate", {
+        const result = await abortOnTermination(cdp.send("Runtime.evaluate", {
           expression,
           returnByValue: true,
           awaitPromise: true,
-        });
-        if (result.exceptionDetails) {
+        }));        if (result.exceptionDetails) {
           throw new Error(`EVAL_FAILED:${result.exceptionDetails.text}`);
         }
         return result.result.value;
@@ -380,28 +412,30 @@ async function produce() {
 
       async function navigate(url) {
         const before = cdp.events.filter((event) => event.method === "Page.loadEventFired").length;
-        await cdp.send("Page.navigate", { url });
+        await abortOnTermination(cdp.send("Page.navigate", { url }));
         for (let i = 0; i < 120; i += 1) {
+          checkTermination();
           const count = cdp.events.filter((event) => event.method === "Page.loadEventFired").length;
           if (count > before) {
             const ready = await evaluate("document.readyState");
             if (ready === "complete" || ready === "interactive") return;
           }
-          await sleep(250);
+          await abortOnTermination(sleep(250));
         }
         throw new Error("PAGE_LOAD_TIMEOUT");
       }
 
       async function reload() {
         const before = cdp.events.filter((event) => event.method === "Page.loadEventFired").length;
-        await cdp.send("Page.reload", { ignoreCache: true });
+        await abortOnTermination(cdp.send("Page.reload", { ignoreCache: true }));
         for (let i = 0; i < 120; i += 1) {
+          checkTermination();
           const count = cdp.events.filter((event) => event.method === "Page.loadEventFired").length;
           if (count > before) {
             const ready = await evaluate("document.readyState");
             if (ready === "complete" || ready === "interactive") return;
           }
-          await sleep(250);
+          await abortOnTermination(sleep(250));
         }
         throw new Error("PAGE_RELOAD_TIMEOUT");
       }
@@ -409,19 +443,20 @@ async function produce() {
       async function waitForState(expression, label) {
         let last = null;
         for (let i = 0; i < 100; i += 1) {
+          checkTermination();
           last = await evaluate(expression);
           if (last && last.ready === true) return last;
-          await sleep(250);
+          await abortOnTermination(sleep(250));
         }
         throw new Error(`${label}:${JSON.stringify(last)}`);
       }
 
-      await cdp.send("Emulation.setDeviceMetricsOverride", {
+      await abortOnTermination(cdp.send("Emulation.setDeviceMetricsOverride", {
         width: 1440,
         height: 900,
         deviceScaleFactor: 1,
         mobile: false,
-      });
+      }));
       await navigate(TARGET_URL);
 
       let observedProjectId = null;
@@ -496,13 +531,13 @@ async function produce() {
         observedProjectId = PROJECT_ID;
       }
 
-      await cdp.send("Emulation.setDeviceMetricsOverride", {
+      await abortOnTermination(cdp.send("Emulation.setDeviceMetricsOverride", {
         width: 390,
         height: 844,
         deviceScaleFactor: 2,
         mobile: true,
-      });
-      await sleep(250);
+      }));
+      await abortOnTermination(sleep(250));
       const overflow = await evaluate(
         "({ scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth })",
       );
@@ -563,8 +598,11 @@ async function produce() {
       cleanupFailure = cleanupFailure || "CHROME_PROFILE_CLEANUP_FAILED";
     }
     if (fixtureServer) fixtureServer.close();
+    process.removeListener("SIGINT", onSigint);
+    process.removeListener("SIGTERM", onSigterm);
   }
 
+  if (terminationSignal) deferredFailure = `TERMINATED_BY_${terminationSignal}`;
   if (watchdogTriggered) deferredFailure = "WATCHDOG_TIMEOUT";
   if (cleanupFailure) deferredFailure = cleanupFailure;
 
