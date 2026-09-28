@@ -229,23 +229,18 @@ async function produce() {
     no_proxy: "127.0.0.1,localhost",
   };
   delete chromeEnv.S32_R7_BROWSER_TOKEN;
-  const chrome = spawn(CHROMIUM, [
-    "--headless=new",
-    "--no-sandbox",
-    "--disable-gpu",
-    `--user-data-dir=${chromeProfileDir}`,
-    `--remote-debugging-port=${port}`,
-    "--remote-debugging-address=127.0.0.1",
-    "about:blank",
-  ], {
-    stdio: ["ignore", "ignore", "ignore"],
-    detached: true,
-    env: chromeEnv,
-  });
+  let chrome = null;
+  let spawnError = null;
+
+  function chromePgid() {
+    return chrome && Number.isInteger(chrome.pid) ? chrome.pid : null;
+  }
 
   function signalChromeGroup() {
+    const pgid = chromePgid();
+    if (pgid === null) return;
     try {
-      process.kill(-chrome.pid, "SIGKILL");
+      process.kill(-pgid, "SIGKILL");
       return;
     } catch (error) {
       if (error && error.code === "ESRCH") return;
@@ -253,20 +248,43 @@ async function produce() {
     }
   }
 
-  function chromeGroupExists() {
+  function chromeGroupHasLiveMembers() {
+    const pgid = chromePgid();
+    if (pgid === null) return false;
+
+    let entries;
     try {
-      process.kill(-chrome.pid, 0);
-      return true;
+      entries = fs.readdirSync("/proc", { withFileTypes: true });
     } catch (error) {
-      if (error && error.code === "ESRCH") return false;
-      throw error;
+      throw new Error(`PROC_SCAN_FAILED:${error && error.code ? error.code : "UNKNOWN"}`);
     }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory() || !/^[0-9]+$/.test(entry.name)) continue;
+      const statPath = `/proc/${entry.name}/stat`;
+      let raw;
+      try {
+        raw = fs.readFileSync(statPath, "utf8");
+      } catch (error) {
+        if (error && error.code === "ENOENT") continue;
+        throw new Error(`PROC_STAT_FAILED:${error && error.code ? error.code : "UNKNOWN"}`);
+      }
+
+      const closeParen = raw.lastIndexOf(")");
+      if (closeParen < 0) throw new Error("PROC_STAT_PARSE_FAILED");
+      const fields = raw.slice(closeParen + 2).trim().split(/\s+/);
+      if (fields.length < 3) throw new Error("PROC_STAT_PARSE_FAILED");
+      const state = fields[0];
+      const processGroup = Number(fields[2]);
+      if (processGroup === pgid && state !== "Z" && state !== "X") return true;
+    }
+    return false;
   }
 
   async function terminateChromeGroup() {
     signalChromeGroup();
     for (let i = 0; i < 100; i += 1) {
-      if (!chromeGroupExists()) return;
+      if (!chromeGroupHasLiveMembers()) return;
       await sleep(50);
       signalChromeGroup();
     }
@@ -293,8 +311,32 @@ async function produce() {
   }).catch(() => null);
 
   try {
+    try {
+      chrome = spawn(CHROMIUM, [
+        "--headless=new",
+        "--no-sandbox",
+        "--disable-gpu",
+        `--user-data-dir=${chromeProfileDir}`,
+        `--remote-debugging-port=${port}`,
+        "--remote-debugging-address=127.0.0.1",
+        "about:blank",
+      ], {
+        stdio: ["ignore", "ignore", "ignore"],
+        detached: true,
+        env: chromeEnv,
+      });
+      chrome.on("error", (error) => {
+        spawnError = error;
+      });
+    } catch (error) {
+      spawnError = error;
+    }
+
     let target = null;
     for (let i = 0; i < 60; i += 1) {
+      if (spawnError) {
+        runtimeFail(`CHROMIUM_SPAWN_FAILED:${spawnError.code || "UNKNOWN"}`);
+      }
       try {
         const response = await localFetch(`http://127.0.0.1:${port}/json/list`);
         if (!response) throw new Error("unreachable");
@@ -308,6 +350,9 @@ async function produce() {
         // retry
       }
       await sleep(250);
+    }
+    if (spawnError) {
+      runtimeFail(`CHROMIUM_SPAWN_FAILED:${spawnError.code || "UNKNOWN"}`);
     }
     if (!target) runtimeFail("DEVTOOLS_ENDPOINT_TIMEOUT");
 
