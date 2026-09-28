@@ -35,6 +35,17 @@ function fail(reason) {
   process.exit(1);
 }
 
+class RuntimeFailure extends Error {
+  constructor(reason) {
+    super(reason);
+    this.reason = reason;
+  }
+}
+
+function runtimeFail(reason) {
+  throw new RuntimeFailure(reason);
+}
+
 if (!["fixture", "browser"].includes(MODE)) fail("INVALID_MODE");
 if (!/^[0-9a-f]{64}$/.test(FP)) fail("INVALID_FINGERPRINT");
 if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(PROJECT_ID)) fail("INVALID_PROJECT_ID");
@@ -170,6 +181,12 @@ class Cdp {
         this.events.push(msg);
       }
     });
+    const rejectPending = (reason) => {
+      for (const { reject } of this.pending.values()) reject(new Error(reason));
+      this.pending.clear();
+    };
+    ws.addEventListener("close", () => rejectPending("CDP_SOCKET_CLOSED"));
+    ws.addEventListener("error", () => rejectPending("CDP_SOCKET_ERROR"));
   }
 
   static async connect(url) {
@@ -226,7 +243,20 @@ async function produce() {
     env: chromeEnv,
   });
 
+  const chromeExited = new Promise((resolve) => {
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    chrome.once("exit", done);
+    chrome.once("error", done);
+    if (chrome.exitCode !== null || chrome.signalCode !== null) done();
+  });
+
   const killChrome = () => {
+    if (chrome.exitCode !== null || chrome.signalCode !== null) return;
     try {
       process.kill(-chrome.pid, "SIGKILL");
     } catch {
@@ -234,9 +264,12 @@ async function produce() {
     }
   };
 
+  let watchdogTriggered = false;
+  let deferredFailure = null;
+  let cleanupFailure = null;
   const watchdog = setTimeout(() => {
+    watchdogTriggered = true;
     killChrome();
-    fail("WATCHDOG_TIMEOUT");
   }, 90000);
   watchdog.unref?.();
 
@@ -262,7 +295,7 @@ async function produce() {
       }
       await sleep(250);
     }
-    if (!target) fail("DEVTOOLS_ENDPOINT_TIMEOUT");
+    if (!target) runtimeFail("DEVTOOLS_ENDPOINT_TIMEOUT");
 
     const cdp = await withTimeout(
       Cdp.connect(target.webSocketDebuggerUrl),
@@ -338,7 +371,7 @@ async function produce() {
         const runnerSource = await evaluate(
           "document.documentElement.getAttribute('data-runner-source')",
         );
-        if (runnerSource !== RUNNER_ID) fail("WRONG_RUNNER_SOURCE");
+        if (runnerSource !== RUNNER_ID) runtimeFail("WRONG_RUNNER_SOURCE");
 
         const desktop = await evaluate(`(() => {
           const root = document.querySelector('#acceptance-root, main');
@@ -352,13 +385,13 @@ async function produce() {
             webResult: web ? web.getAttribute('data-result') : null,
           };
         })()`);
-        if (!desktop.ok) fail(desktop.reason || "DESKTOP_CHECK_FAILED");
-        if (desktop.projectId !== PROJECT_ID) fail("PROJECT_ID_MISMATCH");
-        if (desktop.webResult !== "PASS") fail("WEB_ACCEPTANCE_NOT_PASS");
+        if (!desktop.ok) runtimeFail(desktop.reason || "DESKTOP_CHECK_FAILED");
+        if (desktop.projectId !== PROJECT_ID) runtimeFail("PROJECT_ID_MISMATCH");
+        if (desktop.webResult !== "PASS") runtimeFail("WEB_ACCEPTANCE_NOT_PASS");
         observedProjectId = desktop.projectId;
       } else {
         const target = BROWSER_TARGET;
-        if (!target) fail("MISSING_BROWSER_URL");
+        if (!target) runtimeFail("MISSING_BROWSER_URL");
 
         await evaluate(
           `sessionStorage.setItem(${JSON.stringify(TOKEN_KEY)}, ${JSON.stringify(BROWSER_TOKEN)}); true`,
@@ -414,7 +447,7 @@ async function produce() {
       const overflow = await evaluate(
         "({ scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth })",
       );
-      if (overflow.scrollWidth > overflow.clientWidth) fail("MOBILE_390_OVERFLOW");
+      if (overflow.scrollWidth > overflow.clientWidth) runtimeFail("MOBILE_390_OVERFLOW");
 
       const baseLines = [
         "STATUS=PASS",
@@ -432,14 +465,14 @@ async function produce() {
 
       const secretPattern = /(^|_)(TOKEN|PASSWORD|SECRET|DATABASE_URL)=/;
       if (baseLines.some((line) => secretPattern.test(line))) {
-        fail("SECRET_FIELD_PRESENT");
+        runtimeFail("SECRET_FIELD_PRESENT");
       }
 
       const baseBody = baseLines.join("\n") + "\n";
       const receiptHash = createHash("sha256").update(baseBody, "utf8").digest("hex");
       const receipt = baseBody + `RECEIPT_SHA256=${receiptHash}\n`;
       if (MODE === "browser" && receipt.includes(BROWSER_TOKEN)) {
-        fail("SECRET_VALUE_PRESENT");
+        runtimeFail("SECRET_VALUE_PRESENT");
       }
 
       const dir = path.dirname(OUT);
@@ -449,22 +482,42 @@ async function produce() {
       fs.renameSync(tmp, OUT);
 
       process.stdout.write(`R7_BROWSER_RECEIPT=PASS\nRUNNER_MODE=${MODE}\nRECEIPT=${OUT}\n`);
-      process.exit(0);
+      return;
     } finally {
       cdp.close();
     }
   } catch (error) {
-    fail(`BROWSER_RUN_FAILED:${String(error && error.message).slice(0, 160)}`);
+    if (error instanceof RuntimeFailure) {
+      deferredFailure = error.reason;
+    } else {
+      deferredFailure = `BROWSER_RUN_FAILED:${String(error && error.message).slice(0, 160)}`;
+    }
   } finally {
     clearTimeout(watchdog);
     killChrome();
     try {
-      fs.rmSync(chromeProfileDir, { recursive: true, force: true });
+      await withTimeout(chromeExited, 5000, "CHROMIUM_TERMINATION_TIMEOUT");
     } catch {
-      // best-effort cleanup after Chromium termination
+      cleanupFailure = "CHROMIUM_TERMINATION_TIMEOUT";
+    }
+    try {
+      fs.rmSync(chromeProfileDir, { recursive: true, force: false });
+    } catch {
+      cleanupFailure = cleanupFailure || "CHROME_PROFILE_CLEANUP_FAILED";
     }
     if (fixtureServer) fixtureServer.close();
   }
+
+  if (watchdogTriggered) deferredFailure = "WATCHDOG_TIMEOUT";
+  if (cleanupFailure) {
+    deferredFailure = cleanupFailure;
+    try {
+      if (fs.existsSync(OUT)) fs.rmSync(OUT, { force: true });
+    } catch {
+      // Receipt removal is best-effort; cleanup failure remains terminal.
+    }
+  }
+  if (deferredFailure) fail(deferredFailure);
 }
 
 produce();
