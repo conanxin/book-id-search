@@ -154,6 +154,11 @@ class RecoveryTests(unittest.TestCase):
         recorded=self.x.record_web_external(self.out)
         self.assertEqual(recorded.returncode,0,recorded.stdout+recorded.stderr)
         self.assertEqual(self.web.read_bytes(),self.out.read_bytes())
+        valid_web=self.web.read_text()
+        write(self.web,valid_web.replace(self.head,'a'*40))
+        tampered=self.x.complete()
+        self.assertNotEqual(tampered.returncode,0);self.assertFalse(self.result.exists())
+        write(self.web,valid_web)
         done=self.x.complete();self.assertEqual(done.returncode,0,done.stdout+done.stderr)
         self.assertIn('R7_ACCEPTANCE=PASS',done.stdout);self.assert_unchanged()
 
@@ -191,7 +196,9 @@ class RecoveryTests(unittest.TestCase):
         base+=f'R7_BROWSER_RECOVERY=STARTUP_RECOVERY\nRECOVERY_TOOL_SHA={self.head}\n'
         write(receipt,base+'RECEIPT_SHA256='+hashlib.sha256(base.encode()).hexdigest()+'\n')
         valid=receipt.read_text()
-        for change in [valid.replace(self.head,'a'*40),valid.replace(executor.CTRL,'d'*40)]:
+        wrong_ctrl_body=base.replace(executor.CTRL,'d'*40)
+        wrong_ctrl=wrong_ctrl_body+'RECEIPT_SHA256='+hashlib.sha256(wrong_ctrl_body.encode()).hexdigest()+'\n'
+        for change in [valid.replace(self.head,'a'*40),wrong_ctrl]:
             with self.subTest(change=change[-80:]):
                 write(receipt,change)
                 r=self.x.record_web_external(receipt)

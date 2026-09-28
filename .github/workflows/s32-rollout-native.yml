@@ -13,6 +13,10 @@ jobs:
   verification:
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    env:
+      # Recovery browser tests require a clean checkout; avoid untracked caches
+      # from earlier importlib-based Python contract tests.
+      PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - uses: actions/checkout@v4
         with:
