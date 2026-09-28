@@ -482,7 +482,6 @@ async function produce() {
       fs.renameSync(tmp, OUT);
 
       process.stdout.write(`R7_BROWSER_RECEIPT=PASS\nRUNNER_MODE=${MODE}\nRECEIPT=${OUT}\n`);
-      return;
     } finally {
       cdp.close();
     }
@@ -501,7 +500,10 @@ async function produce() {
       cleanupFailure = "CHROMIUM_TERMINATION_TIMEOUT";
     }
     try {
-      fs.rmSync(chromeProfileDir, { recursive: true, force: false });
+      fs.rmSync(chromeProfileDir, { recursive: true, force: true });
+      if (fs.existsSync(chromeProfileDir)) {
+        cleanupFailure = cleanupFailure || "CHROME_PROFILE_CLEANUP_FAILED";
+      }
     } catch {
       cleanupFailure = cleanupFailure || "CHROME_PROFILE_CLEANUP_FAILED";
     }
