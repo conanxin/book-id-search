@@ -537,7 +537,6 @@ async function produce() {
   }
   try {
     fs.linkSync(pendingReceiptPath, OUT);
-    fs.unlinkSync(pendingReceiptPath);
   } catch {
     try {
       fs.rmSync(pendingReceiptPath, { force: true });
@@ -545,6 +544,12 @@ async function produce() {
       // Publication already failed; preserve the primary error.
     }
     fail("RECEIPT_PUBLISH_FAILED");
+  }
+  try {
+    fs.unlinkSync(pendingReceiptPath);
+  } catch {
+    // Canonical receipt publication is already atomic and complete.
+    // The hidden non-secret temp link may be cleaned manually if needed.
   }
 
   process.stdout.write(`R7_BROWSER_RECEIPT=PASS\nRUNNER_MODE=${MODE}\nRECEIPT=${OUT}\n`);
