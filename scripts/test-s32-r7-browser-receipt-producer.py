@@ -288,10 +288,15 @@ class ProducerTest(unittest.TestCase):
 
     def test_process_group_cleanup_when_chromium_leader_exits_first(self):
         fake = Path(self.tmp.name) / "fake-chromium.sh"
+        pid_file = Path(self.tmp.name) / "leader-descendant.pid"
         sentinel = f"s32-r7-orphan-sentinel-{os.getpid()}"
         fake.write_text(
-            "#!/bin/sh\n"
-            f"sh -c 'exec -a {sentinel} sleep 120' &\n"
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            f"bash -c 'exec -a {sentinel} sleep 120' &\n"
+            "child=$!\n"
+            "kill -0 \"$child\"\n"
+            f"printf '%s\\n' \"$child\" > {str(pid_file)!r}\n"
             "exit 0\n"
         )
         fake.chmod(0o755)
@@ -313,6 +318,17 @@ class ProducerTest(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("DEVTOOLS_ENDPOINT_TIMEOUT", r.stdout)
         self.assertFalse(out2.exists())
+        self.assertTrue(pid_file.exists(), "fake Chromium descendant never started")
+
+        descendant_pid = int(pid_file.read_text().strip())
+        stat_path = Path(f"/proc/{descendant_pid}/stat")
+        if stat_path.exists():
+            raw = stat_path.read_text()
+            close_paren = raw.rfind(")")
+            self.assertGreaterEqual(close_paren, 0)
+            fields = raw[close_paren + 2:].split()
+            self.assertGreaterEqual(len(fields), 3)
+            self.assertIn(fields[0], {"Z", "X"}, f"descendant still live: state={fields[0]}")
 
         ps = subprocess.run(
             ["ps", "-eo", "args="],
@@ -324,12 +340,37 @@ class ProducerTest(unittest.TestCase):
         self.assertNotIn(sentinel, ps.stdout)
         self.assert_no_runtime_profile_leak()
 
+    def test_chromium_spawn_failure_cleans_profile_and_reports_structured_failure(self):
+        fake_dir = Path(self.tmp.name) / "executable-directory"
+        fake_dir.mkdir()
+        fake_dir.chmod(0o755)
+
+        out2 = Path(self.tmp.name) / "spawn-fail.web.env"
+        env = dict(os.environ)
+        env["TMPDIR"] = self.tmp.name
+        env["S32_R7_CHROMIUM"] = str(fake_dir)
+        import random
+        env["S32_R7_FIXTURE_PORT"] = str(random.randint(40000, 49000))
+
+        r = subprocess.run(
+            ["node", str(PRODUCER), "fixture", str(out2), FP, PID, CTRL],
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=120,
+        )
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("CHROMIUM_SPAWN_FAILED:", r.stdout)
+        self.assertFalse(out2.exists())
+        self.assert_no_runtime_profile_leak()
+
     def test_chromium_uses_isolated_nondefault_user_data_dir(self):
         text = PRODUCER.read_text()
         self.assertIn('fs.mkdtempSync(path.join(os.tmpdir(), "s32-r7-chrome-profile-"))', text)
         self.assertIn('--user-data-dir=${chromeProfileDir}', text)
-        self.assertIn('process.kill(-chrome.pid, "SIGKILL")', text)
-        self.assertIn('process.kill(-chrome.pid, 0)', text)
+        self.assertIn('process.kill(-pgid, "SIGKILL")', text)
+        self.assertIn('fs.readdirSync("/proc", { withFileTypes: true })', text)
+        self.assertIn('state !== "Z" && state !== "X"', text)
         self.assertIn('await terminateChromeGroup()', text)
         self.assertNotIn('if (chrome.exitCode !== null || chrome.signalCode !== null) return;', text)
         self.assertIn('fs.rmSync(chromeProfileDir, { recursive: true, force: true })', text)
