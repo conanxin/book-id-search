@@ -530,12 +530,42 @@ cp.spawn = function(exe, args, options) {
             self.assertFalse(int(fields[2]) == observed['pid'] and fields[0] not in ('Z','X'),
                              'live Chromium process group remains')
 
+    def test_reachable_devtools_port_after_group_teardown_blocks_publication(self):
+        # Keep a real TCP proxy listening on the producer's advertised port.
+        # Chrome/CDP run on a second port; the proxy survives Chrome PGID exit.
+        preload=Path(self.tmp.name)/'surviving-devtools-proxy.cjs'
+        preload.write_text("""
+const http=require('http'),cp=require('child_process');const spawn=cp.spawn;
+cp.spawn=function(exe,args,opts) {
+  const index=args.findIndex(a=>a.startsWith('--remote-debugging-port='));
+  const advertised=Number(args[index].split('=')[1]);
+  const actual=Number(process.env.S32_TEST_CHROME_PORT);
+  const proxy=http.createServer((req,res)=>{
+    const upstream=http.get(`http://127.0.0.1:${actual}${req.url}`,r=>r.pipe(res));
+    upstream.on('error',()=>{res.writeHead(503);res.end('not ready');});
+  });
+  proxy.listen(advertised,'127.0.0.1');proxy.unref();
+  args[index]=`--remote-debugging-port=${actual}`;
+  return spawn.call(this,exe,args,opts);
+};
+""")
+        with socket.socket() as free:
+            free.bind(('127.0.0.1',0));actual=free.getsockname()[1]
+        r=self.run_producer(f"NODE_OPTIONS={os.environ['NODE_OPTIONS']} --require={preload}",
+                            f"S32_TEST_CHROME_PORT={actual}")
+        self.assertNotEqual(r.returncode,0,r.stdout+r.stderr)
+        self.assertIn('DEVTOOLS_ENDPOINT_NOT_CLOSED',r.stdout)
+        self.assertFalse(self.out.exists())
+        self.assertEqual(list(Path(self.tmp.name).glob('.r7-web-receipt.*.tmp')),[])
+        self.assert_no_runtime_profile_leak()
+
     def test_pending_unlink_failure_withdraws_canonical_receipt(self):
         preload = Path(self.tmp.name) / 'fail-unlink.cjs'
         preload.write_text("""
-const fs=require('fs'); const unlink=fs.unlinkSync;
+const fs=require('fs'); const unlink=fs.unlinkSync; let rejected=false;
 fs.unlinkSync=function(target, ...args) {
-  if (require('path').basename(String(target)).startsWith('.r7-web-receipt.')) {
+  if (!rejected && require('path').basename(String(target)).startsWith('.r7-web-receipt.')) {
+    rejected=true;
     throw Object.assign(new Error('test sink failure'),{code:'EACCES'});
   }
   return unlink.call(this,target,...args);

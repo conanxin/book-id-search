@@ -34,7 +34,10 @@ Both normal and recovery modes now create `/tmp/s32-r7-XXXXXX` privately (0700).
 The profile and Chrome child TMPDIR/TMP/TEMP are short children of that root.
 Chrome does not inherit the orchestration TMPDIR. The root is removed after
 live process-group termination, including Chrome's internal temp directories.
-Profile/root removal failure blocks canonical publication. Existing receipt,
+Profile/root removal failure blocks canonical publication. Two bounded TCP connection
+refusals must establish DevTools closure before publication; a surviving listener
+blocks the receipt even if Chrome PGID is gone. Pending-link removal failure
+withdraws the newly published local receipt and reports failure. Existing receipt,
 signal and process-group semantics remain in force.
 
 ## Recovery contract and provenance

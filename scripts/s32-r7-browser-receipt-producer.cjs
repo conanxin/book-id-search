@@ -238,6 +238,23 @@ async function withTimeout(promise, ms, label) {
   }
 }
 
+async function requireDevtoolsClosed(port) {
+  let refusals = 0;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const refused = await new Promise((resolve) => {
+      const socket = require("net").createConnection({ host: "127.0.0.1", port });
+      const finish = (closed) => { socket.destroy(); resolve(closed); };
+      socket.once("connect", () => finish(false));
+      socket.once("error", (error) => finish(error.code === "ECONNREFUSED"));
+      socket.setTimeout(250, () => finish(false));
+    });
+    refusals = refused ? refusals + 1 : 0;
+    if (refusals === 2) return;
+    await sleep(50);
+  }
+  throw new Error("DEVTOOLS_ENDPOINT_NOT_CLOSED");
+}
+
 async function produce() {
   if (MODE === "fixture") fixtureServer = await startFixtureServer();
 
@@ -671,6 +688,13 @@ async function produce() {
       }
     } catch {
       cleanupFailure = cleanupFailure || "CHROME_ROOT_CLEANUP_FAILED";
+    }
+    if (chromePgid() !== null) {
+      try {
+        await requireDevtoolsClosed(port);
+      } catch {
+        cleanupFailure = cleanupFailure || "DEVTOOLS_ENDPOINT_NOT_CLOSED";
+      }
     }
     if (fixtureServer) fixtureServer.close();
   }
