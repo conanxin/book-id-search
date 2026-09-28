@@ -1,4 +1,4 @@
-import { Router, type Request, type Response, type ErrorRequestHandler } from "express";
+import { json, Router, type Request, type Response, type ErrorRequestHandler } from "express";
 import type { S32Config } from "../config.js";
 import { InvalidProjectInputError } from "../domain/project.js";
 import { InvalidIdempotencyKeyError, InvalidResearchIssueInputError } from "../domain/research-issue.js";
@@ -19,6 +19,39 @@ import {
 import { checkS32PrivateAuth } from "./private-auth.js";
 
 type ErrorBody = { message: string; code?: string };
+const invalidInput = { code: "ISSUE_RESOLUTION_INVALID", message: "工作结论输入不正确。" };
+
+function authenticate(config: S32Config, req: Request, res: Response): boolean {
+  res.set("Cache-Control", "no-store");
+  const auth = checkS32PrivateAuth(config, req.get("authorization"), req.get("x-private-token"));
+  if (!auth.ok) {
+    res.status(auth.status).json({ error: { message: auth.message } });
+    return false;
+  }
+  return true;
+}
+
+/** Mount before global express.json; leave sibling routes and methods untouched. */
+export function createIssueResolutionBodyParser(config: S32Config) {
+  const router = Router();
+  const parse = json({ limit: "256kb" });
+  router.use((req, res, next) => {
+    // Raw path match: Express parameter decoding must not precede authentication.
+    if (req.method !== "POST" || !/^\/[^/]+\/issues\/[^/]+\/resolutions\/?$/i.test(req.path)) {
+      next();
+      return;
+    }
+    if (!authenticate(config, req, res)) return;
+    parse(req, res, error => {
+      if (error) {
+        res.status(400).json({ error: invalidInput });
+        return;
+      }
+      next();
+    });
+  });
+  return router;
+}
 
 function toHttpError(error: unknown): [number, ErrorBody] {
   if (
@@ -28,7 +61,7 @@ function toHttpError(error: unknown): [number, ErrorBody] {
     error instanceof InvalidIssueResolutionInputError ||
     error instanceof InvalidIssueResolutionCursorError
   ) {
-    return [400, { code: "ISSUE_RESOLUTION_INVALID", message: "工作结论输入不正确。" }];
+    return [400, invalidInput];
   }
   if (error instanceof IssueResolutionScopeNotFoundError) {
     return [404, { code: "PROJECT_OR_ISSUE_NOT_FOUND", message: "研究项目或研究问题不存在。" }];
@@ -68,12 +101,7 @@ export function createIssueResolutionRouter(config: S32Config, issueResolutions:
 
   // Authenticate before Express decodes any path parameter, including malformed IDs.
   router.use((req, res, next) => {
-    res.set("Cache-Control", "no-store");
-    const auth = checkS32PrivateAuth(config, req.get("authorization"), req.get("x-private-token"));
-    if (!auth.ok) {
-      res.status(auth.status).json({ error: { message: auth.message } });
-      return;
-    }
+    if (!authenticate(config, req, res)) return;
     next();
   });
 

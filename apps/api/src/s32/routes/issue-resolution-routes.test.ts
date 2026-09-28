@@ -1,5 +1,5 @@
 import express from "express";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -29,11 +29,14 @@ import {
 } from "../application/issue-resolutions.js";
 
 // Missing implementation is an assertion RED, not a failed test-file import.
+let createBodyParser: typeof import("./issue-resolution-routes.js").createIssueResolutionBodyParser | undefined;
 let createRouter: typeof import("./issue-resolution-routes.js").createIssueResolutionRouter | undefined;
 beforeAll(async () => {
   if (existsSync(new URL("./issue-resolution-routes.ts", import.meta.url))) {
     const modulePath = "./issue-resolution-routes.js";
-    createRouter = (await import(modulePath)).createIssueResolutionRouter;
+    const module = await import(modulePath);
+    createRouter = module.createIssueResolutionRouter;
+    createBodyParser = module.createIssueResolutionBodyParser;
   }
 });
 
@@ -313,3 +316,90 @@ for (const endpoint of endpoints) {
     }
   });
 }
+
+describe("Resolution POST body parsing before the global JSON parser", () => {
+  async function transport(s: IssueResolutionsService, options: S32Config = config) {
+    expect(createBodyParser, "scoped pre-global body parser contract must exist").toBeTypeOf("function");
+    const app = express();
+    app.use("/api/private/s32/projects", createBodyParser!(options));
+    app.use(express.json({ limit: "256kb" }));
+    app.post("/api/private/s32/projects/project-id/unrelated", (req, res) => { res.json(req.body); });
+    app.use("/api/private/s32/projects", createRouter!(options, s));
+    const server = app.listen(0, "127.0.0.1");
+    servers.push(server);
+    await new Promise<void>(resolve => server.once("listening", resolve));
+    return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  }
+  const invalidBodies = [
+    { name: "malformed", raw: '{"rationale":"SECRET",' },
+    { name: "oversized", raw: JSON.stringify({ rationale: "SECRET".repeat(50000) }) },
+  ];
+  for (const invalid of invalidBodies) {
+    it.each([
+      { name: "disabled", options: { ...config, enabled: false }, token: "test-token", status: 404 },
+      { name: "token unconfigured", options: { ...config, privateToken: null }, token: "test-token", status: 503 },
+      { name: "missing token", options: config, token: null, status: 401 },
+      { name: "wrong token", options: config, token: "wrong", status: 403 },
+      { name: "authorized invalid JSON", options: config, token: "test-token", status: 400 },
+    ])(`${invalid.name}: $name is safe JSON with no-store before any service call`, async gate => {
+      const s = service();
+      const base = await transport(s, gate.options);
+      const res = await fetch(`${base}${endpoints[0].path}`, {
+        method: "POST", headers: { "Content-Type": "application/json", ...(gate.token ? { Authorization: `Bearer ${gate.token}` } : {}) },
+        body: invalid.raw,
+      });
+      expect(res.status).toBe(gate.status);
+      expect(res.headers.get("cache-control")).toBe("no-store");
+      expect(res.headers.get("content-type")).toContain("application/json");
+      const raw = await res.text();
+      expect(raw).not.toMatch(/SECRET|SyntaxError|PayloadTooLargeError|stack|node_modules|<html/i);
+      if (gate.status === 400) expect(JSON.parse(raw).error.code).toBe("ISSUE_RESOLUTION_INVALID");
+      expectNoCalls(s);
+    });
+  }
+  it("valid JSON is parsed once and delegated unchanged through the global parser", async () => {
+    const s = service();
+    const res = await request(await transport(s), endpoints[0]);
+    expect(res.status).toBe(201);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(await res.json()).toEqual({ status: "created", resolutionId: R });
+    expect(s.create).toHaveBeenCalledExactlyOnceWith(P.toUpperCase(), I.toUpperCase(), KEY, body);
+  });
+  it("preserves existing x-private-token authentication before parsing", async () => {
+    const s = service();
+    const res = await request(await transport(s), endpoints[0], { "x-private-token": "test-token" });
+    expect(res.status).toBe(201);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    await res.json();
+    expect(s.create).toHaveBeenCalledExactlyOnceWith(P.toUpperCase(), I.toUpperCase(), KEY, body);
+  });
+  it.each([
+    { path: endpoints[0].path.toUpperCase() + "/?test=1" },
+    { path: endpoints[0].path.replace(P.toUpperCase(), "%ZZSECRET") },
+  ])("authenticates raw paths $path before path decoding and body parsing", async ({ path }) => {
+    const s = service();
+    const res = await fetch(`${await transport(s)}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: '{"SECRET":' });
+    expect(res.status).toBe(401);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    const raw = await res.text();
+    expect(raw).not.toMatch(/SECRET|URIError|SyntaxError|<html/i);
+    expectNoCalls(s);
+  });
+  it("does not parse or authenticate sibling requests", async () => {
+    const s = service();
+    const base = await transport(s, { ...config, enabled: false });
+    const res = await fetch(`${base}/api/private/s32/projects/project-id/unrelated`, { method: "POST", headers: { "Content-Type": "application/json" }, body: '{"sibling":true}' });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ sibling: true });
+    expect(res.headers.get("cache-control")).toBeNull();
+    expectNoCalls(s);
+  });
+  it("mounts the scoped parser in the actual API entrypoint before global express.json", () => {
+    const source = readFileSync(new URL("../../index.ts", import.meta.url), "utf8");
+    expect(source).toContain('import { createIssueResolutionBodyParser } from "./s32/routes/issue-resolution-routes.js"');
+    const scoped = source.indexOf('app.use("/api/private/s32/projects", createIssueResolutionBodyParser(readS32Config(process.env)))');
+    const global = source.indexOf('app.use(express.json(');
+    expect(scoped).toBeGreaterThanOrEqual(0);
+    expect(global).toBeGreaterThan(scoped);
+  });
+});
