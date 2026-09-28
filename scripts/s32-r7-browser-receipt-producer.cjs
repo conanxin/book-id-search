@@ -136,6 +136,12 @@ if (!CHROMIUM) fail("CHROMIUM_UNAVAILABLE");
 
 let recoveryProvenance = [];
 if (RECOVERY) {
+  if (MODE === "browser" && process.env.S32_R7_RECOVERY_LAUNCHER !== "SHELL_V1") {
+    fail("RECOVERY_LAUNCHER_REQUIRED");
+  }
+  if (MODE === "browser" && process.execArgv.length !== 0) {
+    fail("RECOVERY_NODE_ARGUMENTS_REJECTED");
+  }
   try {
     recoveryProvenance = require("./s32-r7-browser-recovery.cjs").prepareRecovery({
       stateDir: process.env.S32_R7_RECOVERY_STATE_DIR, fp: FP, projectId: PROJECT_ID,

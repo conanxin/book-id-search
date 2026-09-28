@@ -14,6 +14,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 CONTRACT = HERE / 's32-r7-browser-recovery.cjs'
 PRODUCER = HERE / 's32-r7-browser-receipt-producer.cjs'
+LAUNCHER = HERE / 'recover-s32-r7-browser-acceptance.sh'
 PID = '11111111-1111-4111-8111-111111111111'
 
 def load(name, file):
@@ -71,7 +72,8 @@ class RecoveryTests(unittest.TestCase):
         with socket.socket() as s:
             s.bind(('127.0.0.1',0));env['S32_R7_FIXTURE_PORT']=str(s.getsockname()[1])
         env.update(extra)
-        return subprocess.run(['node',str(PRODUCER),mode,str(self.out),self.x.fp,PID,executor.CTRL],
+        entry=['/bin/sh',str(LAUNCHER),'--recover-browser'] if mode=='recovery-browser' else ['node',str(PRODUCER),mode]
+        return subprocess.run([*entry,str(self.out),self.x.fp,PID,executor.CTRL],
                               env=env,capture_output=True,text=True,timeout=120)
 
     def assert_unchanged(self):
@@ -117,6 +119,42 @@ class RecoveryTests(unittest.TestCase):
         self.write_incident()
         r=self.produce(S32_R7_RECOVERY_TOOL_SHA='a'*40)
         self.assertNotEqual(r.returncode,0);self.assertFalse(self.out.exists())
+
+    def test_node_preload_is_rejected_before_it_can_execute(self):
+        marker=self.x.root/'preload-executed'
+        preload=self.x.root/'unreviewed.cjs'
+        preload.write_text(f"require('fs').writeFileSync({str(marker)!r}, 'unreviewed code ran');")
+        self.authorize_fixture()
+        with browser.production_like_server() as url:
+            r=self.produce(mode='recovery-browser',url=url,NODE_OPTIONS=f'--require={preload}')
+        self.assertFalse(marker.exists(), 'unreviewed preload executed before provenance check')
+        self.assertNotEqual(r.returncode,0)
+        self.assertIn('RECOVERY_RUNTIME_INJECTION_REJECTED',r.stdout)
+        self.assertFalse(self.claim.exists());self.assertFalse(self.out.exists());self.assert_unchanged()
+
+    def test_other_runtime_injection_settings_fail_before_claim(self):
+        self.authorize_fixture()
+        with browser.production_like_server() as url:
+            for key in ['NODE_PATH','NODE_EXTRA_CA_CERTS','NODE_TLS_REJECT_UNAUTHORIZED',
+                        'NODE_ICU_DATA','NODE_REPL_EXTERNAL_MODULE','NODE_USE_ENV_PROXY',
+                        'LD_PRELOAD','LD_LIBRARY_PATH','LD_AUDIT','DYLD_INSERT_LIBRARIES',
+                        'DYLD_LIBRARY_PATH','BASH_ENV','ENV','OPENSSL_CONF','OPENSSL_MODULES']:
+                with self.subTest(variable=key):
+                    r=self.produce(mode='recovery-browser',url=url,**{key:'/nonexistent-test-injection'})
+                    self.assertNotEqual(r.returncode,0)
+                    self.assertIn('RECOVERY_RUNTIME_INJECTION_REJECTED',r.stdout)
+                    self.assertFalse(self.claim.exists());self.assertFalse(self.out.exists())
+        self.assert_unchanged()
+
+    def test_direct_node_recovery_requires_non_node_launcher(self):
+        env=dict(os.environ,S32_R7_BROWSER_URL='http://127.0.0.1:1/research/projects',
+                 S32_R7_BROWSER_TOKEN='LOCAL_RECOVERY_SENTINEL')
+        env.pop('S32_R7_RECOVERY_LAUNCHER',None)
+        r=subprocess.run(['node',str(PRODUCER),'recovery-browser',str(self.out),self.x.fp,PID,executor.CTRL],
+                         env=env,capture_output=True,text=True,timeout=10)
+        self.assertNotEqual(r.returncode,0)
+        self.assertIn('RECOVERY_LAUNCHER_REQUIRED',r.stdout)
+        self.assertFalse(self.claim.exists());self.assertFalse(self.out.exists())
 
     def test_browser_recovery_requires_separate_authorization_before_spawn(self):
         with browser.production_like_server() as url:
