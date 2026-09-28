@@ -290,10 +290,26 @@ class ProducerTest(unittest.TestCase):
         text = PRODUCER.read_text()
         self.assertIn('fs.mkdtempSync(path.join(os.tmpdir(), "s32-r7-chrome-profile-"))', text)
         self.assertIn('--user-data-dir=${chromeProfileDir}', text)
-        self.assertIn('await withTimeout(chromeExited, 5000, "CHROMIUM_TERMINATION_TIMEOUT")', text)
+        self.assertIn('process.kill(-chrome.pid, "SIGKILL")', text)
+        self.assertIn('process.kill(-chrome.pid, 0)', text)
+        self.assertIn('await terminateChromeGroup()', text)
+        self.assertNotIn('if (chrome.exitCode !== null || chrome.signalCode !== null) return;', text)
         self.assertIn('fs.rmSync(chromeProfileDir, { recursive: true, force: true })', text)
         self.assertIn('if (fs.existsSync(chromeProfileDir))', text)
         self.assertNotIn("process.exit(0)", text)
+
+    def test_pass_receipt_is_published_only_after_teardown(self):
+        text = PRODUCER.read_text()
+        write_pos = text.index('fs.writeFileSync(pendingReceiptPath, receipt')
+        teardown_pos = text.index('await terminateChromeGroup()')
+        profile_cleanup_pos = text.index('fs.rmSync(chromeProfileDir, { recursive: true, force: true })')
+        publish_pos = text.index('fs.linkSync(pendingReceiptPath, OUT)')
+        pass_pos = text.index('R7_BROWSER_RECEIPT=PASS')
+        self.assertLess(write_pos, teardown_pos)
+        self.assertLess(teardown_pos, profile_cleanup_pos)
+        self.assertLess(profile_cleanup_pos, publish_pos)
+        self.assertLess(publish_pos, pass_pos)
+        self.assertNotIn('fs.renameSync(tmp, OUT)', text)
 
 
 if __name__ == "__main__":
