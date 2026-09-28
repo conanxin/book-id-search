@@ -103,6 +103,7 @@ class ProducerTest(unittest.TestCase):
 
     def run_producer(self, *extra_env, out=None, project=PID):
         env = dict(os.environ)
+        env["TMPDIR"] = self.tmp.name
         env.update({k: v for k, v in (e.split("=", 1) for e in extra_env)})
         # Fixture server port collision avoidance per test.
         if "S32_R7_FIXTURE_PORT" not in env:
@@ -116,6 +117,7 @@ class ProducerTest(unittest.TestCase):
 
     def run_browser_producer(self, base_url, *, project=PID, token="TOKEN_SENTINEL"):
         env = dict(os.environ)
+        env["TMPDIR"] = self.tmp.name
         env["S32_R7_BROWSER_URL"] = f"{base_url}/research/projects"
         env["S32_R7_BROWSER_TOKEN"] = token
         return subprocess.run(
@@ -259,11 +261,38 @@ class ProducerTest(unittest.TestCase):
         self.assertIn("delete chromeEnv.S32_R7_BROWSER_TOKEN", text)
         self.assertIn("env: chromeEnv", text)
 
+    def assert_no_runtime_profile_leak(self):
+        leftovers = list(Path(self.tmp.name).glob("s32-r7-chrome-profile-*"))
+        self.assertEqual(leftovers, [], f"leftover profile dirs: {leftovers}")
+        ps = subprocess.run(
+            ["ps", "-eo", "args="],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        self.assertEqual(ps.returncode, 0, ps.stderr)
+        marker = f"--user-data-dir={self.tmp.name}/s32-r7-chrome-profile-"
+        self.assertNotIn(marker, ps.stdout)
+
+    def test_chromium_profile_and_process_cleanup_on_success(self):
+        r = self.run_producer()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assert_no_runtime_profile_leak()
+
+    def test_chromium_profile_and_process_cleanup_on_handled_failure(self):
+        wrong = "22222222-2222-4222-8222-222222222222"
+        r = self.run_producer(project=wrong)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("PROJECT_ID_MISMATCH", r.stdout)
+        self.assert_no_runtime_profile_leak()
+
     def test_chromium_uses_isolated_nondefault_user_data_dir(self):
         text = PRODUCER.read_text()
         self.assertIn('fs.mkdtempSync(path.join(os.tmpdir(), "s32-r7-chrome-profile-"))', text)
         self.assertIn('--user-data-dir=${chromeProfileDir}', text)
-        self.assertIn('fs.rmSync(chromeProfileDir, { recursive: true, force: true })', text)
+        self.assertIn('await withTimeout(chromeExited, 5000, "CHROMIUM_TERMINATION_TIMEOUT")', text)
+        self.assertIn('fs.rmSync(chromeProfileDir, { recursive: true, force: false })', text)
+        self.assertNotIn("process.exit(0)", text)
 
 
 if __name__ == "__main__":
