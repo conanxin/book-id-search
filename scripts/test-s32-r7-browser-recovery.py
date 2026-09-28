@@ -16,7 +16,6 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 CONTRACT = HERE / 's32-r7-browser-recovery.cjs'
 PRODUCER = HERE / 's32-r7-browser-receipt-producer.cjs'
-LAUNCHER = HERE / 'recover-s32-r7-browser-acceptance.sh'
 PID = '11111111-1111-4111-8111-111111111111'
 
 def load(name, file):
@@ -161,14 +160,11 @@ class RecoveryTests(unittest.TestCase):
                 self.assertFalse(self.claim.exists());self.assertFalse(self.out.exists())
         self.assert_unchanged()
 
-    def test_supported_launcher_is_static_and_direct_shell_is_rejected(self):
+    def test_supported_launcher_is_static_without_mutable_shell_entry(self):
         program=subprocess.check_output(['/usr/bin/readelf','-lW',str(self.launcher)],text=True)
         dynamic=subprocess.check_output(['/usr/bin/readelf','-dW',str(self.launcher)],text=True)
         self.assertNotIn('INTERP',program);self.assertNotIn('NEEDED',dynamic)
-        env=dict(os.environ);env.pop('S32_R7_RECOVERY_STATIC_LAUNCHER',None)
-        r=subprocess.run(['/bin/sh',str(LAUNCHER)],env=env,capture_output=True,text=True)
-        self.assertNotEqual(r.returncode,0)
-        self.assertIn('RECOVERY_STATIC_LAUNCHER_REQUIRED',r.stdout)
+        self.assertFalse((HERE/'recover-s32-r7-browser-acceptance.sh').exists())
 
     def test_static_builder_requires_fresh_output_and_no_credential(self):
         before=digest(self.launcher)
@@ -220,16 +216,41 @@ class RecoveryTests(unittest.TestCase):
         lookup.chmod(0o700)
         env={k:v for k,v in os.environ.items() if not k.startswith('GIT_')}
         env.update(HOME=str(self.x.root),PATH=str(fakebin)+':/usr/bin:/bin',
-                   S32_R7_RECOVERY_LAUNCHER='SHELL_V1',S32_R7_RECOVERY_STATIC_LAUNCHER='STATIC_V1',
                    S32_R7_BROWSER_URL='http://127.0.0.1:1/research/projects',
                    S32_R7_BROWSER_TOKEN='LOCAL_RECOVERY_SENTINEL',
                    S32_R7_RECOVERY_STATE_DIR=str(self.state),S32_R7_RECOVERY_TOOL_SHA=self.head)
         env.pop('S32_R7_CHROMIUM',None)
-        r=subprocess.run([shutil.which('node'),str(PRODUCER),'recovery-browser-fixture',
+        r=subprocess.run([str(self.launcher),'--local-browser-fixture',
                           str(self.out),self.x.fp,PID,executor.CTRL],env=env,capture_output=True,text=True,timeout=10)
         self.assertFalse(marker.exists(), 'lookup shell executed before authorization')
         self.assertIn('RECOVERY_AUTHORIZATION_REQUIRED',r.stdout)
         self.assertFalse(self.claim.exists());self.assertFalse(self.out.exists())
+
+    def test_modified_checkout_code_cannot_execute_before_dirty_rejection(self):
+        clone=self.x.root/'checkout'
+        subprocess.run(['git','clone','--quiet','--shared','--no-checkout',str(ROOT),str(clone)],check=True)
+        subprocess.run(['git','-C',str(clone),'checkout','--quiet','--detach',self.head],check=True)
+        binary=self.x.root/'bound-launcher'
+        subprocess.run([sys.executable,str(clone/'scripts/build-s32-r7-recovery-launcher.py'),str(binary)],
+                       check=True,capture_output=True,text=True)
+        self.authorize_fixture()
+        env=dict(os.environ,S32_R7_BROWSER_URL='http://127.0.0.1:1/research/projects',
+                 S32_R7_BROWSER_TOKEN='LOCAL_MUTATION_SENTINEL',S32_R7_RECOVERY_STATE_DIR=str(self.state),
+                 S32_R7_RECOVERY_TOOL_SHA=self.head)
+        for name in ['s32-r7-browser-receipt-producer.cjs','s32-r7-browser-recovery.cjs']:
+            with self.subTest(module=name):
+                target=clone/'scripts'/name;original=target.read_text();marker=self.x.root/'unreviewed-ran'
+                target.write_text(original.replace('"use strict";',
+                    '"use strict";require("fs").writeFileSync('+repr(str(marker))+',"executed");',1))
+                try:
+                    r=subprocess.run([str(binary),'--local-browser-fixture',str(self.out),self.x.fp,PID,executor.CTRL],
+                                     env=env,capture_output=True,text=True,timeout=20)
+                    self.assertFalse(marker.exists(),'modified source executed before dirty check')
+                    self.assertNotEqual(r.returncode,0)
+                    self.assertIn('RECOVERY_TOOL_CHECKOUT_DIRTY',r.stdout)
+                    self.assertFalse(self.claim.exists());self.assertFalse(self.out.exists())
+                finally: target.write_text(original)
+        self.assert_unchanged()
 
     def test_path_discovery_executes_chromium_without_lookup_shell(self):
         fakebin=self.x.root/'path-bin';fakebin.mkdir()

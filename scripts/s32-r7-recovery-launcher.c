@@ -6,9 +6,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#ifndef RECOVERY_SCRIPT
-#error "RECOVERY_SCRIPT must name the reviewed internal shell script"
-#endif
+#include "recovery-payload.h"
 extern char **environ;
 
 static int blocked(const char *reason) {
@@ -31,9 +29,27 @@ int main(int argc, char **argv) {
     if (value && *value) return blocked("RECOVERY_RUNTIME_INJECTION_REJECTED");
   }
   if (argc != 6) return blocked("INVALID_ARGUMENTS");
-  if (setenv("S32_R7_RECOVERY_STATIC_LAUNCHER", "STATIC_V1", 1) != 0)
-    return blocked("RECOVERY_LAUNCHER_ENV_FAILED");
-  char *child[] = {"/bin/sh", RECOVERY_SCRIPT, argv[1], argv[2], argv[3], argv[4], argv[5], NULL};
+  for (char **entry = environ; *entry; ++entry) {
+    if (strncmp(*entry, "GIT_", 4) == 0) {
+      const char *value = strchr(*entry, '=');
+      if (value && value[1]) return blocked("RECOVERY_GIT_ENVIRONMENT_REJECTED");
+    }
+  }
+  const char *tool = getenv("S32_R7_RECOVERY_TOOL_SHA");
+  if (!tool || strcmp(tool, RECOVERY_TOOL_SHA) != 0) return blocked("RECOVERY_TOOL_SHA_MISMATCH");
+  char *mode;
+  if (strcmp(argv[1], "--recover-browser") == 0) {
+    const char *url = getenv("S32_R7_BROWSER_URL");
+    const char *production = "https://books.conanxin.com/research/projects";
+    if (url && strcmp(url, production) != 0) return blocked("RECOVERY_PRODUCTION_URL_REQUIRED");
+    if (setenv("S32_R7_BROWSER_URL", production, 1) != 0) return blocked("RECOVERY_LAUNCHER_ENV_FAILED");
+    mode = "recovery-browser";
+  } else if (strcmp(argv[1], "--local-browser-fixture") == 0) {
+    mode = "recovery-browser-fixture";
+  } else return blocked("INVALID_ARGUMENTS");
+  // Only public reviewed source is on argv. The token stays in the environment.
+  // No mutable checkout script or shell is executed, even before dirty checks.
+  char *child[] = {RECOVERY_NODE, "-e", RECOVERY_BOOTSTRAP, mode, argv[2], argv[3], argv[4], argv[5], NULL};
   execv(child[0], child);
   return blocked("RECOVERY_LAUNCHER_EXEC_FAILED");
 }

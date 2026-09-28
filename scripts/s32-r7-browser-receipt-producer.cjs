@@ -146,10 +146,11 @@ if (MODE === "browser") {
 
 let recoveryProvenance = [];
 if (RECOVERY) {
-  if (MODE === "browser" && process.env.S32_R7_RECOVERY_LAUNCHER !== "SHELL_V1") {
+  const capsule = globalThis[Symbol.for("s32.r7.recovery.capsule")];
+  if (MODE === "browser" && (!capsule || capsule.toolSha !== process.env.S32_R7_RECOVERY_TOOL_SHA)) {
     fail("RECOVERY_LAUNCHER_REQUIRED");
   }
-  if (MODE === "browser" && process.execArgv.length !== 0) {
+  if (MODE === "browser" && (process.execArgv.length !== 2 || process.execArgv[0] !== "-e")) {
     fail("RECOVERY_NODE_ARGUMENTS_REJECTED");
   }
   try {

@@ -39,8 +39,15 @@ function absent(file) {
   }
   reject("RECOVERY_ALREADY_RECORDED_OR_CONSUMED");
 }
+function git(args) {
+  // Identity checks require no credential and must not run configured monitors.
+  const env = { PATH: process.env.PATH, HOME: process.env.HOME, LANG: "C",
+    GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" };
+  return execFileSync("git", ["--no-optional-locks", "-c", "core.fsmonitor=false", ...args],
+    { cwd: ROOT, env, encoding: "utf8" }).trim();
+}
 function head() {
-  return execFileSync("git", ["rev-parse", "HEAD"], { cwd: ROOT, encoding: "utf8" }).trim();
+  return git(["rev-parse", "HEAD"]);
 }
 function checkState({ stateDir, fp, projectId, ctrl, toolSha }) {
   // Git's environment can redirect cwd-bound identity/status checks elsewhere.
@@ -90,7 +97,7 @@ function prepareRecovery(options, { fixture = false } = {}) {
       INCIDENT_SHA256: sha256(state.incident.raw), RECOVERY_BROWSER_INVOCATIONS: "1" };
     if (Object.keys(auth.values).length !== Object.keys(expected).length) reject("RECOVERY_AUTHORIZATION_INVALID");
     expect(auth.values, expected);
-    if (execFileSync("git", ["status", "--porcelain", "--untracked-files=normal"], { cwd: ROOT, encoding: "utf8" }).trim()) {
+    if (git(["status", "--porcelain", "--untracked-files=normal"])) {
       reject("RECOVERY_TOOL_CHECKOUT_DIRTY");
     }
     // This is a separate LOCAL recovery claim, never a production R7 artifact.

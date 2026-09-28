@@ -53,7 +53,7 @@ inside the receipt hash. Tool HEAD must equal the supplied exact reviewed SHA.
 Browser recovery also requires a clean checkout. The two identities have
 separate meanings: incident release/control-plane binding and executing tooling.
 
-The helper `scripts/s32-r7-browser-recovery.cjs --check STATE_DIR FP PROJECT_ID
+The credential-free helper `scripts/s32-r7-browser-recovery.cjs --check STATE_DIR FP PROJECT_ID
 CTRL TOOL_SHA` reads local evidence and reports `READY_AUTHORIZATION_REQUIRED`.
 It performs no SSH, HTTP, API, DB, recorder or completion action. This check is
 not an authorization and does not prove production copies are fresh.
@@ -81,21 +81,25 @@ CONSUMABLE_ONCE=true, RECOVERY_TOOL_SHA=<approved SHA>,
 INCIDENT_SHA256=<incident file hash>, RECOVERY_BROWSER_INVOCATIONS=1.
 Before loading any credential, build the supported static ELF entrypoint with
 `python3 scripts/build-s32-r7-recovery-launcher.py /absolute/fresh/private/launcher`.
-Build in an already-trusted, credential-free development process using the local
-trusted compiler. The builder verifies no ELF interpreter or dynamic dependency,
+Build from a clean exact-head checkout in an already-trusted, credential-free
+development process using the local trusted compiler. The builder reads committed
+producer/helper/C blobs into an immutable binary payload, verifies no ELF interpreter or dynamic dependency,
 publishes mode0700 exclusively, and prints its SHA256. Record that binary hash,
 exact tool HEAD and checkout path in the future authorization packet; verify them
 again before invocation. Keep the binary outside the clean checkout. Its embedded
-script path binds it to that checkout; rebuild/review if the checkout moves.
+HEAD and checkout path bind it to that checkout; rebuild/review if the checkout moves.
 
 Set `S32_R7_RECOVERY_STATE_DIR` and `S32_R7_RECOVERY_TOOL_SHA`, then invoke the
 verified static binary directly as `launcher --recover-browser OUT FP PROJECT_ID
-CTRL`. Do not invoke its internal `.sh` second stage directly or wrap the launcher
-in a newly started shell with the credential/injection environment. The static
+CTRL`. Do not wrap the launcher in a newly started shell with the credential/injection
+environment. There is no shell second stage. The static
 entrypoint cannot load LD_PRELOAD/LD_AUDIT constructors. It rejects loader, Node
-and shell injection settings before executing any dynamic program; the internal
-non-login shell then supplies fixed Node arguments. The token remains inherited
-process memory, not command-line arguments. Dynamic shared-library constructor
+and shell injection settings before executing the trusted Node binary with fixed
+arguments. Only public embedded code is on argv; the token remains inherited
+process memory. Embedded producer/helper modules may import only Node builtins
+and each other, never mutable checkout modules. Dirty/head checks still reject a
+changed checkout before the claim, but changed checkout code cannot execute before
+that rejection. Separate-clone mutation tests verify this. Dynamic shared-library constructor
 regressions verify rejection before injected code can execute.
 
 All nonempty `GIT_*` environment variables must be removed during credential-free
@@ -108,8 +112,8 @@ is rejected before consuming a claim. Direct Node recovery is rejected; fixture 
 remains separate. Installed Node/Chrome, PATH and the local filesystem must be
 trusted; this is not cryptographic attestation against a malicious local owner.
 Production credential handling remains process memory/sessionStorage only.
-The internal shell disables tracing and retains the token in the environment,
-never as an env(1) assignment on argv. Never persist credentials in state files.
+Keep parent shell tracing disabled. Retain the token in the environment, never
+as an env(1) assignment on argv. Never persist credentials in state files.
 
 Before Chrome starts, browser recovery hard-links that authorization to the
 exclusive **local** `R7.browser-recovery.claim.env`. Keep this claim on success
