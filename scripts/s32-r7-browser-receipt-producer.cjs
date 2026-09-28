@@ -15,6 +15,7 @@
 
 const fs = require("fs");
 const { createHash } = require("crypto");
+const os = require("os");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 
@@ -32,6 +33,17 @@ const BROWSER_TOKEN = (process.env.S32_R7_BROWSER_TOKEN || "").trim();
 function fail(reason) {
   process.stdout.write(`R7_BROWSER_RECEIPT=FAIL\nREASON=${reason}\n`);
   process.exit(1);
+}
+
+class RuntimeFailure extends Error {
+  constructor(reason) {
+    super(reason);
+    this.reason = reason;
+  }
+}
+
+function runtimeFail(reason) {
+  throw new RuntimeFailure(reason);
 }
 
 if (!["fixture", "browser"].includes(MODE)) fail("INVALID_MODE");
@@ -169,6 +181,12 @@ class Cdp {
         this.events.push(msg);
       }
     });
+    const rejectPending = (reason) => {
+      for (const { reject } of this.pending.values()) reject(new Error(reason));
+      this.pending.clear();
+    };
+    ws.addEventListener("close", () => rejectPending("CDP_SOCKET_CLOSED"));
+    ws.addEventListener("error", () => rejectPending("CDP_SOCKET_ERROR"));
   }
 
   static async connect(url) {
@@ -194,46 +212,167 @@ class Cdp {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function withTimeout(promise, ms, label) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(label)), ms)),
-  ]);
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(label)), ms);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function produce() {
   if (MODE === "fixture") fixtureServer = await startFixtureServer();
 
   const port = 10000 + (process.pid % 50000);
+  const chromeProfileDir = fs.mkdtempSync(path.join(os.tmpdir(), "s32-r7-chrome-profile-"));
   const chromeEnv = {
     ...process.env,
     NO_PROXY: "127.0.0.1,localhost",
     no_proxy: "127.0.0.1,localhost",
   };
   delete chromeEnv.S32_R7_BROWSER_TOKEN;
-  const chrome = spawn(CHROMIUM, [
-    "--headless=new",
-    "--no-sandbox",
-    "--disable-gpu",
-    `--remote-debugging-port=${port}`,
-    "--remote-debugging-address=127.0.0.1",
-    "about:blank",
-  ], {
-    stdio: ["ignore", "ignore", "ignore"],
-    detached: true,
-    env: chromeEnv,
-  });
+  let chrome = null;
+  let spawnError = null;
 
-  const killChrome = () => {
+  function chromePgid() {
+    return chrome && Number.isInteger(chrome.pid) ? chrome.pid : null;
+  }
+
+  function signalChromeGroup() {
+    const pgid = chromePgid();
+    if (pgid === null) return;
     try {
-      process.kill(-chrome.pid, "SIGKILL");
+      process.kill(-pgid, "SIGKILL");
+      return;
+    } catch (error) {
+      if (error && error.code === "ESRCH") return;
+      throw error;
+    }
+  }
+
+  function chromeGroupHasLiveMembers() {
+    const pgid = chromePgid();
+    if (pgid === null) return false;
+
+    let entries;
+    try {
+      entries = fs.readdirSync("/proc", { withFileTypes: true });
+    } catch (error) {
+      throw new Error(`PROC_SCAN_FAILED:${error && error.code ? error.code : "UNKNOWN"}`);
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory() || !/^[0-9]+$/.test(entry.name)) continue;
+      const statPath = `/proc/${entry.name}/stat`;
+      let raw;
+      try {
+        raw = fs.readFileSync(statPath, "utf8");
+      } catch (error) {
+        if (error && error.code === "ENOENT") continue;
+        throw new Error(`PROC_STAT_FAILED:${error && error.code ? error.code : "UNKNOWN"}`);
+      }
+
+      const closeParen = raw.lastIndexOf(")");
+      if (closeParen < 0) throw new Error("PROC_STAT_PARSE_FAILED");
+      const fields = raw.slice(closeParen + 2).trim().split(/\s+/);
+      if (fields.length < 3) throw new Error("PROC_STAT_PARSE_FAILED");
+      const state = fields[0];
+      const processGroup = Number(fields[2]);
+      if (processGroup === pgid && state !== "Z" && state !== "X") return true;
+    }
+    return false;
+  }
+
+  async function terminateChromeGroup() {
+    signalChromeGroup();
+    for (let i = 0; i < 100; i += 1) {
+      if (!chromeGroupHasLiveMembers()) return;
+      await sleep(50);
+      signalChromeGroup();
+    }
+    throw new Error("CHROMIUM_PROCESS_GROUP_TIMEOUT");
+  }
+
+  let watchdogTriggered = false;
+  let terminationSignal = null;
+  let resolveTerminationSignal;
+  const terminationSignalPromise = new Promise((resolve) => {
+    resolveTerminationSignal = resolve;
+  });
+  let deferredFailure = null;
+  let cleanupFailure = null;
+  let pendingReceiptPath = null;
+  let publishedReceipt = false;
+  let receiptIdentity = null;
+
+  function failPublishedReceipt(reason, useStderr = false) {
+    const report = (failure) => {
+      if (!useStderr) fail(failure);
+      // stdout may be a broken pipe. Report synchronously through stderr,
+      // without starting another write to the failed stream.
+      try {
+        fs.writeSync(2, `R7_BROWSER_RECEIPT=FAIL\nREASON=${failure}\n`);
+      } catch {
+        // Even if both output streams are unavailable, preserve exit 1.
+      }
+      process.exit(1);
+    };
+    // This invocation owns only the local OUT inode it just linked. Production
+    // recording must wait for producer exit 0; never remove another writer's OUT.
+    try {
+      const current = fs.lstatSync(OUT);
+      if (!receiptIdentity || current.dev !== receiptIdentity.dev || current.ino !== receiptIdentity.ino) {
+        throw new Error("RECEIPT_IDENTITY_CHANGED");
+      }
+      fs.unlinkSync(OUT);
+      publishedReceipt = false;
+      if (pendingReceiptPath) fs.rmSync(pendingReceiptPath, { force: true });
     } catch {
-      // already gone
+      report("RECEIPT_FAILURE_CLEANUP_FAILED");
+    }
+    report(reason);
+  }
+
+  const requestTermination = (signal) => {
+    if (terminationSignal) return;
+    terminationSignal = signal;
+    resolveTerminationSignal(signal);
+    if (publishedReceipt) failPublishedReceipt(`TERMINATED_BY_${signal}`);
+    try {
+      signalChromeGroup();
+    } catch {
+      // Final teardown performs the authoritative fail-closed check.
     }
   };
+  const onSigint = () => requestTermination("SIGINT");
+  const onSigterm = () => requestTermination("SIGTERM");
+  // Repeated signals must not restore Node's immediate-exit default while
+  // process/profile or pending-receipt cleanup is still in progress.
+  process.on("SIGINT", onSigint);
+  process.on("SIGTERM", onSigterm);
 
+  const abortOnTermination = async (promise) => Promise.race([
+    promise,
+    terminationSignalPromise.then((signal) => {
+      throw new RuntimeFailure(`TERMINATED_BY_${signal}`);
+    }),
+  ]);
+
+  const checkTermination = () => {
+    if (terminationSignal) runtimeFail(`TERMINATED_BY_${terminationSignal}`);
+  };
   const watchdog = setTimeout(() => {
-    killChrome();
-    fail("WATCHDOG_TIMEOUT");
+    watchdogTriggered = true;
+    try {
+      signalChromeGroup();
+    } catch {
+      // Final teardown performs the authoritative fail-closed check.
+    }
   }, 90000);
   watchdog.unref?.();
 
@@ -243,10 +382,35 @@ async function produce() {
   }).catch(() => null);
 
   try {
+    try {
+      chrome = spawn(CHROMIUM, [
+        "--headless=new",
+        "--no-sandbox",
+        "--disable-gpu",
+        `--user-data-dir=${chromeProfileDir}`,
+        `--remote-debugging-port=${port}`,
+        "--remote-debugging-address=127.0.0.1",
+        "about:blank",
+      ], {
+        stdio: ["ignore", "ignore", "ignore"],
+        detached: true,
+        env: chromeEnv,
+      });
+      chrome.on("error", (error) => {
+        spawnError = error;
+      });
+    } catch (error) {
+      spawnError = error;
+    }
+
     let target = null;
     for (let i = 0; i < 60; i += 1) {
+      checkTermination();
+      if (spawnError) {
+        runtimeFail(`CHROMIUM_SPAWN_FAILED:${spawnError.code || "UNKNOWN"}`);
+      }
       try {
-        const response = await localFetch(`http://127.0.0.1:${port}/json/list`);
+        const response = await abortOnTermination(localFetch(`http://127.0.0.1:${port}/json/list`));
         if (!response) throw new Error("unreachable");
         const list = await response.json();
         const page = list.find((entry) => entry.type === "page");
@@ -257,26 +421,30 @@ async function produce() {
       } catch {
         // retry
       }
-      await sleep(250);
+      await abortOnTermination(sleep(250));
     }
-    if (!target) fail("DEVTOOLS_ENDPOINT_TIMEOUT");
+    checkTermination();
+    if (spawnError) {
+      runtimeFail(`CHROMIUM_SPAWN_FAILED:${spawnError.code || "UNKNOWN"}`);
+    }
+    if (!target) runtimeFail("DEVTOOLS_ENDPOINT_TIMEOUT");
 
-    const cdp = await withTimeout(
+    const cdp = await abortOnTermination(withTimeout(
       Cdp.connect(target.webSocketDebuggerUrl),
       10000,
       "CDP_CONNECT_TIMEOUT",
-    );
+    ));
 
     try {
-      await cdp.send("Page.enable");
-      await cdp.send("Runtime.enable");
+      await abortOnTermination(cdp.send("Page.enable"));
+      await abortOnTermination(cdp.send("Runtime.enable"));
 
       async function evaluate(expression) {
-        const result = await cdp.send("Runtime.evaluate", {
+        const result = await abortOnTermination(cdp.send("Runtime.evaluate", {
           expression,
           returnByValue: true,
           awaitPromise: true,
-        });
+        }));
         if (result.exceptionDetails) {
           throw new Error(`EVAL_FAILED:${result.exceptionDetails.text}`);
         }
@@ -285,28 +453,30 @@ async function produce() {
 
       async function navigate(url) {
         const before = cdp.events.filter((event) => event.method === "Page.loadEventFired").length;
-        await cdp.send("Page.navigate", { url });
+        await abortOnTermination(cdp.send("Page.navigate", { url }));
         for (let i = 0; i < 120; i += 1) {
+          checkTermination();
           const count = cdp.events.filter((event) => event.method === "Page.loadEventFired").length;
           if (count > before) {
             const ready = await evaluate("document.readyState");
             if (ready === "complete" || ready === "interactive") return;
           }
-          await sleep(250);
+          await abortOnTermination(sleep(250));
         }
         throw new Error("PAGE_LOAD_TIMEOUT");
       }
 
       async function reload() {
         const before = cdp.events.filter((event) => event.method === "Page.loadEventFired").length;
-        await cdp.send("Page.reload", { ignoreCache: true });
+        await abortOnTermination(cdp.send("Page.reload", { ignoreCache: true }));
         for (let i = 0; i < 120; i += 1) {
+          checkTermination();
           const count = cdp.events.filter((event) => event.method === "Page.loadEventFired").length;
           if (count > before) {
             const ready = await evaluate("document.readyState");
             if (ready === "complete" || ready === "interactive") return;
           }
-          await sleep(250);
+          await abortOnTermination(sleep(250));
         }
         throw new Error("PAGE_RELOAD_TIMEOUT");
       }
@@ -314,19 +484,20 @@ async function produce() {
       async function waitForState(expression, label) {
         let last = null;
         for (let i = 0; i < 100; i += 1) {
+          checkTermination();
           last = await evaluate(expression);
           if (last && last.ready === true) return last;
-          await sleep(250);
+          await abortOnTermination(sleep(250));
         }
         throw new Error(`${label}:${JSON.stringify(last)}`);
       }
 
-      await cdp.send("Emulation.setDeviceMetricsOverride", {
+      await abortOnTermination(cdp.send("Emulation.setDeviceMetricsOverride", {
         width: 1440,
         height: 900,
         deviceScaleFactor: 1,
         mobile: false,
-      });
+      }));
       await navigate(TARGET_URL);
 
       let observedProjectId = null;
@@ -335,7 +506,7 @@ async function produce() {
         const runnerSource = await evaluate(
           "document.documentElement.getAttribute('data-runner-source')",
         );
-        if (runnerSource !== RUNNER_ID) fail("WRONG_RUNNER_SOURCE");
+        if (runnerSource !== RUNNER_ID) runtimeFail("WRONG_RUNNER_SOURCE");
 
         const desktop = await evaluate(`(() => {
           const root = document.querySelector('#acceptance-root, main');
@@ -349,13 +520,13 @@ async function produce() {
             webResult: web ? web.getAttribute('data-result') : null,
           };
         })()`);
-        if (!desktop.ok) fail(desktop.reason || "DESKTOP_CHECK_FAILED");
-        if (desktop.projectId !== PROJECT_ID) fail("PROJECT_ID_MISMATCH");
-        if (desktop.webResult !== "PASS") fail("WEB_ACCEPTANCE_NOT_PASS");
+        if (!desktop.ok) runtimeFail(desktop.reason || "DESKTOP_CHECK_FAILED");
+        if (desktop.projectId !== PROJECT_ID) runtimeFail("PROJECT_ID_MISMATCH");
+        if (desktop.webResult !== "PASS") runtimeFail("WEB_ACCEPTANCE_NOT_PASS");
         observedProjectId = desktop.projectId;
       } else {
         const target = BROWSER_TARGET;
-        if (!target) fail("MISSING_BROWSER_URL");
+        if (!target) runtimeFail("MISSING_BROWSER_URL");
 
         await evaluate(
           `sessionStorage.setItem(${JSON.stringify(TOKEN_KEY)}, ${JSON.stringify(BROWSER_TOKEN)}); true`,
@@ -401,17 +572,17 @@ async function produce() {
         observedProjectId = PROJECT_ID;
       }
 
-      await cdp.send("Emulation.setDeviceMetricsOverride", {
+      await abortOnTermination(cdp.send("Emulation.setDeviceMetricsOverride", {
         width: 390,
         height: 844,
         deviceScaleFactor: 2,
         mobile: true,
-      });
-      await sleep(250);
+      }));
+      await abortOnTermination(sleep(250));
       const overflow = await evaluate(
         "({ scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth })",
       );
-      if (overflow.scrollWidth > overflow.clientWidth) fail("MOBILE_390_OVERFLOW");
+      if (overflow.scrollWidth > overflow.clientWidth) runtimeFail("MOBILE_390_OVERFLOW");
 
       const baseLines = [
         "STATUS=PASS",
@@ -429,34 +600,109 @@ async function produce() {
 
       const secretPattern = /(^|_)(TOKEN|PASSWORD|SECRET|DATABASE_URL)=/;
       if (baseLines.some((line) => secretPattern.test(line))) {
-        fail("SECRET_FIELD_PRESENT");
+        runtimeFail("SECRET_FIELD_PRESENT");
       }
 
       const baseBody = baseLines.join("\n") + "\n";
       const receiptHash = createHash("sha256").update(baseBody, "utf8").digest("hex");
       const receipt = baseBody + `RECEIPT_SHA256=${receiptHash}\n`;
       if (MODE === "browser" && receipt.includes(BROWSER_TOKEN)) {
-        fail("SECRET_VALUE_PRESENT");
+        runtimeFail("SECRET_VALUE_PRESENT");
       }
 
       const dir = path.dirname(OUT);
-      const tmp = path.join(dir, `.r7-web-receipt.${process.pid}.tmp`);
-      fs.writeFileSync(tmp, receipt, { mode: 0o600 });
-      fs.chmodSync(tmp, 0o600);
-      fs.renameSync(tmp, OUT);
-
-      process.stdout.write(`R7_BROWSER_RECEIPT=PASS\nRUNNER_MODE=${MODE}\nRECEIPT=${OUT}\n`);
-      process.exit(0);
+      pendingReceiptPath = path.join(dir, `.r7-web-receipt.${process.pid}.tmp`);
+      fs.writeFileSync(pendingReceiptPath, receipt, { mode: 0o600, flag: "wx" });
+      fs.chmodSync(pendingReceiptPath, 0o600);
     } finally {
       cdp.close();
     }
   } catch (error) {
-    fail(`BROWSER_RUN_FAILED:${String(error && error.message).slice(0, 160)}`);
+    if (error instanceof RuntimeFailure) {
+      deferredFailure = error.reason;
+    } else {
+      deferredFailure = `BROWSER_RUN_FAILED:${String(error && error.message).slice(0, 160)}`;
+    }
   } finally {
     clearTimeout(watchdog);
-    killChrome();
+    try {
+      await terminateChromeGroup();
+    } catch {
+      cleanupFailure = "CHROMIUM_PROCESS_GROUP_TIMEOUT";
+    }
+    try {
+      fs.rmSync(chromeProfileDir, { recursive: true, force: true });
+      if (fs.existsSync(chromeProfileDir)) {
+        cleanupFailure = cleanupFailure || "CHROME_PROFILE_CLEANUP_FAILED";
+      }
+    } catch {
+      cleanupFailure = cleanupFailure || "CHROME_PROFILE_CLEANUP_FAILED";
+    }
     if (fixtureServer) fixtureServer.close();
   }
+
+  // A signal received during synchronous profile deletion is queued by Node.
+  // Cross a poll phase before deciding whether canonical evidence may commit;
+  // a single immediate can run in the current check phase before signal I/O.
+  // Keep both handlers installed until that queued work has been dispatched.
+  await new Promise((resolve) => setImmediate(() => setImmediate(resolve)));
+
+  if (terminationSignal) deferredFailure = `TERMINATED_BY_${terminationSignal}`;
+  if (watchdogTriggered) deferredFailure = "WATCHDOG_TIMEOUT";
+  if (cleanupFailure) deferredFailure = cleanupFailure;
+
+  if (deferredFailure) {
+    try {
+      if (pendingReceiptPath) fs.rmSync(pendingReceiptPath, { force: true });
+    } catch {
+      // Temporary receipt cleanup is best-effort after a terminal failure.
+    }
+    fail(deferredFailure);
+  }
+
+  if (!pendingReceiptPath || !fs.existsSync(pendingReceiptPath)) {
+    fail("RECEIPT_TEMP_MISSING");
+  }
+  try {
+    receiptIdentity = fs.statSync(pendingReceiptPath);
+    fs.linkSync(pendingReceiptPath, OUT);
+    publishedReceipt = true;
+  } catch {
+    try {
+      fs.rmSync(pendingReceiptPath, { force: true });
+    } catch {
+      // Publication already failed; preserve the primary error.
+    }
+    fail("RECEIPT_PUBLISH_FAILED");
+  }
+  try {
+    fs.unlinkSync(pendingReceiptPath);
+  } catch {
+    // Canonical receipt publication is already atomic and complete.
+    // The hidden non-secret temp link may be cleaned manually if needed.
+  }
+
+  // link/unlink can also block signal dispatch. A queued termination withdraws
+  // this invocation's local receipt before PASS can be reported.
+  await new Promise((resolve) => setImmediate(() => setImmediate(resolve)));
+  const failPassOutput = (error) => {
+    failPublishedReceipt(`PASS_STDOUT_FAILED:${error && error.code ? error.code : "UNKNOWN"}`, true);
+  };
+  process.stdout.on("error", failPassOutput);
+  try {
+    await new Promise((resolve) => {
+      process.stdout.write(`R7_BROWSER_RECEIPT=PASS\nRUNNER_MODE=${MODE}\nRECEIPT=${OUT}\n`, (error) => {
+        if (error) failPassOutput(error);
+        resolve();
+      });
+    });
+  } catch (error) {
+    failPassOutput(error);
+  }
+  // A slow stdout write is another synchronous window. Keep signal handlers
+  // through natural exit, including this last drain. If output already reached
+  // the pipe, exit 1 plus an absent receipt still prevents its acceptance.
+  await new Promise((resolve) => setImmediate(() => setImmediate(resolve)));
 }
 
 produce();
