@@ -480,8 +480,6 @@ async function produce() {
       fs.writeFileSync(tmp, receipt, { mode: 0o600 });
       fs.chmodSync(tmp, 0o600);
       fs.renameSync(tmp, OUT);
-
-      process.stdout.write(`R7_BROWSER_RECEIPT=PASS\nRUNNER_MODE=${MODE}\nRECEIPT=${OUT}\n`);
     } finally {
       cdp.close();
     }
@@ -520,6 +518,7 @@ async function produce() {
     }
   }
   if (deferredFailure) fail(deferredFailure);
+  process.stdout.write(`R7_BROWSER_RECEIPT=PASS\nRUNNER_MODE=${MODE}\nRECEIPT=${OUT}\n`);
 }
 
 produce();
