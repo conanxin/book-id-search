@@ -284,6 +284,64 @@ fs.rmSync = function(target, ...args) {
     def test_repeated_sigint_during_profile_cleanup_stays_structured(self):
         self.run_signal_cleanup_case(signal.SIGINT, repeat_during_cleanup=True)
 
+    def run_first_signal_during_cleanup_case(self, sig):
+        # The page succeeds and creates pending evidence before the FIRST
+        # signal arrives while synchronous profile deletion blocks JS callbacks.
+        entered = Path(self.tmp.name) / "first-signal-cleanup-entered"
+        release = Path(self.tmp.name) / "first-signal-cleanup-release"
+        preload = Path(self.tmp.name) / "first-signal-cleanup.cjs"
+        preload.write_text("""
+const fs = require('fs');
+const path = require('path');
+const originalRm = fs.rmSync;
+fs.rmSync = function(target, ...args) {
+  if (path.basename(String(target)).startsWith('s32-r7-chrome-profile-')) {
+    fs.writeFileSync(path.join(process.env.TMPDIR, 'first-signal-cleanup-entered'), 'ready');
+    const deadline = Date.now() + 5000;
+    while (!fs.existsSync(path.join(process.env.TMPDIR, 'first-signal-cleanup-release')) && Date.now() < deadline) {
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+    }
+  }
+  return originalRm.call(this, target, ...args);
+};
+""")
+        env = dict(os.environ)
+        env.update(TMPDIR=self.tmp.name, S32_R7_BROWSER_TOKEN="TOKEN_SENTINEL")
+        with production_like_server() as base:
+            env["S32_R7_BROWSER_URL"] = f"{base}/research/projects"
+            proc = subprocess.Popen(
+                ["node", "--require", str(preload), str(PRODUCER), "browser", str(self.out), FP, PID, CTRL],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
+            )
+            deadline = time.monotonic() + 30
+            while not entered.exists() and proc.poll() is None and time.monotonic() < deadline:
+                time.sleep(0.01)
+            reached_cleanup = entered.exists()
+            pending_before_signal = list(Path(self.tmp.name).glob(".r7-web-receipt.*.tmp"))
+            canonical_before_signal = self.out.exists()
+            if reached_cleanup:
+                proc.send_signal(sig)
+                time.sleep(0.1)
+            release.touch()
+            stdout, stderr = proc.communicate(timeout=30)
+
+        self.assertTrue(reached_cleanup, stdout + stderr)
+        self.assertEqual(len(pending_before_signal), 1, "page did not reach pending PASS evidence")
+        self.assertFalse(canonical_before_signal)
+        self.assert_no_runtime_profile_leak()
+        self.assertTrue(self.wait_for_devtools_closed(10000 + proc.pid % 50000))
+        self.assertNotEqual(proc.returncode, 0, stdout + stderr)
+        self.assertIn(f"TERMINATED_BY_{sig.name}", stdout)
+        self.assertNotIn("R7_BROWSER_RECEIPT=PASS", stdout)
+        self.assertFalse(self.out.exists(), "queued signal still published canonical PASS")
+        self.assertEqual(list(Path(self.tmp.name).glob(".r7-web-receipt.*.tmp")), [])
+
+    def test_first_sigterm_during_profile_cleanup_blocks_publication(self):
+        self.run_first_signal_during_cleanup_case(signal.SIGTERM)
+
+    def test_first_sigint_during_profile_cleanup_blocks_publication(self):
+        self.run_first_signal_during_cleanup_case(signal.SIGINT)
+
     def test_settled_cdp_timeout_does_not_keep_node_alive(self):
         # Run the real helper with a real Node timer: either settled branch
         # must allow natural process exit without waiting for the deadline.

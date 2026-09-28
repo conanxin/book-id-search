@@ -610,6 +610,12 @@ async function produce() {
     if (fixtureServer) fixtureServer.close();
   }
 
+  // A signal received during synchronous profile deletion is queued by Node.
+  // Cross a poll phase before deciding whether canonical evidence may commit;
+  // a single immediate can run in the current check phase before signal I/O.
+  // Keep both handlers installed until that queued work has been dispatched.
+  await new Promise((resolve) => setImmediate(() => setImmediate(resolve)));
+
   if (terminationSignal) deferredFailure = `TERMINATED_BY_${terminationSignal}`;
   if (watchdogTriggered) deferredFailure = "WATCHDOG_TIMEOUT";
   if (cleanupFailure) deferredFailure = cleanupFailure;
