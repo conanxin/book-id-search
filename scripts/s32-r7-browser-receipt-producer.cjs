@@ -15,11 +15,12 @@
 
 const fs = require("fs");
 const { createHash } = require("crypto");
-const os = require("os");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 
-const MODE = process.argv[2] || "";
+const REQUESTED_MODE = process.argv[2] || "";
+const RECOVERY = ["recovery-fixture", "recovery-browser"].includes(REQUESTED_MODE);
+const MODE = RECOVERY ? REQUESTED_MODE.slice("recovery-".length) : REQUESTED_MODE;
 const OUT = process.argv[3] || "";
 const FP = process.argv[4] || "";
 const PROJECT_ID = process.argv[5] || "";
@@ -133,6 +134,18 @@ if (MODE === "browser") {
 const CHROMIUM = findChromium();
 if (!CHROMIUM) fail("CHROMIUM_UNAVAILABLE");
 
+let recoveryProvenance = [];
+if (RECOVERY) {
+  try {
+    recoveryProvenance = require("./s32-r7-browser-recovery.cjs").prepareRecovery({
+      stateDir: process.env.S32_R7_RECOVERY_STATE_DIR, fp: FP, projectId: PROJECT_ID,
+      ctrl: RUNNER_SOURCE_SHA, toolSha: process.env.S32_R7_RECOVERY_TOOL_SHA,
+    }, { fixture: MODE === "fixture" });
+  } catch (error) {
+    fail(error.code || error.message);
+  }
+}
+
 const FIXTURE_PROJECT_ID = "11111111-1111-4111-8111-111111111111";
 let fixtureServer = null;
 
@@ -229,7 +242,10 @@ async function produce() {
   if (MODE === "fixture") fixtureServer = await startFixtureServer();
 
   const port = 10000 + (process.pid % 50000);
-  const chromeProfileDir = fs.mkdtempSync(path.join(os.tmpdir(), "s32-r7-chrome-profile-"));
+  // Chrome creates additional Unix-domain sockets under TMPDIR. Keep both
+  // that directory and the profile short, independently of the caller's TMPDIR.
+  let chromeRoot = null;
+  let chromeProfileDir = null;
   const chromeEnv = {
     ...process.env,
     NO_PROXY: "127.0.0.1,localhost",
@@ -382,6 +398,15 @@ async function produce() {
   }).catch(() => null);
 
   try {
+    chromeRoot = fs.mkdtempSync("/tmp/s32-r7-");
+    fs.chmodSync(chromeRoot, 0o700);
+    chromeProfileDir = path.join(chromeRoot, "profile");
+    const chromeTmpDir = path.join(chromeRoot, "chrome-tmp");
+    fs.mkdirSync(chromeProfileDir, { mode: 0o700 });
+    fs.mkdirSync(chromeTmpDir, { mode: 0o700 });
+    chromeEnv.TMPDIR = chromeTmpDir;
+    chromeEnv.TMP = chromeTmpDir;
+    chromeEnv.TEMP = chromeTmpDir;
     try {
       chrome = spawn(CHROMIUM, [
         "--headless=new",
@@ -596,6 +621,7 @@ async function produce() {
         `RUNNER_SOURCE_SHA=${RUNNER_SOURCE_SHA}`,
         `RUNNER_ID=${RUNNER_ID}`,
         `RUNNER_MODE=${MODE}`,
+        ...recoveryProvenance,
       ];
 
       const secretPattern = /(^|_)(TOKEN|PASSWORD|SECRET|DATABASE_URL)=/;
@@ -631,12 +657,20 @@ async function produce() {
       cleanupFailure = "CHROMIUM_PROCESS_GROUP_TIMEOUT";
     }
     try {
-      fs.rmSync(chromeProfileDir, { recursive: true, force: true });
-      if (fs.existsSync(chromeProfileDir)) {
+      if (chromeProfileDir) fs.rmSync(chromeProfileDir, { recursive: true, force: true });
+      if (chromeProfileDir && fs.existsSync(chromeProfileDir)) {
         cleanupFailure = cleanupFailure || "CHROME_PROFILE_CLEANUP_FAILED";
       }
     } catch {
       cleanupFailure = cleanupFailure || "CHROME_PROFILE_CLEANUP_FAILED";
+    }
+    try {
+      if (chromeRoot) fs.rmSync(chromeRoot, { recursive: true, force: true });
+      if (chromeRoot && fs.existsSync(chromeRoot)) {
+        cleanupFailure = cleanupFailure || "CHROME_ROOT_CLEANUP_FAILED";
+      }
+    } catch {
+      cleanupFailure = cleanupFailure || "CHROME_ROOT_CLEANUP_FAILED";
     }
     if (fixtureServer) fixtureServer.close();
   }
@@ -678,8 +712,9 @@ async function produce() {
   try {
     fs.unlinkSync(pendingReceiptPath);
   } catch {
-    // Canonical receipt publication is already atomic and complete.
-    // The hidden non-secret temp link may be cleaned manually if needed.
+    // A surviving pending link is not a completed local proof. Withdraw only
+    // this invocation's canonical inode before reporting the cleanup failure.
+    failPublishedReceipt("RECEIPT_TEMP_CLEANUP_FAILED");
   }
 
   // link/unlink can also block signal dispatch. A queued termination withdraws

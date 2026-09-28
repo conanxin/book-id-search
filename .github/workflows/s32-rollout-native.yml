@@ -49,6 +49,7 @@ jobs:
           python3 scripts/test-s32-control-plane-sync.py
           python3 scripts/test-s32-production-authorization.py
           python3 scripts/test-s32-r7-browser-receipt-producer.py
+          python3 scripts/test-s32-r7-browser-recovery.py
           python3 scripts/test-s32-api-rollback.py
           python3 scripts/test-s32-production-baseline-with-grace.py
           python3 scripts/test-recover-s32-api-rollback.py
