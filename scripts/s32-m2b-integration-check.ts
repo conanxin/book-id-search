@@ -1,6 +1,6 @@
+import { readS32MigrationChain } from "./s32-migration-chain.js";
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -47,7 +47,7 @@ try {
 
   docker(
     ["exec", "-i", container, "psql", "-X", "-U", "s32test", "-d", "s32_m2b_test", "-v", "ON_ERROR_STOP=1", "-f", "-"],
-    readFileSync(resolve(root, "db/migrations/001_s32_core_schema.sql"), "utf8"),
+    readS32MigrationChain(root).join("\n"),
   );
   const port = docker(["port", container, "5432/tcp"]).match(/^127\.0\.0\.1:(\d+)$/)?.[1];
   if (!port) throw new Error("Expected a loopback-only disposable database port");

@@ -1,0 +1,53 @@
+name: S32 M2-E schema verification
+
+on:
+  push:
+    branches: [feat/s32-m2e-issue-resolution]
+  pull_request:
+    branches: [main]
+    paths:
+      - db/**
+      - scripts/s32-*.ts
+      - scripts/fixtures/s32-m2e-schema-upgrade.sql
+      - .github/workflows/s32-m2e-schema.yml
+  workflow_dispatch:
+
+jobs:
+  schema-and-upgrade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install locked dependencies
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+          pnpm install --frozen-lockfile
+      - name: Exact-head static and harness tests
+        run: |
+          git rev-parse HEAD
+          pnpm exec vitest run scripts/s32-migration-chain.test.ts scripts/s32-schema-contract.test.ts scripts/s32-schema-check.test.ts
+      - name: Disposable PG16 fresh, upgrade, invalid legacy and regression matrix
+        run: |
+          docker pull postgres:16-alpine
+          pnpm s32:schema:check
+          for stage in m1a m1b m1c m1d m1e m2a m2b m2c m2d; do
+            pnpm "s32:$stage:check"
+          done
+      - name: Preserve frozen schema artifacts
+        run: |
+          git diff --exit-code 04cd637a6fa5ada76d11fa9afa69a580441a200c..HEAD -- db/migrations/001_s32_core_schema.sql db/tests/001_s32_schema_assertions.sql db/tests/002_s32_negative_invariants.sql
+          git diff --check
+      - name: Retain upgrade snapshots even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: s32-m2e-schema-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: /tmp/s32-schema-evidence-*
+          if-no-files-found: ignore

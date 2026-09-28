@@ -1,0 +1,102 @@
+-- Synthetic, rollback-only cases. The CASE markers also allow each real
+-- pre-migration RED probe to run independently against the frozen 001 schema.
+BEGIN;
+INSERT INTO core.research_issues (id, title, question) VALUES
+ ('00000000-0000-4000-8000-000000000101', 'M2E A', 'A?'),
+ ('00000000-0000-4000-8000-000000000102', 'M2E B', 'B?');
+INSERT INTO core.claims (id, statement) VALUES
+ ('00000000-0000-4000-8000-000000000201', 'Candidate A'),
+ ('00000000-0000-4000-8000-000000000202', 'Candidate B');
+INSERT INTO core.research_issue_claims (issue_id, claim_id) VALUES
+ ('00000000-0000-4000-8000-000000000101', '00000000-0000-4000-8000-000000000201'),
+ ('00000000-0000-4000-8000-000000000102', '00000000-0000-4000-8000-000000000202');
+INSERT INTO core.issue_resolutions (id, issue_id, resolution_type, preferred_claim_id, rationale) VALUES
+ ('00000000-0000-4000-8000-000000000301', '00000000-0000-4000-8000-000000000101', 'PREFERRED_CLAIM', '00000000-0000-4000-8000-000000000201', NULL);
+
+-- CASE composite_fk
+DO $$ DECLARE rejected boolean := false; affected integer; constraint_name text;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM core.research_issue_claims WHERE issue_id='00000000-0000-4000-8000-000000000102' AND claim_id='00000000-0000-4000-8000-000000000202')
+    OR EXISTS (SELECT 1 FROM core.research_issue_claims WHERE issue_id='00000000-0000-4000-8000-000000000101' AND claim_id='00000000-0000-4000-8000-000000000202') THEN
+    RAISE EXCEPTION 'FAULT_SETUP_FAILED: cross-Issue membership';
+  END IF;
+  RAISE NOTICE 'FAULT_SETUP=PASS: composite_fk';
+  BEGIN
+    INSERT INTO core.issue_resolutions (id, issue_id, resolution_type, preferred_claim_id) VALUES
+     ('00000000-0000-4000-8000-000000000302', '00000000-0000-4000-8000-000000000101', 'PREFERRED_CLAIM', '00000000-0000-4000-8000-000000000202');
+    GET DIAGNOSTICS affected = ROW_COUNT;
+    IF affected <> 1 OR NOT EXISTS (SELECT 1 FROM core.issue_resolutions WHERE id='00000000-0000-4000-8000-000000000302') THEN RAISE EXCEPTION 'FAULT_NOT_EXECUTED'; END IF;
+    RAISE NOTICE 'INVALID_STATE_CREATED_OR_ACCEPTED=PASS: composite_fk rows=%', affected;
+  EXCEPTION WHEN foreign_key_violation THEN
+    GET STACKED DIAGNOSTICS constraint_name = CONSTRAINT_NAME;
+    IF constraint_name <> 'fk_ir_preferred_claim_same_issue' THEN RAISE; END IF;
+    rejected := true;
+  END;
+  IF NOT rejected THEN RAISE EXCEPTION 'EXPECTED_REJECTION_MISSING:M2E_COMPOSITE_FK'; END IF;
+END $$;
+
+-- CASE update_immutable
+DO $$ DECLARE rejected boolean := false; affected integer; message text;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM core.issue_resolutions WHERE id='00000000-0000-4000-8000-000000000301' AND rationale IS NULL) THEN RAISE EXCEPTION 'FAULT_SETUP_FAILED: update'; END IF;
+  RAISE NOTICE 'FAULT_SETUP=PASS: update';
+  BEGIN
+    UPDATE core.issue_resolutions SET rationale='changed' WHERE id='00000000-0000-4000-8000-000000000301';
+    GET DIAGNOSTICS affected = ROW_COUNT;
+    IF affected <> 1 OR NOT EXISTS (SELECT 1 FROM core.issue_resolutions WHERE id='00000000-0000-4000-8000-000000000301' AND rationale='changed') THEN RAISE EXCEPTION 'FAULT_NOT_EXECUTED'; END IF;
+    RAISE NOTICE 'INVALID_STATE_CREATED_OR_ACCEPTED=PASS: update rows=%', affected;
+  EXCEPTION WHEN SQLSTATE '55000' THEN
+    GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+    IF message <> 'S32_M2E_ISSUE_RESOLUTION_IMMUTABLE' THEN RAISE; END IF;
+    rejected := true;
+  END;
+  IF NOT rejected THEN RAISE EXCEPTION 'EXPECTED_REJECTION_MISSING:M2E_UPDATE'; END IF;
+END $$;
+
+-- CASE delete_immutable
+DO $$ DECLARE rejected boolean := false; affected integer; message text;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM core.issue_resolutions WHERE id='00000000-0000-4000-8000-000000000301') THEN RAISE EXCEPTION 'FAULT_SETUP_FAILED: delete'; END IF;
+  RAISE NOTICE 'FAULT_SETUP=PASS: delete';
+  BEGIN
+    DELETE FROM core.issue_resolutions WHERE id='00000000-0000-4000-8000-000000000301';
+    GET DIAGNOSTICS affected = ROW_COUNT;
+    IF affected <> 1 OR EXISTS (SELECT 1 FROM core.issue_resolutions WHERE id='00000000-0000-4000-8000-000000000301') THEN RAISE EXCEPTION 'FAULT_NOT_EXECUTED'; END IF;
+    RAISE NOTICE 'INVALID_STATE_CREATED_OR_ACCEPTED=PASS: delete rows=%', affected;
+  EXCEPTION WHEN SQLSTATE '55000' THEN
+    GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+    IF message <> 'S32_M2E_ISSUE_RESOLUTION_IMMUTABLE' THEN RAISE; END IF;
+    rejected := true;
+  END;
+  IF NOT rejected THEN RAISE EXCEPTION 'EXPECTED_REJECTION_MISSING:M2E_DELETE'; END IF;
+END $$;
+
+-- CASE compatibility
+DO $$ DECLARE rejected boolean := false; constraint_name text;
+BEGIN
+  BEGIN
+    INSERT INTO core.issue_resolutions (id, issue_id, resolution_type) VALUES
+     ('00000000-0000-4000-8000-000000000303', '00000000-0000-4000-8000-000000000101', 'PREFERRED_CLAIM');
+  EXCEPTION WHEN check_violation THEN
+    GET STACKED DIAGNOSTICS constraint_name = CONSTRAINT_NAME;
+    IF constraint_name <> 'ck_ir_preferred' THEN RAISE; END IF;
+    rejected := true;
+  END;
+  IF NOT rejected THEN RAISE EXCEPTION 'EXPECTED_REJECTION_MISSING:M2E_PREFERRED_NULL'; END IF;
+  INSERT INTO core.issue_resolutions (id, issue_id, resolution_type) VALUES
+   ('00000000-0000-4000-8000-000000000304', '00000000-0000-4000-8000-000000000101', 'INSUFFICIENT_EVIDENCE'),
+   ('00000000-0000-4000-8000-000000000305', '00000000-0000-4000-8000-000000000101', 'NO_WORKING_CONCLUSION');
+  IF (SELECT count(*) FROM core.issue_resolutions WHERE issue_id='00000000-0000-4000-8000-000000000101' AND rationale IS NULL) <> 3 THEN RAISE EXCEPTION 'M2E_NULL_COMPATIBILITY_FAILED'; END IF;
+  rejected := false;
+  BEGIN
+    UPDATE core.research_issues SET current_resolution_id='00000000-0000-4000-8000-000000000301' WHERE id='00000000-0000-4000-8000-000000000102';
+    SET CONSTRAINTS core.fk_ri_current_resolution IMMEDIATE;
+  EXCEPTION WHEN foreign_key_violation THEN
+    GET STACKED DIAGNOSTICS constraint_name = CONSTRAINT_NAME;
+    IF constraint_name <> 'fk_ri_current_resolution' THEN RAISE; END IF;
+    rejected := true;
+  END;
+  IF NOT rejected THEN RAISE EXCEPTION 'EXPECTED_REJECTION_MISSING:M2E_CURRENT_POINTER'; END IF;
+END $$;
+ROLLBACK;
+\echo 'S32_M2E_NEGATIVE_INVARIANTS=PASS'
