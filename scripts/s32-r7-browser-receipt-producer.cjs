@@ -307,11 +307,31 @@ async function produce() {
   let deferredFailure = null;
   let cleanupFailure = null;
   let pendingReceiptPath = null;
+  let publishedReceipt = false;
+  let receiptIdentity = null;
+
+  function failPublishedReceipt(reason) {
+    // This invocation owns only the local OUT inode it just linked. Production
+    // recording must wait for producer exit 0; never remove another writer's OUT.
+    try {
+      const current = fs.lstatSync(OUT);
+      if (!receiptIdentity || current.dev !== receiptIdentity.dev || current.ino !== receiptIdentity.ino) {
+        throw new Error("RECEIPT_IDENTITY_CHANGED");
+      }
+      fs.unlinkSync(OUT);
+      publishedReceipt = false;
+      if (pendingReceiptPath) fs.rmSync(pendingReceiptPath, { force: true });
+    } catch {
+      fail("RECEIPT_TERMINATION_CLEANUP_FAILED");
+    }
+    fail(reason);
+  }
 
   const requestTermination = (signal) => {
     if (terminationSignal) return;
     terminationSignal = signal;
     resolveTerminationSignal(signal);
+    if (publishedReceipt) failPublishedReceipt(`TERMINATED_BY_${signal}`);
     try {
       signalChromeGroup();
     } catch {
@@ -633,7 +653,9 @@ async function produce() {
     fail("RECEIPT_TEMP_MISSING");
   }
   try {
+    receiptIdentity = fs.statSync(pendingReceiptPath);
     fs.linkSync(pendingReceiptPath, OUT);
+    publishedReceipt = true;
   } catch {
     try {
       fs.rmSync(pendingReceiptPath, { force: true });
@@ -649,10 +671,16 @@ async function produce() {
     // The hidden non-secret temp link may be cleaned manually if needed.
   }
 
-  process.stdout.write(`R7_BROWSER_RECEIPT=PASS\nRUNNER_MODE=${MODE}\nRECEIPT=${OUT}\n`);
-  // Failure paths exit only after pending cleanup, with handlers still active.
-  process.removeListener("SIGINT", onSigint);
-  process.removeListener("SIGTERM", onSigterm);
+  // link/unlink can also block signal dispatch. A queued termination withdraws
+  // this invocation's local receipt before PASS can be reported.
+  await new Promise((resolve) => setImmediate(() => setImmediate(resolve)));
+  await new Promise((resolve) => {
+    process.stdout.write(`R7_BROWSER_RECEIPT=PASS\nRUNNER_MODE=${MODE}\nRECEIPT=${OUT}\n`, resolve);
+  });
+  // A slow stdout write is another synchronous window. Keep signal handlers
+  // through natural exit, including this last drain. If output already reached
+  // the pipe, exit 1 plus an absent receipt still prevents its acceptance.
+  await new Promise((resolve) => setImmediate(() => setImmediate(resolve)));
 }
 
 produce();

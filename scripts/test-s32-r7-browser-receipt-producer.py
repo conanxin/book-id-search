@@ -284,7 +284,7 @@ fs.rmSync = function(target, ...args) {
     def test_repeated_sigint_during_profile_cleanup_stays_structured(self):
         self.run_signal_cleanup_case(signal.SIGINT, repeat_during_cleanup=True)
 
-    def run_first_signal_during_cleanup_case(self, sig):
+    def run_first_signal_during_cleanup_case(self, sig, *, phase="profile"):
         # The page succeeds and creates pending evidence before the FIRST
         # signal arrives while synchronous profile deletion blocks JS callbacks.
         entered = Path(self.tmp.name) / "first-signal-cleanup-entered"
@@ -294,19 +294,37 @@ fs.rmSync = function(target, ...args) {
 const fs = require('fs');
 const path = require('path');
 const originalRm = fs.rmSync;
-fs.rmSync = function(target, ...args) {
-  if (path.basename(String(target)).startsWith('s32-r7-chrome-profile-')) {
+function pauseAt(phase) {
+  if (process.env.S32_TEST_SIGNAL_PHASE === phase) {
     fs.writeFileSync(path.join(process.env.TMPDIR, 'first-signal-cleanup-entered'), 'ready');
     const deadline = Date.now() + 5000;
     while (!fs.existsSync(path.join(process.env.TMPDIR, 'first-signal-cleanup-release')) && Date.now() < deadline) {
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
     }
   }
+}
+fs.rmSync = function(target, ...args) {
+  if (path.basename(String(target)).startsWith('s32-r7-chrome-profile-')) pauseAt('profile');
   return originalRm.call(this, target, ...args);
+};
+const originalLink = fs.linkSync;
+fs.linkSync = function(...args) {
+  pauseAt('link');
+  return originalLink.apply(this, args);
+};
+const originalUnlink = fs.unlinkSync;
+fs.unlinkSync = function(target, ...args) {
+  if (path.basename(String(target)).startsWith('.r7-web-receipt.')) pauseAt('unlink');
+  return originalUnlink.call(this, target, ...args);
+};
+const originalWrite = process.stdout.write;
+process.stdout.write = function(chunk, ...args) {
+  if (String(chunk).startsWith('R7_BROWSER_RECEIPT=PASS')) pauseAt('stdout');
+  return originalWrite.call(this, chunk, ...args);
 };
 """)
         env = dict(os.environ)
-        env.update(TMPDIR=self.tmp.name, S32_R7_BROWSER_TOKEN="TOKEN_SENTINEL")
+        env.update(TMPDIR=self.tmp.name, S32_R7_BROWSER_TOKEN="TOKEN_SENTINEL", S32_TEST_SIGNAL_PHASE=phase)
         with production_like_server() as base:
             env["S32_R7_BROWSER_URL"] = f"{base}/research/projects"
             proc = subprocess.Popen(
@@ -326,13 +344,14 @@ fs.rmSync = function(target, ...args) {
             stdout, stderr = proc.communicate(timeout=30)
 
         self.assertTrue(reached_cleanup, stdout + stderr)
-        self.assertEqual(len(pending_before_signal), 1, "page did not reach pending PASS evidence")
-        self.assertFalse(canonical_before_signal)
+        self.assertEqual(len(pending_before_signal), 0 if phase == "stdout" else 1)
+        self.assertEqual(canonical_before_signal, phase in ("unlink", "stdout"))
         self.assert_no_runtime_profile_leak()
         self.assertTrue(self.wait_for_devtools_closed(10000 + proc.pid % 50000))
         self.assertNotEqual(proc.returncode, 0, stdout + stderr)
         self.assertIn(f"TERMINATED_BY_{sig.name}", stdout)
-        self.assertNotIn("R7_BROWSER_RECEIPT=PASS", stdout)
+        if phase != "stdout":
+            self.assertNotIn("R7_BROWSER_RECEIPT=PASS", stdout)
         self.assertFalse(self.out.exists(), "queued signal still published canonical PASS")
         self.assertEqual(list(Path(self.tmp.name).glob(".r7-web-receipt.*.tmp")), [])
 
@@ -341,6 +360,24 @@ fs.rmSync = function(target, ...args) {
 
     def test_first_sigint_during_profile_cleanup_blocks_publication(self):
         self.run_first_signal_during_cleanup_case(signal.SIGINT)
+
+    def test_sigterm_during_canonical_link_fails_closed(self):
+        self.run_first_signal_during_cleanup_case(signal.SIGTERM, phase="link")
+
+    def test_sigint_during_canonical_link_fails_closed(self):
+        self.run_first_signal_during_cleanup_case(signal.SIGINT, phase="link")
+
+    def test_sigterm_during_pending_unlink_fails_closed(self):
+        self.run_first_signal_during_cleanup_case(signal.SIGTERM, phase="unlink")
+
+    def test_sigint_during_pending_unlink_fails_closed(self):
+        self.run_first_signal_during_cleanup_case(signal.SIGINT, phase="unlink")
+
+    def test_sigterm_during_pass_stdout_fails_closed(self):
+        self.run_first_signal_during_cleanup_case(signal.SIGTERM, phase="stdout")
+
+    def test_sigint_during_pass_stdout_fails_closed(self):
+        self.run_first_signal_during_cleanup_case(signal.SIGINT, phase="stdout")
 
     def test_settled_cdp_timeout_does_not_keep_node_alive(self):
         # Run the real helper with a real Node timer: either settled branch
