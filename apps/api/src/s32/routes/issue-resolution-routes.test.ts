@@ -100,7 +100,7 @@ async function start(s: IssueResolutionsService | null, options: S32Config = con
   await new Promise<void>(resolve => server.once("listening", resolve));
   return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 }
-function request(base: string, endpoint: typeof endpoints[number], headers: Record<string, string> = { Authorization: "Bearer test-token" }, suffix = "") {
+function request(base: string, endpoint: { method: "POST" | "GET"; path: string }, headers: Record<string, string> = { Authorization: "Bearer test-token" }, suffix = "") {
   return fetch(`${base}${endpoint.path}${suffix}`, {
     method: endpoint.method,
     headers: { "Content-Type": "application/json", "Idempotency-Key": KEY, ...headers },
@@ -284,3 +284,32 @@ describe("real registration with no database", () => {
     expect(await res.json()).toEqual({ error: { message: "项目研究概览数据库尚未配置。" } });
   });
 });
+
+for (const endpoint of endpoints) {
+  describe(`${endpoint.name} malformed URL path protection`, () => {
+    const paths = [
+      { part: "project", path: endpoint.path.replace(P.toUpperCase(), "%ZZSECRET") },
+      { part: "issue", path: endpoint.path.replace(I.toUpperCase(), "%ZZSECRET") },
+      ...(endpoint.name === "get" ? [{ part: "resolution", path: endpoint.path.replace(R.toUpperCase(), "%ZZSECRET") }] : []),
+    ];
+    for (const path of paths) {
+      it.each([
+        { name: "disabled", enabled: false, token: "test-token", status: 404 },
+        { name: "missing credential", enabled: true, token: null, status: 401 },
+        { name: "wrong credential", enabled: true, token: "wrong", status: 403 },
+        { name: "authorized invalid path", enabled: true, token: "test-token", status: 400 },
+      ])(`${path.part}: $name keeps auth precedence and safe JSON`, async gate => {
+        const s = service();
+        const base = await start(s, { ...config, enabled: gate.enabled });
+        const res = await request(base, { ...endpoint, path: path.path }, gate.token ? { Authorization: `Bearer ${gate.token}` } : {});
+        expect(res.status).toBe(gate.status);
+        expect(res.headers.get("cache-control")).toBe("no-store");
+        expect(res.headers.get("content-type")).toContain("application/json");
+        const raw = await res.text();
+        expect(raw).not.toMatch(/SECRET|URIError|stack|node_modules|<html|Failed to decode/i);
+        if (gate.status === 400) expect(JSON.parse(raw).error.code).toBe("ISSUE_RESOLUTION_INVALID");
+        expectNoCalls(s);
+      });
+    }
+  });
+}

@@ -1,4 +1,4 @@
-import { Router, type Request, type Response } from "express";
+import { Router, type Request, type Response, type ErrorRequestHandler } from "express";
 import type { S32Config } from "../config.js";
 import { InvalidProjectInputError } from "../domain/project.js";
 import { InvalidIdempotencyKeyError, InvalidResearchIssueInputError } from "../domain/research-issue.js";
@@ -66,17 +66,22 @@ function toHttpError(error: unknown): [number, ErrorBody] {
 export function createIssueResolutionRouter(config: S32Config, issueResolutions: IssueResolutionsService | null) {
   const router = Router();
 
-  // Scope middleware so mounting before sibling project routers cannot intercept them.
-  router.use([
-    "/:projectId/issues/:issueId/resolutions",
-    "/:projectId/issues/:issueId/resolution-evidence-bases",
-  ], (req, res, next) => {
+  // Authenticate before Express decodes any path parameter, including malformed IDs.
+  router.use((req, res, next) => {
     res.set("Cache-Control", "no-store");
     const auth = checkS32PrivateAuth(config, req.get("authorization"), req.get("x-private-token"));
     if (!auth.ok) {
       res.status(auth.status).json({ error: { message: auth.message } });
       return;
     }
+    next();
+  });
+
+  // Only Resolution requests consume this service's configuration gate.
+  router.use([
+    "/:projectId/issues/:issueId/resolutions",
+    "/:projectId/issues/:issueId/resolution-evidence-bases",
+  ], (_req, res, next) => {
     if (!config.databaseUrl || !issueResolutions) {
       res.status(503).json({ error: { code: "ISSUE_RESOLUTION_STORE_UNAVAILABLE", message: "工作结论服务尚未配置。" } });
       return;
@@ -125,6 +130,15 @@ export function createIssueResolutionRouter(config: S32Config, issueResolutions:
       res.status(200).json(result);
     }),
   );
+
+  // Routing errors occur before an endpoint's async handler can catch them.
+  const pathError: ErrorRequestHandler = (error, _req, res, _next) => {
+    const [status, body] = toHttpError(
+      error instanceof URIError ? new InvalidIssueResolutionInputError() : error,
+    );
+    res.status(status).json({ error: body });
+  };
+  router.use(pathError);
 
   return router;
 }
