@@ -424,13 +424,13 @@ process.stdout.write = function(chunk, ...args) {
             # An actual OS pipe with no reader, not a mocked callback/error.
             proc.stdout.close()
             proc.stdout = None
-        _, stderr = proc.communicate(timeout=60)
+        stdout, stderr = proc.communicate(timeout=60)
         self.assertNotEqual(proc.returncode, 0)
         self.assert_no_runtime_profile_leak()
         self.assertTrue(self.wait_for_devtools_closed(10000 + proc.pid % 50000))
         self.assertFalse(self.out.exists(), "failed PASS output left canonical evidence")
         self.assertEqual(list(Path(self.tmp.name).glob(".r7-web-receipt.*.tmp")), [])
-        self.assertIn("R7_BROWSER_RECEIPT=FAIL", stderr)
+        self.assertIn("R7_BROWSER_RECEIPT=FAIL", stderr, f"stdout={stdout!r}; stderr={stderr!r}")
         self.assertIn("PASS_STDOUT_FAILED:" + ("EPIPE" if broken_pipe else "EIO"), stderr)
         self.assertNotIn("Unhandled 'error' event", stderr)
 
