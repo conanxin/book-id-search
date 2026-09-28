@@ -310,7 +310,18 @@ async function produce() {
   let publishedReceipt = false;
   let receiptIdentity = null;
 
-  function failPublishedReceipt(reason) {
+  function failPublishedReceipt(reason, useStderr = false) {
+    const report = (failure) => {
+      if (!useStderr) fail(failure);
+      // stdout may be a broken pipe. Report synchronously through stderr,
+      // without starting another write to the failed stream.
+      try {
+        fs.writeSync(2, `R7_BROWSER_RECEIPT=FAIL\nREASON=${failure}\n`);
+      } catch {
+        // Even if both output streams are unavailable, preserve exit 1.
+      }
+      process.exit(1);
+    };
     // This invocation owns only the local OUT inode it just linked. Production
     // recording must wait for producer exit 0; never remove another writer's OUT.
     try {
@@ -322,9 +333,9 @@ async function produce() {
       publishedReceipt = false;
       if (pendingReceiptPath) fs.rmSync(pendingReceiptPath, { force: true });
     } catch {
-      fail("RECEIPT_TERMINATION_CLEANUP_FAILED");
+      report("RECEIPT_FAILURE_CLEANUP_FAILED");
     }
-    fail(reason);
+    report(reason);
   }
 
   const requestTermination = (signal) => {
@@ -674,9 +685,20 @@ async function produce() {
   // link/unlink can also block signal dispatch. A queued termination withdraws
   // this invocation's local receipt before PASS can be reported.
   await new Promise((resolve) => setImmediate(() => setImmediate(resolve)));
-  await new Promise((resolve) => {
-    process.stdout.write(`R7_BROWSER_RECEIPT=PASS\nRUNNER_MODE=${MODE}\nRECEIPT=${OUT}\n`, resolve);
-  });
+  const failPassOutput = (error) => {
+    failPublishedReceipt(`PASS_STDOUT_FAILED:${error && error.code ? error.code : "UNKNOWN"}`, true);
+  };
+  process.stdout.on("error", failPassOutput);
+  try {
+    await new Promise((resolve) => {
+      process.stdout.write(`R7_BROWSER_RECEIPT=PASS\nRUNNER_MODE=${MODE}\nRECEIPT=${OUT}\n`, (error) => {
+        if (error) failPassOutput(error);
+        resolve();
+      });
+    });
+  } catch (error) {
+    failPassOutput(error);
+  }
   // A slow stdout write is another synchronous window. Keep signal handlers
   // through natural exit, including this last drain. If output already reached
   // the pipe, exit 1 plus an absent receipt still prevents its acceptance.

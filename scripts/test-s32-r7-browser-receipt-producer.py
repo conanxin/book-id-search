@@ -379,6 +379,48 @@ process.stdout.write = function(chunk, ...args) {
     def test_sigint_during_pass_stdout_fails_closed(self):
         self.run_first_signal_during_cleanup_case(signal.SIGINT, phase="stdout")
 
+    def run_failed_pass_output_case(self, *, broken_pipe):
+        env = dict(os.environ, TMPDIR=self.tmp.name)
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            env["S32_R7_FIXTURE_PORT"] = str(sock.getsockname()[1])
+        node_args = []
+        if not broken_pipe:
+            preload = Path(self.tmp.name) / "throw-pass-output.cjs"
+            preload.write_text("""
+const originalWrite = process.stdout.write;
+process.stdout.write = function(chunk, ...args) {
+  if (String(chunk).startsWith('R7_BROWSER_RECEIPT=PASS')) {
+    throw Object.assign(new Error('local failing sink'), {code: 'EIO'});
+  }
+  return originalWrite.call(this, chunk, ...args);
+};
+""")
+            node_args = ["--require", str(preload)]
+        proc = subprocess.Popen(
+            ["node", *node_args, str(PRODUCER), "fixture", str(self.out), FP, PID, CTRL],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
+        )
+        if broken_pipe:
+            # An actual OS pipe with no reader, not a mocked callback/error.
+            proc.stdout.close()
+            proc.stdout = None
+        _, stderr = proc.communicate(timeout=60)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assert_no_runtime_profile_leak()
+        self.assertTrue(self.wait_for_devtools_closed(10000 + proc.pid % 50000))
+        self.assertFalse(self.out.exists(), "failed PASS output left canonical evidence")
+        self.assertEqual(list(Path(self.tmp.name).glob(".r7-web-receipt.*.tmp")), [])
+        self.assertIn("R7_BROWSER_RECEIPT=FAIL", stderr)
+        self.assertIn("PASS_STDOUT_FAILED:" + ("EPIPE" if broken_pipe else "EIO"), stderr)
+        self.assertNotIn("Unhandled 'error' event", stderr)
+
+    def test_closed_stdout_pipe_withdraws_receipt(self):
+        self.run_failed_pass_output_case(broken_pipe=True)
+
+    def test_throwing_pass_stdout_withdraws_receipt(self):
+        self.run_failed_pass_output_case(broken_pipe=False)
+
     def test_settled_cdp_timeout_does_not_keep_node_alive(self):
         # Run the real helper with a real Node timer: either settled branch
         # must allow natural process exit without waiting for the deadline.
