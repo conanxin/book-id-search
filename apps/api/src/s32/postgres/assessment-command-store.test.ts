@@ -66,6 +66,12 @@ const COMMAND: AssessmentCreateCommand = {
 function scopeRow(projectState = "ACTIVE", issueState = "OPEN") {
   return {
     project_id: P,
+    project_created_at: new Date("2026-01-01T00:00:00Z"),
+    project_updated_at: new Date("2026-01-01T00:00:00Z"),
+    issue_created_at: new Date("2026-01-01T00:00:00Z"),
+    issue_updated_at: new Date("2026-01-01T00:00:00Z"),
+    issue_binding_created_at: new Date("2026-01-01T00:00:00Z"),
+    current_resolution_id: null,
     project_name: "Project",
     project_state: projectState,
     issue_id: I,
@@ -76,6 +82,8 @@ function scopeRow(projectState = "ACTIVE", issueState = "OPEN") {
     owner_project_id: P,
     issue_binding_role: null,
     issue_binding_metadata: {},
+    relation_issue_id: I,
+    claim_id: C,
     relation_claim_id: C,
     claim_statement: "Candidate",
     claim_state: "ACTIVE",
@@ -197,6 +205,7 @@ function fakePool(options: Options = {}) {
     if (text === "SELECT id FROM core.research_issues WHERE id=$1 FOR UPDATE") return { rows: [{ id: I }] };
     if (text.startsWith("SELECT issue_id,claim_id FROM core.research_issue_claims")) return { rows: [{ issue_id: I, claim_id: C }] };
     if (text === "SELECT id FROM core.claims WHERE id=$1 FOR UPDATE") return { rows: [{ id: C }] };
+    if (text.includes("FROM core.research_issue_claims ric")) return { rows: [scopeRow(options.projectState, options.issueState)] };
     if (text.includes("FROM core.projects p")) {
       return { rows: [scopeRow(options.projectState, options.issueState)] };
     }

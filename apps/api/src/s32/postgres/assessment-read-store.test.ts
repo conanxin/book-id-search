@@ -26,6 +26,12 @@ function uuid(n: number) {
 function scopeRow() {
   return {
     project_id: P,
+    project_created_at: new Date("2026-01-01T00:00:00Z"),
+    project_updated_at: new Date("2026-01-01T00:00:00Z"),
+    issue_created_at: new Date("2026-01-01T00:00:00Z"),
+    issue_updated_at: new Date("2026-01-01T00:00:00Z"),
+    issue_binding_created_at: new Date("2026-01-01T00:00:00Z"),
+    current_resolution_id: null,
     project_name: "Project",
     project_state: "ACTIVE",
     issue_id: I,
@@ -36,6 +42,8 @@ function scopeRow() {
     owner_project_id: P,
     issue_binding_role: null,
     issue_binding_metadata: {},
+    relation_issue_id: I,
+    claim_id: C,
     relation_claim_id: C,
     claim_statement: "Candidate",
     claim_state: "ACTIVE",
@@ -156,6 +164,7 @@ function fakePool(options: Options = {}) {
     if (sql === "BEGIN ISOLATION LEVEL REPEATABLE READ, READ ONLY" || sql === "COMMIT" || sql === "ROLLBACK") {
       return { rows: [] };
     }
+    if (sql.includes("FROM core.research_issue_claims ric")) return { rows: (options.scopeMissing ? [] : [scopeRow()]) };
     if (sql.includes("FROM core.projects p")) {
       return { rows: options.scopeMissing ? [] : [scopeRow()] };
     }

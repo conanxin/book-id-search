@@ -18,6 +18,12 @@ const nr = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'; // note revision
 function scopeRow(o: any = {}) {
   return {
     project_id: p,
+    project_created_at: new Date("2026-01-01T00:00:00Z"),
+    project_updated_at: new Date("2026-01-01T00:00:00Z"),
+    issue_created_at: new Date("2026-01-01T00:00:00Z"),
+    issue_updated_at: new Date("2026-01-01T00:00:00Z"),
+    issue_binding_created_at: new Date("2026-01-01T00:00:00Z"),
+    current_resolution_id: null,
     project_name: o.projectName ?? 'project name',
     project_state: o.projectState ?? 'ACTIVE',
     issue_id: i,
@@ -28,6 +34,8 @@ function scopeRow(o: any = {}) {
     owner_project_id: o.owner ?? p,
     issue_binding_role: null,
     issue_binding_metadata: {},
+    relation_issue_id: i,
+    claim_id: c,
     relation_claim_id: c,
     claim_statement: o.claimStatement ?? 'claim statement',
     claim_state: o.claimState ?? 'ACTIVE',
@@ -75,12 +83,15 @@ function setup(o: any = {}) {
   const query = vi.fn(async (sql: string) => {
     if (o.fail && sql.includes(o.fail)) throw Object.assign(new Error('SECRET'), { code: o.code });
     if (sql.includes('WITH requested')) return { rows: o.authorized ?? [{ ordinal: 1, ok: true }] };
+    if (sql.includes('FROM core.research_issue_claims ric')) {
+      return { rows: (o.scope ?? [scopeRow(o)]).filter((row: any) => row.relation_claim_id !== null) };
+    }
     if (sql.includes('FROM core.projects p')) {
       // Two-pass pattern: loadScope runs the scope SQL; if a "missing Issue"
       // condition is requested, the FIRST scope SQL returns a row with
       // issue_id=null and a SECOND dangling-binding probe follows.
       if (o.danglingBinding) {
-        return { rows: [{ project_id: p, project_name: 'project name', project_state: 'ACTIVE', issue_id: null, issue_title: null, issue_question: null, issue_state: null, issue_binding_id: null, owner_project_id: null, issue_binding_role: null, issue_binding_metadata: null, relation_claim_id: null, claim_statement: null, claim_state: null, claim_type: null, subject_type: null, subject_id: null, claim_metadata: null, claim_created_at: new Date(), claim_updated_at: new Date() }] };
+        return { rows: [{ ...scopeRow(), project_id: p, project_name: 'project name', project_state: 'ACTIVE', issue_id: null, issue_title: null, issue_question: null, issue_state: null, issue_binding_id: null, owner_project_id: null, issue_binding_role: null, issue_binding_metadata: null, relation_claim_id: null, claim_statement: null, claim_state: null, claim_type: null, subject_type: null, subject_id: null, claim_metadata: null, claim_created_at: new Date(), claim_updated_at: new Date() }] };
       }
       if (o.missingIssue) return { rows: [] };
       return { rows: o.scope ?? [scopeRow(o)] };
