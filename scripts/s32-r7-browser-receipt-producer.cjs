@@ -212,10 +212,17 @@ class Cdp {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function withTimeout(promise, ms, label) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(label)), ms)),
-  ]);
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(label)), ms);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function produce() {
@@ -313,8 +320,10 @@ async function produce() {
   };
   const onSigint = () => requestTermination("SIGINT");
   const onSigterm = () => requestTermination("SIGTERM");
-  process.once("SIGINT", onSigint);
-  process.once("SIGTERM", onSigterm);
+  // Repeated signals must not restore Node's immediate-exit default while
+  // process/profile or pending-receipt cleanup is still in progress.
+  process.on("SIGINT", onSigint);
+  process.on("SIGTERM", onSigterm);
 
   const abortOnTermination = async (promise) => Promise.race([
     promise,
@@ -404,7 +413,8 @@ async function produce() {
           expression,
           returnByValue: true,
           awaitPromise: true,
-        }));        if (result.exceptionDetails) {
+        }));
+        if (result.exceptionDetails) {
           throw new Error(`EVAL_FAILED:${result.exceptionDetails.text}`);
         }
         return result.result.value;
@@ -598,8 +608,6 @@ async function produce() {
       cleanupFailure = cleanupFailure || "CHROME_PROFILE_CLEANUP_FAILED";
     }
     if (fixtureServer) fixtureServer.close();
-    process.removeListener("SIGINT", onSigint);
-    process.removeListener("SIGTERM", onSigterm);
   }
 
   if (terminationSignal) deferredFailure = `TERMINATED_BY_${terminationSignal}`;
@@ -636,6 +644,9 @@ async function produce() {
   }
 
   process.stdout.write(`R7_BROWSER_RECEIPT=PASS\nRUNNER_MODE=${MODE}\nRECEIPT=${OUT}\n`);
+  // Failure paths exit only after pending cleanup, with handlers still active.
+  process.removeListener("SIGINT", onSigint);
+  process.removeListener("SIGTERM", onSigterm);
 }
 
 produce();

@@ -196,16 +196,39 @@ class ProducerTest(unittest.TestCase):
             time.sleep(0.05)
         return False
 
-    def run_signal_cleanup_case(self, sig):
+    def run_signal_cleanup_case(self, sig, *, repeat_during_cleanup=False):
         out2 = Path(self.tmp.name) / f"signal-{sig.name.lower()}.web.env"
         env = dict(os.environ)
         env["TMPDIR"] = self.tmp.name
         env["S32_R7_BROWSER_TOKEN"] = "TOKEN_SENTINEL"
+        node_options = []
+        cleanup_entered = Path(self.tmp.name) / "cleanup-entered"
+        cleanup_release = Path(self.tmp.name) / "cleanup-release"
+        if repeat_during_cleanup:
+            # Delay the real profile deletion so a second OS signal arrives
+            # after the first signal's handler, while teardown is still active.
+            preload = Path(self.tmp.name) / "slow-profile-cleanup.cjs"
+            preload.write_text("""
+const fs = require('fs');
+const path = require('path');
+const originalRm = fs.rmSync;
+fs.rmSync = function(target, ...args) {
+  if (path.basename(String(target)).startsWith('s32-r7-chrome-profile-')) {
+    fs.writeFileSync(path.join(process.env.TMPDIR, 'cleanup-entered'), 'ready');
+    const deadline = Date.now() + 5000;
+    while (!fs.existsSync(path.join(process.env.TMPDIR, 'cleanup-release')) && Date.now() < deadline) {
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+    }
+  }
+  return originalRm.call(this, target, ...args);
+};
+""")
+            node_options = ["--require", str(preload)]
 
         with production_like_signal_server() as (base, token_reload_seen):
             env["S32_R7_BROWSER_URL"] = f"{base}/research/projects"
             proc = subprocess.Popen(
-                ["node", str(PRODUCER), "browser", str(out2), FP, PID, CTRL],
+                ["node", *node_options, str(PRODUCER), "browser", str(out2), FP, PID, CTRL],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -225,6 +248,14 @@ class ProducerTest(unittest.TestCase):
             self.assertTrue(profiles, "isolated Chromium profile never appeared")
 
             proc.send_signal(sig)
+            if repeat_during_cleanup:
+                deadline = time.monotonic() + 10
+                while not cleanup_entered.exists() and proc.poll() is None and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                self.assertTrue(cleanup_entered.exists(), "producer did not reach profile teardown")
+                proc.send_signal(sig)
+                time.sleep(0.1)
+                cleanup_release.touch()
             stdout, stderr = proc.communicate(timeout=30)
 
         self.assertNotEqual(proc.returncode, 0, stdout + stderr)
@@ -246,6 +277,26 @@ class ProducerTest(unittest.TestCase):
 
     def test_sigint_after_token_reload_routes_through_teardown(self):
         self.run_signal_cleanup_case(signal.SIGINT)
+
+    def test_repeated_sigterm_during_profile_cleanup_stays_structured(self):
+        self.run_signal_cleanup_case(signal.SIGTERM, repeat_during_cleanup=True)
+
+    def test_repeated_sigint_during_profile_cleanup_stays_structured(self):
+        self.run_signal_cleanup_case(signal.SIGINT, repeat_during_cleanup=True)
+
+    def test_settled_cdp_timeout_does_not_keep_node_alive(self):
+        # Run the real helper with a real Node timer: either settled branch
+        # must allow natural process exit without waiting for the deadline.
+        source = PRODUCER.read_text()
+        helper = source[source.index("async function withTimeout("):source.index("\nasync function produce()")]
+        for promise in ("Promise.resolve('ready')", "Promise.reject(new Error('connect failed'))"):
+            with self.subTest(promise=promise):
+                script = helper + f"\nwithTimeout({promise}, 10000, 'deadline').then(() => {{}}, () => {{}});\n"
+                try:
+                    result = subprocess.run(["node", "-e", script], capture_output=True, text=True, timeout=2)
+                except subprocess.TimeoutExpired:
+                    self.fail("settled CDP race left its 10-second timer alive")
+                self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_happy_path_writes_receipt(self):
         r = self.run_producer()
