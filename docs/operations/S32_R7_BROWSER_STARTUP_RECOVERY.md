@@ -84,7 +84,10 @@ non-Node entrypoint `scripts/recover-s32-r7-browser-acceptance.sh --recover-brow
 OUT FP PROJECT_ID CTRL` (direct executable or `/bin/sh`, never a shell with
 startup hooks). It rejects NODE_OPTIONS, NODE_PATH, runtime loader injections,
 Node trust overrides and shell startup hooks **before Node starts**. It passes
-no caller-selected Node flags. Direct Node recovery is rejected; fixture mode
+no caller-selected Node flags. Git repository/configuration environment overrides
+are rejected so identity checks cover the executing checkout. Production recovery
+is pinned to `https://books.conanxin.com/research/projects`; any different URL
+is rejected before consuming a claim. Direct Node recovery is rejected; fixture mode
 remains separate. Installed Node/Chrome, PATH and the local filesystem must be
 trusted; this is not cryptographic attestation against a malicious local owner.
 Production credential handling remains process memory/sessionStorage only.
@@ -102,9 +105,13 @@ use invented identities/authorization in disposable local directories.
 ## Existing recorder compatibility and future boundary
 
 The incident executor remains byte-identical. Its Web validator permits extra
-non-secret fields and hashes all of them. Deterministic local tests run a real
-loopback browser recovery, then the unchanged external Web recorder and
-complete-r7 with disposable test-mode receipts; tampering is rejected.
+non-secret fields and hashes all of them. The separate `--local-browser-fixture`
+entrypoint permits only HTTP loopback, still exercises the one-shot synthetic
+authorization/claim, and always publishes `RUNNER_MODE=fixture`. The unchanged
+external Web recorder rejects that receipt. Independent deterministic contract
+tests use explicitly synthetic browser evidence with recovery provenance to
+exercise the unchanged recorder and complete-r7 in disposable test-mode state;
+tampering is rejected. No local fixture proves production browser acceptance.
 The existing production recorder does **not** independently require the new
 provenance keys. Before any future upload, the authorized operator must validate
 both keys, their exact values, receipt hash/mode, producer exit zero and cleanup,

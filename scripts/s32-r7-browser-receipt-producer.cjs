@@ -19,8 +19,10 @@ const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 
 const REQUESTED_MODE = process.argv[2] || "";
-const RECOVERY = ["recovery-fixture", "recovery-browser"].includes(REQUESTED_MODE);
-const MODE = RECOVERY ? REQUESTED_MODE.slice("recovery-".length) : REQUESTED_MODE;
+const LOCAL_RECOVERY_BROWSER = REQUESTED_MODE === "recovery-browser-fixture";
+const RECOVERY = LOCAL_RECOVERY_BROWSER || ["recovery-fixture", "recovery-browser"].includes(REQUESTED_MODE);
+const MODE = LOCAL_RECOVERY_BROWSER ? "browser" : RECOVERY ? REQUESTED_MODE.slice("recovery-".length) : REQUESTED_MODE;
+const RECEIPT_MODE = LOCAL_RECOVERY_BROWSER ? "fixture" : MODE;
 const OUT = process.argv[3] || "";
 const FP = process.argv[4] || "";
 const PROJECT_ID = process.argv[5] || "";
@@ -124,6 +126,12 @@ if (MODE === "browser") {
   const normalizedPath = BROWSER_TARGET.pathname.replace(/\/+$/, "");
   if (normalizedPath !== "/research/projects") fail("BROWSER_URL_NOT_PROJECT_LIST");
   const loopback = BROWSER_TARGET.hostname === "127.0.0.1" || BROWSER_TARGET.hostname === "localhost";
+  if (RECOVERY && !LOCAL_RECOVERY_BROWSER && TARGET_URL !== "https://books.conanxin.com/research/projects") {
+    fail("RECOVERY_PRODUCTION_URL_REQUIRED");
+  }
+  if (LOCAL_RECOVERY_BROWSER && (!loopback || BROWSER_TARGET.protocol !== "http:")) {
+    fail("RECOVERY_FIXTURE_LOOPBACK_REQUIRED");
+  }
   if (!loopback) {
     if (BROWSER_TARGET.protocol !== "https:" || BROWSER_TARGET.origin !== "https://books.conanxin.com") {
       fail("BROWSER_URL_UNTRUSTED_ORIGIN");
@@ -643,7 +651,7 @@ async function produce() {
         `RUNNER_VERSION=${RUNNER_VERSION}`,
         `RUNNER_SOURCE_SHA=${RUNNER_SOURCE_SHA}`,
         `RUNNER_ID=${RUNNER_ID}`,
-        `RUNNER_MODE=${MODE}`,
+        `RUNNER_MODE=${RECEIPT_MODE}`,
         ...recoveryProvenance,
       ];
 
@@ -756,7 +764,7 @@ async function produce() {
   process.stdout.on("error", failPassOutput);
   try {
     await new Promise((resolve) => {
-      process.stdout.write(`R7_BROWSER_RECEIPT=PASS\nRUNNER_MODE=${MODE}\nRECEIPT=${OUT}\n`, (error) => {
+      process.stdout.write(`R7_BROWSER_RECEIPT=PASS\nRUNNER_MODE=${RECEIPT_MODE}\nRECEIPT=${OUT}\n`, (error) => {
         if (error) failPassOutput(error);
         resolve();
       });

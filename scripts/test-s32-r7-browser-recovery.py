@@ -72,7 +72,7 @@ class RecoveryTests(unittest.TestCase):
         with socket.socket() as s:
             s.bind(('127.0.0.1',0));env['S32_R7_FIXTURE_PORT']=str(s.getsockname()[1])
         env.update(extra)
-        entry=['/bin/sh',str(LAUNCHER),'--recover-browser'] if mode=='recovery-browser' else ['node',str(PRODUCER),mode]
+        entry=['/bin/sh',str(LAUNCHER),'--local-browser-fixture'] if mode=='recovery-browser' else ['node',str(PRODUCER),mode]
         return subprocess.run([*entry,str(self.out),self.x.fp,PID,executor.CTRL],
                               env=env,capture_output=True,text=True,timeout=120)
 
@@ -147,7 +147,7 @@ class RecoveryTests(unittest.TestCase):
         self.assert_unchanged()
 
     def test_direct_node_recovery_requires_non_node_launcher(self):
-        env=dict(os.environ,S32_R7_BROWSER_URL='http://127.0.0.1:1/research/projects',
+        env=dict(os.environ,S32_R7_BROWSER_URL='https://books.conanxin.com/research/projects',
                  S32_R7_BROWSER_TOKEN='LOCAL_RECOVERY_SENTINEL')
         env.pop('S32_R7_RECOVERY_LAUNCHER',None)
         r=subprocess.run(['node',str(PRODUCER),'recovery-browser',str(self.out),self.x.fp,PID,executor.CTRL],
@@ -163,6 +163,38 @@ class RecoveryTests(unittest.TestCase):
         self.assertIn('RECOVERY_AUTHORIZATION_REQUIRED',r.stdout)
         self.assertFalse(self.out.exists());self.assertFalse(self.claim.exists());self.assert_unchanged()
 
+    def test_git_repository_overrides_are_rejected_before_claim(self):
+        self.authorize_fixture()
+        with browser.production_like_server() as url:
+            for key in ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE',
+                        'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+                        'GIT_CONFIG_COUNT', 'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_GLOBAL',
+                        'GIT_CONFIG_SYSTEM', 'GIT_CONFIG_NOSYSTEM']:
+                with self.subTest(variable=key):
+                    r = self.produce(mode='recovery-browser', url=url, **{key: str(self.x.root)})
+                    self.assertNotEqual(r.returncode, 0)
+                    self.assertIn('RECOVERY_GIT_ENVIRONMENT_REJECTED', r.stdout)
+                    self.assertFalse(self.claim.exists()); self.assertFalse(self.out.exists())
+
+    def test_production_entrypoint_rejects_loopback_before_claim(self):
+        self.authorize_fixture()
+        with browser.production_like_server() as url:
+            env = dict(os.environ, S32_R7_BROWSER_URL=url+'/research/projects',
+                       S32_R7_BROWSER_TOKEN='LOCAL_RECOVERY_SENTINEL',
+                       S32_R7_RECOVERY_STATE_DIR=str(self.state), S32_R7_RECOVERY_TOOL_SHA=self.head)
+            r = subprocess.run(['/bin/sh', str(LAUNCHER), '--recover-browser', str(self.out),
+                                self.x.fp, PID, executor.CTRL], env=env, capture_output=True, text=True, timeout=10)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn('RECOVERY_PRODUCTION_URL_REQUIRED', r.stdout)
+        self.assertFalse(self.claim.exists()); self.assertFalse(self.out.exists()); self.assert_unchanged()
+
+    def test_local_browser_fixture_rejects_non_loopback_before_claim(self):
+        self.authorize_fixture()
+        r=self.produce(mode='recovery-browser',url='https://example.invalid')
+        self.assertNotEqual(r.returncode,0)
+        self.assertIn('RECOVERY_FIXTURE_LOOPBACK_REQUIRED',r.stdout)
+        self.assertFalse(self.claim.exists());self.assertFalse(self.out.exists())
+
     def test_recovery_fixture_binds_incident_and_tool_provenance(self):
         r=self.produce();self.assertEqual(r.returncode,0,r.stdout+r.stderr)
         self.assertIn('RUNNER_MODE=fixture',r.stdout)
@@ -173,7 +205,7 @@ class RecoveryTests(unittest.TestCase):
         self.assertNotIn('LOCAL_RECOVERY_SENTINEL',text)
         self.assertFalse(self.claim.exists());self.assert_unchanged()
 
-    def test_authorized_local_browser_then_original_recorder_and_complete(self):
+    def test_authorized_local_browser_fixture_cannot_record_as_production(self):
         self.authorize_fixture()
         oldfp=browser.FP;browser.FP=self.x.fp
         try:
@@ -189,16 +221,10 @@ class RecoveryTests(unittest.TestCase):
                 self.out=self.x.root/'local-recovery.web.env'
         finally: browser.FP=oldfp
         self.assert_unchanged()
+        self.assertIn('RUNNER_MODE=fixture\n', self.out.read_text())
         recorded=self.x.record_web_external(self.out)
-        self.assertEqual(recorded.returncode,0,recorded.stdout+recorded.stderr)
-        self.assertEqual(self.web.read_bytes(),self.out.read_bytes())
-        valid_web=self.web.read_text()
-        write(self.web,valid_web.replace(self.head,'a'*40))
-        tampered=self.x.complete()
-        self.assertNotEqual(tampered.returncode,0);self.assertFalse(self.result.exists())
-        write(self.web,valid_web)
-        done=self.x.complete();self.assertEqual(done.returncode,0,done.stdout+done.stderr)
-        self.assertIn('R7_ACCEPTANCE=PASS',done.stdout);self.assert_unchanged()
+        self.assertNotEqual(recorded.returncode,0)
+        self.assertFalse(self.web.exists()); self.assertFalse(self.result.exists())
 
     def test_failed_recovery_spawn_consumes_local_claim_without_mutating_incident(self):
         self.authorize_fixture()
@@ -241,6 +267,17 @@ class RecoveryTests(unittest.TestCase):
                 write(receipt,change)
                 r=self.x.record_web_external(receipt)
                 self.assertNotEqual(r.returncode,0);self.assertFalse(self.web.exists())
-        self.assert_unchanged()
+        # Deterministic synthetic browser-contract evidence, never a fixture
+        # receipt passed off as a real production acceptance result.
+        write(receipt,valid)
+        recorded=self.x.record_web_external(receipt)
+        self.assertEqual(recorded.returncode,0,recorded.stdout+recorded.stderr)
+        self.assertEqual(self.web.read_bytes(),receipt.read_bytes())
+        write(self.web,valid.replace(self.head,'a'*40))
+        tampered=self.x.complete()
+        self.assertNotEqual(tampered.returncode,0);self.assertFalse(self.result.exists())
+        write(self.web,valid)
+        done=self.x.complete();self.assertEqual(done.returncode,0,done.stdout+done.stderr)
+        self.assertIn('R7_ACCEPTANCE=PASS',done.stdout);self.assert_unchanged()
 
 if __name__=='__main__': unittest.main()

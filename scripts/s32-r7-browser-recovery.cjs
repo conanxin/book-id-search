@@ -43,6 +43,11 @@ function head() {
   return execFileSync("git", ["rev-parse", "HEAD"], { cwd: ROOT, encoding: "utf8" }).trim();
 }
 function checkState({ stateDir, fp, projectId, ctrl, toolSha }) {
+  // Git's environment can redirect cwd-bound identity/status checks elsewhere.
+  // Reject every Git override, including future variables, before invoking Git.
+  if (Object.keys(process.env).some((key) => key.startsWith("GIT_") && process.env[key])) {
+    reject("RECOVERY_GIT_ENVIRONMENT_REJECTED");
+  }
   if (!stateDir || !path.isAbsolute(stateDir)) reject("RECOVERY_STATE_DIRECTORY_REQUIRED");
   const dir = fs.lstatSync(stateDir);
   if (!dir.isDirectory() || (dir.mode & 0o777) !== 0o700) reject("RECOVERY_STATE_DIRECTORY_UNSAFE");
