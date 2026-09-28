@@ -286,6 +286,44 @@ class ProducerTest(unittest.TestCase):
         self.assertIn("PROJECT_ID_MISMATCH", r.stdout)
         self.assert_no_runtime_profile_leak()
 
+    def test_process_group_cleanup_when_chromium_leader_exits_first(self):
+        fake = Path(self.tmp.name) / "fake-chromium.sh"
+        sentinel = f"s32-r7-orphan-sentinel-{os.getpid()}"
+        fake.write_text(
+            "#!/bin/sh\n"
+            f"sh -c 'exec -a {sentinel} sleep 120' &\n"
+            "exit 0\n"
+        )
+        fake.chmod(0o755)
+
+        out2 = Path(self.tmp.name) / "leader-exit.web.env"
+        env = dict(os.environ)
+        env["TMPDIR"] = self.tmp.name
+        env["S32_R7_CHROMIUM"] = str(fake)
+        import random
+        env["S32_R7_FIXTURE_PORT"] = str(random.randint(30000, 39000))
+
+        r = subprocess.run(
+            ["node", str(PRODUCER), "fixture", str(out2), FP, PID, CTRL],
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=120,
+        )
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("DEVTOOLS_ENDPOINT_TIMEOUT", r.stdout)
+        self.assertFalse(out2.exists())
+
+        ps = subprocess.run(
+            ["ps", "-eo", "args="],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        self.assertEqual(ps.returncode, 0, ps.stderr)
+        self.assertNotIn(sentinel, ps.stdout)
+        self.assert_no_runtime_profile_leak()
+
     def test_chromium_uses_isolated_nondefault_user_data_dir(self):
         text = PRODUCER.read_text()
         self.assertIn('fs.mkdtempSync(path.join(os.tmpdir(), "s32-r7-chrome-profile-"))', text)
