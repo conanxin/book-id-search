@@ -689,8 +689,12 @@ async function produce() {
     clearTimeout(watchdog);
     try {
       await terminateChromeGroup();
-    } catch {
-      cleanupFailure = "CHROMIUM_PROCESS_GROUP_TIMEOUT";
+    } catch (error) {
+      // Do not mislabel a failed /proc proof as a live-group timeout. Preserve
+      // only our bounded non-secret reason codes, never arbitrary error text.
+      const reason = String(error && error.message);
+      cleanupFailure = /^(CHROMIUM_PROCESS_GROUP_TIMEOUT|PROC_(SCAN_FAILED|STAT_FAILED):[A-Z0-9_]+|PROC_STAT_PARSE_FAILED)$/.test(reason)
+        ? reason : "CHROMIUM_PROCESS_GROUP_CLEANUP_FAILED";
     }
     try {
       if (chromeProfileDir) fs.rmSync(chromeProfileDir, { recursive: true, force: true });

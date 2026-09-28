@@ -610,6 +610,32 @@ fs.rmSync=function(target,...args) {
     def test_short_parent_tmpdir_control_and_owned_root_cleanup(self):
         self.run_temp_topology_case(long_parent=False)
 
+    def test_proc_scan_read_and_parse_errors_fail_closed_with_precise_reason(self):
+        preload = Path(self.tmp.name) / 'proc-failure.cjs'
+        preload.write_text(r"""
+const fs=require('fs');const list=fs.readdirSync,read=fs.readFileSync;
+fs.readdirSync=function(p,...args){
+  if(p==='/proc' && process.env.PROC_FAULT==='scan')throw Object.assign(new Error('injected'),{code:'EACCES'});
+  return list.call(this,p,...args);
+};
+fs.readFileSync=function(p,...args){
+  if(/^\/proc\/[0-9]+\/stat$/.test(String(p))){
+    if(process.env.PROC_FAULT==='read')throw Object.assign(new Error('injected'),{code:'EIO'});
+    if(process.env.PROC_FAULT==='parse')return 'malformed';
+  }
+  return read.call(this,p,...args);
+};
+""")
+        for fault,reason in [('scan','PROC_SCAN_FAILED:EACCES'),('read','PROC_STAT_FAILED:EIO'),
+                             ('parse','PROC_STAT_PARSE_FAILED')]:
+            with self.subTest(fault=fault):
+                r=self.run_producer(f"NODE_OPTIONS={os.environ['NODE_OPTIONS']} --require={preload}",f'PROC_FAULT={fault}')
+                self.assertNotEqual(r.returncode,0)
+                self.assertIn('REASON='+reason,r.stdout)
+                self.assertFalse(self.out.exists())
+                self.assertEqual(list(Path(self.tmp.name).glob('.r7-web-receipt.*.tmp')),[])
+                self.assert_no_runtime_profile_leak()
+
     def test_fake_chrome_receives_private_short_tmpdir_without_token(self):
         self.run_temp_topology_case(long_parent=True, fake=True)
 
