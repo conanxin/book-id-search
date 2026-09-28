@@ -43,7 +43,7 @@ function git(args) {
   // Identity checks require no credential and must not run configured monitors.
   const env = { PATH: process.env.PATH, HOME: process.env.HOME, LANG: "C",
     GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" };
-  return execFileSync("git", ["--no-optional-locks", "-c", "core.fsmonitor=false", ...args],
+  return execFileSync("git", ["--no-replace-objects", "--no-optional-locks", "-c", "core.fsmonitor=false", ...args],
     { cwd: ROOT, env, encoding: "utf8" }).trim();
 }
 function head() {
@@ -54,6 +54,9 @@ function checkState({ stateDir, fp, projectId, ctrl, toolSha }) {
   // Reject every Git override, including future variables, before invoking Git.
   if (Object.keys(process.env).some((key) => key.startsWith("GIT_") && process.env[key])) {
     reject("RECOVERY_GIT_ENVIRONMENT_REJECTED");
+  }
+  if (git(["for-each-ref", "--format=%(refname)", "refs/replace"])) {
+    reject("RECOVERY_GIT_REPLACEMENTS_REJECTED");
   }
   if (!stateDir || !path.isAbsolute(stateDir)) reject("RECOVERY_STATE_DIRECTORY_REQUIRED");
   const dir = fs.lstatSync(stateDir);

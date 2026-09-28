@@ -252,6 +252,39 @@ class RecoveryTests(unittest.TestCase):
                 finally: target.write_text(original)
         self.assert_unchanged()
 
+    def test_replacement_refs_cannot_rebind_build_or_runtime_provenance(self):
+        clone=self.x.root/'replacement-checkout'
+        subprocess.run(['git','clone','--quiet','--shared','--no-checkout',str(ROOT),str(clone)],check=True)
+        def git(*args):
+            return subprocess.check_output(['git','-C',str(clone),*args],text=True).strip()
+        git('checkout','--quiet','--detach',self.head)
+        binary=self.x.root/'original-launcher'
+        builder=[sys.executable,str(clone/'scripts/build-s32-r7-recovery-launcher.py')]
+        subprocess.run([*builder,str(binary)],check=True,capture_output=True,text=True)
+        producer=clone/'scripts/s32-r7-browser-receipt-producer.cjs'
+        producer.write_text(producer.read_text().replace('"use strict";',
+                            '"use strict";/* REPLACEMENT_SENTINEL */',1))
+        git('add',str(producer))
+        git('-c','user.name=Fixture','-c','user.email=fixture@example.invalid',
+            'commit','--quiet','-m','replacement fixture')
+        replacement=git('rev-parse','HEAD')
+        git('replace',self.head,replacement);git('reset','--hard',self.head)
+        self.assertEqual(git('rev-parse','HEAD'),self.head)
+        self.assertEqual(git('status','--porcelain'),'')
+        blocked=self.x.root/'must-not-embed'
+        r=subprocess.run([*builder,str(blocked)],capture_output=True,text=True)
+        self.assertNotEqual(r.returncode,0)
+        self.assertIn('BUILD_GIT_REPLACEMENTS_REJECTED',r.stdout);self.assertFalse(blocked.exists())
+        self.authorize_fixture()
+        env=dict(os.environ,S32_R7_BROWSER_URL='http://127.0.0.1:1/research/projects',
+                 S32_R7_BROWSER_TOKEN='LOCAL_REPLACEMENT_SENTINEL',
+                 S32_R7_RECOVERY_STATE_DIR=str(self.state),S32_R7_RECOVERY_TOOL_SHA=self.head)
+        r=subprocess.run([str(binary),'--local-browser-fixture',str(self.out),self.x.fp,PID,executor.CTRL],
+                         env=env,capture_output=True,text=True,timeout=20)
+        self.assertNotEqual(r.returncode,0)
+        self.assertIn('RECOVERY_GIT_REPLACEMENTS_REJECTED',r.stdout)
+        self.assertFalse(self.claim.exists());self.assertFalse(self.out.exists());self.assert_unchanged()
+
     def test_path_discovery_executes_chromium_without_lookup_shell(self):
         fakebin=self.x.root/'path-bin';fakebin.mkdir()
         shell_marker=self.x.root/'shell-ran';chrome_marker=self.x.root/'chrome-ran'

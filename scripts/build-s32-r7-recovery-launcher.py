@@ -7,6 +7,7 @@ the reviewed checkout and verify its printed hash at the authorization gate.
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -20,7 +21,7 @@ ROOT = Path(__file__).resolve().parent
 def git(*args):
     env = {k:v for k,v in os.environ.items() if not k.startswith('GIT_')}
     env.update(GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL='/dev/null')
-    return subprocess.check_output(['git', '--no-optional-locks', '-c', 'core.fsmonitor=false',
+    return subprocess.check_output(['git', '--no-replace-objects', '--no-optional-locks', '-c', 'core.fsmonitor=false',
                                     '-C', str(ROOT.parent), *args], env=env)
 
 
@@ -51,6 +52,8 @@ def build(out):
         raise RuntimeError('BUILD_REQUIRES_CREDENTIAL_FREE_ENVIRONMENT')
     if out.exists() or out.is_symlink():
         raise RuntimeError('OUTPUT_ALREADY_EXISTS')
+    if git('for-each-ref', '--format=%(refname)', 'refs/replace').strip():
+        raise RuntimeError('BUILD_GIT_REPLACEMENTS_REJECTED')
     if git('status', '--porcelain', '--untracked-files=normal').strip():
         raise RuntimeError('BUILD_REQUIRES_CLEAN_CHECKOUT')
     head = git('rev-parse', 'HEAD').decode().strip()
@@ -93,5 +96,6 @@ if __name__ == '__main__':
             raise RuntimeError('ABSOLUTE_OUTPUT_REQUIRED')
         build(output)
     except Exception as error:
-        print('STATUS=FAIL\nREASON=' + type(error).__name__)
+        reason = str(error) if isinstance(error, RuntimeError) and re.fullmatch('[A-Z0-9_]+', str(error)) else type(error).__name__
+        print('STATUS=FAIL\nREASON=' + reason)
         sys.exit(1)

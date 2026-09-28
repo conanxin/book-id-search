@@ -88,6 +88,10 @@ publishes mode0700 exclusively, and prints its SHA256. Record that binary hash,
 exact tool HEAD and checkout path in the future authorization packet; verify them
 again before invocation. Keep the binary outside the clean checkout. Its embedded
 HEAD and checkout path bind it to that checkout; rebuild/review if the checkout moves.
+Every build/runtime Git operation ignores replacement objects, and any local
+`refs/replace` entry blocks preparation or execution before the claim. Separate
+clone tests cover a replacement commit that otherwise reports the approved HEAD
+and a clean status.
 
 Set `S32_R7_RECOVERY_STATE_DIR` and `S32_R7_RECOVERY_TOOL_SHA`, then invoke the
 verified static binary directly as `launcher --recover-browser OUT FP PROJECT_ID
