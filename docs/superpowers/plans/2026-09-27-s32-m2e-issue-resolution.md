@@ -861,11 +861,14 @@ Add:
 "s32:m2e:check": "tsx scripts/s32-m2e-integration-check.ts"
 ```
 
-The runner must apply:
+The runner must import and consume `readS32MigrationChain(root)` from
+`scripts/s32-migration-chain.ts`, just like the existing runners refactored
+in Task 1. Do not copy a separate 001/002 path list into this runner.
+The shared chain must be applied completely, in its configured order,
+before the synthetic fixture and integration tests:
 
 ```text
-001_s32_core_schema.sql
-002_s32_m2e_issue_resolution.sql
+readS32MigrationChain(root) (currently 001 then 002)
 M2-E synthetic fixture
 issue-resolution-store.integration.test.ts
 ```
