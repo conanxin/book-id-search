@@ -18,6 +18,7 @@ import type {
 import {
   buildEvidenceManifestDraft,
   normalizeEvidenceItemNote,
+  normalizeEvidencePreviewInput,
   type EvidenceDraftInputItem,
 } from "../domain/evidence-selection.js";
 import { normalizeCandidateClaimStatement } from "../domain/candidate-claim.js";
@@ -329,6 +330,13 @@ function canonicalBasis(
     targetId,
     note,
   }));
+  // Keep eligible read bases compatible with the frozen command contract,
+  // including target-pair uniqueness even when the Manifest hash is valid.
+  try {
+    normalizeEvidencePreviewInput({ items: draft });
+  } catch {
+    integrity("MANIFEST_ITEMS_CANONICAL_INVALID");
+  }
   if (buildEvidenceManifestDraft(draft).manifestSha256 !== row.manifest_sha256)
     integrity("MANIFEST_HASH_MISMATCH");
   const manifest: Manifest = {

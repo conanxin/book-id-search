@@ -1006,3 +1006,30 @@ it("query-level unknown exception rolls back and is not masked", async () => {
   expect(d.release).toHaveBeenCalledOnce();
   expect(d.calls.at(-1)?.sql).toBe("ROLLBACK");
 });
+
+it.each(["list", "get", "bases"])(
+  "rejects duplicate Manifest target pairs with a matching SHA in %s",
+  async (op) => {
+    const b = basis();
+    const duplicate = {
+      role: "SUPPORTING" as const,
+      targetType: "SOURCE" as const,
+      targetId: S,
+      note: null,
+    };
+    b.manifest_sha256 = buildEvidenceManifestDraft([
+      duplicate,
+      duplicate,
+    ]).manifestSha256;
+    const d = database({
+      bases: [b],
+      items: [item(b), item(b, { item_id: id(3999), ordinal: 2 })],
+      resolutions: [resolution(4, { evidence_manifest_id: b.manifest_id })],
+    });
+    await expect(run(d, op)).rejects.toBeInstanceOf(
+      IssueResolutionIntegrityError,
+    );
+    expect(d.calls.at(-1)?.sql).toBe("ROLLBACK");
+    expect(d.release).toHaveBeenCalledOnce();
+  },
+);
