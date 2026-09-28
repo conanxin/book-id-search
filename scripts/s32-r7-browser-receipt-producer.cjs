@@ -243,33 +243,47 @@ async function produce() {
     env: chromeEnv,
   });
 
-  const chromeExited = new Promise((resolve) => {
-    let settled = false;
-    const done = () => {
-      if (settled) return;
-      settled = true;
-      resolve();
-    };
-    chrome.once("exit", done);
-    chrome.once("error", done);
-    if (chrome.exitCode !== null || chrome.signalCode !== null) done();
-  });
-
-  const killChrome = () => {
-    if (chrome.exitCode !== null || chrome.signalCode !== null) return;
+  function signalChromeGroup() {
     try {
       process.kill(-chrome.pid, "SIGKILL");
-    } catch {
-      // already gone
+      return;
+    } catch (error) {
+      if (error && error.code === "ESRCH") return;
+      throw error;
     }
-  };
+  }
+
+  function chromeGroupExists() {
+    try {
+      process.kill(-chrome.pid, 0);
+      return true;
+    } catch (error) {
+      if (error && error.code === "ESRCH") return false;
+      throw error;
+    }
+  }
+
+  async function terminateChromeGroup() {
+    signalChromeGroup();
+    for (let i = 0; i < 100; i += 1) {
+      if (!chromeGroupExists()) return;
+      await sleep(50);
+      signalChromeGroup();
+    }
+    throw new Error("CHROMIUM_PROCESS_GROUP_TIMEOUT");
+  }
 
   let watchdogTriggered = false;
   let deferredFailure = null;
   let cleanupFailure = null;
+  let pendingReceiptPath = null;
   const watchdog = setTimeout(() => {
     watchdogTriggered = true;
-    killChrome();
+    try {
+      signalChromeGroup();
+    } catch {
+      // Final teardown performs the authoritative fail-closed check.
+    }
   }, 90000);
   watchdog.unref?.();
 
@@ -476,10 +490,9 @@ async function produce() {
       }
 
       const dir = path.dirname(OUT);
-      const tmp = path.join(dir, `.r7-web-receipt.${process.pid}.tmp`);
-      fs.writeFileSync(tmp, receipt, { mode: 0o600 });
-      fs.chmodSync(tmp, 0o600);
-      fs.renameSync(tmp, OUT);
+      pendingReceiptPath = path.join(dir, `.r7-web-receipt.${process.pid}.tmp`);
+      fs.writeFileSync(pendingReceiptPath, receipt, { mode: 0o600, flag: "wx" });
+      fs.chmodSync(pendingReceiptPath, 0o600);
     } finally {
       cdp.close();
     }
@@ -491,11 +504,10 @@ async function produce() {
     }
   } finally {
     clearTimeout(watchdog);
-    killChrome();
     try {
-      await withTimeout(chromeExited, 5000, "CHROMIUM_TERMINATION_TIMEOUT");
+      await terminateChromeGroup();
     } catch {
-      cleanupFailure = "CHROMIUM_TERMINATION_TIMEOUT";
+      cleanupFailure = "CHROMIUM_PROCESS_GROUP_TIMEOUT";
     }
     try {
       fs.rmSync(chromeProfileDir, { recursive: true, force: true });
@@ -509,15 +521,32 @@ async function produce() {
   }
 
   if (watchdogTriggered) deferredFailure = "WATCHDOG_TIMEOUT";
-  if (cleanupFailure) {
-    deferredFailure = cleanupFailure;
+  if (cleanupFailure) deferredFailure = cleanupFailure;
+
+  if (deferredFailure) {
     try {
-      if (fs.existsSync(OUT)) fs.rmSync(OUT, { force: true });
+      if (pendingReceiptPath) fs.rmSync(pendingReceiptPath, { force: true });
     } catch {
-      // Receipt removal is best-effort; cleanup failure remains terminal.
+      // Temporary receipt cleanup is best-effort after a terminal failure.
     }
+    fail(deferredFailure);
   }
-  if (deferredFailure) fail(deferredFailure);
+
+  if (!pendingReceiptPath || !fs.existsSync(pendingReceiptPath)) {
+    fail("RECEIPT_TEMP_MISSING");
+  }
+  try {
+    fs.linkSync(pendingReceiptPath, OUT);
+    fs.unlinkSync(pendingReceiptPath);
+  } catch {
+    try {
+      fs.rmSync(pendingReceiptPath, { force: true });
+    } catch {
+      // Publication already failed; preserve the primary error.
+    }
+    fail("RECEIPT_PUBLISH_FAILED");
+  }
+
   process.stdout.write(`R7_BROWSER_RECEIPT=PASS\nRUNNER_MODE=${MODE}\nRECEIPT=${OUT}\n`);
 }
 
