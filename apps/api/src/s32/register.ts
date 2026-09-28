@@ -1,3 +1,7 @@
+import { createIssueResolutionsService, type IssueResolutionsService } from "./application/issue-resolutions.js";
+import { createPostgresIssueResolutionCommandStore } from "./postgres/issue-resolution-command-store.js";
+import { createPostgresIssueResolutionReadStore } from "./postgres/issue-resolution-read-store.js";
+import { createIssueResolutionRouter } from "./routes/issue-resolution-routes.js";
 import {createAssessmentsService,type AssessmentsService} from "./application/assessments.js";
 import {createPostgresAssessmentCommandStore} from "./postgres/assessment-command-store.js";
 import {createPostgresAssessmentReadStore} from "./postgres/assessment-read-store.js";
@@ -53,6 +57,7 @@ export function createS32Router(deps: {
   let candidateClaims: CandidateClaimsService | null = null;
   let evidenceSelection: EvidenceSelectionService | null = null;
   let assessments: AssessmentsService | null = null;
+  let issueResolutions: IssueResolutionsService | null = null;
   let researchIssues: ResearchIssuesService | null = null;
   if (config.enabled && config.databaseUrl) {
     const pool = new Pool({ connectionString: config.databaseUrl, connectionTimeoutMillis: 3000, query_timeout: 5000 });
@@ -67,6 +72,10 @@ export function createS32Router(deps: {
       createPostgresAssessmentCommandStore(pool),
       createPostgresAssessmentReadStore(pool),
     );
+    issueResolutions = createIssueResolutionsService(
+      createPostgresIssueResolutionCommandStore(pool),
+      createPostgresIssueResolutionReadStore(pool),
+    );
     researchIssues = createResearchIssuesService(createPostgresResearchIssueStore(pool));
     command = createPromoteCatalogBookCommand({
       reader: createMeiliCatalogBookReader(deps.getCatalogDocument),
@@ -80,6 +89,7 @@ export function createS32Router(deps: {
     createCatalogPromotionHandler({ config, command }),
   );
   router.use("/research-memberships", createResearchMembershipRouter(config, researchMemberships));
+  router.use("/projects", createIssueResolutionRouter(config, issueResolutions));
   router.use("/projects", createProjectOverviewRouter(config, projectOverview));
   router.use("/projects", createCandidateClaimRouter(config, candidateClaims));
   router.use("/projects", createEvidenceSelectionRouter(config, evidenceSelection));
