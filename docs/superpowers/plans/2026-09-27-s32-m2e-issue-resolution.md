@@ -1,6 +1,6 @@
 # S32 M2-E Issue Resolution Implementation Plan
 
-**Status:** Refreshed after R7 terminal closeout; Task 1 follows exact-head planning review and merge  
+**Status:** Refreshed after R7 terminal closeout; Task 1 follows exact-head planning review and merge
 **Task ID:** `S32_M2E_ISSUE_RESOLUTION_IMPLEMENTATION_PLAN_R1`  
 **Written spec:** latest canonical spec on this planning branch (post-review lifecycle/replay corrections)  
 **Source baseline for planning:** `main@d8e6d96672e9cef6a2bab5a35c604fbd83ec83d9`  
@@ -1052,5 +1052,5 @@ S32_ROLLOUT=COMPLETE
 R7_TERMINAL_PASS_REQUIRED_BEFORE_IMPLEMENTATION=YES
 ```
 
-**Next allowed action in the current state:** complete the refreshed PR42 exact-head review/CI and merge.  
+**Next allowed action in the current state:** complete the refreshed PR42 exact-head review/CI and merge.
 **Next code action after PR42 merge:** create the fresh implementation worktree and execute Task 1 with RED schema tests first.
