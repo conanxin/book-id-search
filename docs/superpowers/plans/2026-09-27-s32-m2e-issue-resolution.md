@@ -1,6 +1,6 @@
 # S32 M2-E Issue Resolution Implementation Plan
 
-**Status:** Implementation plan ready for review; execution blocked until R7 terminal PASS  
+**Status:** Refreshed after R7 terminal closeout; Task 1 follows exact-head planning review and merge  
 **Task ID:** `S32_M2E_ISSUE_RESOLUTION_IMPLEMENTATION_PLAN_R1`  
 **Written spec:** latest canonical spec on this planning branch (post-review lifecycle/replay corrections)  
 **Source baseline for planning:** `main@d8e6d96672e9cef6a2bab5a35c604fbd83ec83d9`  
@@ -8,16 +8,22 @@
 
 ## 0. Hard gate and execution boundary
 
-Do not begin implementation, migration execution, or production mutation until the existing R7 final acceptance reaches terminal PASS.
+R7 reached [terminal PASS](https://github.com/conanxin/book-id-search/issues/2#issuecomment-5864529231) and [rollout closeout](https://github.com/conanxin/book-id-search/issues/2#issuecomment-5864572642). The [M2-E re-entry gate](https://github.com/conanxin/book-id-search/issues/2#issuecomment-5864639302) now permits this planning refresh/review/merge, followed by local Task 1. Production schema/runtime mutation still requires separate explicit authorization.
 
 Before creating the implementation worktree require:
 
 ```text
 R7_STATE=TERMINAL_PASS
 S32_ROLLOUT=COMPLETE
-GITHUB_MAIN=<post-R7 canonical main>
-PRODUCTION_HEAD=<same canonical main>
+R7_FINAL_AUDIT=PASS
+R7_INCIDENT_CTRL=20e1b8dee2e77c5df0566f305f7d5a5b1745041c
+PRODUCTION_HEAD=20e1b8dee2e77c5df0566f305f7d5a5b1745041c
+PR42_REFRESHED_EXACT_HEAD_REVIEW=PASS
+PR42=MERGED
+IMPLEMENTATION_BASE=<latest main after PR42 merge>
 ```
+
+The R7 final audit proved production HEAD and GitHub main equal to the incident CTRL at closeout. A later docs-only planning merge advances development main; it does not require another production control-plane sync or alter that historical acceptance identity.
 
 Then create a fresh main-based implementation worktree/branch, suggested:
 
@@ -1041,9 +1047,10 @@ M2_E_IMPLEMENTATION=NOT_STARTED
 M2_E_SCHEMA_MIGRATION=NOT_STARTED
 M2_E_PRODUCTION_CHANGED=NO
 
-R7_STATE=NOT_EXECUTED
+R7_STATE=TERMINAL_PASS
+S32_ROLLOUT=COMPLETE
 R7_TERMINAL_PASS_REQUIRED_BEFORE_IMPLEMENTATION=YES
 ```
 
-**Next allowed action in the current state:** review/freeze this implementation plan while waiting for R7 execution.  
-**Next code action after R7 terminal PASS:** create the fresh implementation worktree and execute Task 1 with RED schema tests first.
+**Next allowed action in the current state:** complete the refreshed PR42 exact-head review/CI and merge.  
+**Next code action after PR42 merge:** create the fresh implementation worktree and execute Task 1 with RED schema tests first.

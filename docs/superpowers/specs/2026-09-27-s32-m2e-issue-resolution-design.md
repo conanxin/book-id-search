@@ -5,7 +5,7 @@
 **Source baseline:** `main@d8e6d96672e9cef6a2bab5a35c604fbd83ec83d9`  
 **Planning branch:** `plan/s32-m2e-issue-resolution`  
 **Predecessor:** M2-D Assessment merged and closed  
-**Production gate:** R7 final acceptance must reach terminal PASS before M2-E implementation or schema mutation.
+**Execution gate:** R7 terminal closeout is complete; local M2-E Task 1 follows refreshed PR42 review/merge. Production schema mutation remains separately authorized.
 
 ## 1. Purpose
 
@@ -499,14 +499,16 @@ Fresh implementation evidence must cover:
 
 ## 16. Hard sequencing gate
 
-Current rollout state remains:
+Current rollout state is proven by [R7 terminal receipt](https://github.com/conanxin/book-id-search/issues/2#issuecomment-5864529231), [rollout closeout](https://github.com/conanxin/book-id-search/issues/2#issuecomment-5864572642), and the [M2-E re-entry gate](https://github.com/conanxin/book-id-search/issues/2#issuecomment-5864639302):
 
 ```text
 R6_STATE=TERMINAL_PASS
-R7_STATE=NOT_EXECUTED
+R7_STATE=TERMINAL_PASS
+S32_ROLLOUT=COMPLETE
+PRODUCTION_CTRL=20e1b8dee2e77c5df0566f305f7d5a5b1745041c
 ```
 
-M2-E design work is allowed now, but implementation, migration, runtime mutation, and deployment are blocked until R7 final acceptance reaches terminal PASS.
+The original planning baseline above remains historical. Current main at re-entry is `20e1b8dee2e77c5df0566f305f7d5a5b1745041c`; its executable schema still has exactly the two gaps described here. After refreshed PR42 review/merge, use the new latest main for local development. Production stays at the accepted incident CTRL; a docs-only main advance does not authorize a production sync, migration, runtime mutation, or deployment.
 
 ```text
 M2_E_DESIGN=READY_FOR_REVIEW
@@ -516,10 +518,10 @@ M2_E_PRODUCTION_CHANGED=NO
 R7_TERMINAL_PASS_REQUIRED_BEFORE_M2E_CODE=YES
 ```
 
-Next after R7 terminal PASS:
+Next after the completed R7 closeout:
 
-1. approve/freeze this written spec;
-2. write implementation plan;
+1. complete refreshed PR42 exact-head review and CI;
+2. merge the docs-only planning PR and create a fresh latest-main implementation worktree;
 3. additive schema migration + real PG invariant tests;
 4. domain/store/routes;
 5. Web Resolution composer/history;
