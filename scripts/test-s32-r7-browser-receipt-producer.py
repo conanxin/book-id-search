@@ -291,7 +291,8 @@ class ProducerTest(unittest.TestCase):
         self.assertIn('fs.mkdtempSync(path.join(os.tmpdir(), "s32-r7-chrome-profile-"))', text)
         self.assertIn('--user-data-dir=${chromeProfileDir}', text)
         self.assertIn('await withTimeout(chromeExited, 5000, "CHROMIUM_TERMINATION_TIMEOUT")', text)
-        self.assertIn('fs.rmSync(chromeProfileDir, { recursive: true, force: false })', text)
+        self.assertIn('fs.rmSync(chromeProfileDir, { recursive: true, force: true })', text)
+        self.assertIn('if (fs.existsSync(chromeProfileDir))', text)
         self.assertNotIn("process.exit(0)", text)
 
 
