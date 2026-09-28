@@ -15,10 +15,13 @@ import hashlib
 import http.server
 import os
 import re
+import signal
+import socket
 import stat
 import subprocess
 import tempfile
 import threading
+import time
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
@@ -93,6 +96,58 @@ if (location.pathname === listPath) {{
         thread.join(timeout=2)
 
 
+@contextmanager
+def production_like_signal_server():
+    project_name = f"[S32 Production Acceptance] {FP[:12]}"
+    token_reload_seen = threading.Event()
+    list_requests = {"count": 0}
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path.startswith("/research/projects"):
+                list_requests["count"] += 1
+                if list_requests["count"] >= 2:
+                    token_reload_seen.set()
+
+            page = f"""<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BOOK-ID-SEARCH</title>
+</head>
+<body>
+<script>
+const token = sessionStorage.getItem("book-id-search:s32-private-token:v1");
+const projectName = {project_name!r};
+document.body.innerHTML = token
+  ? '<main><h1>我的研究项目</h1><p data-token-state="present">' + projectName + '</p></main>'
+  : '<main><h1>我的研究项目</h1></main>';
+</script>
+</body>
+</html>"""
+            encoded = page.encode("utf-8")
+            self.send_response(200)
+            self.send_header("content-type", "text/html; charset=utf-8")
+            self.send_header("content-length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+
+        def log_message(self, format, *args):
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        host, port = server.server_address
+        yield f"http://{host}:{port}", token_reload_seen
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
 class ProducerTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -127,6 +182,70 @@ class ProducerTest(unittest.TestCase):
             env=env,
             timeout=120,
         )
+
+    def wait_for_devtools_closed(self, port, timeout=5):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(0.2)
+            try:
+                if sock.connect_ex(("127.0.0.1", port)) != 0:
+                    return True
+            finally:
+                sock.close()
+            time.sleep(0.05)
+        return False
+
+    def run_signal_cleanup_case(self, sig):
+        out2 = Path(self.tmp.name) / f"signal-{sig.name.lower()}.web.env"
+        env = dict(os.environ)
+        env["TMPDIR"] = self.tmp.name
+        env["S32_R7_BROWSER_TOKEN"] = "TOKEN_SENTINEL"
+
+        with production_like_signal_server() as (base, token_reload_seen):
+            env["S32_R7_BROWSER_URL"] = f"{base}/research/projects"
+            proc = subprocess.Popen(
+                ["node", str(PRODUCER), "browser", str(out2), FP, PID, CTRL],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=env,
+            )
+            devtools_port = 10000 + (proc.pid % 50000)
+            self.assertTrue(
+                token_reload_seen.wait(timeout=20),
+                "browser never reached the post-token reload",
+            )
+            profile_deadline = time.monotonic() + 5
+            while time.monotonic() < profile_deadline:
+                profiles = list(Path(self.tmp.name).glob("s32-r7-chrome-profile-*"))
+                if profiles:
+                    break
+                time.sleep(0.05)
+            self.assertTrue(profiles, "isolated Chromium profile never appeared")
+
+            proc.send_signal(sig)
+            stdout, stderr = proc.communicate(timeout=30)
+
+        self.assertNotEqual(proc.returncode, 0, stdout + stderr)
+        self.assertIn(f"TERMINATED_BY_{sig.name}", stdout)
+        self.assertFalse(out2.exists(), "canonical PASS receipt survived signal teardown")
+        self.assertEqual(
+            list(Path(self.tmp.name).glob(".r7-web-receipt.*.tmp")),
+            [],
+            "pending receipt survived signal teardown",
+        )
+        self.assert_no_runtime_profile_leak()
+        self.assertTrue(
+            self.wait_for_devtools_closed(devtools_port),
+            f"DevTools TCP endpoint still reachable on {devtools_port}",
+        )
+
+    def test_sigterm_after_token_reload_routes_through_teardown(self):
+        self.run_signal_cleanup_case(signal.SIGTERM)
+
+    def test_sigint_after_token_reload_routes_through_teardown(self):
+        self.run_signal_cleanup_case(signal.SIGINT)
 
     def test_happy_path_writes_receipt(self):
         r = self.run_producer()
