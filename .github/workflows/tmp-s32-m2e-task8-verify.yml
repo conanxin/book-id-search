@@ -13,11 +13,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 6dc7752e3ce8042f6f36165b5c7dbea2a44d2bd3
+          ref: b54ec81f11ef19aa95c417094be0ae965acb1470
           fetch-depth: 0
       - name: Assert exact target
         run: |
-          test "$(git rev-parse HEAD)" = "6dc7752e3ce8042f6f36165b5c7dbea2a44d2bd3"
+          test "$(git rev-parse HEAD)" = "b54ec81f11ef19aa95c417094be0ae965acb1470"
           git status --short
       - uses: actions/setup-node@v4
         with:
