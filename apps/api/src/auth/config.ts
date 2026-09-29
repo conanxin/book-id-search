@@ -34,12 +34,27 @@ export function readGoogleSessionAuthConfig(env: NodeJS.ProcessEnv): GoogleSessi
   };
 }
 
+function isExactHttpOrigin(value: string | null): boolean {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return (url.protocol === "https:" || url.protocol === "http:")
+      && url.origin === value
+      && url.pathname === "/"
+      && !url.search
+      && !url.hash;
+  } catch {
+    return false;
+  }
+}
+
 export function isGoogleSessionAuthConfigured(config: GoogleSessionAuthConfig): boolean {
   return Boolean(
     config.enabled
       && config.clientId
       && config.ownerSub
       && config.sessionSecret
-      && config.publicOrigin,
+      && Buffer.byteLength(config.sessionSecret, "utf8") >= 32
+      && isExactHttpOrigin(config.publicOrigin),
   );
 }
