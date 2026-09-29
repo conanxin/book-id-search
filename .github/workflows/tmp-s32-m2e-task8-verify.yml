@@ -31,6 +31,37 @@ jobs:
           corepack prepare pnpm@10.33.0 --activate
           pnpm install --frozen-lockfile
 
+      - name: Add temporary receipt diagnostics
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("apps/web/src/research/issue-resolution-draft.ts")
+          s = p.read_text()
+          old = 'if (!isReceipt(receipt)) throw new Error("Pending Issue Resolution receipt is invalid.");'
+          new = '''if (!isReceipt(receipt)) {
+            console.error("TASK8_RECEIPT_DIAG", {
+              receipt,
+              receiptKeys: Reflect.ownKeys(receipt),
+              receiptPrototype: Object.getPrototypeOf(receipt)?.constructor?.name ?? null,
+              commandKeys: Reflect.ownKeys(receipt.command),
+              commandPrototype: Object.getPrototypeOf(receipt.command)?.constructor?.name ?? null,
+              createdAtRoundTrip: new Date(receipt.createdAt).toISOString(),
+              canonicalCreatedAt: isCanonicalTimestamp(receipt.createdAt),
+              projectOk: uuidPattern.test(receipt.projectId),
+              issueOk: uuidPattern.test(receipt.issueId),
+              hashOk: /^[0-9a-f]{64}$/.test(receipt.requestHash),
+              keyOk: uuidPattern.test(receipt.idempotencyKey),
+              normalizedCommand: normalizeIssueResolutionBrowserCommand(receipt.command),
+              commandJson: JSON.stringify(receipt.command),
+              normalizedJson: JSON.stringify(normalizeIssueResolutionBrowserCommand(receipt.command)),
+            });
+            throw new Error("Pending Issue Resolution receipt is invalid.");
+          }'''
+          if old not in s:
+              raise SystemExit("diagnostic target not found")
+          p.write_text(s.replace(old, new))
+          PY
+
       - name: Task 8 scoped tests
         run: |
           pnpm exec vitest run \
