@@ -37,7 +37,7 @@ describe("readGoogleSessionAuthConfig", () => {
       enabled: true,
       clientId: "client.apps.googleusercontent.com",
       ownerSub: "owner-sub",
-      sessionSecret: "session-secret",
+      sessionSecret: "ssssssssssssssssssssssssssssssss",
       publicOrigin: "https://books.conanxin.com",
       production: false,
       cookieName: GOOGLE_SESSION_COOKIE_DEVELOPMENT,
