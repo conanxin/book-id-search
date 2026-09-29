@@ -65,6 +65,8 @@ import { createS32Router } from "./s32/register.js";
 import { createIssueResolutionBodyParser } from "./s32/routes/issue-resolution-routes.js";
 import { readS32Config } from "./s32/config.js";
 import { createProjectItemNoteBodyParser } from "./s32/routes/project-item-note-routes.js";
+import { readGoogleSessionAuthConfig } from "./auth/config.js";
+import { createAuthRouter } from "./auth/routes.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(currentDir, "../../../");
@@ -127,6 +129,11 @@ const client = new MeiliSearch({ host, apiKey });
 const index = client.index<BookDocument>(indexName);
 
 app.use(cors());
+// Google web-session auth. Mounted BEFORE the global 256kb express.json so
+// POST /api/auth/google consumes its own 16kb bounded raw-body parser
+// (malformed/oversized payloads are answered here and never forwarded).
+// When GOOGLE_AUTH_ENABLED is off the router 404s, leaving legacy behavior untouched.
+app.use("/api/auth", createAuthRouter({ config: readGoogleSessionAuthConfig(process.env) }));
 app.use("/api/private/s32/projects/:projectId/items/:bindingId/note", createProjectItemNoteBodyParser(readS32Config(process.env)));
 app.use("/api/private/s32/projects", createIssueResolutionBodyParser(readS32Config(process.env)));
 app.use(express.json({ limit: "256kb" }));
