@@ -1,4 +1,4 @@
-name: S32 M2-E Task 9 composer verification
+name: S32 M2-E Task 10 current/history verification
 
 on:
   push:
@@ -7,17 +7,17 @@ on:
     branches: [main]
 
 jobs:
-  task9-web:
+  task10-web:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: b54ec81f11ef19aa95c417094be0ae965acb1470
+          ref: e17f936a416c192fede7d1e86f0f91d9ab2030fc
           fetch-depth: 0
       - name: Assert exact target
         run: |
-          test "$(git rev-parse HEAD)" = "b54ec81f11ef19aa95c417094be0ae965acb1470"
+          test "$(git rev-parse HEAD)" = "e17f936a416c192fede7d1e86f0f91d9ab2030fc"
           git status --short
       - uses: actions/setup-node@v4
         with:
@@ -27,9 +27,12 @@ jobs:
           corepack enable
           corepack prepare pnpm@10.33.0 --activate
           pnpm install --frozen-lockfile
-      - name: Task 9 scoped tests
+      - name: Task 10 scoped tests
         run: |
           pnpm exec vitest run \
+            apps/web/src/research/IssueResolutionCurrent.test.tsx \
+            apps/web/src/research/IssueResolutionHistory.test.tsx \
+            apps/web/src/research/IssueResolutionDetail.test.tsx \
             apps/web/src/research/IssueResolutionComposer.test.tsx \
             apps/web/src/research/ResearchIssueDetail.test.tsx \
             apps/web/src/research/issue-resolution-draft.test.ts \
