@@ -70,56 +70,64 @@ try {
   const migrations = readS32MigrationChain(root);
   if (migrations.length !== 2) throw new Error("Expected reviewed 001 -> 002 migration chain");
   const fixture = readFileSync(resolve(root, "scripts/fixtures/s32-m2e-browser.sql"), "utf8");
+  const upgradeBaseFixture = readFileSync(resolve(root, "scripts/fixtures/s32-m2d-browser.sql"), "utf8");
+  const upgradeFixture = readFileSync(resolve(root, "scripts/fixtures/s32-m2e-schema-upgrade.sql"), "utf8");
 
   // Fresh 001 -> 002 install used by the store integration suite.
   psql("s32_m2e_test", migrations.join("\n"));
   psql("s32_m2e_test", fixture);
 
-  // Valid upgrade: representative pre-002 Project/Issue/Claim/Resolution survives.
+  // Valid upgrade: reuse the frozen M2-D fixture plus the M2-E upgrade fixture so
+  // Assessment/Manifest/Resolution/pointer/idempotency rows all survive 001 -> 002.
   docker(["exec", container, "createdb", "-U", "s32test", "s32_m2e_upgrade_valid"]);
   psql("s32_m2e_upgrade_valid", migrations[0]);
-  psql("s32_m2e_upgrade_valid", fixture);
-  psql("s32_m2e_upgrade_valid", `
-    INSERT INTO core.issue_resolutions
-      (id,issue_id,resolution_type,preferred_claim_id,rationale)
-    VALUES (
-      '71111111-1111-4111-8111-111111111111',
-      '21111111-1111-4111-8111-111111111111',
-      'PREFERRED_CLAIM',
-      '31111111-1111-4111-8111-111111111111',
-      'valid legacy resolution'
-    );
-    UPDATE core.research_issues
-      SET current_resolution_id='71111111-1111-4111-8111-111111111111'
-      WHERE id='21111111-1111-4111-8111-111111111111';
-  `);
-  const beforeValid = scalar("s32_m2e_upgrade_valid", "SELECT count(*) FROM core.issue_resolutions");
+  psql("s32_m2e_upgrade_valid", upgradeBaseFixture);
+  psql("s32_m2e_upgrade_valid", upgradeFixture);
+  const beforeValid = {
+    resolutions: scalar("s32_m2e_upgrade_valid", "SELECT count(*) FROM core.issue_resolutions"),
+    assessments: scalar("s32_m2e_upgrade_valid", "SELECT count(*) FROM core.assessments"),
+    manifests: scalar("s32_m2e_upgrade_valid", "SELECT count(*) FROM core.evidence_manifests"),
+    assessmentReceipts: scalar(
+      "s32_m2e_upgrade_valid",
+      "SELECT count(*) FROM ops.idempotency_keys WHERE resource_type='ASSESSMENT' AND resource_id='e3111111-1111-4111-8111-111111111111'",
+    ),
+  };
   psql("s32_m2e_upgrade_valid", migrations[1]);
-  const afterValid = scalar("s32_m2e_upgrade_valid", "SELECT count(*) FROM core.issue_resolutions");
+  const afterValid = {
+    resolutions: scalar("s32_m2e_upgrade_valid", "SELECT count(*) FROM core.issue_resolutions"),
+    assessments: scalar("s32_m2e_upgrade_valid", "SELECT count(*) FROM core.assessments"),
+    manifests: scalar("s32_m2e_upgrade_valid", "SELECT count(*) FROM core.evidence_manifests"),
+    assessmentReceipts: scalar(
+      "s32_m2e_upgrade_valid",
+      "SELECT count(*) FROM ops.idempotency_keys WHERE resource_type='ASSESSMENT' AND resource_id='e3111111-1111-4111-8111-111111111111'",
+    ),
+  };
   const validPointer = scalar(
     "s32_m2e_upgrade_valid",
     "SELECT current_resolution_id::text FROM core.research_issues WHERE id='21111111-1111-4111-8111-111111111111'",
   );
-  if (beforeValid !== "1" || afterValid !== "1" || validPointer !== "71111111-1111-4111-8111-111111111111") {
-    throw new Error("Valid 001 -> 002 upgrade did not preserve representative rows");
+  if (
+    JSON.stringify(beforeValid) !== JSON.stringify(afterValid)
+    || beforeValid.resolutions !== "1"
+    || beforeValid.assessments !== "1"
+    || beforeValid.manifests !== "1"
+    || beforeValid.assessmentReceipts !== "1"
+    || validPointer !== "e4111111-1111-4111-8111-111111111111"
+  ) {
+    throw new Error("Valid 001 -> 002 upgrade did not preserve representative M2-D/M2-E rows");
   }
   console.log("S32_M2E_VALID_UPGRADE=PASS");
 
-  // Invalid upgrade: cross-Issue preferred Claim is legal in 001 but 002 must fail closed.
+  // Invalid upgrade: mutate the frozen historical Resolution into a cross-Issue
+  // preferred Claim. This is legal under 001 and must fail closed before 002 DDL lands.
   docker(["exec", container, "createdb", "-U", "s32test", "s32_m2e_upgrade_invalid"]);
   psql("s32_m2e_upgrade_invalid", migrations[0]);
-  psql("s32_m2e_upgrade_invalid", fixture);
-  psql("s32_m2e_upgrade_invalid", `
-    INSERT INTO core.issue_resolutions
-      (id,issue_id,resolution_type,preferred_claim_id,rationale)
-    VALUES (
-      '72111111-1111-4111-8111-111111111111',
-      '21111111-1111-4111-8111-111111111111',
-      'PREFERRED_CLAIM',
-      '32111111-1111-4111-8111-111111111111',
-      'invalid legacy cross-issue preferred claim'
-    );
-  `);
+  psql("s32_m2e_upgrade_invalid", upgradeBaseFixture);
+  psql("s32_m2e_upgrade_invalid", upgradeFixture);
+  psql(
+    "s32_m2e_upgrade_invalid",
+    "UPDATE core.issue_resolutions SET preferred_claim_id='32111111-1111-4111-8111-111111111111' WHERE id='e4111111-1111-4111-8111-111111111111';",
+  );
   const invalid = dockerRaw(
     ["exec", "-i", container, "psql", "-X", "-U", "s32test", "-d", "s32_m2e_upgrade_invalid", "-v", "ON_ERROR_STOP=1", "-f", "-"],
     migrations[1],
