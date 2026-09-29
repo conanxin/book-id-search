@@ -73,7 +73,12 @@ export function IssueResolutionHistory({ token, projectId, issueId, refreshVersi
       if (controller.signal.aborted) return;
       setResolutions(previous => {
         const seen = new Set(previous.map(item => item.id));
-        return [...previous, ...result.resolutions.filter(item => !seen.has(item.id))];
+        const merged = [...previous, ...result.resolutions.filter(item => !seen.has(item.id))];
+        return merged.map(item => ({
+          ...item,
+          isCurrent: result.issue.currentResolutionId !== null
+            && item.id === result.issue.currentResolutionId,
+        }));
       });
       setNextCursor(result.nextCursor);
       setPageState({ state: "idle" });
