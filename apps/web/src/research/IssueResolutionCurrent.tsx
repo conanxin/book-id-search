@@ -6,7 +6,6 @@ import {
 import { IssueResolutionDetail } from "./IssueResolutionDetail";
 
 type Props = {
-  token: string;
   projectId: string;
   issueId: string;
   refreshVersion: number;
@@ -23,7 +22,7 @@ function typeLabel(type: IssueResolutionSummary["resolutionType"]): string {
   return "暂不形成工作结论";
 }
 
-export function IssueResolutionCurrent({ token, projectId, issueId, refreshVersion }: Props) {
+export function IssueResolutionCurrent({ projectId, issueId, refreshVersion }: Props) {
   const [state, setState] = useState<State>({ state: "loading" });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const active = useRef<AbortController | null>(null);
@@ -31,9 +30,7 @@ export function IssueResolutionCurrent({ token, projectId, issueId, refreshVersi
   async function load(signal?: AbortSignal) {
     setState({ state: "loading" });
     try {
-      const result = await listIssueResolutions(
-        token,
-        projectId,
+      const result = await listIssueResolutions(projectId,
         issueId,
         { limit: 1 },
         signal,
@@ -52,7 +49,7 @@ export function IssueResolutionCurrent({ token, projectId, issueId, refreshVersi
     active.current = controller;
     void load(controller.signal);
     return () => controller.abort();
-  }, [token, projectId, issueId, refreshVersion]);
+  }, [projectId, issueId, refreshVersion]);
 
   return <section className="issue-resolution-current" aria-label="当前工作结论">
     <h2>当前工作结论</h2>
@@ -75,7 +72,6 @@ export function IssueResolutionCurrent({ token, projectId, issueId, refreshVersi
       <p>{state.current.evidenceBasisAvailable ? "证据依据当前可用" : "未指定或当前不可访问证据依据"}</p>
       <button type="button" onClick={() => setSelectedId(state.current!.id)}>查看完整结论</button>
       {selectedId === state.current.id ? <IssueResolutionDetail
-        token={token}
         projectId={projectId}
         issueId={issueId}
         resolutionId={selectedId}

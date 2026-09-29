@@ -18,13 +18,12 @@ import {
 import RelatedBooksDiscovery from "./RelatedBooksDiscovery";
 
 interface NotesAiSummaryProps {
-  token: string;
   items: WereadPrivateNoteItem[];
   /**
    * S27H-2: fired whenever the AI summary state changes. Reports the
    * current summary + the number of notes that were sent to MiniMax
    * (`meta.itemsUsed`), or `null` when the panel goes back to idle
-   * (token change, items change, user cleared, error). The parent uses
+   * (session change, items change, user cleared, error). The parent uses
    * this to derive a small, safe session-theme overlay for the reading
    * map. Note text, comment, overview, key points, and review questions
    * are NEVER included in this callback.
@@ -46,26 +45,26 @@ type State =
  *
  * Lives inside NotesLibrary, below the loaded items list. The user must
  * explicitly click the button to trigger an AI summary; nothing runs on
- * mount or when the token / search changes.
+ * mount or when the session / search changes.
  *
  * Privacy contract (UI):
  *  - The summary only ever describes the notes the user already sees on
  *    this page. The payload sent to the server is sanitised by
  *    `buildAiSummaryInput` (drops empty items, caps at 30, trims text).
- *  - Search terms (`q`), private token, wereadBookId / noteId / highlightId
+ *  - Search terms (`q`), wereadBookId / noteId / highlightId
  *    / chapterTitle / catalogId, title, author, dates, the matched flag,
  *    and the URL are NOT included in the request payload.
  *  - The privacy notice is always visible. The button is disabled when
  *    there are no notes to summarise or when the AI is already running.
- *  - Old summaries are cleared on token / items / filter / search / sort
+ *  - Old summaries are cleared on items / filter / search / sort
  *    changes so the displayed summary always matches the current view.
- *  - An AbortController cancels in-flight requests when the token changes
+ *  - An AbortController cancels in-flight requests when the session changes
  *    or the user leaves the page.
  *  - The summary is rendered as React children only (never
  *    dangerouslySetInnerHTML), so HTML tags inside the response text are
  *    displayed literally and never executed.
  */
-export default function NotesAiSummary({ token, items, onSummaryChange }: NotesAiSummaryProps) {
+export default function NotesAiSummary({ items, onSummaryChange }: NotesAiSummaryProps) {
   const [state, setState] = useState<State>({ kind: "idle" });
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
   const requestIdRef = useRef(0);
@@ -99,11 +98,11 @@ export default function NotesAiSummary({ token, items, onSummaryChange }: NotesA
     onSummaryChange(payload);
   }, [state, onSummaryChange]);
 
-  // Clear stale summaries whenever the loaded notes / token / etc. changes.
+  // Clear stale summaries whenever the loaded notes / etc. changes.
   useEffect(() => {
     setState({ kind: "idle" });
     setCopyState("idle");
-  }, [token, itemsCount]);
+  }, [itemsCount]);
 
   // Abort on unmount.
   useEffect(() => {
@@ -133,7 +132,7 @@ export default function NotesAiSummary({ token, items, onSummaryChange }: NotesA
         text: p.text,
         comment: p.comment,
       }));
-      const resp = await fetchWereadAiSummary(token, safeInput, ctl.signal);
+      const resp = await fetchWereadAiSummary(safeInput, ctl.signal);
       if (myId !== requestIdRef.current) return; // stale
       if (!hasAiSummaryContent(resp.summary)) {
         setState({
@@ -154,7 +153,7 @@ export default function NotesAiSummary({ token, items, onSummaryChange }: NotesA
     } finally {
       if (abortRef.current === ctl) abortRef.current = null;
     }
-  }, [eligibility, items, state.kind, token]);
+  }, [eligibility, items, state.kind]);
 
   const handleClear = useCallback(() => {
     abortRef.current?.abort();
@@ -253,7 +252,7 @@ export default function NotesAiSummary({ token, items, onSummaryChange }: NotesA
 
       <p className="weread-ai-summary__meta" data-testid="weread-ai-summary-meta">
         当前已加载 {itemsCount} 条{truncated ? `（本次使用前 ${itemsUsedInCall} 条）` : ""}
-        。不会发送搜索词、token、内部 ID 或书目信息。
+        。不会发送搜索词、内部 ID 或书目信息。
       </p>
 
       {state.kind === "loading" ? (
@@ -350,7 +349,6 @@ export default function NotesAiSummary({ token, items, onSummaryChange }: NotesA
               gates the request on a validated summary + at least one
               loaded note, so rendering it here is safe. */}
           <RelatedBooksDiscovery
-            token={token}
             summary={state.summary}
             notes={items}
           />

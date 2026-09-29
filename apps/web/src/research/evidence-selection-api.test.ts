@@ -2,6 +2,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { listEvidenceCandidates, previewEvidenceManifest, ProjectApiError } from "./api";
 
+import { __resetWebAuthStoreForTests, __setWebAuthSnapshotForTests } from "../auth/session";
+function seedSession(): void {
+  __setWebAuthSnapshotForTests({ status: "authenticated", user: { email: "owner@example.com", name: "Owner" }, csrfToken: "csrf-test", error: null });
+}
+beforeEach(() => { seedSession(); });
+afterEach(() => { __resetWebAuthStoreForTests(); });
+
 const p = "11111111-1111-4111-8111-111111111111";
 const i = "22222222-2222-4222-8222-222222222222";
 const c = "33333333-3333-4333-8333-333333333333";
@@ -39,30 +46,33 @@ function err(status: number, body: unknown) {
 }
 
 describe("paths and request shape", () => {
-  it("candidates GET hits the exact encoded path with Bearer token", async () => {
+  it("candidates GET hits the exact encoded path via session cookie", async () => {
     fetchMock.mockResolvedValueOnce(ok({ claim: claimCtx, candidates: [sourceCandidate, assetCandidate, noteCandidate] }));
-    const result = await listEvidenceCandidates("t0k", p, i, c);
+    const result = await listEvidenceCandidates(p, i, c);
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe(`/api/private/s32/projects/${p}/issues/${i}/claims/${c}/evidence-candidates`);
     expect(init.method).toBe("GET");
-    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer t0k");
+    expect(init.credentials).toBe("same-origin");
+    expect((init.headers as Record<string, string>).Authorization).toBeUndefined();
+    expect(JSON.stringify(init.headers)).not.toContain("X-CSRF-Token");
     expect(result.candidates).toHaveLength(3);
   });
 
   it("preview POST sends normalized items and never an Idempotency-Key", async () => {
     fetchMock.mockResolvedValueOnce(ok({ claim: { id: c, statement: claimCtx.statement }, draft, persisted: false }));
-    await previewEvidenceManifest("t0k", p, i, c, [{ role: "SUPPORTING", targetType: "SOURCE", targetId: src, note: null }]);
+    await previewEvidenceManifest(p, i, c, [{ role: "SUPPORTING", targetType: "SOURCE", targetId: src, note: null }]);
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe(`/api/private/s32/projects/${p}/issues/${i}/claims/${c}/evidence-manifest-preview`);
     expect(init.method).toBe("POST");
     expect(init.headers).not.toHaveProperty("Idempotency-Key");
+    expect((init.headers as Record<string, string>)["X-CSRF-Token"]).toBe("csrf-test");
     expect(JSON.parse(init.body)).toEqual({ items: [{ role: "SUPPORTING", targetType: "SOURCE", targetId: src, note: null }] });
   });
 
   it("aborts propagate via signal", async () => {
     const controller = new AbortController();
     controller.abort();
-    await expect(listEvidenceCandidates("t", p, i, c, controller.signal)).rejects.toThrow();
+    await expect(listEvidenceCandidates(p, i, c, controller.signal)).rejects.toThrow();
   });
 });
 
@@ -87,15 +97,15 @@ describe("strict response validation", () => {
   ])("rejects %s", async (_name, body) => {
     fetchMock.mockResolvedValueOnce(ok(body));
     if ("candidates" in (body as Record<string, unknown>)) {
-      await expect(listEvidenceCandidates("t", p, i, c)).rejects.toThrow(ProjectApiError);
+      await expect(listEvidenceCandidates(p, i, c)).rejects.toThrow(ProjectApiError);
     } else {
-      await expect(previewEvidenceManifest("t", p, i, c, [{ role: "SUPPORTING", targetType: "SOURCE", targetId: src, note: null }])).rejects.toThrow(ProjectApiError);
+      await expect(previewEvidenceManifest(p, i, c, [{ role: "SUPPORTING", targetType: "SOURCE", targetId: src, note: null }])).rejects.toThrow(ProjectApiError);
     }
   });
 
   it("missing candidate fields are rejected", async () => {
     fetchMock.mockResolvedValueOnce(ok({ claim: claimCtx, candidates: [{ ...sourceCandidate, materialTitle: undefined }] }));
-    await expect(listEvidenceCandidates("t", p, i, c)).rejects.toThrow(ProjectApiError);
+    await expect(listEvidenceCandidates(p, i, c)).rejects.toThrow(ProjectApiError);
   });
 });
 
@@ -106,7 +116,7 @@ describe("safe error mapping", () => {
     [404, { error: { code: "EVIDENCE_TARGET_NOT_AVAILABLE", message: "server detail" } }, "所选证据不可用于当前研究项目。"],
   ])("maps %i %s to frozen copy without leaking server detail", async (status, body, message) => {
     fetchMock.mockResolvedValue(err(status, body));
-    const error = await previewEvidenceManifest("t", p, i, c, [{ role: "SUPPORTING", targetType: "SOURCE", targetId: src, note: null }]).catch(e => e);
+    const error = await previewEvidenceManifest(p, i, c, [{ role: "SUPPORTING", targetType: "SOURCE", targetId: src, note: null }]).catch(e => e);
     expect(error).toBeInstanceOf(ProjectApiError);
     expect(error.message).toBe(message);
     expect(error.message).not.toContain("server detail");

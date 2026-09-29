@@ -1,15 +1,29 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearWereadStatusCache,
-  clearWereadToken,
   fetchWereadAiSummary,
   fetchWereadNotes,
   fetchWereadStatusesForBooks,
   fetchWereadStatus,
   fetchWereadSummary,
-  getWereadToken,
-  saveWereadToken,
+  fetchWereadTrends,
+  purgeLegacyWereadTokenStorage,
+  WereadPrivateError,
 } from "./wereadPrivate";
+import { __setWebAuthSnapshotForTests, __resetWebAuthStoreForTests } from "./auth/session";
+
+// Task 9: the 401/403 path fires an authoritative session refresh. Without this
+// mock the REAL loader would consume the queued fetch responses and flip the
+// store to unauthenticated mid-test; tests here exercise the client contract,
+// not the loader itself (covered in auth suite).
+vi.mock("./auth/session", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./auth/session")>();
+  return { ...actual, ensureAuthSessionLoaded: vi.fn(async () => {}) };
+});
+
+// Task 9: seed an authenticated session before every request-level test.
+const seedAuthed = () =>
+  __setWebAuthSnapshotForTests({ status: "authenticated", user: { email: "u@example.com", name: "U" }, csrfToken: "csrf-test", error: null });
 
 const TOKEN_KEY = "book-id-search:weread-private-token";
 
@@ -52,7 +66,8 @@ describe("wereadPrivate", () => {
   beforeEach(() => {
     (globalThis as unknown as { sessionStorage: Storage }).sessionStorage.clear();
     clearWereadStatusCache();
-    clearWereadToken();
+    __resetWebAuthStoreForTests();
+    seedAuthed();
     fetchMock.mockReset();
     fetchMock.mockResolvedValue(new Response("{}"));
     vi.stubGlobal("fetch", fetchMock);
@@ -62,18 +77,21 @@ describe("wereadPrivate", () => {
     vi.restoreAllMocks();
     (globalThis as unknown as { sessionStorage: Storage }).sessionStorage.clear();
     clearWereadStatusCache();
-    clearWereadToken();
+    __resetWebAuthStoreForTests();
     globalThis.fetch = originalFetch;
   });
 
-  it("token save/load/clear use sessionStorage", () => {
-    expect(getWereadToken()).toBeNull();
-    saveWereadToken("secret");
-    expect(getWereadToken()).toBe("secret");
-    expect(sessionStorage.getItem(TOKEN_KEY)).toBe("secret");
-    clearWereadToken();
-    expect(getWereadToken()).toBeNull();
+  it("legacy token storage is purged, never read or written (Task 9)", () => {
+    // arrange a stale secret left by an old build
+    sessionStorage.setItem(TOKEN_KEY, "stale-secret");
+    purgeLegacyWereadTokenStorage();
     expect(sessionStorage.getItem(TOKEN_KEY)).toBeNull();
+  });
+
+  it("unauthenticated → no request leaves the browser", async () => {
+    __setWebAuthSnapshotForTests({ status: "unauthenticated", user: null, csrfToken: null, error: null });
+    await expect(fetchWereadSummary()).rejects.toBeInstanceOf(WereadPrivateError);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("fetchWereadSummary sends Authorization header", async () => {
@@ -91,11 +109,12 @@ describe("wereadPrivate", () => {
         })
       )
     );
-    await fetchWereadSummary("my-token");
+    await fetchWereadSummary();
     const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     const [url, init] = call;
     expect(url).toContain("/private/weread/summary");
-    expect(init?.headers).toMatchObject({ Authorization: "Bearer my-token" });
+    expect((init?.headers as Record<string, string>)?.Authorization).toBeUndefined();
+    expect(init?.credentials).toBe("same-origin");
   });
 
   it("fetchWereadStatus sends Authorization header", async () => {
@@ -108,21 +127,22 @@ describe("wereadPrivate", () => {
         })
       )
     );
-    await fetchWereadStatus("my-token", "13000000_000000000001");
+    await fetchWereadStatus("13000000_000000000001");
     const call2 = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     const [url, init] = call2;
     expect(url).toContain("/private/weread/status?catalogId=13000000_000000000001");
-    expect(init?.headers).toMatchObject({ Authorization: "Bearer my-token" });
+    expect((init?.headers as Record<string, string>)?.Authorization).toBeUndefined();
+    expect(init?.credentials).toBe("same-origin");
   });
 
-  it("401 does not leak token in thrown error", async () => {
+  it("401 → safe message (Task 9)", async () => {
     fetchMock.mockResolvedValue(
-      new Response(JSON.stringify({ error: "unauthorized" }), {
+      new Response(JSON.stringify({ error: "raw-unauthorized-detail" }), {
         status: 401,
         statusText: "Unauthorized",
       })
     );
-    await expect(fetchWereadSummary("my-token")).rejects.toThrow("unauthorized");
+    await expect(fetchWereadSummary()).rejects.toThrow("登录已失效，请重新登录。");
   });
 
   it("fetchWereadStatusesForBooks uses batch endpoint and deduplicates", async () => {
@@ -157,20 +177,21 @@ describe("wereadPrivate", () => {
         })
       )
     );
-    const r1 = await fetchWereadStatusesForBooks("tok", [
+    const r1 = await fetchWereadStatusesForBooks([
       "13000000_000000000001",
       "13000000_000000000001",
     ]);
-    const r2 = await fetchWereadStatusesForBooks("tok", ["13000000_000000000001"]);
+    const r2 = await fetchWereadStatusesForBooks(["13000000_000000000001"]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     const [url, init] = call;
     expect(url).toContain("/private/weread/status/batch");
     expect(init?.method).toBe("POST");
     expect(init?.headers).toMatchObject({
-      Authorization: "Bearer tok",
+      "X-CSRF-Token": "csrf-test",
       "Content-Type": "application/json",
     });
+    expect((init?.headers as Record<string, string>).Authorization).toBeUndefined();
     const body = JSON.parse(init?.body as string);
     expect(body.catalogIds).toEqual(["13000000_000000000001"]);
     expect(r1["13000000_000000000001"]).toBe(r2["13000000_000000000001"]);
@@ -189,7 +210,7 @@ describe("wereadPrivate", () => {
         })
       )
     );
-    const result = await fetchWereadStatusesForBooks("tok", ["13000000_000000000001"]);
+    const result = await fetchWereadStatusesForBooks(["13000000_000000000001"]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     const batchCall = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     const singleCall = fetchMock.mock.calls[1] as unknown as [string, RequestInit];
@@ -198,12 +219,12 @@ describe("wereadPrivate", () => {
     expect(result["13000000_000000000001"].matched).toBe(true);
   });
 
-  it("batch 401 throws without leaking token", async () => {
+  it("batch 403 → safe message (Task 9)", async () => {
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify({ error: "Invalid token." }), { status: 403 })
     );
-    await expect(fetchWereadStatusesForBooks("leaked-token", ["13000000_000000000001"])).rejects.toThrow(
-      "Invalid token."
+    await expect(fetchWereadStatusesForBooks(["13000000_000000000001"])).rejects.toThrow(
+      "登录安全校验失败，请刷新后重试。"
     );
   });
 
@@ -226,7 +247,7 @@ describe("wereadPrivate", () => {
         })
       )
     );
-    const res = await fetchWereadStatus("tok", "13000000_000000000001");
+    const res = await fetchWereadStatus("13000000_000000000001");
     const json = JSON.stringify(res);
     expect(json).not.toContain("wereadBookId");
     expect(json).not.toContain("noteId");
@@ -246,7 +267,8 @@ describe("fetchWereadNotes", () => {
   beforeEach(() => {
     (globalThis as unknown as { sessionStorage: Storage }).sessionStorage.clear();
     clearWereadStatusCache();
-    clearWereadToken();
+    __resetWebAuthStoreForTests();
+    seedAuthed();
     fetchMock.mockReset();
     fetchMock.mockResolvedValue(
       new Response(
@@ -273,12 +295,13 @@ describe("fetchWereadNotes", () => {
     vi.restoreAllMocks();
     (globalThis as unknown as { sessionStorage: Storage }).sessionStorage.clear();
     clearWereadStatusCache();
-    clearWereadToken();
+    __resetWebAuthStoreForTests();
+    seedAuthed();
     globalThis.fetch = originalFetch;
   });
 
   it("builds URL with all query params and Authorization header", async () => {
-    await fetchWereadNotes("my-token", {
+    await fetchWereadNotes({
       type: "highlight",
       days: "30",
       matchedOnly: true,
@@ -297,7 +320,8 @@ describe("fetchWereadNotes", () => {
     expect(url).toContain("limit=25");
     expect(url).toContain("offset=10");
     expect(url).toContain("sort=oldest");
-    expect(init?.headers).toMatchObject({ Authorization: "Bearer my-token" });
+    expect((init?.headers as Record<string, string>)?.Authorization).toBeUndefined();
+    expect(init?.credentials).toBe("same-origin");
   });
 
   it("returns parsed items from response", async () => {
@@ -330,7 +354,7 @@ describe("fetchWereadNotes", () => {
         })
       )
     );
-    const res = await fetchWereadNotes("my-token");
+    const res = await fetchWereadNotes();
     expect(res.ok).toBe(true);
     expect(res.items.length).toBe(1);
     expect(res.items[0].text).toBe("示例划线");
@@ -338,17 +362,11 @@ describe("fetchWereadNotes", () => {
     expect(res.summary.highlights).toBe(1);
   });
 
-  it("401 does not leak token in thrown error", async () => {
+  it("401 → safe message, authoritative refresh, no raw body echo (Task 9)", async () => {
     fetchMock.mockResolvedValue(
-      new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 })
+      new Response(JSON.stringify({ error: "raw-secret-detail" }), { status: 401 })
     );
-    await expect(fetchWereadNotes("secret-token", { limit: 1 })).rejects.toThrow("unauthorized");
-    // Ensure error message does not contain the token
-    try {
-      await fetchWereadNotes("secret-token", { limit: 1 });
-    } catch (e) {
-      expect(String(e)).not.toContain("secret-token");
-    }
+    await expect(fetchWereadNotes({ limit: 1 })).rejects.toThrow("登录已失效，请重新登录。");
   });
 
   it("does not write to localStorage", async () => {
@@ -357,14 +375,14 @@ describe("fetchWereadNotes", () => {
       value: { setItem: localStorageSet, getItem: () => null, removeItem: () => undefined, clear: () => undefined, key: () => null, length: 0 },
       configurable: true,
     });
-    await fetchWereadNotes("tok");
+    await fetchWereadNotes();
     expect(localStorageSet).not.toHaveBeenCalled();
   });
 
   // ---- S27D: full-text search client tests ----
 
   it("sends q param when present and non-empty", async () => {
-    await fetchWereadNotes("my-token", { q: "佛塔" });
+    await fetchWereadNotes({ q: "佛塔" });
     const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     const [url] = call;
     expect(url).toContain("/private/weread/notes");
@@ -373,20 +391,20 @@ describe("fetchWereadNotes", () => {
   });
 
   it("trims q before sending", async () => {
-    await fetchWereadNotes("my-token", { q: "  hello  " });
+    await fetchWereadNotes({ q: "  hello  " });
     const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     const [url] = call;
     expect(url).toContain("q=" + encodeURIComponent("hello"));
   });
 
   it("omits q param when empty or whitespace-only", async () => {
-    await fetchWereadNotes("my-token", { q: "" });
+    await fetchWereadNotes({ q: "" });
     const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     const [url] = call;
     expect(url).not.toContain("q=");
     // Second case: all-whitespace
     fetchMock.mockClear();
-    await fetchWereadNotes("my-token", { q: "   " });
+    await fetchWereadNotes({ q: "   " });
     const url2 = (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[0];
     expect(url2).not.toContain("q=");
   });
@@ -396,7 +414,7 @@ describe("fetchWereadNotes", () => {
       new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 })
     );
     try {
-      await fetchWereadNotes("secret-token", { q: "private-thing" });
+      await fetchWereadNotes({ q: "private-thing" });
       throw new Error("should have thrown");
     } catch (e) {
       const s = String(e);
@@ -420,7 +438,7 @@ describe("fetchWereadNotes", () => {
         })
       )
     );
-    const res = await fetchWereadNotes("tok", { q: "hello" });
+    const res = await fetchWereadNotes({ q: "hello" });
     expect(res.searchInfo).toBeDefined();
     expect(res.searchInfo?.enabled).toBe(true);
     expect(res.searchInfo?.queryLength).toBe(5);
@@ -438,6 +456,8 @@ describe("fetchWereadAiSummary (S27E)", () => {
   const TOKEN = "token-for-ai-summary";
 
   beforeEach(() => {
+    __resetWebAuthStoreForTests();
+    seedAuthed();
     fetchMock = vi.fn(async () =>
       new Response(
         JSON.stringify({
@@ -461,7 +481,7 @@ describe("fetchWereadAiSummary (S27E)", () => {
   });
 
   it("sends POST with Content-Type: application/json and Authorization header", async () => {
-    await fetchWereadAiSummary(TOKEN, [
+    await fetchWereadAiSummary([
       { type: "highlight", text: "合成测试材料：隐私边界。" },
     ]);
     const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
@@ -469,13 +489,13 @@ describe("fetchWereadAiSummary (S27E)", () => {
     expect(init?.method).toBe("POST");
     expect(url).toContain("/private/weread/notes/summarize");
     expect(init?.headers).toMatchObject({
-      Authorization: "Bearer token-for-ai-summary",
+      "X-CSRF-Token": "csrf-test",
       "Content-Type": "application/json",
     });
   });
 
   it("only sends { type, text, comment } — no q / catalogId / matched / IDs / dates / title / author", async () => {
-    await fetchWereadAiSummary(TOKEN, [
+    await fetchWereadAiSummary([
       {
         type: "highlight",
         text: "合成测试材料：边界检查。",
@@ -512,10 +532,10 @@ describe("fetchWereadAiSummary (S27E)", () => {
       new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 })
     );
     await expect(
-      fetchWereadAiSummary("leaked-token", [{ type: "highlight", text: "合成测试：鉴权失败。" }])
-    ).rejects.toThrow("unauthorized");
+      fetchWereadAiSummary([{ type: "highlight", text: "合成测试：鉴权失败。" }])
+    ).rejects.toThrow("登录已失效，请重新登录。");
     try {
-      await fetchWereadAiSummary("leaked-token", [{ type: "highlight", text: "合成测试：鉴权失败。" }]);
+      await fetchWereadAiSummary([{ type: "highlight", text: "合成测试：鉴权失败。" }]);
     } catch (e) {
       expect(String(e)).not.toContain("leaked-token");
     }
@@ -528,13 +548,13 @@ describe("fetchWereadAiSummary (S27E)", () => {
         new Response(JSON.stringify({ error: `provider-failure-${status}` }), { status })
       );
       await expect(
-        fetchWereadAiSummary(TOKEN, [{ type: "highlight", text: "合成测试：限流。" }])
+        fetchWereadAiSummary([{ type: "highlight", text: "合成测试：限流。" }])
       ).rejects.toThrow(`provider-failure-${status}`);
     }
   });
 
   it("drops items where text AND comment are both empty after the rebuild", async () => {
-    await fetchWereadAiSummary(TOKEN, [
+    await fetchWereadAiSummary([
       { type: "highlight", text: "保留的合成笔记。", comment: null },
       { type: "thought", text: "", comment: "" },
       { type: "review", text: "", comment: null },
@@ -546,7 +566,7 @@ describe("fetchWereadAiSummary (S27E)", () => {
   });
 
   it("normalizes an invalid type to 'unknown'", async () => {
-    await fetchWereadAiSummary(TOKEN, [
+    await fetchWereadAiSummary([
       { type: "garbage" as unknown as "highlight", text: "类型归一化。", comment: null },
     ]);
     const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
@@ -564,6 +584,8 @@ describe("wereadPrivate S27F catalogId + per-book pagination", () => {
   const TOKEN = "token-for-s27f";
 
   beforeEach(() => {
+    __resetWebAuthStoreForTests();
+    seedAuthed();
     fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
   });
@@ -597,7 +619,7 @@ describe("wereadPrivate S27F catalogId + per-book pagination", () => {
         { status: 200, headers: { "Content-Type": "application/json" } }
       )
     );
-    await fetchWereadNotes(TOKEN, { catalogId: "13000000_000000000001" });
+    await fetchWereadNotes({ catalogId: "13000000_000000000001" });
     const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(call[0]).toContain("catalogId=13000000_000000000001");
   });
@@ -614,7 +636,7 @@ describe("wereadPrivate S27F catalogId + per-book pagination", () => {
         { status: 200, headers: { "Content-Type": "application/json" } }
       )
     );
-    await fetchWereadNotes(TOKEN, { catalogId: "garbage" });
+    await fetchWereadNotes({ catalogId: "garbage" });
     const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(call[0]).not.toContain("catalogId=");
   });
@@ -631,7 +653,7 @@ describe("wereadPrivate S27F catalogId + per-book pagination", () => {
         { status: 200, headers: { "Content-Type": "application/json" } }
       )
     );
-    await fetchWereadNotes(TOKEN, { catalogId: "  13000000_000000000001  " });
+    await fetchWereadNotes({ catalogId: "  13000000_000000000001  " });
     const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(call[0]).toContain("catalogId=13000000_000000000001");
   });
@@ -665,7 +687,7 @@ describe("wereadPrivate S27F catalogId + per-book pagination", () => {
       );
     const result = await (
       await import("./wereadPrivate")
-    ).fetchAllWereadBookNotes(TOKEN, CATALOG, { pageSize: 3 });
+    ).fetchAllWereadBookNotes(CATALOG, { pageSize: 3 });
     expect(result.items).toHaveLength(5);
     expect(result.truncated).toBe(false);
     expect(result.total).toBe(5);
@@ -691,7 +713,7 @@ describe("wereadPrivate S27F catalogId + per-book pagination", () => {
     );
     const result = await (
       await import("./wereadPrivate")
-    ).fetchAllWereadBookNotes(TOKEN, CATALOG, { pageSize: 50 });
+    ).fetchAllWereadBookNotes(CATALOG, { pageSize: 50 });
     expect(result.items).toHaveLength(0);
     expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(2);
   });
@@ -713,7 +735,7 @@ describe("wereadPrivate S27F catalogId + per-book pagination", () => {
     );
     const result = await (
       await import("./wereadPrivate")
-    ).fetchAllWereadBookNotes(TOKEN, CATALOG, { pageSize: 10, maxItems: 5000 });
+    ).fetchAllWereadBookNotes(CATALOG, { pageSize: 10, maxItems: 5000 });
     expect(fetchMock.mock.calls.length).toBe(20);
     expect(result.truncated).toBe(true);
   });
@@ -735,14 +757,14 @@ describe("wereadPrivate S27F catalogId + per-book pagination", () => {
     );
     const result = await (
       await import("./wereadPrivate")
-    ).fetchAllWereadBookNotes(TOKEN, CATALOG, { pageSize: 4, maxItems: 6 });
+    ).fetchAllWereadBookNotes(CATALOG, { pageSize: 4, maxItems: 6 });
     expect(result.items).toHaveLength(6);
     expect(result.truncated).toBe(true);
   });
 
   it("fetchAllWereadBookNotes rejects malformed catalogId", async () => {
     await expect(
-      (await import("./wereadPrivate")).fetchAllWereadBookNotes(TOKEN, "garbage-id")
+      (await import("./wereadPrivate")).fetchAllWereadBookNotes("garbage-id")
     ).rejects.toThrow();
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -751,7 +773,7 @@ describe("wereadPrivate S27F catalogId + per-book pagination", () => {
     const ctl = new AbortController();
     ctl.abort();
     await expect(
-      (await import("./wereadPrivate")).fetchAllWereadBookNotes(TOKEN, "13000000_000000000005", { signal: ctl.signal })
+      (await import("./wereadPrivate")).fetchAllWereadBookNotes("13000000_000000000005", { signal: ctl.signal })
     ).rejects.toThrow();
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -761,10 +783,10 @@ describe("wereadPrivate S27F catalogId + per-book pagination", () => {
       new Response(JSON.stringify({ ok: false, error: "认证失败" }), { status: 401, headers: { "Content-Type": "application/json" } })
     );
     await expect(
-      (await import("./wereadPrivate")).fetchAllWereadBookNotes(TOKEN, "13000000_000000000006")
-    ).rejects.toThrow(/认证失败/);
+      (await import("./wereadPrivate")).fetchAllWereadBookNotes("13000000_000000000006")
+    ).rejects.toThrow(/登录已失效/);
     const err = await (await import("./wereadPrivate")).fetchAllWereadBookNotes(
-      TOKEN,
+
       "13000000_000000000007"
     ).catch((e: Error) => e);
     // Confirm error class doesn't include token
@@ -782,6 +804,8 @@ describe("fetchWereadRelatedBooks (S27G)", () => {
   const TOKEN = "token-for-s27g";
 
   beforeEach(() => {
+    __resetWebAuthStoreForTests();
+    seedAuthed();
     fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     fetchMock.mockResolvedValue(
@@ -810,7 +834,7 @@ describe("fetchWereadRelatedBooks (S27G)", () => {
   it("POST + Content-Type / auth header / payload shape", async () => {
     await (
       await import("./wereadPrivate")
-    ).fetchWereadRelatedBooks(TOKEN, [
+    ).fetchWereadRelatedBooks([
       { id: "theme-0", text: "合成主题" },
     ]);
     const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
@@ -818,7 +842,7 @@ describe("fetchWereadRelatedBooks (S27G)", () => {
     expect(init?.method).toBe("POST");
     expect(url).toContain("/private/weread/related-books");
     expect(init?.headers).toMatchObject({
-      Authorization: "Bearer token-for-s27g",
+      "X-CSRF-Token": "csrf-test",
       "Content-Type": "application/json",
     });
     const body = JSON.parse(init.body as string);
@@ -829,7 +853,6 @@ describe("fetchWereadRelatedBooks (S27G)", () => {
     await (
       await import("./wereadPrivate")
     ).fetchWereadRelatedBooks(
-      TOKEN,
       [
         {
           id: "theme-0",
@@ -868,7 +891,6 @@ describe("fetchWereadRelatedBooks (S27G)", () => {
     await (
       await import("./wereadPrivate")
     ).fetchWereadRelatedBooks(
-      TOKEN,
       [{ id: "theme-0", text: "合成主题" }],
       [],
       ctl.signal
@@ -890,13 +912,13 @@ describe("fetchWereadRelatedBooks (S27G)", () => {
     );
     const out = await (
       await import("./wereadPrivate")
-    ).fetchWereadRelatedBooks(TOKEN, [{ id: "theme-0", text: "合成主题" }]);
+    ).fetchWereadRelatedBooks([{ id: "theme-0", text: "合成主题" }]);
     expect(out.meta.persisted).toBe(false);
     expect(out.meta.source).toBe("meilisearch");
   });
 
   it("error responses surface generic messages without token / seed text leak", async () => {
-    for (const status of [401, 403, 429, 500] as const) {
+    for (const status of [429, 500] as const) {
       fetchMock.mockReset();
       fetchMock.mockResolvedValue(
         new Response(JSON.stringify({ error: `generic-${status}` }), { status })
@@ -904,7 +926,7 @@ describe("fetchWereadRelatedBooks (S27G)", () => {
       try {
         await (
           await import("./wereadPrivate")
-        ).fetchWereadRelatedBooks(TOKEN, [
+        ).fetchWereadRelatedBooks([
           { id: "theme-0", text: "合成主题-LEAK" },
         ]);
         throw new Error("expected-reject");
@@ -924,7 +946,6 @@ describe("fetchWereadRelatedBooks (S27G)", () => {
     await (
       await import("./wereadPrivate")
     ).fetchWereadRelatedBooks(
-      TOKEN,
       [{ id: "theme-0", text: "合成主题" }],
       ["bad", 1, null, "13000000_000000000099", "13000000_000000000099"]
     );
@@ -936,7 +957,7 @@ describe("fetchWereadRelatedBooks (S27G)", () => {
   it("dedupes duplicate seeds by text and caps to 6", async () => {
     await (
       await import("./wereadPrivate")
-    ).fetchWereadRelatedBooks(TOKEN, [
+    ).fetchWereadRelatedBooks([
       { id: "a", text: "重复主题" },
       { id: "b", text: "  重复主题  " },
       { id: "c", text: "另一主题" },
@@ -958,7 +979,7 @@ describe("fetchWereadRelatedBooks (S27G)", () => {
     await expect(
       (
         await import("./wereadPrivate")
-      ).fetchWereadRelatedBooks(TOKEN, [], [], undefined)
+      ).fetchWereadRelatedBooks([], [], undefined)
     ).rejects.toThrow();
   });
 });
@@ -969,6 +990,8 @@ describe("fetchWereadReadingMap (S27H)", () => {
   const TOKEN = "token-for-s27h";
 
   beforeEach(() => {
+    __resetWebAuthStoreForTests();
+    seedAuthed();
     fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     fetchMock.mockResolvedValue(
@@ -1011,7 +1034,7 @@ describe("fetchWereadReadingMap (S27H)", () => {
   it("uses default months=24 and topBooks=12 when no options provided", async () => {
     await (
       await import("./wereadPrivate")
-    ).fetchWereadReadingMap(TOKEN);
+    ).fetchWereadReadingMap();
     const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(call[0]).toContain("/private/weread/reading-map");
     expect(call[0]).toContain("months=24");
@@ -1022,26 +1045,28 @@ describe("fetchWereadReadingMap (S27H)", () => {
   it("attaches months and topBooks options", async () => {
     await (
       await import("./wereadPrivate")
-    ).fetchWereadReadingMap(TOKEN, { months: 12, topBooks: 18 });
+    ).fetchWereadReadingMap({ months: 12, topBooks: 18 });
     const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(call[0]).toContain("months=12");
     expect(call[0]).toContain("topBooks=18");
   });
 
-  it("sends the Bearer Authorization header", async () => {
+  it("sends no Authorization header (session cookie auth, Task 9)", async () => {
     await (
       await import("./wereadPrivate")
-    ).fetchWereadReadingMap(TOKEN);
+    ).fetchWereadReadingMap();
     const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     const headers = call[1].headers as Record<string, string>;
-    expect(headers.Authorization).toBe(`Bearer ${TOKEN}`);
+    expect(headers.Authorization).toBeUndefined();
+    expect(call[1].credentials).toBe("same-origin");
+    expect(headers["X-CSRF-Token"]).toBeUndefined();
   });
 
   it("forwards the AbortSignal to fetch", async () => {
     const controller = new AbortController();
     await (
       await import("./wereadPrivate")
-    ).fetchWereadReadingMap(TOKEN, { signal: controller.signal });
+    ).fetchWereadReadingMap({ signal: controller.signal });
     const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(call[1].signal).toBe(controller.signal);
   });
@@ -1051,22 +1076,22 @@ describe("fetchWereadReadingMap (S27H)", () => {
       new Response(JSON.stringify({ error: "Invalid token." }), { status: 403 })
     );
     await expect(
-      (await import("./wereadPrivate")).fetchWereadReadingMap(TOKEN)
-    ).rejects.toThrow(/token|认证/i);
+      (await import("./wereadPrivate")).fetchWereadReadingMap()
+    ).rejects.toThrow(/登录安全校验|登录已失效/);
 
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ error: "阅读地图生成失败。" }), { status: 500 })
     );
     await expect(
-      (await import("./wereadPrivate")).fetchWereadReadingMap(TOKEN)
+      (await import("./wereadPrivate")).fetchWereadReadingMap()
     ).rejects.toThrow(/阅读地图/);
 
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ error: "Missing token." }), { status: 401 })
     );
     await expect(
-      (await import("./wereadPrivate")).fetchWereadReadingMap(TOKEN)
-    ).rejects.toThrow(/token|认证/i);
+      (await import("./wereadPrivate")).fetchWereadReadingMap()
+    ).rejects.toThrow(/登录安全校验|登录已失效/);
   });
 
   it("returns the parsed response shape on success", async () => {
@@ -1157,7 +1182,7 @@ describe("fetchWereadReadingMap (S27H)", () => {
     );
     const resp = await (
       await import("./wereadPrivate")
-    ).fetchWereadReadingMap(TOKEN);
+    ).fetchWereadReadingMap();
     expect(logSpy).not.toHaveBeenCalled();
     expect(warnSpy).not.toHaveBeenCalled();
     expect(errSpy).not.toHaveBeenCalled();
@@ -1174,6 +1199,8 @@ describe("fetchWereadAnnualReview (S27J)", () => {
   const TOKEN = "token-for-s27j";
 
   beforeEach(() => {
+    __resetWebAuthStoreForTests();
+    seedAuthed();
     fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     fetchMock.mockResolvedValue(
@@ -1231,7 +1258,7 @@ describe("fetchWereadAnnualReview (S27J)", () => {
   });
 
   it("uses default topBooks=12 when no options provided", async () => {
-    await (await import("./wereadPrivate")).fetchWereadAnnualReview(TOKEN);
+    await (await import("./wereadPrivate")).fetchWereadAnnualReview();
     const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(call[0]).toContain("/private/weread/annual-review");
     expect(call[0]).toContain("topBooks=12");
@@ -1240,7 +1267,7 @@ describe("fetchWereadAnnualReview (S27J)", () => {
   });
 
   it("attaches year and topBooks options", async () => {
-    await (await import("./wereadPrivate")).fetchWereadAnnualReview(TOKEN, {
+    await (await import("./wereadPrivate")).fetchWereadAnnualReview({
       year: 2025,
       topBooks: 18,
     });
@@ -1250,23 +1277,25 @@ describe("fetchWereadAnnualReview (S27J)", () => {
   });
 
   it("clamps invalid topBooks to the default", async () => {
-    await (await import("./wereadPrivate")).fetchWereadAnnualReview(TOKEN, {
+    await (await import("./wereadPrivate")).fetchWereadAnnualReview({
       topBooks: 10 as unknown as 6,
     });
     const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(call[0]).toContain("topBooks=12");
   });
 
-  it("sends the Bearer Authorization header", async () => {
-    await (await import("./wereadPrivate")).fetchWereadAnnualReview(TOKEN);
+  it("sends no Authorization header (session cookie auth, Task 9)", async () => {
+    await (await import("./wereadPrivate")).fetchWereadAnnualReview();
     const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     const headers = call[1].headers as Record<string, string>;
-    expect(headers.Authorization).toBe(`Bearer ${TOKEN}`);
+    expect(headers.Authorization).toBeUndefined();
+    expect(call[1].credentials).toBe("same-origin");
+    expect(headers["X-CSRF-Token"]).toBeUndefined();
   });
 
   it("forwards the AbortSignal to fetch", async () => {
     const controller = new AbortController();
-    await (await import("./wereadPrivate")).fetchWereadAnnualReview(TOKEN, {
+    await (await import("./wereadPrivate")).fetchWereadAnnualReview({
       signal: controller.signal,
     });
     const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
@@ -1278,28 +1307,28 @@ describe("fetchWereadAnnualReview (S27J)", () => {
       new Response(JSON.stringify({ error: "year 必须是四位整数。" }), { status: 400 })
     );
     await expect(
-      (await import("./wereadPrivate")).fetchWereadAnnualReview(TOKEN)
+      (await import("./wereadPrivate")).fetchWereadAnnualReview()
     ).rejects.toThrow(/year|整数/i);
 
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ error: "Missing token." }), { status: 401 })
     );
     await expect(
-      (await import("./wereadPrivate")).fetchWereadAnnualReview(TOKEN)
-    ).rejects.toThrow(/token|认证/i);
+      (await import("./wereadPrivate")).fetchWereadAnnualReview()
+    ).rejects.toThrow(/登录已失效/);
 
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ error: "Invalid token." }), { status: 403 })
     );
     await expect(
-      (await import("./wereadPrivate")).fetchWereadAnnualReview(TOKEN)
-    ).rejects.toThrow(/token|认证/i);
+      (await import("./wereadPrivate")).fetchWereadAnnualReview()
+    ).rejects.toThrow(/登录安全校验/);
 
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ error: "年度回顾生成失败。" }), { status: 500 })
     );
     await expect(
-      (await import("./wereadPrivate")).fetchWereadAnnualReview(TOKEN)
+      (await import("./wereadPrivate")).fetchWereadAnnualReview()
     ).rejects.toThrow(/年度回顾/);
   });
 
@@ -1337,7 +1366,7 @@ describe("fetchWereadAnnualReview (S27J)", () => {
         { status: 200 }
       )
     );
-    const resp = await (await import("./wereadPrivate")).fetchWereadAnnualReview(TOKEN, {
+    const resp = await (await import("./wereadPrivate")).fetchWereadAnnualReview({
       year: 2025,
     });
     expect(resp.ok).toBe(true);
@@ -1350,7 +1379,7 @@ describe("fetchWereadAnnualReview (S27J)", () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    await (await import("./wereadPrivate")).fetchWereadAnnualReview(TOKEN);
+    await (await import("./wereadPrivate")).fetchWereadAnnualReview();
     expect(logSpy).not.toHaveBeenCalled();
     expect(warnSpy).not.toHaveBeenCalled();
     expect(errSpy).not.toHaveBeenCalled();

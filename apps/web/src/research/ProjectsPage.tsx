@@ -3,7 +3,8 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, FolderOpen, Plus } from "lucide-react";
 import { createProject, getProjectOverview, listProjects, type Project, type ProjectOverview } from "./api";
-import { saveS32Token, useS32Token } from "./access";
+import { useWebAuthSession } from "../auth/useWebAuthSession";
+import { GoogleLoginPanel } from "../auth/GoogleLoginPanel";
 import { ResearchIssuesSection, useProjectResearchIssues } from "./ResearchIssues";
 import { ResearchIssueDetail } from "./ResearchIssueDetail";
 import "./research.css";
@@ -35,7 +36,7 @@ export function ProjectDetails({ project, summary }: { project: Project & { read
   </article>;
 }
 
-export function ProjectWorkspace({ token, projectId }: { token: string; projectId?: string }) {
+export function ProjectWorkspace({ projectId }: { projectId?: string }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [projects, setProjects] = useState<Project[]>([]);
@@ -48,17 +49,17 @@ export function ProjectWorkspace({ token, projectId }: { token: string; projectI
   const [formError, setFormError] = useState("");
   const [creating, setCreating] = useState(false);
   const submission = useRef<AbortController | null>(null);
-  const researchIssues = useProjectResearchIssues(token, projectId ?? "");
+  const researchIssues = useProjectResearchIssues(projectId ?? "");
   useEffect(() => () => { submission.current?.abort(); }, []);
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true); setError(""); setOverview(null); setProjects([]);
-    const load = projectId ? getProjectOverview(token, projectId, controller.signal).then((data) => { if (!controller.signal.aborted) setOverview(data); })
-      : listProjects(token, controller.signal).then((data) => { if (!controller.signal.aborted) setProjects(data.projects); });
+    const load = projectId ? getProjectOverview(projectId, controller.signal).then((data) => { if (!controller.signal.aborted) setOverview(data); })
+      : listProjects(controller.signal).then((data) => { if (!controller.signal.aborted) setProjects(data.projects); });
     void load.catch((err) => { if (!controller.signal.aborted) setError(errorLabel(err)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [token, projectId, attempt]);
+  }, [projectId, attempt]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -70,7 +71,7 @@ export function ProjectWorkspace({ token, projectId }: { token: string; projectI
     submission.current = controller;
     setCreating(true); setFormError("");
     try {
-      const result = await createProject(token, { name: name.trim(), description: description.trim() || null }, controller.signal);
+      const result = await createProject({ name: name.trim(), description: description.trim() || null }, controller.signal);
       if (!controller.signal.aborted) navigate(`/research/projects/${result.project.id}`);
     } catch (err) {
       if (!controller.signal.aborted) setFormError(`${errorLabel(err)} 未自动重试；若结果不确定，请先刷新列表确认。`);
@@ -83,8 +84,8 @@ export function ProjectWorkspace({ token, projectId }: { token: string; projectI
     const issuesProject = researchIssues.result.state === "ready" ? researchIssues.result.response.project : null;
     return <>
       {overview && !loading && !error ? <ProjectDetails project={overview.project} summary={overview.summary} /> : issuesProject ? <article className="research-panel research-detail"><div className="research-detail-status"><span className="research-eyebrow">研究项目</span>{issuesProject.readOnly ? <span className="research-read-only">已归档 · 只读</span> : null}</div><h1>{issuesProject.name}</h1></article> : null}
-      <ResearchIssuesSection token={token} projectId={projectId} result={researchIssues.result} retry={researchIssues.retry} />
-      {overview && !loading && !error ? <ProjectItems token={token} projectId={overview.project.id} items={overview.items} readOnly={overview.project.readOnly} focusedBindingId={searchParams.get("item")} onItemsChanged={() => setAttempt(n => n + 1)} /> : <section className="research-materials" aria-labelledby="research-materials-heading">
+      <ResearchIssuesSection projectId={projectId} result={researchIssues.result} retry={researchIssues.retry} />
+      {overview && !loading && !error ? <ProjectItems projectId={overview.project.id} items={overview.items} readOnly={overview.project.readOnly} focusedBindingId={searchParams.get("item")} onItemsChanged={() => setAttempt(n => n + 1)} /> : <section className="research-materials" aria-labelledby="research-materials-heading">
         <h2 id="research-materials-heading">研究资料</h2>
         {loading ? <p role="status" className="research-panel">正在读取研究资料…</p> : null}
         {error ? <div role="alert" className="research-error">研究资料暂不可用。<button onClick={() => setAttempt((n) => n + 1)}>重试研究资料</button></div> : null}
@@ -115,8 +116,7 @@ export function ProjectWorkspace({ token, projectId }: { token: string; projectI
 
 export default function ProjectsPage() {
   const { projectId, issueId } = useParams();
-  const token = useS32Token();
-  const [input, setInput] = useState("");
+  const session = useWebAuthSession();
   useEffect(() => {
     const previousTitle = document.title;
     document.title = issueId ? "研究问题 · BOOK-ID-SEARCH" : projectId ? "项目详情 · BOOK-ID-SEARCH" : "我的研究项目 · BOOK-ID-SEARCH";
@@ -127,12 +127,10 @@ export default function ProjectsPage() {
     {projectId && !issueId ? <Link className="research-back" to="/research/projects"><ArrowLeft size={16} />返回项目列表</Link> : !projectId ? <header className="research-header"><div className="brand-row"><FolderOpen size={28} /><h1>我的研究项目</h1></div><p>为想深入了解的主题，留下一处起点。</p></header> : null}
     {!researchEnabled ? <p className="research-panel" role="status">研究项目功能尚未开启。</p> : <>
       <section className="research-access" aria-label="研究项目访问">
-        {token ? <><span>研究项目访问凭据已设置</span><button className="research-text-button" onClick={() => { saveS32Token(null); setInput(""); }}>清除访问凭据</button></> : <form onSubmit={(event) => { event.preventDefault(); saveS32Token(input); setInput(""); }}>
-          <label htmlFor="research-token">研究项目访问凭据</label><input id="research-token" type="password" autoComplete="off" value={input} onChange={(e) => setInput(e.target.value)} required placeholder="输入独立的 S32 访问凭据" /><button className="research-primary" disabled={!input.trim()}>进入研究项目</button>
-          <small className="research-muted">凭据仅在当前浏览器会话中使用，与微信读书独立。</small>
-        </form>}
+        <p className="research-muted">私人研究空间 · 使用 Google 账号登录，与微信读书凭据独立。</p>
+        <GoogleLoginPanel className="research-google-login" />
       </section>
-      {token && projectId && issueId ? <ResearchIssueDetail key={`${token}:${projectId}:${issueId}`} token={token} projectId={projectId} issueId={issueId} /> : token ? <ProjectWorkspace key={`${token}:${projectId ?? "list"}`} token={token} projectId={projectId} /> : null}
+      {session.status === "authenticated" && projectId && issueId ? <ResearchIssueDetail key={`${projectId}:${issueId}`} projectId={projectId} issueId={issueId} /> : session.status === "authenticated" ? <ProjectWorkspace key={`${projectId ?? "list"}`} projectId={projectId} /> : null}
     </>}
   </main>;
 }

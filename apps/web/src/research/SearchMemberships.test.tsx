@@ -3,10 +3,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { saveS32Token } from "./access";
 import { getResearchMemberships, ProjectApiError, type ResearchMembership } from "./api";
 import { ResearchMembershipChips, useSearchMemberships } from "./SearchMemberships";
 
+vi.mock("../auth/session", async importOriginal => {
+  const actual = await importOriginal<typeof import("../auth/session")>();
+  return { ...actual, ensureAuthSessionLoaded: vi.fn(async () => {}) };
+});
+import { __resetWebAuthStoreForTests, __setWebAuthSnapshotForTests } from "../auth/session";
+function seedSession(status: "authenticated" | "unauthenticated" = "authenticated"): void {
+  __setWebAuthSnapshotForTests(status === "authenticated"
+    ? { status: "authenticated", user: { email: "owner@example.com", name: "Owner" }, csrfToken: "csrf-test", error: null }
+    : { status: "unauthenticated", user: null, csrfToken: null, error: null });
+}
 vi.mock("./api", async importOriginal => ({
   ...await importOriginal<typeof import("./api")>(),
   getResearchMemberships: vi.fn(),
@@ -30,18 +39,17 @@ function Harness({ bookIds }: { bookIds: string[] }) {
   </>;
 }
 
-beforeEach(() => {
+beforeEach(() => { seedSession();
   vi.clearAllMocks();
-  saveS32Token("token");
   vi.mocked(getResearchMemberships).mockResolvedValue({ memberships: {} });
 });
-afterEach(() => { cleanup(); saveS32Token(null); });
+afterEach(() => { __resetWebAuthStoreForTests(); cleanup(); });
 
 describe("useSearchMemberships", () => {
-  it("does not request without a token", async () => {
-    saveS32Token(null);
+  it("does not request when unauthenticated", async () => {
+    seedSession("unauthenticated");
     render(<Harness bookIds={["book-a"]} />);
-    expect(screen.getByTestId("state").textContent).toBe("no-token");
+    expect(screen.getByTestId("state").textContent).toBe("unauthenticated");
     expect(getResearchMemberships).not.toHaveBeenCalled();
   });
 
@@ -50,7 +58,7 @@ describe("useSearchMemberships", () => {
     render(<Harness bookIds={["book-a", "book-a", "book-b"]} />);
     await waitFor(() => expect(screen.getByTestId("state").textContent).toBe("ready"));
     expect(getResearchMemberships).toHaveBeenCalledOnce();
-    expect(getResearchMemberships).toHaveBeenCalledWith("token", ["book-a", "book-b"], expect.any(AbortSignal));
+    expect(getResearchMemberships).toHaveBeenCalledWith(["book-a", "book-b"], expect.any(AbortSignal));
   });
 
   it("aborts a changed result request and ignores its late response", async () => {
@@ -59,7 +67,7 @@ describe("useSearchMemberships", () => {
       .mockReturnValueOnce(new Promise(resolve => { resolveOld = resolve; }))
       .mockResolvedValueOnce({ memberships: { "book-b": [membership(2)] } });
     const view = render(<Harness bookIds={["book-a"]} />);
-    const oldSignal = vi.mocked(getResearchMemberships).mock.calls[0][2]!;
+    const oldSignal = vi.mocked(getResearchMemberships).mock.calls[0][1]!;
     view.rerender(<Harness bookIds={["book-b"]} />);
     expect(oldSignal.aborted).toBe(true);
     await waitFor(() => expect(screen.getByTestId("memberships").textContent).toContain("项目2"));
@@ -67,14 +75,16 @@ describe("useSearchMemberships", () => {
     expect(screen.getByTestId("memberships").textContent).not.toContain("项目1");
   });
 
-  it("aborts on token change and uses the new token", async () => {
+  it("reloads once when auth state changes unauthenticated → authenticated", async () => {
+    seedSession("unauthenticated");
     vi.mocked(getResearchMemberships).mockReturnValue(new Promise(() => {}));
     render(<Harness bookIds={["book-a"]} />);
-    const oldSignal = vi.mocked(getResearchMemberships).mock.calls[0][2]!;
-    act(() => saveS32Token("next-token"));
-    await waitFor(() => expect(getResearchMemberships).toHaveBeenCalledTimes(2));
-    expect(oldSignal.aborted).toBe(true);
-    expect(getResearchMemberships).toHaveBeenLastCalledWith("next-token", ["book-a"], expect.any(AbortSignal));
+    expect(getResearchMemberships).not.toHaveBeenCalled();
+    const firstCall = vi.mocked(getResearchMemberships).mock;
+    act(() => seedSession()); // re-authenticate: session change must reload
+    await waitFor(() => expect(getResearchMemberships).toHaveBeenCalledTimes(1));
+    expect(getResearchMemberships).toHaveBeenLastCalledWith(["book-a"], expect.any(AbortSignal));
+    expect(firstCall).toBeDefined();
   });
 
   it.each([401, 403])("maps %s to auth-error", async status => {
@@ -97,7 +107,7 @@ describe("useSearchMemberships", () => {
     await waitFor(() => expect(screen.getByTestId("state").textContent).toBe("ready"));
     await userEvent.click(screen.getByRole("button", { name: "refresh" }));
     await waitFor(() => expect(getResearchMemberships).toHaveBeenCalledTimes(2));
-    expect(getResearchMemberships).toHaveBeenLastCalledWith("token", ["book-a"], expect.any(AbortSignal));
+    expect(getResearchMemberships).toHaveBeenLastCalledWith(["book-a"], expect.any(AbortSignal));
   });
 });
 
@@ -126,7 +136,7 @@ describe("ResearchMembershipChips", () => {
 
   it.each([
     ["loading", "正在确认研究状态…"],
-    ["auth-error", "研究项目访问凭据已失效，请重新设置。"],
+    ["auth-error", "登录已失效，请重新登录。"],
     ["unavailable", "研究状态暂不可用"],
   ] as const)("renders the %s degraded state", (state, copy) => {
     render(<MemoryRouter><ResearchMembershipChips state={state} memberships={[]} /></MemoryRouter>);

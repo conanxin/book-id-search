@@ -6,7 +6,6 @@ import {
 import { IssueResolutionDetail } from "./IssueResolutionDetail";
 
 type Props = {
-  token: string;
   projectId: string;
   issueId: string;
   refreshVersion: number;
@@ -24,7 +23,7 @@ function typeLabel(type: IssueResolutionSummary["resolutionType"]): string {
   return "暂不形成工作结论";
 }
 
-export function IssueResolutionHistory({ token, projectId, issueId, refreshVersion }: Props) {
+export function IssueResolutionHistory({ projectId, issueId, refreshVersion }: Props) {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [resolutions, setResolutions] = useState<IssueResolutionSummary[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -37,7 +36,7 @@ export function IssueResolutionHistory({ token, projectId, issueId, refreshVersi
     setLoadState("loading");
     setPageState({ state: "idle" });
     try {
-      const result = await listIssueResolutions(token, projectId, issueId, { limit: 20 }, signal);
+      const result = await listIssueResolutions(projectId, issueId, { limit: 20 }, signal);
       if (signal?.aborted) return;
       setResolutions(result.resolutions);
       setNextCursor(result.nextCursor);
@@ -55,7 +54,7 @@ export function IssueResolutionHistory({ token, projectId, issueId, refreshVersi
     initial.current = controller;
     void loadInitial(controller.signal);
     return () => controller.abort();
-  }, [token, projectId, issueId, refreshVersion]);
+  }, [projectId, issueId, refreshVersion]);
 
   async function loadOlder(cursor: string) {
     older.current?.abort();
@@ -63,9 +62,7 @@ export function IssueResolutionHistory({ token, projectId, issueId, refreshVersi
     older.current = controller;
     setPageState({ state: "loading" });
     try {
-      const result = await listIssueResolutions(
-        token,
-        projectId,
+      const result = await listIssueResolutions(projectId,
         issueId,
         { limit: 20, cursor },
         controller.signal,
@@ -109,7 +106,6 @@ export function IssueResolutionHistory({ token, projectId, issueId, refreshVersi
         <p>{resolution.evidenceBasisAvailable ? "证据依据当前可用" : "未指定或当前不可访问证据依据"}</p>
         <button type="button" onClick={() => setSelectedId(resolution.id)}>查看完整结论</button>
         {selectedId === resolution.id ? <IssueResolutionDetail
-          token={token}
           projectId={projectId}
           issueId={issueId}
           resolutionId={resolution.id}

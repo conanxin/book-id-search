@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { useS32Token } from "./access";
+import { useWebAuthSession } from "../auth/useWebAuthSession";
 import { addCatalogBookToProject, listProjects, ProjectApiError, type Project, type ProjectResearchItem, type ResearchMembership } from "./api";
 import { researchEnabled } from "./ProjectsPage";
 import type { MembershipLoadState } from "./SearchMemberships";
@@ -14,12 +14,14 @@ type Props = {
   onMembershipInvalidated?: () => void;
 };
 export function AddToProject(props: Props) {
-  const token = useS32Token();
+  const session = useWebAuthSession();
   if (!researchEnabled) return null;
-  // A changed credential/book owns a fresh panel; stale responses cannot mark it as added.
-  return <ProjectSelector key={`${token ?? ""}:${props.bookId}`} {...props} token={token} />;
+  // A changed auth state/book owns a fresh panel; stale responses cannot mark it as added.
+  return <ProjectSelector key={`${session.status}:${props.bookId}`} session={session} {...props} />;
 }
-function ProjectSelector({ bookId, bookTitle, onAdded, memberships, membershipState, onMembershipInvalidated, token }: Props & { token: string | null }) {
+type SessionSnapshot = ReturnType<typeof useWebAuthSession>;
+function ProjectSelector({ bookId, bookTitle, onAdded, memberships, membershipState, onMembershipInvalidated, session }: Props & { session: SessionSnapshot }) {
+  const token = session.status === "authenticated";
   const [open, setOpen] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(false);
@@ -35,10 +37,10 @@ function ProjectSelector({ bookId, bookTitle, onAdded, memberships, membershipSt
   async function show() {
     if (open) { if (!pending) close(); return; }
     setOpen(true); setError(""); setProjects([]); setAllActiveAlreadyAdded(false);
-    if (!token) return;
+    if (!token) return; // unauthenticated: open shows login guidance below
     const request = new AbortController(); controller.current = request; setLoading(true);
     try {
-      const data = await listProjects(token, request.signal);
+      const data = await listProjects(request.signal);
       if (!request.signal.aborted) {
         const activeProjects = data.projects.filter(p => p.lifecycleState === "ACTIVE");
         const activeMembershipProjectIds = new Set((memberships ?? [])
@@ -57,7 +59,7 @@ function ProjectSelector({ bookId, bookTitle, onAdded, memberships, membershipSt
     if (!token || !request || request.signal.aborted || submitting.current) return;
     submitting.current = true; setPending(true); setError(""); setAdded("");
     try {
-      const result = await addCatalogBookToProject(token, project.id, bookId, request.signal);
+      const result = await addCatalogBookToProject(project.id, bookId, request.signal);
       if (!request.signal.aborted) {
         setPending(false);
         setAdded(project.name);
@@ -74,7 +76,7 @@ function ProjectSelector({ bookId, bookTitle, onAdded, memberships, membershipSt
     <button type="button" className="toolbar-button" aria-expanded={open} disabled={pending && open} onClick={() => void show()}>加入研究</button>
     {added ? <span role="status" className="research-add-success">{awaitingMembershipRefresh && membershipState === "unavailable" ? "已加入项目；研究状态暂未能重新确认。" : `已加入「${added}」`}</span> : null}
     {open ? <section className="research-add-panel" aria-label={`将《${bookTitle}》加入研究项目`}>
-      {!token ? <p>先进入<Link to="/research/projects">我的研究项目</Link>设置访问凭据。</p> : <>
+      {!token ? <p>先登录<Link to="/research/projects">私人研究空间</Link>，再加入盐研究项目。</p> : <>
         <strong>选择一个研究项目</strong>
         {loading ? <p role="status">正在读取项目…</p> : null}
         {error ? <p role="alert" className="research-error">{error}</p> : null}

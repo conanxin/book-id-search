@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BookOpen, Lock, Loader2, AlertCircle, XCircle, RefreshCw, Shield, EyeOff, BarChart3, Library, Map, CalendarClock, Calendar, Archive } from "lucide-react";
+import { BookOpen, Lock, Loader2, AlertCircle, RefreshCw, Shield, EyeOff, BarChart3, Library, Map, CalendarClock, Calendar, Archive } from "lucide-react";
 import {
-  clearWereadToken,
+  clearWereadStatusCache,
   fetchWereadSummary,
   fetchWereadTrends,
   formatWereadCenterSummary,
-  getWereadToken,
-  saveWereadToken,
+  purgeLegacyWereadTokenStorage,
   type WereadSummary,
   type WereadTrends,
 } from "../wereadPrivate";
+import { useWebAuthSession } from "../auth/useWebAuthSession";
+import { GoogleLoginPanel } from "../auth/GoogleLoginPanel";
 import {
   formatTrendWindow,
   getActivityLevel,
@@ -138,8 +139,8 @@ const KPI_LABELS = {
 } as const;
 
 export default function WereadCenter() {
-  const [token, setToken] = useState("");
-  const [storedToken, setStoredToken] = useState<string | null>(getWereadToken());
+  const session = useWebAuthSession();
+  const authenticated = session.status === "authenticated";
   const [summary, setSummary] = useState<WereadSummary | null>(null);
   const [trends, setTrends] = useState<WereadTrends | null>(null);
   const [trendsStatus, setTrendsStatus] = useState<"idle" | "loading" | "error" | "ok">("idle");
@@ -171,13 +172,34 @@ export default function WereadCenter() {
     setSessionThemeOverlay(overlay);
   }, []);
 
+  // Task 9: session-driven lifecycle. One-time purge of the legacy
+  // sessionStorage token key (never read, never used for auth).
   useEffect(() => {
-    const t = getWereadToken();
-    if (t) {
-      setStoredToken(t);
-      loadSummary(t);
-    }
+    purgeLegacyWereadTokenStorage();
   }, []);
+
+  useEffect(() => {
+    if (authenticated) {
+      loadSummary();
+    } else {
+      // logout / unauthenticated: drop every private surface immediately.
+      clearWereadStatusCache();
+      setSummary(null);
+      setTrends(null);
+      setTrendsStatus("idle");
+      setTrendsError(null);
+      setStatus("idle");
+      setError(null);
+      setActiveTab("notes");
+      setMapActivated(false);
+      setReviewActivated(false);
+      setAnnualActivated(false);
+      setArchiveActivated(false);
+      setRequestedAnnualReviewYear(null);
+      lastSessionOverlayKeyRef.current = sessionThemeOverlayKey(EMPTY_SESSION_THEME_OVERLAY);
+      setSessionThemeOverlay(EMPTY_SESSION_THEME_OVERLAY);
+    }
+  }, [authenticated]);
 
   // S27L — clear the long-term archive's requested-year hint once
   // the user has switched to the annual-review tab so a manual
@@ -190,23 +212,28 @@ export default function WereadCenter() {
     return undefined;
   }, [requestedAnnualReviewYear, activeTab, annualActivated]);
 
-  async function loadSummary(t: string) {
+  async function loadSummary() {
     setStatus("loading");
     setError(null);
     try {
-      const s = await fetchWereadSummary(t);
-      setSummary(s);
-      setStatus(s.ok ? "idle" : "error");
-      if (!s.ok) setError("私有 API 返回异常");
+      const s = await fetchWereadSummary();
       if (s.ok) {
-        void loadTrends(t);
+        setSummary(s);
+        setStatus("idle");
+        void loadTrends();
+      } else {
+        // Task 9: a not-ok summary never mounts the private workspace and
+        // never chains the trends/notes/map fetches.
+        setSummary(null);
+        setStatus("error");
+        setError("私有 API 返回异常");
       }
     } catch (err) {
       setStatus("error");
       const msg = err instanceof Error ? err.message : "连接失败";
-      if (/401|403|unauthorized|invalid token|missing token|认证失败|已过期|token 无效/i.test(msg)) {
+      if (/401|403|unauthorized|认证失败|登录已失效|登录安全校验/i.test(msg)) {
         setStatus("disabled");
-        setError("Token 无效或已过期");
+        setError("登录已失效，请重新登录");
       } else if (/disabled|not enabled|未启用/i.test(msg)) {
         setStatus("disabled");
         setError("私有 API 未启用");
@@ -216,11 +243,11 @@ export default function WereadCenter() {
     }
   }
 
-  async function loadTrends(t: string) {
+  async function loadTrends() {
     setTrendsStatus("loading");
     setTrendsError(null);
     try {
-      const resp = await fetchWereadTrends(t);
+      const resp = await fetchWereadTrends();
       if (resp.ok && resp.trends) {
         setTrends(resp.trends);
         setTrendsStatus("ok");
@@ -234,35 +261,9 @@ export default function WereadCenter() {
     }
   }
 
-  function handleConnect() {
-    if (!token.trim()) return;
-    saveWereadToken(token.trim());
-    setStoredToken(token.trim());
-    loadSummary(token.trim());
-  }
-
-  function handleClear() {
-    clearWereadToken();
-    setStoredToken(null);
-    setSummary(null);
-    setTrends(null);
-    setTrendsStatus("idle");
-    setTrendsError(null);
-    setStatus("idle");
-    setError(null);
-    setToken("");
-    setActiveTab("notes");
-    setMapActivated(false);
-    setReviewActivated(false);
-    setAnnualActivated(false);
-    setArchiveActivated(false);
-    setRequestedAnnualReviewYear(null);
-    // S27H-2: dropping the token also drops the session overlay —
-    // NotesLibrary will emit empty on next render, but be explicit so
-    // the map immediately sees a clean state if it is mounted.
-    lastSessionOverlayKeyRef.current = sessionThemeOverlayKey(EMPTY_SESSION_THEME_OVERLAY);
-    setSessionThemeOverlay(EMPTY_SESSION_THEME_OVERLAY);
-  }
+  // Task 9: unified logout — the GoogleLoginPanel handles signing out;
+  // the unauthenticated effect above clears all private state on the
+  // authenticated→unauthenticated transition.
 
   function handleTabChange(next: WorkspaceTab) {
     setActiveTab(next);
@@ -285,8 +286,7 @@ export default function WereadCenter() {
   }
 
   function handleRetry() {
-    const t = getWereadToken();
-    if (t) loadSummary(t);
+    if (authenticated) loadSummary();
   }
 
   const view = summary ? formatWereadCenterSummary(summary) : null;
@@ -297,47 +297,33 @@ export default function WereadCenter() {
         <BookOpen size={32} />
         <h1>微信读书中心</h1>
         <p className="weread-center-hero__subtitle">
-          这是你的私有阅读数据入口。输入 private token 后显示微信读书统计。
+          这是你的私有阅读数据入口。使用 Google 账号登录后显示微信读书统计，浏览器通过本站安全登录会话访问私人数据。
         </p>
       </header>
 
-      {!storedToken ? (
-        <section className="weread-center-panel" data-testid="weread-token-form">
-          <div className="weread-private-form">
+      {!authenticated ? (
+        <section className="weread-center-panel" data-testid="weread-login-panel">
+          <div className="weread-login-panel__inner">
             <Lock size={16} />
-            <span className="weread-private-label">私有 token</span>
-            <input
-              type="password"
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleConnect()}
-              placeholder="输入 private token"
-              aria-label="private token"
-            />
-            <button type="button" onClick={handleConnect} disabled={!token.trim()}>
-              连接
-            </button>
+            <span className="weread-private-label">私人数据需要登录</span>
           </div>
           <p className="weread-center-hint">
-            Token 只保存在当前浏览器 sessionStorage，不会上传到除本站 private API 外的地方。
+            使用 Google 账号登录后，浏览器将通过本站安全登录会话访问你的微信读书私人数据；会话 cookie 为 HttpOnly，页面脚本不可读取。
           </p>
+          <GoogleLoginPanel className="weread-google-login" />
         </section>
       ) : (
-        <section className="weread-center-panel weread-token-status" data-testid="weread-token-status">
+        <section className="weread-center-panel weread-token-status" data-testid="weread-session-status">
           <div className="weread-private-status">
             <div className="weread-private-status__left">
               <Lock size={16} />
-              <span>微信读书私有模式已启用</span>
+              <span>微信读书私有模式已启用（Google 登录）</span>
               {status === "loading" && <Loader2 size={14} className="spin" />}
             </div>
             <div className="weread-center-actions">
-              <button type="button" onClick={handleRetry} disabled={status === "loading"} title="重新连接">
+              <button type="button" onClick={handleRetry} disabled={status === "loading"} title="刷新数据">
                 <RefreshCw size={14} />
-                重新连接
-              </button>
-              <button type="button" onClick={handleClear} title="清除 token">
-                <XCircle size={14} />
-                清除 token
+                刷新数据
               </button>
             </div>
           </div>
@@ -350,7 +336,7 @@ export default function WereadCenter() {
         </section>
       )}
 
-      {view && status !== "disabled" ? (
+      {authenticated && view && status !== "disabled" ? (
         <>
           <section className="weread-kpi-section" aria-label="总览指标">
             <h2 className="weread-section-title">总览</h2>
@@ -446,12 +432,7 @@ export default function WereadCenter() {
               <h2 className="weread-center-card__title">
                 <Library size={16} aria-hidden="true" /> 私有笔记库
               </h2>
-              {storedToken ? (
-                <NotesLibrary
-                  token={storedToken}
-                  onSessionOverlayChange={handleSessionOverlayChange}
-                />
-              ) : null}
+              <NotesLibrary onSessionOverlayChange={handleSessionOverlayChange} />
             </section>
 
             <aside className="weread-side-rail" data-testid="weread-side-rail">
@@ -479,7 +460,7 @@ export default function WereadCenter() {
                   <Shield size={16} aria-hidden="true" /> 隐私边界
                 </h2>
                 <p className="weread-privacy-card__summary">
-                  私有内容仅在当前 private token 会话中可见。
+                  私有内容仅在本站 Google 登录会话中可见。
                 </p>
                 <details className="weread-privacy-card__details">
                   <summary>展开隐私说明</summary>
@@ -504,11 +485,8 @@ export default function WereadCenter() {
             className="weread-workspace-panel"
             data-testid="weread-panel-map"
           >
-            {storedToken && mapActivated ? (
-              <ReadingMapDashboard
-                token={storedToken}
-                sessionThemeOverlay={sessionThemeOverlay}
-              />
+            {mapActivated ? (
+              <ReadingMapDashboard sessionThemeOverlay={sessionThemeOverlay} />
             ) : null}
           </div>
 
@@ -520,9 +498,8 @@ export default function WereadCenter() {
             className="weread-workspace-panel"
             data-testid="weread-panel-review"
           >
-            {storedToken && reviewActivated ? (
+            {reviewActivated ? (
               <ReviewCalendarDashboard
-                token={storedToken}
                 active={activeTab === "review"}
                 sessionThemeOverlay={sessionThemeOverlay}
               />
@@ -537,9 +514,8 @@ export default function WereadCenter() {
             className="weread-workspace-panel"
             data-testid="weread-panel-annual"
           >
-            {storedToken && annualActivated ? (
+            {annualActivated ? (
               <AnnualReviewDashboard
-                token={storedToken}
                 active={activeTab === "annual"}
                 requestedYear={requestedAnnualReviewYear}
               />
@@ -554,9 +530,8 @@ export default function WereadCenter() {
             className="weread-workspace-panel"
             data-testid="weread-panel-archive"
           >
-            {storedToken && archiveActivated ? (
+            {archiveActivated ? (
               <ReadingArchiveDashboard
-                token={storedToken}
                 active={activeTab === "archive"}
                 onOpenAnnualYear={handleOpenAnnualYear}
               />

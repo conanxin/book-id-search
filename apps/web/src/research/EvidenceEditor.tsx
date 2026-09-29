@@ -34,7 +34,6 @@ export interface CurrentEvidencePreview {
 }
 
 export interface EvidenceEditorProps {
-  token: string;
   projectId: string;
   issueId: string;
   claim: CandidateClaim;
@@ -62,7 +61,6 @@ function candidateLabel(candidate: EvidenceCandidate): string {
 
 export function EvidenceEditor(props: EvidenceEditorProps) {
   const {
-    token,
     projectId,
     issueId,
     claim,
@@ -111,7 +109,7 @@ export function EvidenceEditor(props: EvidenceEditorProps) {
     active.current = controller;
     setLoad("loading");
     try {
-      const result = await listEvidenceCandidates(token, projectId, issueId, claim.id, controller.signal);
+      const result = await listEvidenceCandidates(projectId, issueId, claim.id, controller.signal);
       if (controller.signal.aborted) return;
       setCandidates(result.candidates);
       setLoad("ready");
@@ -130,8 +128,7 @@ export function EvidenceEditor(props: EvidenceEditorProps) {
     const version = draftVersion.current;
     setPreview({ state: "loading" });
     try {
-      const response = await previewEvidenceManifest(
-        token, projectId, issueId, claim.id,
+      const response = await previewEvidenceManifest(projectId, issueId, claim.id,
         draft.map(item => ({ role: item.role, targetType: item.candidate.targetType, targetId: item.candidate.targetId, note: item.note })),
         controller.signal,
       );

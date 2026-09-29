@@ -11,7 +11,6 @@ import {
 import { getBook } from "../api";
 
 interface BookNotesExportButtonProps {
-  token: string;
   catalogId: string;
   /** Optional public-book metadata to avoid an extra fetch. */
   metaHint?: WereadBookExportMeta;
@@ -40,12 +39,11 @@ const FALLBACK_META_ERROR = "公共书目信息暂不可用，将使用书目 ID
  *  4. Component builds a Markdown file via `buildWereadBookExport`.
  *  5. Component downloads the file in the browser using Blob + a temporary
  *     anchor element. The Markdown is NEVER POSTed to the server.
- *  6. An AbortController cancels in-flight requests when the token changes
+ *  6. An AbortController cancels in-flight requests when the session changes
  *     or the component unmounts. At most one export runs at a time per
  *     instance.
  */
 export default function BookNotesExportButton({
-  token,
   catalogId,
   metaHint,
   label = "导出本书全部笔记",
@@ -64,7 +62,7 @@ export default function BookNotesExportButton({
       abortRef.current?.abort();
       abortRef.current = null;
     };
-  }, [token, catalogId]);
+  }, [catalogId]);
 
   const handleClick = useCallback(async () => {
     if (state.kind === "loading") return;
@@ -95,7 +93,7 @@ export default function BookNotesExportButton({
       }
 
       // 2. Paginate every private note attached to this catalogId.
-      const result = await fetchAllWereadBookNotes(token, catalogId, {
+      const result = await fetchAllWereadBookNotes(catalogId, {
         ...getWereadBookPagination(),
         signal: ctl.signal,
       });
@@ -148,7 +146,7 @@ export default function BookNotesExportButton({
     } finally {
       if (abortRef.current === ctl) abortRef.current = null;
     }
-  }, [catalogId, label, metaHint, state.kind, token]);
+  }, [catalogId, label, metaHint, state.kind]);
 
   const handleClose = useCallback(() => {
     abortRef.current?.abort();

@@ -1,10 +1,17 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createResearchIssue,
   getResearchIssue,
   listResearchIssues,
   ProjectApiError,
 } from "./api";
+
+import { __resetWebAuthStoreForTests, __setWebAuthSnapshotForTests } from "../auth/session";
+function seedSession(): void {
+  __setWebAuthSnapshotForTests({ status: "authenticated", user: { email: "owner@example.com", name: "Owner" }, csrfToken: "csrf-test", error: null });
+}
+beforeEach(() => { seedSession(); });
+afterEach(() => { __resetWebAuthStoreForTests(); });
 
 const projectId = "11111111-1111-4111-8111-111111111111";
 const issueId = "22222222-2222-4222-8222-222222222222";
@@ -21,7 +28,7 @@ describe("M2-A research issue API client", () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ project, issue }), { status }));
     vi.stubGlobal("fetch", fetchMock);
     const signal = new AbortController().signal;
-    await expect(createResearchIssue("secret", "project/a", key, { title: "normalized", question: "question", forged: true } as any, signal))
+    await expect(createResearchIssue("project/a", key, { title: "normalized", question: "question", forged: true } as any, signal))
       .resolves.toEqual({ project, issue });
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/private/s32/projects/project%2Fa/issues",
@@ -31,10 +38,11 @@ describe("M2-A research issue API client", () => {
         cache: "no-store",
         body: JSON.stringify({ title: "normalized", question: "question" }),
         headers: {
-          Authorization: "Bearer secret",
+          "X-CSRF-Token": "csrf-test",
           "Content-Type": "application/json",
           "Idempotency-Key": key,
         },
+        credentials: "same-origin",
       }),
     );
   });
@@ -44,8 +52,8 @@ describe("M2-A research issue API client", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ project, issues: [summary] })))
       .mockResolvedValueOnce(new Response(JSON.stringify({ project, issue })));
     vi.stubGlobal("fetch", fetchMock);
-    expect(await listResearchIssues("t", "p/a")).toEqual({ project, issues: [summary] });
-    expect(await getResearchIssue("t", "p/a", "i/b")).toEqual({ project, issue });
+    expect(await listResearchIssues("p/a")).toEqual({ project, issues: [summary] });
+    expect(await getResearchIssue("p/a", "i/b")).toEqual({ project, issue });
     expect(fetchMock.mock.calls[0][0]).toBe("/api/private/s32/projects/p%2Fa/issues");
     expect(fetchMock.mock.calls[1][0]).toBe("/api/private/s32/projects/p%2Fa/issues/i%2Fb");
   });
@@ -59,7 +67,7 @@ describe("M2-A research issue API client", () => {
     { project, issues: [{ ...summary, updatedAt: "invalid" }] },
   ])("rejects malformed list payload %#", async (body) => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(body))));
-    await expect(listResearchIssues("t", projectId)).rejects.toMatchObject({ status: 502 });
+    await expect(listResearchIssues(projectId)).rejects.toMatchObject({ status: 502 });
   });
 
   it.each([
@@ -69,7 +77,7 @@ describe("M2-A research issue API client", () => {
     { project, issue: { ...issue, createdAt: "bad" } },
   ])("rejects malformed detail payload %#", async (body) => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(body))));
-    await expect(getResearchIssue("t", projectId, issueId)).rejects.toMatchObject({ status: 502 });
+    await expect(getResearchIssue(projectId, issueId)).rejects.toMatchObject({ status: 502 });
   });
 
   it.each([
@@ -77,7 +85,7 @@ describe("M2-A research issue API client", () => {
     ["IDEMPOTENCY_CONFLICT", "创建请求标识与当前研究问题内容不一致。"],
   ])("surfaces safe typed conflict %s without reflecting private details", async (code, message) => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: { code, message: "SQL SECRET" } }), { status: 409 })));
-    await expect(createResearchIssue("t", projectId, key, { title: "t", question: "q" }))
+    await expect(createResearchIssue(projectId, key, { title: "t", question: "q" }))
       .rejects.toEqual(new ProjectApiError(409, message, code));
   });
 });

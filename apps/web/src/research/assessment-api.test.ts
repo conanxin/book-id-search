@@ -7,6 +7,13 @@ import {
   listAssessments,
 } from "./api";
 
+import { __resetWebAuthStoreForTests, __setWebAuthSnapshotForTests } from "../auth/session";
+function seedSession(): void {
+  __setWebAuthSnapshotForTests({ status: "authenticated", user: { email: "owner@example.com", name: "Owner" }, csrfToken: "csrf-test", error: null });
+}
+beforeEach(() => { seedSession(); });
+afterEach(() => { __resetWebAuthStoreForTests(); });
+
 const P = "11111111-1111-4111-8111-111111111111";
 const I = "22222222-2222-4222-8222-222222222222";
 const C = "33333333-3333-4333-8333-333333333333";
@@ -94,7 +101,7 @@ describe("assessment client paths", () => {
       assessment: record,
       evidenceManifest: manifestSummary,
     }, 201));
-    await createAssessment("token", P, I, C, KEY, {
+    await createAssessment(P, I, C, KEY, {
       stance: "SUPPORTS",
       confidenceLevel: null,
       reasoning: "because",
@@ -116,13 +123,13 @@ describe("assessment client paths", () => {
 
   it("history uses encoded cursor/limit query and detail uses exact assessment path", async () => {
     fetchMock.mockResolvedValueOnce(response({ claim, assessments: [summary], nextCursor: null }));
-    await listAssessments("t", P, I, C, { limit: 20, cursor: "opaque" });
+    await listAssessments(P, I, C, { limit: 20, cursor: "opaque" });
     expect(fetchMock.mock.calls[0][0]).toBe(
       "/api/private/s32/projects/" + P + "/issues/" + I + "/claims/" + C + "/assessments?limit=20&cursor=opaque",
     );
 
     fetchMock.mockResolvedValueOnce(response(detail));
-    await getAssessment("t", P, I, C, A);
+    await getAssessment(P, I, C, A);
     expect(fetchMock.mock.calls[1][0]).toBe(
       "/api/private/s32/projects/" + P + "/issues/" + I + "/claims/" + C + "/assessments/" + A,
     );
@@ -142,7 +149,7 @@ describe("strict assessment response validation", () => {
       }],
       nextCursor: null,
     }));
-    const result = await listAssessments("t", P, I, C);
+    const result = await listAssessments(P, I, C);
     expect(result.assessments[0]).toMatchObject({
       actorId: ACTOR,
       numericScore: 0.82,
@@ -160,7 +167,7 @@ describe("strict assessment response validation", () => {
         reasoning: null,
       },
     }));
-    expect((await getAssessment("t", P, I, C, A)).assessment.reasoning).toBeNull();
+    expect((await getAssessment(P, I, C, A)).assessment.reasoning).toBeNull();
   });
 
   it("rejects malformed score pairing and malformed Manifest summary", async () => {
@@ -169,14 +176,14 @@ describe("strict assessment response validation", () => {
       assessments: [{ ...summary, numericScore: 0.5, scoreKind: null }],
       nextCursor: null,
     }));
-    await expect(listAssessments("t", P, I, C)).rejects.toMatchObject({ status: 502 });
+    await expect(listAssessments(P, I, C)).rejects.toMatchObject({ status: 502 });
 
     fetchMock.mockResolvedValueOnce(response({
       claim,
       assessments: [{ ...summary, evidenceManifest: { ...manifestSummary, purpose: "OTHER" } }],
       nextCursor: null,
     }));
-    await expect(listAssessments("t", P, I, C)).rejects.toMatchObject({ status: 502 });
+    await expect(listAssessments(P, I, C)).rejects.toMatchObject({ status: 502 });
   });
 
   it("accepts minimal replay visible=false and rejects protected extra fields", async () => {
@@ -188,7 +195,7 @@ describe("strict assessment response validation", () => {
       items: [{ role: "SUPPORTING" as const, targetType: "SOURCE" as const, targetId: SOURCE, note: null }],
     };
     fetchMock.mockResolvedValueOnce(response({ status: "replayed", visible: false, assessmentId: A }));
-    expect(await createAssessment("t", P, I, C, KEY, input))
+    expect(await createAssessment(P, I, C, KEY, input))
       .toEqual({ status: "replayed", visible: false, assessmentId: A });
 
     fetchMock.mockResolvedValueOnce(response({
@@ -197,7 +204,7 @@ describe("strict assessment response validation", () => {
       assessmentId: A,
       reasoning: "leak",
     }));
-    await expect(createAssessment("t", P, I, C, KEY, input)).rejects.toMatchObject({ status: 502 });
+    await expect(createAssessment(P, I, C, KEY, input)).rejects.toMatchObject({ status: 502 });
   });
 
   it("rejects noncontiguous detail ordinals and more than 100 items", async () => {
@@ -208,7 +215,7 @@ describe("strict assessment response validation", () => {
         items: [{ ...detail.evidenceManifest.items[0], ordinal: 2 }],
       },
     }));
-    await expect(getAssessment("t", P, I, C, A)).rejects.toMatchObject({ status: 502 });
+    await expect(getAssessment(P, I, C, A)).rejects.toMatchObject({ status: 502 });
 
     fetchMock.mockResolvedValueOnce(response({
       ...detail,
@@ -221,7 +228,7 @@ describe("strict assessment response validation", () => {
         })),
       },
     }));
-    await expect(getAssessment("t", P, I, C, A)).rejects.toMatchObject({ status: 502 });
+    await expect(getAssessment(P, I, C, A)).rejects.toMatchObject({ status: 502 });
   });
 });
 
@@ -232,7 +239,7 @@ describe("safe assessment errors", () => {
     [503, "ASSESSMENT_STORE_UNAVAILABLE", "评价服务暂不可用。"],
   ])("maps %s %s to stable copy", async (status, code, message) => {
     fetchMock.mockResolvedValueOnce(response({ error: { code, message: "server secret" } }, status));
-    const error = await getAssessment("t", P, I, C, A).catch(e => e);
+    const error = await getAssessment(P, I, C, A).catch(e => e);
     expect(error).toBeInstanceOf(ProjectApiError);
     expect(error.message).toBe(message);
     expect(error.message).not.toContain("server secret");

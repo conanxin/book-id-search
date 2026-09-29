@@ -12,6 +12,16 @@ import {
 } from "./api";
 import { ResearchIssueDetail } from "./ResearchIssueDetail";
 
+vi.mock("../auth/session", async importOriginal => {
+  const actual = await importOriginal<typeof import("../auth/session")>();
+  return { ...actual, ensureAuthSessionLoaded: vi.fn(async () => {}) };
+});
+import { __resetWebAuthStoreForTests, __setWebAuthSnapshotForTests } from "../auth/session";
+function seedSession(status: "authenticated" | "unauthenticated" = "authenticated"): void {
+  __setWebAuthSnapshotForTests(status === "authenticated"
+    ? { status: "authenticated", user: { email: "owner@example.com", name: "Owner" }, csrfToken: "csrf-test", error: null }
+    : { status: "unauthenticated", user: null, csrfToken: null, error: null });
+}
 vi.mock("./api", async (load) => ({
   ...(await load<typeof import("./api")>()),
   getResearchIssue: vi.fn(),
@@ -24,7 +34,7 @@ const issueId = "22222222-2222-4222-8222-222222222222";
 const project = { id: projectId, name: "北京古道研究", lifecycleState: "ACTIVE" as const, readOnly: false };
 const issue = { id: issueId, projectId, title: "刘祥店迁出时间", question: "第一行\n第二行 <script>x</script>", lifecycleState: "OPEN" as const, createdAt: "2026-09-20T00:00:00Z", updatedAt: "2026-09-20T01:00:00Z" };
 
-beforeEach(() => {
+beforeEach(() => { seedSession();
   vi.mocked(getResearchIssue).mockReset().mockResolvedValue({ project, issue });
   vi.mocked(listCandidateClaims).mockReset().mockResolvedValue({ claims: [] });
   vi.mocked(listIssueResolutionEvidenceBases).mockReset().mockResolvedValue({
@@ -44,11 +54,11 @@ beforeEach(() => {
     nextCursor: null,
   });
 });
-afterEach(() => { cleanup(); vi.clearAllMocks(); });
+afterEach(() => { __resetWebAuthStoreForTests(); cleanup(); vi.clearAllMocks(); });
 
 describe("Research Issue detail", () => {
   it("loads dedicated Issue detail and keeps Resolution views at Issue level", async () => {
-    const { container } = render(<MemoryRouter><ResearchIssueDetail token="token" projectId={projectId} issueId={issueId} /></MemoryRouter>);
+    const { container } = render(<MemoryRouter><ResearchIssueDetail projectId={projectId} issueId={issueId} /></MemoryRouter>);
     expect(screen.getByRole("status").textContent).toContain("正在读取研究问题");
     expect(await screen.findByRole("heading", { name: issue.title })).toBeTruthy();
     expect(getResearchIssue).toHaveBeenCalledOnce();
@@ -75,7 +85,7 @@ describe("Research Issue detail", () => {
 
   it("keeps archived details readable", async () => {
     vi.mocked(getResearchIssue).mockResolvedValue({ project: { ...project, lifecycleState: "ARCHIVED", readOnly: true }, issue });
-    render(<MemoryRouter><ResearchIssueDetail token="token" projectId={projectId} issueId={issueId} /></MemoryRouter>);
+    render(<MemoryRouter><ResearchIssueDetail projectId={projectId} issueId={issueId} /></MemoryRouter>);
     expect(await screen.findByText("已归档 · 只读")).toBeTruthy();
     expect(await screen.findByRole("heading", { name: "当前工作结论" })).toBeTruthy();
   });
@@ -86,7 +96,7 @@ describe("Research Issue detail", () => {
     [503, "研究问题暂不可用。"],
   ])("shows safe retryable error for %s", async (status, copy) => {
     vi.mocked(getResearchIssue).mockRejectedValueOnce(new ProjectApiError(status, "SECRET OWNER")).mockResolvedValueOnce({ project, issue });
-    render(<MemoryRouter><ResearchIssueDetail token="token" projectId={projectId} issueId={issueId} /></MemoryRouter>);
+    render(<MemoryRouter><ResearchIssueDetail projectId={projectId} issueId={issueId} /></MemoryRouter>);
     expect(await screen.findByText(copy)).toBeTruthy();
     expect(document.body.textContent).not.toContain("SECRET OWNER");
     await userEvent.click(screen.getByRole("button", { name: "重试研究问题" }));
@@ -96,7 +106,7 @@ describe("Research Issue detail", () => {
 
 it("keeps Issue visible and retries Claims independently", async () => {
  vi.mocked(listCandidateClaims).mockRejectedValueOnce(new ProjectApiError(503,"SECRET")).mockResolvedValueOnce({claims:[]});
- render(<MemoryRouter><ResearchIssueDetail token="t" projectId={projectId} issueId={issueId}/></MemoryRouter>);
+ render(<MemoryRouter><ResearchIssueDetail projectId={projectId} issueId={issueId}/></MemoryRouter>);
  expect(await screen.findByRole("heading",{name:issue.title})).toBeTruthy();
  expect(await screen.findByText("可能答案暂不可用。")).toBeTruthy();
  expect(document.body.textContent).not.toContain("SECRET");

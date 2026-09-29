@@ -6,6 +6,16 @@ import { EvidenceEditor } from "./EvidenceEditor";
 import { listEvidenceCandidates, previewEvidenceManifest, ProjectApiError } from "./api";
 import type { CandidateClaim } from "./api";
 
+vi.mock("../auth/session", async importOriginal => {
+  const actual = await importOriginal<typeof import("../auth/session")>();
+  return { ...actual, ensureAuthSessionLoaded: vi.fn(async () => {}) };
+});
+import { __resetWebAuthStoreForTests, __setWebAuthSnapshotForTests } from "../auth/session";
+function seedSession(status: "authenticated" | "unauthenticated" = "authenticated"): void {
+  __setWebAuthSnapshotForTests(status === "authenticated"
+    ? { status: "authenticated", user: { email: "owner@example.com", name: "Owner" }, csrfToken: "csrf-test", error: null }
+    : { status: "unauthenticated", user: null, csrfToken: null, error: null });
+}
 vi.mock("./api", async load => ({
   ...await load<typeof import("./api")>(),
   listEvidenceCandidates: vi.fn(),
@@ -45,7 +55,7 @@ const previewResponse = {
   persisted: false as const,
 };
 
-beforeEach(() => {
+beforeEach(() => { seedSession();
   vi.resetAllMocks();
   vi.mocked(listEvidenceCandidates).mockResolvedValue({ claim: { ...claim }, candidates: [source, asset, note] });
   vi.mocked(previewEvidenceManifest).mockResolvedValue(previewResponse);
@@ -53,7 +63,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 function show(claimOverride: Partial<CandidateClaim> = {}) {
-  return render(<EvidenceEditor token="t" projectId={p} issueId={i} claim={{ ...claim, ...claimOverride }} />);
+  return render(<EvidenceEditor projectId={p} issueId={i} claim={{ ...claim, ...claimOverride }} />);
 }
 
 describe("lazy load and degradation", () => {
@@ -67,7 +77,7 @@ describe("lazy load and degradation", () => {
     show();
     await userEvent.click(screen.getByRole("button", { name: "构建证据集" }));
     expect((await screen.findAllByText(/北京古道志/)).length).toBeGreaterThan(0);
-    expect(listEvidenceCandidates).toHaveBeenCalledWith("t", p, i, claim.id, expect.anything());
+    expect(listEvidenceCandidates).toHaveBeenCalledWith(p, i, claim.id, expect.anything());
     expect(listEvidenceCandidates).toHaveBeenCalledTimes(1);
   });
 
@@ -164,7 +174,7 @@ describe("preview and invalidation", () => {
     expect(await screen.findByText("尚未提交。")).toBeTruthy();
     expect(screen.getByText(/将在评价该 Claim 时冻结为 EvidenceManifest。/)).toBeTruthy();
     expect(screen.getByText(/^a{64}$/)).toBeTruthy();
-    expect(vi.mocked(previewEvidenceManifest)).toHaveBeenCalledWith("t", p, i, claim.id, [
+    expect(vi.mocked(previewEvidenceManifest)).toHaveBeenCalledWith(p, i, claim.id, [
       { role: "SUPPORTING", targetType: "SOURCE", targetId: source.targetId, note: "" },
     ], expect.anything());
     expect(screen.queryByText(/manifestId/i)).toBeNull();
@@ -306,7 +316,6 @@ describe("M2-D preview handoff", () => {
     const onPreviewChange = vi.fn();
     render(
       <EvidenceEditor
-        token="t"
         projectId={p}
         issueId={i}
         claim={claim}
@@ -347,7 +356,7 @@ describe("M2-D preview handoff", () => {
       claim: { ...claim },
       candidates,
     });
-    render(<EvidenceEditor token="t" projectId={p} issueId={i} claim={claim} />);
+    render(<EvidenceEditor projectId={p} issueId={i} claim={claim} />);
     await userEvent.click(screen.getByRole("button", { name: "构建证据集" }));
     await screen.findByText(/资料 101/);
 
@@ -372,7 +381,6 @@ describe("external preview reset after committed Assessment", () => {
     const onPreviewChange = vi.fn();
     const view = render(
       <EvidenceEditor
-        token="t"
         projectId={p}
         issueId={i}
         claim={claim}
@@ -391,7 +399,6 @@ describe("external preview reset after committed Assessment", () => {
 
     view.rerender(
       <EvidenceEditor
-        token="t"
         projectId={p}
         issueId={i}
         claim={claim}

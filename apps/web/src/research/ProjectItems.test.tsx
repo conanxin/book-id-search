@@ -6,6 +6,16 @@ import { MemoryRouter } from "react-router-dom";
 import { ProjectItems } from "./ProjectItems";
 import { createProjectItemNote, getProjectItemNote, removeProjectItem, ProjectApiError, type ProjectItemNote, type ProjectOverviewItem } from "./api";
 
+vi.mock("../auth/session", async importOriginal => {
+  const actual = await importOriginal<typeof import("../auth/session")>();
+  return { ...actual, ensureAuthSessionLoaded: vi.fn(async () => {}) };
+});
+import { __resetWebAuthStoreForTests, __setWebAuthSnapshotForTests } from "../auth/session";
+function seedSession(status: "authenticated" | "unauthenticated" = "authenticated"): void {
+  __setWebAuthSnapshotForTests(status === "authenticated"
+    ? { status: "authenticated", user: { email: "owner@example.com", name: "Owner" }, csrfToken: "csrf-test", error: null }
+    : { status: "unauthenticated", user: null, csrfToken: null, error: null });
+}
 vi.mock("./api", async importOriginal => ({
   ...await importOriginal<typeof import("./api")>(),
   removeProjectItem: vi.fn(),
@@ -43,21 +53,20 @@ const item: ProjectOverviewItem = {
 };
 
 const view = (props: Partial<React.ComponentProps<typeof ProjectItems>> = {}) => <MemoryRouter><ProjectItems
-  token="token"
   projectId="project"
   items={[item]}
   readOnly={false}
   {...props}
 /></MemoryRouter>;
 
-beforeEach(() => {
+beforeEach(() => { seedSession();
   vi.clearAllMocks();
   vi.mocked(removeProjectItem).mockResolvedValue(undefined);
   vi.mocked(getProjectItemNote).mockResolvedValue({ note: null });
   vi.mocked(createProjectItemNote).mockResolvedValue({ note: savedNote });
   vi.spyOn(window, "confirm").mockReturnValue(true);
 });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers(); });
+afterEach(() => { __resetWebAuthStoreForTests(); cleanup(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe("project rediscover materials", () => {
   it("renders canonical fields, count and items in server-provided activity order", () => {
@@ -117,7 +126,7 @@ describe("project rediscover materials", () => {
     render(view());
     await userEvent.click(screen.getByRole("button", { name: "移出项目" }));
     expect(screen.getByText(item.title)).toBeTruthy();
-    expect(removeProjectItem).toHaveBeenCalledWith("token", "project", "binding", expect.any(AbortSignal));
+    expect(removeProjectItem).toHaveBeenCalledWith("project", "binding", expect.any(AbortSignal));
     await act(async () => resolve());
     await waitFor(() => expect(screen.queryByText(item.title)).toBeNull());
 

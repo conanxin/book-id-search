@@ -1,22 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useS32Token } from "./access";
+import { useWebAuthSession } from "../auth/useWebAuthSession";
 import { getResearchMemberships, ProjectApiError, type ResearchMembership } from "./api";
 
-export type MembershipLoadState = "no-token" | "loading" | "ready" | "auth-error" | "unavailable";
+export type MembershipLoadState = "unauthenticated" | "loading" | "ready" | "auth-error" | "unavailable";
 
 export function useSearchMemberships(bookIds: string[]) {
-  const token = useS32Token();
+  const session = useWebAuthSession();
   const requestKey = JSON.stringify(Array.from(new Set(bookIds.filter(Boolean))));
   const uniqueBookIds = useMemo<string[]>(() => JSON.parse(requestKey), [requestKey]);
   const [refreshVersion, setRefreshVersion] = useState(0);
-  const [state, setState] = useState<MembershipLoadState>(token ? "loading" : "no-token");
+  const [state, setState] = useState<MembershipLoadState>(session.status === "authenticated" ? "loading" : "unauthenticated");
   const [memberships, setMemberships] = useState<Record<string, ResearchMembership[]>>({});
 
   useEffect(() => {
     setMemberships({});
-    if (!token) {
-      setState("no-token");
+    if (session.status !== "authenticated") {
+      setState("unauthenticated");
       return;
     }
     if (uniqueBookIds.length === 0) {
@@ -26,7 +26,7 @@ export function useSearchMemberships(bookIds: string[]) {
 
     const request = new AbortController();
     setState("loading");
-    getResearchMemberships(token, uniqueBookIds, request.signal)
+    getResearchMemberships(uniqueBookIds, request.signal)
       .then(data => {
         if (!request.signal.aborted) {
           setMemberships(data.memberships);
@@ -39,7 +39,7 @@ export function useSearchMemberships(bookIds: string[]) {
         setState(error instanceof ProjectApiError && (error.status === 401 || error.status === 403) ? "auth-error" : "unavailable");
       });
     return () => request.abort();
-  }, [token, requestKey, refreshVersion]);
+  }, [requestKey, refreshVersion, session.status]);
 
   const refresh = useCallback(() => setRefreshVersion(version => version + 1), []);
   return { state, memberships, refresh };
@@ -56,9 +56,9 @@ export function ResearchMembershipChips({
   const membershipKey = memberships.map(item => `${item.projectId}:${item.bindingId}`).join("|");
   useEffect(() => setExpanded(false), [membershipKey]);
 
-  if (state === "no-token") return null;
+  if (state === "unauthenticated") return null;
   if (state === "loading") return <p className="research-membership-status">正在确认研究状态…</p>;
-  if (state === "auth-error") return <p className="research-membership-status research-membership-status--error">研究项目访问凭据已失效，请重新设置。</p>;
+  if (state === "auth-error") return <p className="research-membership-status research-membership-status--error">登录已失效，请重新登录。</p>;
   if (state === "unavailable") return <p className="research-membership-status research-membership-status--error">研究状态暂不可用</p>;
 
   const active = memberships.filter(item => item.projectLifecycleState === "ACTIVE");

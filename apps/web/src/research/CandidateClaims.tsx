@@ -19,17 +19,15 @@ import {
 } from "./candidate-claim-draft";
 
 type Props = {
-  token: string;
   project: ResearchIssueProjectContext;
   issue: ResearchIssue;
 };
 
 export function CandidateClaims(props: Props) {
-  return <CandidateClaimsSession key={`${props.token}:${props.project.id}:${props.issue.id}`} {...props} />;
+  return <CandidateClaimsSession key={`${props.project.id}:${props.issue.id}`} {...props} />;
 }
 
 function ClaimAssessmentSession({
-  token,
   project,
   issue,
   claim,
@@ -70,7 +68,6 @@ function ClaimAssessmentSession({
 
     <EvidenceEditor
       key={`${claim.id}:${evidenceRefreshVersion}`}
-      token={token}
       projectId={project.id}
       issueId={issue.id}
       claim={claim}
@@ -79,7 +76,6 @@ function ClaimAssessmentSession({
     />
 
     <AssessmentComposer
-      token={token}
       projectId={project.id}
       issueId={issue.id}
       claimId={claim.id}
@@ -95,7 +91,6 @@ function ClaimAssessmentSession({
     />
 
     <AssessmentHistory
-      token={token}
       projectId={project.id}
       issueId={issue.id}
       claimId={claim.id}
@@ -105,7 +100,6 @@ function ClaimAssessmentSession({
     />
 
     {selectedAssessmentId ? <AssessmentDetail
-      token={token}
       projectId={project.id}
       issueId={issue.id}
       claimId={claim.id}
@@ -116,7 +110,7 @@ function ClaimAssessmentSession({
   </article>;
 }
 
-function CandidateClaimsSession({ token, project, issue }: Props) {
+function CandidateClaimsSession({ project, issue }: Props) {
   const [attempt, setAttempt] = useState(0);
   const [load, setLoad] = useState<"loading" | "ready" | "unavailable">("loading");
   const [claims, setClaims] = useState<CandidateClaim[]>([]);
@@ -130,7 +124,7 @@ function CandidateClaimsSession({ token, project, issue }: Props) {
   useEffect(() => {
     const controller = new AbortController();
     setLoad("loading");
-    void listCandidateClaims(token, project.id, issue.id, controller.signal)
+    void listCandidateClaims(project.id, issue.id, controller.signal)
       .then(result => {
         if (!controller.signal.aborted) {
           setClaims(result.claims);
@@ -141,7 +135,7 @@ function CandidateClaimsSession({ token, project, issue }: Props) {
         if (!controller.signal.aborted) setLoad("unavailable");
       });
     return () => controller.abort();
-  }, [token, project.id, issue.id, attempt]);
+  }, [project.id, issue.id, attempt]);
 
   const canCreate = !project.readOnly && issue.lifecycleState === "OPEN";
 
@@ -163,7 +157,7 @@ function CandidateClaimsSession({ token, project, issue }: Props) {
     try {
       const receipt = await getOrCreateCandidateClaimReceipt(project.id, issue.id, normalized, forceNew);
       if (controller.signal.aborted) return;
-      await createCandidateClaim(token, project.id, issue.id, receipt.idempotencyKey, normalized, controller.signal);
+      await createCandidateClaim(project.id, issue.id, receipt.idempotencyKey, normalized, controller.signal);
       if (controller.signal.aborted) return;
       clearPendingCandidateClaimReceipt();
       setStatement("");
@@ -215,7 +209,6 @@ function CandidateClaimsSession({ token, project, issue }: Props) {
       {claims.length ? <div className="research-claim-list">
         {claims.map(claim => <ClaimAssessmentSession
           key={claim.id}
-          token={token}
           project={project}
           issue={issue}
           claim={claim}

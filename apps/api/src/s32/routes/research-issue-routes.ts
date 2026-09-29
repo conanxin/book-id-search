@@ -10,7 +10,7 @@ import {
   ResearchIssueStoreUnavailableError,
   type ResearchIssuesService,
 } from "../application/research-issues.js";
-import { checkS32PrivateAuth } from "./private-auth.js";
+import { authorizeS32RouteRequest, type S32RequestAuthorizer } from "./private-auth.js";
 
 function toHttpError(error: unknown): [number, { message: string; code?: string }] {
   if (error instanceof InvalidProjectInputError || error instanceof InvalidResearchIssueInputError || error instanceof InvalidIdempotencyKeyError) {
@@ -28,11 +28,11 @@ function toHttpError(error: unknown): [number, { message: string; code?: string 
   return [500, { message: "研究问题请求失败，请稍后再试。" }];
 }
 
-export function createResearchIssueRouter(config: S32Config, issues: ResearchIssuesService | null) {
+export function createResearchIssueRouter(config: S32Config, issues: ResearchIssuesService | null, requestAuthorizer?: S32RequestAuthorizer) {
   const router = Router();
   router.use((req, res, next) => {
     res.set("Cache-Control", "no-store");
-    const auth = checkS32PrivateAuth(config, req.get("authorization"), req.get("x-private-token"));
+    const auth = authorizeS32RouteRequest(config, req, requestAuthorizer);
     if (!auth.ok) {
       res.status(auth.status).json({ error: { message: auth.message } });
       return;

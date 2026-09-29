@@ -376,21 +376,18 @@ function SessionThemeOverlay({
 }
 
 export interface ReadingMapDashboardProps {
-  token: string;
-  /** Called when the user clears the token so the parent can also clear its state. */
   onAbort?: () => void;
   /**
    * S27H-2: a safe, lifted session-theme overlay derived from the notes
    * workspace. Carries only theme titles / directions / public catalogIds
    * / notesUsed. The dashboard uses it to draw the focus ring without
-   * ever seeing note text, comment, overview, key points, token, or
+   * ever seeing note text, comment, overview, key points, or
    * private IDs.
    */
   sessionThemeOverlay?: WereadSessionThemeOverlay;
 }
 
 export default function ReadingMapDashboard({
-  token,
   onAbort,
   sessionThemeOverlay,
 }: ReadingMapDashboardProps) {
@@ -409,7 +406,7 @@ export default function ReadingMapDashboard({
     abortRef.current = controller;
     setStatus("loading");
     setError(null);
-    fetchWereadReadingMap(token, { months: m, topBooks: t, signal: controller.signal })
+    fetchWereadReadingMap({ months: m, topBooks: t, signal: controller.signal })
       .then((resp) => {
         setResponse(resp);
         setStatus("ok");
@@ -425,29 +422,16 @@ export default function ReadingMapDashboard({
 
   // First-time load — only when this component becomes active.
   useEffect(() => {
-    if (!token) {
-      setResponse(null);
-      setStatus("idle");
-      return;
-    }
     load(months, topBooks);
     return () => {
       abortRef.current?.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [months, topBooks]);
 
-  // Token cleared → abort in-flight + clear local state.
-  useEffect(() => {
-    if (!token) {
-      abortRef.current?.abort();
-      setResponse(null);
-      setStatus("idle");
-      setError(null);
-      setFocusMode("full");
-      onAbort?.();
-    }
-  }, [token, onAbort]);
+  // Session ended / parent unmounted → abort in-flight + clear local state
+  // is handled by unmount cleanup above; the parent drops this dashboard
+  // entirely when the session leaves the authenticated state.
 
   const overview: ReadingMapOverviewView = useMemo(
     () => formatReadingMapOverview(response?.overview ?? null),

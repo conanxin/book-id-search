@@ -4,7 +4,11 @@ import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { AddToProject } from "./AddToProject";
-import { saveS32Token } from "./access";
+vi.mock("../auth/session", async importOriginal => {
+  const actual = await importOriginal<typeof import("../auth/session")>();
+  return { ...actual, ensureAuthSessionLoaded: vi.fn(async () => {}) };
+});
+import { __resetWebAuthStoreForTests, __setWebAuthSnapshotForTests } from "../auth/session";
 import { listProjects, addCatalogBookToProject, ProjectApiError, type ResearchMembership } from "./api";
 const feature = vi.hoisted(() => ({ enabled: true }));
 vi.mock("./ProjectsPage", () => ({ get researchEnabled() { return feature.enabled; } }));
@@ -13,13 +17,18 @@ const project = { id: "project", name: "北京古道研究", description: null, 
 const result = { promotionStatus: "created" as const, bindingStatus: "created" as const, item: { bindingId: "binding", projectId: "project", workId: "work", editionId: "edition", sourceId: "source", catalogBookId: "book", title: "北京古道考", publisher: null, publicationDate: null, publicationDatePrecision: "YEAR" as const, isbn: null, addedAt: project.createdAt } };
 const existing: ResearchMembership = { projectId: project.id, projectName: project.name, projectLifecycleState: "ACTIVE", bindingId: "binding", hasNote: false, noteUpdatedAt: null };
 const mount = (props: Partial<React.ComponentProps<typeof AddToProject>> = {}) => render(<MemoryRouter><AddToProject bookId="book" bookTitle="北京古道考" {...props} /></MemoryRouter>);
-beforeEach(() => { vi.clearAllMocks(); feature.enabled = true; saveS32Token("token"); vi.mocked(listProjects).mockResolvedValue({ projects: [project] }); vi.mocked(addCatalogBookToProject).mockResolvedValue(result); });
-afterEach(() => { cleanup(); saveS32Token(null); });
+function seedSession(status: "authenticated" | "unauthenticated" = "authenticated"): void {
+  __setWebAuthSnapshotForTests(status === "authenticated"
+    ? { status: "authenticated", user: { email: "owner@example.com", name: "Owner" }, csrfToken: "csrf-test", error: null }
+    : { status: "unauthenticated", user: null, csrfToken: null, error: null });
+}
+beforeEach(() => { vi.clearAllMocks(); feature.enabled = true; seedSession(); vi.mocked(listProjects).mockResolvedValue({ projects: [project] }); vi.mocked(addCatalogBookToProject).mockResolvedValue(result); });
+afterEach(() => { __resetWebAuthStoreForTests(); cleanup(); __resetWebAuthStoreForTests(); });
 describe("Add to project", () => {
   it("renders nothing with the feature disabled", () => { feature.enabled = false; const { container } = mount(); expect(container.textContent).toBe(""); expect(listProjects).not.toHaveBeenCalled(); });
-  it("without token guides to existing credentials UI, without requesting projects", async () => {
-    saveS32Token(null); mount(); await userEvent.click(screen.getByRole("button", { name: "加入研究" }));
-    expect(screen.getByRole("link", { name: /我的研究项目/ }).getAttribute("href")).toBe("/research/projects");
+  it("unauthenticated guides to login, without requesting projects", async () => {
+    seedSession("unauthenticated"); mount(); await userEvent.click(screen.getByRole("button", { name: "加入研究" }));
+    expect(screen.getByRole("link", { name: /私人研究空间/ }).getAttribute("href")).toBe("/research/projects");
     expect(screen.queryByRole("textbox")).toBeNull(); expect(listProjects).not.toHaveBeenCalled();
   });
   it("loads on open only and guides creation for zero projects", async () => {
@@ -36,7 +45,7 @@ describe("Add to project", () => {
     expect(screen.queryByText("已加入「北京古道研究」")).toBeNull();
     await act(async () => resolve(result));
     expect(await screen.findByText("已加入「北京古道研究」")).toBeTruthy(); expect(screen.queryByRole("button", { name: "北京古道研究" })).toBeNull();
-    expect(addCatalogBookToProject).toHaveBeenCalledWith("token", "project", "book", expect.any(AbortSignal));
+    expect(addCatalogBookToProject).toHaveBeenCalledWith("project", "book", expect.any(AbortSignal));
   });
   it.each([401,403,503])("list failure %s shows safe error, no fake empty state", async status => {
     vi.mocked(listProjects).mockRejectedValue(new ProjectApiError(status, "服务暂不可用")); mount(); await userEvent.click(screen.getByRole("button", { name: "加入研究" }));
@@ -49,20 +58,20 @@ describe("Add to project", () => {
   });
   it("unmount aborts pending list", async () => {
     vi.mocked(listProjects).mockReturnValue(new Promise(() => {})); const view = mount(); await userEvent.click(screen.getByRole("button", { name: "加入研究" }));
-    const signal = vi.mocked(listProjects).mock.calls[0][1]!; view.unmount(); expect(signal.aborted).toBe(true);
+    const signal = vi.mocked(listProjects).mock.calls[0][0]!; view.unmount(); expect(signal.aborted).toBe(true);
   });
   it.each(["unmount", "clear token"])("%s aborts pending POST and ignores late success", async action => {
     let resolve!: (v: typeof result) => void; vi.mocked(addCatalogBookToProject).mockReturnValue(new Promise(r => { resolve = r; }));
     const added = vi.fn(); const view = mount({ onAdded: added });
     await userEvent.click(screen.getByRole("button", { name: "加入研究" })); await userEvent.click(await screen.findByRole("button", { name: "北京古道研究" }));
-    const signal = vi.mocked(addCatalogBookToProject).mock.calls[0][3]!;
-    if (action === "unmount") view.unmount(); else act(() => saveS32Token(null));
+    const signal = vi.mocked(addCatalogBookToProject).mock.calls[0][2]!;
+    if (action === "unmount") view.unmount(); else act(() => seedSession("unauthenticated"));
     expect(signal.aborted).toBe(true); await act(async () => resolve(result));
     expect(added).not.toHaveBeenCalled(); expect(screen.queryByText("已加入「北京古道研究」")).toBeNull();
   });
   it("clearing credentials clears previous success state", async () => {
     mount(); await userEvent.click(screen.getByRole("button", { name: "加入研究" })); await userEvent.click(await screen.findByRole("button", { name: "北京古道研究" }));
-    await screen.findByText("已加入「北京古道研究」"); act(() => saveS32Token(null)); await waitFor(() => expect(screen.queryByText("已加入「北京古道研究」")).toBeNull());
+    await screen.findByText("已加入「北京古道研究」"); act(() => seedSession("unauthenticated")); await waitFor(() => expect(screen.queryByText("已加入「北京古道研究」")).toBeNull());
   });
   it("can reopen and explicitly add again after success without a stuck pending state", async () => {
     mount();

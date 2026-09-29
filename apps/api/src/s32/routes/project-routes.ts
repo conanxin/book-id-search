@@ -2,13 +2,13 @@ import { Router, type Request, type Response } from "express";
 import type { S32Config } from "../config.js";
 import { ProjectStoreUnavailableError, type ProjectsService } from "../application/projects.js";
 import { InvalidProjectInputError } from "../domain/project.js";
-import { checkS32PrivateAuth } from "./private-auth.js";
+import { authorizeS32RouteRequest, type S32RequestAuthorizer } from "./private-auth.js";
 
-export function createProjectRouter(config: S32Config, projects: ProjectsService | null) {
+export function createProjectRouter(config: S32Config, projects: ProjectsService | null, requestAuthorizer?: S32RequestAuthorizer) {
   const router = Router();
   router.use((_req, res, next) => { res.set("Cache-Control", "no-store"); next(); });
   router.use((req, res, next) => {
-    const auth = checkS32PrivateAuth(config, req.get("authorization"), req.get("x-private-token"));
+    const auth = authorizeS32RouteRequest(config, req, requestAuthorizer);
     if (!auth.ok) { res.status(auth.status).json({ error: { message: auth.message } }); return; }
     if (!config.databaseUrl || !projects) {
       res.status(503).json({ error: { message: "项目数据库尚未配置。" } }); return;

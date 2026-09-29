@@ -765,7 +765,7 @@ describe("ReadingArchiveDashboard — section-3 navigation + cache", () => {
     // Phase B: the hook gates the bootstrap + scheduler on the
     // `active` flag (controller.tick returns early when
     // !getActive()). The dashboard forwards `active` to the hook.
-    expect(dashboard).toMatch(/useReadingArchiveMachine\(\{ token, active \}\)/);
+    expect(dashboard).toMatch(/useReadingArchiveMachine\(\{ ready: true, active \}\)/);
   });
 
   // 60
@@ -855,15 +855,13 @@ describe("ReadingArchiveDashboard — Phase B React adapter integration", () => 
     expect(center).toMatch(/setRequestedAnnualReviewYear\(year\)/);
   });
 
-  it("B8-13. token clear in WereadCenter also clears the machine (TOKEN_RESET)", () => {
-    // WereadCenter.handleClear sets requestedAnnualReviewYear to
-    // null; the archive machine handles its own token-change path
-    // via the hook. Verify the wiring stays symmetric: the
-    // dashboard's `token` prop comes from `storedToken`, which
-    // is reset by handleClear.
-    expect(center).toMatch(/handleClear/);
-    expect(center).toMatch(/setStoredToken\(null\)/);
-    expect(center).toMatch(/setRequestedAnnualReviewYear\(null\)/);
+  it("B8-13. session loss in WereadCenter unmounts the archive machine (Task 9)", () => {
+    // Task 9: logout flips the session to unauthenticated; the private
+    // workspace (dashboards included) unmounts entirely, so the machine is
+    // destroyed rather than reset. The readiness flip inside the hook dispatches
+    // TOKEN_RESET for the unmount transition.
+    expect(center).toMatch(/clearWereadStatusCache/);
+    expect(dashboard).toMatch(/useReadingArchiveMachine\(\{ ready: true, active \}\)/);
   });
 
   it("B8-14. other four workspaces' state is not touched by ReadingArchiveDashboard", () => {

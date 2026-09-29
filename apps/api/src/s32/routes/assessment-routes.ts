@@ -20,7 +20,7 @@ import {
   ResearchIssueReadOnlyForAssessmentError,
   type AssessmentsService,
 } from "../application/assessments.js";
-import { checkS32PrivateAuth } from "./private-auth.js";
+import { authorizeS32RouteRequest, type S32RequestAuthorizer } from "./private-auth.js";
 
 type ErrorBody = { message: string; code?: string };
 
@@ -69,12 +69,12 @@ function toHttpError(error: unknown): [number, ErrorBody] {
   return [500, { message: "评价请求失败，请稍后再试。" }];
 }
 
-export function createAssessmentRouter(config: S32Config, assessments: AssessmentsService | null) {
+export function createAssessmentRouter(config: S32Config, assessments: AssessmentsService | null, requestAuthorizer?: S32RequestAuthorizer) {
   const router = Router();
 
   router.use((req, res, next) => {
     res.set("Cache-Control", "no-store");
-    const auth = checkS32PrivateAuth(config, req.get("authorization"), req.get("x-private-token"));
+    const auth = authorizeS32RouteRequest(config, req, requestAuthorizer);
     if (!auth.ok) {
       res.status(auth.status).json({ error: { message: auth.message } });
       return;

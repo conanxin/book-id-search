@@ -32,7 +32,6 @@ type ComposerState =
   | "read-only";
 
 type Props = {
-  token: string;
   project: ResearchIssueProjectContext;
   issue: ResearchIssue;
   onCommitted?: (result: IssueResolutionCreateResponse) => void;
@@ -53,7 +52,7 @@ function basisLabel(basis: IssueResolutionEvidenceBasisSummary): string {
   return `${basis.claimStatementExcerpt} · ${basis.stance}${confidence} · ${basis.itemCount} 条证据`;
 }
 
-export function IssueResolutionComposer({ token, project, issue, onCommitted }: Props) {
+export function IssueResolutionComposer({ project, issue, onCommitted }: Props) {
   const restored = (() => {
     const receipt = loadPendingIssueResolutionReceipt();
     return matchingReceipt(receipt, project.id, issue.id) ? receipt : null;
@@ -88,9 +87,9 @@ export function IssueResolutionComposer({ token, project, issue, onCommitted }: 
     setLoadState("loading");
 
     void Promise.all([
-      listIssueResolutions(token, project.id, issue.id, { limit: 1 }, controller.signal),
-      listCandidateClaims(token, project.id, issue.id, controller.signal),
-      listIssueResolutionEvidenceBases(token, project.id, issue.id, { limit: 50 }, controller.signal),
+      listIssueResolutions(project.id, issue.id, { limit: 1 }, controller.signal),
+      listCandidateClaims(project.id, issue.id, controller.signal),
+      listIssueResolutionEvidenceBases(project.id, issue.id, { limit: 50 }, controller.signal),
     ]).then(([history, candidatePage, evidencePage]) => {
       if (controller.signal.aborted) return;
       setCurrentResolutionId(current => pendingReceipt ? current : history.issue.currentResolutionId);
@@ -106,7 +105,7 @@ export function IssueResolutionComposer({ token, project, issue, onCommitted }: 
     });
 
     return () => controller.abort();
-  }, [token, project.id, issue.id, loadVersion, pendingReceipt]);
+  }, [project.id, issue.id, loadVersion, pendingReceipt]);
 
   const writeAllowed = !project.readOnly
     && (issue.lifecycleState === "OPEN" || issue.lifecycleState === "RESOLVED")
@@ -157,9 +156,7 @@ export function IssueResolutionComposer({ token, project, issue, onCommitted }: 
     setState("submitting");
     setMessage("");
     try {
-      const result = await createIssueResolution(
-        token,
-        project.id,
+      const result = await createIssueResolution(project.id,
         issue.id,
         receipt.idempotencyKey,
         receipt.command,

@@ -64,3 +64,69 @@ export function checkPrivateAuth(authHeader: string | undefined, tokenHeader: st
   }
   return { ok: true };
 }
+
+// ─── M3-A Auth Gate 1 Task 6: request-aware WeRead authorizer ───
+// Wraps the Task 4 shared helper (authorizePrivateRequest) with the WeRead
+// capability (WEREAD_PRIVATE) while keeping checkPrivateAuth above as the
+// unchanged legacy checker. Handlers call authorizeWereadRouteRequest(req,
+// wereadRequestAuthorizer) instead of reading headers directly.
+
+import type { Request } from "express";
+import type { GoogleSessionAuthConfig } from "../auth/config.js";
+import { authorizePrivateRequest, type PrivateRequestInput, type LegacyAuthResult } from "../auth/private-request-auth.js";
+
+/** Narrow header reader: Express req.get() first, plain-object harness fallback. */
+function readHeader(req: Request, name: string): string | undefined {
+  const viaGet = typeof (req as { get?: unknown }).get === "function"
+    ? ((req as { get(key: string): string | undefined }).get(name) as string | undefined)
+    : undefined;
+  if (viaGet !== undefined) return viaGet;
+  const raw = (req as { headers?: Record<string, unknown> }).headers?.[name];
+  return typeof raw === "string" ? raw : undefined;
+}
+
+function legacyCheck(authHeader: string | undefined, tokenHeader: string | undefined): LegacyAuthResult {
+  return checkPrivateAuth(authHeader, tokenHeader);
+}
+
+export type WereadRequestAuthorizer = (req: Request) => AuthCheckResult;
+
+export function createWereadRequestAuthorizer(
+  googleConfig: GoogleSessionAuthConfig,
+): WereadRequestAuthorizer {
+  return (req: Request): AuthCheckResult => {
+    const request: PrivateRequestInput = {
+      method: req.method,
+      authorization: readHeader(req, "authorization"),
+      privateToken: readHeader(req, "x-private-token"),
+      cookie: readHeader(req, "cookie"),
+      origin: readHeader(req, "origin"),
+      csrfToken: readHeader(req, "x-csrf-token"),
+    };
+    const result = authorizePrivateRequest({
+      capability: "WEREAD_PRIVATE",
+      capabilityEnabled: isOverlayEnabled(),
+      request,
+      legacyCheck,
+      googleConfig,
+    });
+    if (result.ok) return { ok: true };
+    return { ok: false, status: result.status, message: result.message };
+  };
+}
+
+/**
+ * Migration gate for the nine WeRead private endpoints. With an injected
+ * authorizer it is used exclusively; without one (unit-test harnesses) it
+ * falls back to the legacy header check so old semantics never regress.
+ */
+export function authorizeWereadRouteRequest(
+  req: Request,
+  requestAuthorizer?: WereadRequestAuthorizer,
+): AuthCheckResult {
+  if (requestAuthorizer) return requestAuthorizer(req);
+  return checkPrivateAuth(
+    readHeader(req, "authorization"),
+    readHeader(req, "x-private-token"),
+  );
+}

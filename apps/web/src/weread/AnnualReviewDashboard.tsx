@@ -33,7 +33,7 @@
  *     `state.response`. No new API request, no AI call, no storage.
  *   - S27K: Year comparison is computed from the cached responses.
  *     No new endpoint, no AI call, no storage. The comparison cache
- *     lives in component memory only and is dropped on token
+ *     lives in component memory only and is dropped on session
  *     change / unmount.
  */
 
@@ -77,7 +77,6 @@ import {
 const TOP_BOOKS_OPTIONS: ReadonlyArray<WereadAnnualReviewTopBooksOption> = [6, 12, 18];
 
 export interface AnnualReviewDashboardProps {
-  token: string;
   active: boolean;
   /** S27L — optional year requested by the long-term archive. When
    *  this value changes the dashboard switches to that year (if it
@@ -133,7 +132,7 @@ function compareKey(year: number, topBooks: WereadAnnualReviewTopBooksOption): s
   return `${year}:${topBooks}`;
 }
 
-export default function AnnualReviewDashboard({ token, active, requestedYear, onRequestedYearApplied }: AnnualReviewDashboardProps) {
+export default function AnnualReviewDashboard({ active, requestedYear, onRequestedYearApplied }: AnnualReviewDashboardProps) {
   const [state, setState] = useState<DashboardState>(INITIAL_STATE);
   const [comparison, setComparison] = useState<ComparisonState>(INITIAL_COMPARISON);
   const abortRef = useRef<AbortController | null>(null);
@@ -146,19 +145,9 @@ export default function AnnualReviewDashboard({ token, active, requestedYear, on
   // same compare key.
   const compareInflightRef = useRef<Set<string>>(new Set());
 
-  // Reset on token change.
+  // Task 9: reset local state on (re)mount — the parent only mounts this
+  // dashboard while the session is authenticated.
   useEffect(() => {
-    if (!token) {
-      abortRef.current?.abort();
-      compareAbortRef.current?.abort();
-      lastRequestTokenRef.current = "";
-      compareCacheRef.current.clear();
-      compareInflightRef.current.clear();
-      setState(INITIAL_STATE);
-      setComparison(INITIAL_COMPARISON);
-      return;
-    }
-    lastRequestTokenRef.current = "";
     compareCacheRef.current.clear();
     compareInflightRef.current.clear();
     setState((prev) => ({
@@ -171,20 +160,17 @@ export default function AnnualReviewDashboard({ token, active, requestedYear, on
       exportMessage: "",
     }));
     setComparison(INITIAL_COMPARISON);
-  }, [token]);
+  }, []);
 
   // Issue the initial fetch once the tab is activated.
   useEffect(() => {
-    if (!token) return;
     if (!active) return;
     if (state.response || state.status === "loading") return;
-    if (lastRequestTokenRef.current === token) return;
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
-    lastRequestTokenRef.current = token;
     setState((prev) => ({ ...prev, status: "loading", error: null }));
-    fetchWereadAnnualReview(token, {
+    fetchWereadAnnualReview({
       topBooks: state.topBooks,
       signal: controller.signal,
     })
@@ -201,7 +187,7 @@ export default function AnnualReviewDashboard({ token, active, requestedYear, on
         const msg = err instanceof Error ? err.message : "年度回顾加载失败";
         setState((prev) => ({ ...prev, status: "error", error: msg, response: null }));
       });
-  }, [active, token, state.response, state.status, state.topBooks]);
+  }, [active, state.response, state.status, state.topBooks]);
 
   // Cleanup on unmount.
   useEffect(() => {
@@ -213,11 +199,9 @@ export default function AnnualReviewDashboard({ token, active, requestedYear, on
 
   const requestAnnualReview = useCallback(
     (year: number | null, topBooks: WereadAnnualReviewTopBooksOption) => {
-      if (!token) return;
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
-      lastRequestTokenRef.current = token;
       setState((prev) => ({
         ...prev,
         status: "loading",
@@ -226,7 +210,7 @@ export default function AnnualReviewDashboard({ token, active, requestedYear, on
         exportStatus: "idle",
         exportMessage: "",
       }));
-      fetchWereadAnnualReview(token, {
+      fetchWereadAnnualReview({
         year: year ?? undefined,
         topBooks,
         signal: controller.signal,
@@ -245,7 +229,7 @@ export default function AnnualReviewDashboard({ token, active, requestedYear, on
           setState((prev) => ({ ...prev, status: "error", error: msg }));
         });
     },
-    [token]
+    []
   );
 
   const handleYearChange = useCallback(
@@ -266,12 +250,10 @@ export default function AnnualReviewDashboard({ token, active, requestedYear, on
   );
 
   const handleRetry = useCallback(() => {
-    if (!token) return;
     abortRef.current?.abort();
-    lastRequestTokenRef.current = "";
     setState((prev) => ({ ...prev, status: "loading", error: null }));
     requestAnnualReview(state.selectedYear, state.topBooks);
-  }, [token, state.selectedYear, state.topBooks, requestAnnualReview]);
+  }, [state.selectedYear, state.topBooks, requestAnnualReview]);
 
   // S27L — when the long-term archive requests a specific year,
   // switch the dashboard to that year. Cached responses are re-used
@@ -285,7 +267,6 @@ export default function AnnualReviewDashboard({ token, active, requestedYear, on
     if (requestedYear === undefined || requestedYear === null) return;
     if (!Number.isInteger(requestedYear)) return;
     if (lastRequestedYearRef.current === requestedYear) return;
-    if (!token) return;
     if (!state.response) return; // wait for the initial load to land
     const available = state.response.availableYears;
     if (Array.isArray(available) && available.length > 0 && !available.includes(requestedYear)) {
@@ -302,7 +283,6 @@ export default function AnnualReviewDashboard({ token, active, requestedYear, on
     onRequestedYearApplied?.();
   }, [
     requestedYear,
-    token,
     state.response,
     state.selectedYear,
     state.topBooks,
@@ -322,7 +302,6 @@ export default function AnnualReviewDashboard({ token, active, requestedYear, on
   // S27K — fetch (or reuse) the base year response for comparison.
   const loadCompareYear = useCallback(
     (year: number, topBooks: WereadAnnualReviewTopBooksOption) => {
-      if (!token) return;
       const key = compareKey(year, topBooks);
       const cached = compareCacheRef.current.get(key);
       if (cached) {
@@ -349,7 +328,7 @@ export default function AnnualReviewDashboard({ token, active, requestedYear, on
         baseStatus: "loading",
         baseError: null,
       }));
-      fetchWereadAnnualReview(token, {
+      fetchWereadAnnualReview({
         year,
         topBooks,
         signal: controller.signal,
@@ -376,7 +355,7 @@ export default function AnnualReviewDashboard({ token, active, requestedYear, on
           }));
         });
     },
-    [token]
+    []
   );
 
   // S27K — derive the default base year from `availableYears`.

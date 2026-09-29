@@ -6,7 +6,7 @@ import {
   ResearchMembershipStoreUnavailableError,
   type ResearchMembershipService,
 } from "../application/research-memberships.js";
-import { checkS32PrivateAuth } from "./private-auth.js";
+import { authorizeS32RouteRequest, type S32RequestAuthorizer } from "./private-auth.js";
 
 function toHttpError(error: unknown): [number, string] {
   if (error instanceof InvalidRediscoverInputError) {
@@ -24,16 +24,13 @@ function toHttpError(error: unknown): [number, string] {
 export function createResearchMembershipRouter(
   config: S32Config,
   memberships: ResearchMembershipService | null,
+  requestAuthorizer?: S32RequestAuthorizer,
 ) {
   const router = Router();
 
   router.use((req, res, next) => {
     res.set("Cache-Control", "no-store");
-    const auth = checkS32PrivateAuth(
-      config,
-      req.get("authorization"),
-      req.get("x-private-token"),
-    );
+    const auth = authorizeS32RouteRequest(config, req, requestAuthorizer);
     if (!auth.ok) {
       res.status(auth.status).json({ error: { message: auth.message } });
       return;

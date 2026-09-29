@@ -8,7 +8,7 @@ import {
 } from "../application/promote-catalog-book.js";
 import type { S32Config } from "../config.js";
 import { InvalidCatalogBookError } from "../domain/catalog-promotion.js";
-import { checkS32PrivateAuth } from "./private-auth.js";
+import { authorizeS32RouteRequest, type S32RequestAuthorizer } from "./private-auth.js";
 
 export interface CatalogPromotionCommand {
   execute(input: { bookId: string }): Promise<PromotionResult>;
@@ -25,13 +25,10 @@ function stringHeader(value: string | string[] | undefined): string | undefined 
 export function createCatalogPromotionHandler(deps: {
   config: S32Config;
   command: CatalogPromotionCommand | null;
+  requestAuthorizer?: S32RequestAuthorizer;
 }) {
   return async function catalogPromotionHandler(req: Request, res: Response) {
-    const auth = checkS32PrivateAuth(
-      deps.config,
-      stringHeader(req.headers.authorization),
-      stringHeader(req.headers["x-private-token"]),
-    );
+    const auth = authorizeS32RouteRequest(deps.config, req, deps.requestAuthorizer);
     if (!auth.ok) {
       return res.status(auth.status).json(errorBody(auth.message));
     }

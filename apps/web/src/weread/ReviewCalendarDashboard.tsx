@@ -9,7 +9,7 @@
  *     reading-map` (catalogId, title, author, noteCount, activeMonths,
  *     lastNoteAt, etc.).
  *   - Receives a sanitised session-theme overlay. NEVER receives the
- *     full AI summary, the raw notes, the token, or any private id.
+ *     full AI summary, the raw notes, or any private id.
  *   - Never calls fetchWereadAiSummary or fetchWereadRelatedBooks.
  *   - Never persists state to localStorage / sessionStorage / IndexedDB
  *     / server / external calendar.
@@ -58,7 +58,6 @@ import {
 const NOW_INJECTION = () => new Date();
 
 export interface ReviewCalendarDashboardProps {
-  token: string;
   active: boolean;
   sessionThemeOverlay: WereadSessionThemeOverlay;
 }
@@ -130,25 +129,18 @@ function rankTask(task: ReadingReviewTask): number {
 }
 
 export default function ReviewCalendarDashboard({
-  token,
   active,
   sessionThemeOverlay,
 }: ReviewCalendarDashboardProps) {
   const [state, setState] = useState<DashboardState>(INITIAL_STATE);
   const abortRef = useRef<AbortController | null>(null);
-  const lastRequestTokenRef = useRef<string>("");
 
   const overlay: WereadSessionThemeOverlay = sessionThemeOverlay ?? EMPTY_SESSION_THEME_OVERLAY;
 
-  // Reset on token change.
+  // Task 9: reset local state on (re)mount — the parent only mounts this
+  // dashboard while the session is authenticated, so a fresh mount is a
+  // fresh private view.
   useEffect(() => {
-    if (!token) {
-      abortRef.current?.abort();
-      lastRequestTokenRef.current = "";
-      setState(INITIAL_STATE);
-      return;
-    }
-    lastRequestTokenRef.current = "";
     setState((prev) => ({
       ...prev,
       response: null,
@@ -157,20 +149,17 @@ export default function ReviewCalendarDashboard({
       exportStatus: "idle",
       exportMessage: "",
     }));
-  }, [token]);
+  }, []);
 
-  // Load once per token, only after the tab is activated.
+  // Load once, only after the tab is activated.
   useEffect(() => {
-    if (!token) return;
     if (!active) return;
     if (state.response || state.status === "loading") return;
-    if (lastRequestTokenRef.current === token) return;
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
-    lastRequestTokenRef.current = token;
     setState((prev) => ({ ...prev, status: "loading", error: null }));
-    fetchWereadReadingMap(token, {
+    fetchWereadReadingMap({
       months: 36,
       topBooks: 18,
       signal: controller.signal,
@@ -183,7 +172,7 @@ export default function ReviewCalendarDashboard({
         const msg = err instanceof Error ? err.message : "阅读地图加载失败";
         setState((prev) => ({ ...prev, status: "error", error: msg, response: null }));
       });
-  }, [active, token, state.response, state.status]);
+  }, [active, state.response, state.status]);
 
   useEffect(() => {
     return () => {
@@ -225,13 +214,11 @@ export default function ReviewCalendarDashboard({
   const exportableCount = countExportableTasks(calendar, state.exportRange);
 
   const handleRetry = useCallback(() => {
-    if (!token) return;
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
-    lastRequestTokenRef.current = "";
     setState((prev) => ({ ...prev, status: "loading", error: null }));
-    fetchWereadReadingMap(token, {
+    fetchWereadReadingMap({
       months: 36,
       topBooks: 18,
       signal: controller.signal,
@@ -244,7 +231,7 @@ export default function ReviewCalendarDashboard({
         const msg = err instanceof Error ? err.message : "阅读地图加载失败";
         setState((prev) => ({ ...prev, status: "error", error: msg, response: null }));
       });
-  }, [token]);
+  }, []);
 
   const handleExportRangeChange = useCallback((next: IcsExportRange) => {
     setState((prev) => ({

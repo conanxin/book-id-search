@@ -9,6 +9,13 @@ import {
   listIssueResolutions,
 } from "./api";
 
+import { __resetWebAuthStoreForTests, __setWebAuthSnapshotForTests } from "../auth/session";
+function seedSession(): void {
+  __setWebAuthSnapshotForTests({ status: "authenticated", user: { email: "owner@example.com", name: "Owner" }, csrfToken: "csrf-test", error: null });
+}
+beforeEach(() => { seedSession(); });
+afterEach(() => { __resetWebAuthStoreForTests(); });
+
 const P = "11111111-1111-4111-8111-111111111111";
 const I = "22222222-2222-4222-8222-222222222222";
 const R = "33333333-3333-4333-8333-333333333333";
@@ -137,7 +144,7 @@ describe("M2-E issue resolution client paths", () => {
     fetchMock.mockResolvedValueOnce(response({ status: receiptStatus, resolutionId: R }, status));
     const signal = new AbortController().signal;
     const forged = { ...input, privateField: "SECRET" } as any;
-    await expect(createIssueResolution("token", "p/a", "i/b", KEY, forged, signal))
+    await expect(createIssueResolution("p/a", "i/b", KEY, forged, signal))
       .resolves.toEqual({ status: receiptStatus, resolutionId: R });
 
     const [url, init] = fetchMock.mock.calls[0];
@@ -149,7 +156,7 @@ describe("M2-E issue resolution client paths", () => {
       body: JSON.stringify(forged),
     }));
     expect(init.headers).toEqual({
-      Authorization: "Bearer token",
+      "X-CSRF-Token": "csrf-test",
       "Content-Type": "application/json",
       "Idempotency-Key": KEY,
     });
@@ -163,7 +170,7 @@ describe("M2-E issue resolution client paths", () => {
     [202, "replayed"],
   ] as const)("rejects protocol-inconsistent create status %s / %s", async (status, receiptStatus) => {
     fetchMock.mockResolvedValueOnce(response({ status: receiptStatus, resolutionId: R }, status));
-    await expect(createIssueResolution("t", P, I, KEY, input)).rejects.toMatchObject({
+    await expect(createIssueResolution(P, I, KEY, input)).rejects.toMatchObject({
       status: 502,
       message: "工作结论服务响应异常，请稍后再试。",
     });
@@ -175,11 +182,11 @@ describe("M2-E issue resolution client paths", () => {
       .mockResolvedValueOnce(response(detail))
       .mockResolvedValueOnce(response(bases));
 
-    await expect(listIssueResolutions("t", "p/a", "i/b", { limit: 20, cursor: "a+b/c==" }))
+    await expect(listIssueResolutions("p/a", "i/b", { limit: 20, cursor: "a+b/c==" }))
       .rejects.toMatchObject({ status: 502 });
-    await expect(getIssueResolution("t", "p/a", "i/b", "r/c"))
+    await expect(getIssueResolution("p/a", "i/b", "r/c"))
       .rejects.toMatchObject({ status: 502 });
-    await expect(listIssueResolutionEvidenceBases("t", "p/a", "i/b", { limit: 7, cursor: "x+y/z==" }))
+    await expect(listIssueResolutionEvidenceBases("p/a", "i/b", { limit: 7, cursor: "x+y/z==" }))
       .rejects.toMatchObject({ status: 502 });
 
     expect(fetchMock.mock.calls[0][0]).toBe(
@@ -197,7 +204,7 @@ describe("M2-E issue resolution client paths", () => {
 describe("strict authoritative Resolution validation", () => {
   it.each([bases, { ...bases, evidenceBases: [] }])("accepts a scoped evidence page including an empty page", async body => {
     fetchMock.mockResolvedValueOnce(response(body));
-    await expect(listIssueResolutionEvidenceBases("t", P, I)).resolves.toEqual(body);
+    await expect(listIssueResolutionEvidenceBases(P, I)).resolves.toEqual(body);
   });
 
   it.each([
@@ -208,7 +215,7 @@ describe("strict authoritative Resolution validation", () => {
     { ...bases, privateTargets: [SOURCE] },
   ])("rejects evidence pages with missing, invalid, wrong or extra scope data %#", async body => {
     fetchMock.mockResolvedValueOnce(response(body));
-    await expect(listIssueResolutionEvidenceBases("t", P, I)).rejects.toMatchObject({
+    await expect(listIssueResolutionEvidenceBases(P, I)).rejects.toMatchObject({
       status: 502,
       message: "工作结论服务响应异常，请稍后再试。",
     });
@@ -218,12 +225,12 @@ describe("strict authoritative Resolution validation", () => {
     const issueId = "abcdefab-abcd-4abc-8abc-abcdefabcdef";
     const body = { ...bases, issueId };
     fetchMock.mockResolvedValueOnce(response(body));
-    await expect(listIssueResolutionEvidenceBases("t", P, issueId.toUpperCase())).resolves.toEqual(body);
+    await expect(listIssueResolutionEvidenceBases(P, issueId.toUpperCase())).resolves.toEqual(body);
   });
 
   it("accepts current outside the requested history page", async () => {
     fetchMock.mockResolvedValueOnce(response(history));
-    const result = await listIssueResolutions("t", P, I);
+    const result = await listIssueResolutions(P, I);
     expect(result.issue.currentResolutionId).toBe(R);
     expect(result.currentResolution?.id).toBe(R);
     expect(result.resolutions.map(item => item.id)).toEqual([H]);
@@ -235,7 +242,7 @@ describe("strict authoritative Resolution validation", () => {
       issue: { ...issue, currentResolutionId: null },
       currentResolution: null,
     }));
-    await expect(listIssueResolutions("t", P, I)).resolves.toMatchObject({
+    await expect(listIssueResolutions(P, I)).resolves.toMatchObject({
       issue: { currentResolutionId: null },
       currentResolution: null,
       resolutions: [{ id: H, isCurrent: false }],
@@ -249,7 +256,7 @@ describe("strict authoritative Resolution validation", () => {
       evidenceBasisAvailable: false,
       evidenceManifest: null,
     }));
-    const result = await getIssueResolution("t", P, I, R);
+    const result = await getIssueResolution(P, I, R);
     expect(result.resolution.rationale).toBeNull();
     expect(result.evidenceBasisAvailable).toBe(false);
     expect(result.evidenceManifest).toBeNull();
@@ -258,27 +265,27 @@ describe("strict authoritative Resolution validation", () => {
   it.each([
     {
       name: "issue updatedAt year-only",
-      call: () => listIssueResolutions("t", P, I),
+      call: () => listIssueResolutions(P, I),
       body: { ...history, issue: { ...issue, updatedAt: "2026" } },
     },
     {
       name: "summary createdAt impossible date",
-      call: () => listIssueResolutions("t", P, I),
+      call: () => listIssueResolutions(P, I),
       body: { ...history, currentResolution: { ...current, createdAt: "2026-02-30T00:00:00.000Z" } },
     },
     {
       name: "detail record createdAt noncanonical",
-      call: () => getIssueResolution("t", P, I, R),
+      call: () => getIssueResolution(P, I, R),
       body: { ...detail, resolution: { ...detail.resolution, createdAt: "2026-09-28T00:00:00Z" } },
     },
     {
       name: "detail manifest createdAt numeric-like",
-      call: () => getIssueResolution("t", P, I, R),
+      call: () => getIssueResolution(P, I, R),
       body: { ...detail, evidenceManifest: { ...manifestDetail, createdAt: "0" } },
     },
     {
       name: "evidence basis assessmentCreatedAt noncanonical",
-      call: () => listIssueResolutionEvidenceBases("t", P, I),
+      call: () => listIssueResolutionEvidenceBases(P, I),
       body: { ...bases, evidenceBases: [{ ...bases.evidenceBases[0], assessmentCreatedAt: "2026" }] },
     },
   ])("rejects noncanonical Resolution timestamp: $name", async ({ call, body }) => {
@@ -329,7 +336,7 @@ describe("strict authoritative Resolution validation", () => {
     },
   ])("rejects malformed history: $name", async ({ body }) => {
     fetchMock.mockResolvedValueOnce(response(body));
-    await expect(listIssueResolutions("t", P, I)).rejects.toMatchObject({
+    await expect(listIssueResolutions(P, I)).rejects.toMatchObject({
       status: 502,
       message: "工作结论服务响应异常，请稍后再试。",
     });
@@ -372,12 +379,12 @@ describe("strict authoritative Resolution validation", () => {
     },
   ])("rejects malformed detail: $name", async ({ body }) => {
     fetchMock.mockResolvedValueOnce(response(body));
-    await expect(getIssueResolution("t", P, I, R)).rejects.toMatchObject({ status: 502 });
+    await expect(getIssueResolution(P, I, R)).rejects.toMatchObject({ status: 502 });
   });
 
   it("rejects an internally valid evidence-basis page from another Issue", async () => {
     fetchMock.mockResolvedValueOnce(response({ ...bases, issueId: P }));
-    await expect(listIssueResolutionEvidenceBases("t", P, I)).rejects.toMatchObject({
+    await expect(listIssueResolutionEvidenceBases(P, I)).rejects.toMatchObject({
       status: 502,
       message: "工作结论服务响应异常，请稍后再试。",
     });
@@ -397,7 +404,7 @@ describe("strict authoritative Resolution validation", () => {
       ...bases,
       evidenceBases: [{ ...bases.evidenceBases[0], ...patch }],
     }));
-    await expect(listIssueResolutionEvidenceBases("t", P, I)).rejects.toMatchObject({ status: 502 });
+    await expect(listIssueResolutionEvidenceBases(P, I)).rejects.toMatchObject({ status: 502 });
   });
 
   it.each([
@@ -406,7 +413,7 @@ describe("strict authoritative Resolution validation", () => {
     { status: "created", resolutionId: R, detail: "SECRET" },
   ])("rejects malformed create receipt %#", async body => {
     fetchMock.mockResolvedValueOnce(response(body, 201));
-    await expect(createIssueResolution("t", P, I, KEY, input)).rejects.toMatchObject({ status: 502 });
+    await expect(createIssueResolution(P, I, KEY, input)).rejects.toMatchObject({ status: 502 });
   });
 });
 
@@ -423,7 +430,7 @@ describe("safe M2-E error copy and collision isolation", () => {
     [503, "ISSUE_RESOLUTION_STORE_UNAVAILABLE", "工作结论服务暂不可用。"],
   ])("maps %s %s locally without reflecting server detail", async (status, code, message) => {
     fetchMock.mockResolvedValueOnce(response({ error: { code, message: "SECRET SQL private-host" } }, status));
-    const error = await createIssueResolution("t", P, I, KEY, input).catch(value => value);
+    const error = await createIssueResolution(P, I, KEY, input).catch(value => value);
     expect(error).toBeInstanceOf(ProjectApiError);
     expect(error).toMatchObject({ status, code, message });
     expect(error.message).not.toMatch(/SECRET|SQL|private-host/);
@@ -434,10 +441,10 @@ describe("safe M2-E error copy and collision isolation", () => {
       .mockResolvedValueOnce(response({ error: { code: "ISSUE_RESOLUTION_NOT_FOUND", message: "SECRET" } }, 404))
       .mockResolvedValueOnce(response({ error: { message: "SECRET stack" } }, 500));
 
-    await expect(getIssueResolution("t", P, I, R)).rejects.toEqual(
+    await expect(getIssueResolution(P, I, R)).rejects.toEqual(
       new ProjectApiError(404, "该工作结论当前不可用。", "ISSUE_RESOLUTION_NOT_FOUND"),
     );
-    await expect(getIssueResolution("t", P, I, R)).rejects.toMatchObject({
+    await expect(getIssueResolution(P, I, R)).rejects.toMatchObject({
       status: 500,
       message: "工作结论请求失败，请稍后再试。",
     });
@@ -448,12 +455,12 @@ describe("safe M2-E error copy and collision isolation", () => {
       .mockResolvedValueOnce(response({ error: { code: "PROJECT_OR_ISSUE_NOT_FOUND", message: "SECRET" } }, 404))
       .mockResolvedValueOnce(response({ error: { code: "PROJECT_OR_ISSUE_NOT_FOUND", message: "SECRET" } }, 404));
 
-    await expect(createCandidateClaim("t", P, I, KEY, "候选答案")).rejects.toMatchObject({
+    await expect(createCandidateClaim(P, I, KEY, "候选答案")).rejects.toMatchObject({
       status: 404,
       code: undefined,
       message: "项目不存在，或研究项目功能尚未开启。",
     });
-    await expect(getIssueResolution("t", P, I, R)).rejects.toMatchObject({
+    await expect(getIssueResolution(P, I, R)).rejects.toMatchObject({
       status: 404,
       code: "PROJECT_OR_ISSUE_NOT_FOUND",
       message: "研究项目或研究问题不存在。",
@@ -465,10 +472,10 @@ describe("safe M2-E error copy and collision isolation", () => {
       .mockResolvedValueOnce(response({ error: { code: "IDEMPOTENCY_CONFLICT", message: "SECRET" } }, 409))
       .mockResolvedValueOnce(response({ error: { code: "IDEMPOTENCY_CONFLICT", message: "SECRET" } }, 409));
 
-    await expect(createCandidateClaim("t", P, I, KEY, "候选答案"))
+    await expect(createCandidateClaim(P, I, KEY, "候选答案"))
       .rejects.toMatchObject({ message: "创建请求标识与当前可能答案内容不一致。" });
 
-    await expect(createAssessment("t", P, I, C, KEY, {
+    await expect(createAssessment(P, I, C, KEY, {
       stance: "SUPPORTS",
       confidenceLevel: null,
       reasoning: "reason",

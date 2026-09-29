@@ -44,7 +44,6 @@ const LIMIT_OPTIONS = [20, 50];
 type LoadState = "idle" | "loading" | "ready" | "error";
 
 interface NotesLibraryProps {
-  token: string;
   /**
    * S27H-2: notify the parent whenever the session-theme overlay derived
    * from the currently loaded notes + the most recent AI summary
@@ -59,7 +58,7 @@ interface NotesLibraryProps {
   onSessionOverlayChange?: (overlay: WereadSessionThemeOverlay) => void;
 }
 
-export default function NotesLibrary({ token, onSessionOverlayChange }: NotesLibraryProps) {
+export default function NotesLibrary({ onSessionOverlayChange }: NotesLibraryProps) {
   const [filterType, setFilterType] = useState<WereadNoteTypeFilter>("all");
   const [filterDays, setFilterDays] = useState<WereadNotesDaysFilter>("all");
   const [filterMatched, setFilterMatched] = useState<boolean>(false);
@@ -133,7 +132,7 @@ export default function NotesLibrary({ token, onSessionOverlayChange }: NotesLib
   const queryKey = notesQueryKey(currentQuery);
 
   useEffect(() => {
-    // Reset state when token changes (also clears q + items per privacy contract).
+    // Reset state when the session changes (also clears q + items per privacy contract).
     setItems([]);
     setPageInfo(null);
     setSummary(null);
@@ -142,7 +141,7 @@ export default function NotesLibrary({ token, onSessionOverlayChange }: NotesLib
     setError(null);
     setNoteQuery("");
     setNoteQueryInput("");
-  }, [token]);
+  }, []);
 
   async function load(reset: boolean) {
     const myId = ++requestIdRef.current;
@@ -150,7 +149,7 @@ export default function NotesLibrary({ token, onSessionOverlayChange }: NotesLib
     setError(null);
     try {
       const offset = reset ? 0 : (pageInfo?.offset ?? 0) + (pageInfo?.limit ?? 0);
-      const resp = await fetchWereadNotes(token, { ...currentQuery, offset });
+      const resp = await fetchWereadNotes({ ...currentQuery, offset });
       if (myId !== requestIdRef.current) return;
       if (!resp.ok) {
         setState("error");
@@ -166,7 +165,7 @@ export default function NotesLibrary({ token, onSessionOverlayChange }: NotesLib
       if (myId !== requestIdRef.current) return;
       setState("error");
       const msg = err instanceof Error ? err.message : "加载失败";
-      if (/401|403|unauthorized|invalid token|missing token|认证失败|已过期|token 无效/i.test(msg)) {
+      if (/401|403|unauthorized|认证失败|登录已失效|登录安全校验/i.test(msg)) {
         setError("Token 无效或已过期");
       } else if (/disabled|not enabled|未启用/i.test(msg)) {
         setError("私有 API 未启用");
@@ -240,7 +239,7 @@ export default function NotesLibrary({ token, onSessionOverlayChange }: NotesLib
     if (items.length === 0) return;
     const md = buildMarkdownExport(items, {
       query: currentQuery,
-      privacyNotice: "本文件由当前浏览器的私有 token 会话导出，不包含微信读书内部 ID。",
+      privacyNotice: "本文件由当前浏览器的安全登录会话导出，不包含微信读书内部 ID。",
     });
     const filename = buildMarkdownExportFilename(currentQuery);
     const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
@@ -262,7 +261,7 @@ export default function NotesLibrary({ token, onSessionOverlayChange }: NotesLib
       <div className="weread-note-privacy-warning">
         <AlertCircle size={14} aria-hidden="true" />
         <span>
-          以下内容来自你的微信读书私有笔记，仅当前浏览器 private token 模式可见。不会进入公开搜索或 Meilisearch。
+          以下内容来自你的微信读书私有笔记，仅当前浏览器的安全登录会话可见。不会进入公开搜索或 Meilisearch。
         </span>
       </div>
 
@@ -525,7 +524,6 @@ export default function NotesLibrary({ token, onSessionOverlayChange }: NotesLib
                 {/* S27F: per-book Markdown export — only on matched cards. */}
                 {item.matched && item.catalogId ? (
                   <BookNotesExportButton
-                    token={token}
                     catalogId={item.catalogId}
                     label="导出本书全部笔记"
                   />
@@ -549,7 +547,7 @@ export default function NotesLibrary({ token, onSessionOverlayChange }: NotesLib
           NotesAiSummary itself owns the privacy notice, the manual trigger,
           the abort/clear behaviour, and the responsive layout. */}
       {items.length > 0 ? (
-        <NotesAiSummary token={token} items={items} onSummaryChange={handleSummaryChange} />
+        <NotesAiSummary items={items} onSummaryChange={handleSummaryChange} />
       ) : null}
     </div>
   );

@@ -6,7 +6,7 @@ import {
   ProjectOverviewStoreUnavailableError,
   type ProjectOverviewService,
 } from "../application/project-overview.js";
-import { checkS32PrivateAuth } from "./private-auth.js";
+import { authorizeS32RouteRequest, type S32RequestAuthorizer } from "./private-auth.js";
 
 function toHttpError(error: unknown): [number, string] {
   if (error instanceof InvalidProjectInputError) return [400, "项目 ID 格式不正确。"];
@@ -18,16 +18,13 @@ function toHttpError(error: unknown): [number, string] {
 export function createProjectOverviewRouter(
   config: S32Config,
   overview: ProjectOverviewService | null,
+  requestAuthorizer?: S32RequestAuthorizer,
 ) {
   const router = Router();
 
   router.use((req, res, next) => {
     res.set("Cache-Control", "no-store");
-    const auth = checkS32PrivateAuth(
-      config,
-      req.get("authorization"),
-      req.get("x-private-token"),
-    );
+    const auth = authorizeS32RouteRequest(config, req, requestAuthorizer);
     if (!auth.ok) {
       res.status(auth.status).json({ error: { message: auth.message } });
       return;

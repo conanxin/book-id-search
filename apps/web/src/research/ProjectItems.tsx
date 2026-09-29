@@ -4,7 +4,6 @@ import { removeProjectItem, ProjectApiError, type ProjectOverviewItem, type Proj
 import { ProjectItemNotePanel } from "./ProjectItemNote";
 
 type Props = {
-  token: string;
   projectId: string;
   items: ProjectOverviewItem[];
   readOnly: boolean;
@@ -23,7 +22,7 @@ function publicationLabel(item: ProjectOverviewItem) {
 
 const dateLabel = (value: string) => new Date(value).toLocaleString("zh-CN");
 
-export function ProjectItems({ token, projectId, items, readOnly, focusedBindingId, onItemsChanged }: Props) {
+export function ProjectItems({ projectId, items, readOnly, focusedBindingId, onItemsChanged }: Props) {
   const [visibleItems, setVisibleItems] = useState(items);
   const [error, setError] = useState("");
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -61,7 +60,7 @@ export function ProjectItems({ token, projectId, items, readOnly, focusedBinding
     setRemovingId(item.bindingId);
     setError("");
     try {
-      await removeProjectItem(token, projectId, item.bindingId, request.signal);
+      await removeProjectItem(projectId, item.bindingId, request.signal);
       if (!request.signal.aborted) {
         setVisibleItems(current => current.filter(value => value.bindingId !== item.bindingId));
         onItemsChanged?.();
@@ -101,7 +100,7 @@ export function ProjectItems({ token, projectId, items, readOnly, focusedBinding
           {item.catalogBookId ? <Link to={`/books/${encodeURIComponent(item.catalogBookId)}`}>查看书目</Link> : null}
           {!readOnly ? <button type="button" className="research-text-button" disabled={!!removingId} onClick={() => void remove(item)}>{removingId === item.bindingId ? "正在移出…" : "移出项目"}</button> : null}
         </div>
-        {item.noteSummary || !readOnly ? <ProjectItemNotePanel token={token} projectId={projectId} item={noteItem} readOnly={readOnly} buttonLabel={item.noteSummary ? "打开笔记" : "写笔记"} onSaved={onItemsChanged} /> : null}
+        {item.noteSummary || !readOnly ? <ProjectItemNotePanel projectId={projectId} item={noteItem} readOnly={readOnly} buttonLabel={item.noteSummary ? "打开笔记" : "写笔记"} onSaved={onItemsChanged} /> : null}
       </article>;
     })}</div>
   </section>;

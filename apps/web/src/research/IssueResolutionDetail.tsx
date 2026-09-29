@@ -6,7 +6,6 @@ import {
 } from "./api";
 
 type Props = {
-  token: string;
   projectId: string;
   issueId: string;
   resolutionId: string;
@@ -26,7 +25,6 @@ function typeLabel(type: IssueResolutionDetailResponse["resolution"]["resolution
 }
 
 export function IssueResolutionDetail({
-  token,
   projectId,
   issueId,
   resolutionId,
@@ -41,9 +39,7 @@ export function IssueResolutionDetail({
     active.current = controller;
     setState({ state: "loading" });
     try {
-      const detail = await getIssueResolution(
-        token,
-        projectId,
+      const detail = await getIssueResolution(projectId,
         issueId,
         resolutionId,
         controller.signal,
@@ -64,7 +60,7 @@ export function IssueResolutionDetail({
   useEffect(() => {
     void load();
     return () => active.current?.abort();
-  }, [token, projectId, issueId, resolutionId]);
+  }, [projectId, issueId, resolutionId]);
 
   return <section className="issue-resolution-detail" aria-label="完整工作结论">
     <div className="issue-resolution-detail-heading">
