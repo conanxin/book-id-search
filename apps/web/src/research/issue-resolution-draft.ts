@@ -63,7 +63,8 @@ function normalizeRationale(value: unknown): string {
 export function normalizeIssueResolutionBrowserCommand(
   input: unknown,
 ): NormalizedIssueResolutionBrowserCommand {
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
+  if (!input || typeof input !== "object" || Array.isArray(input)
+    || ![Object.prototype, null].includes(Object.getPrototypeOf(input))) {
     throw new Error("工作结论输入格式不正确。");
   }
   const record = input as Record<string, unknown>;
@@ -74,8 +75,10 @@ export function normalizeIssueResolutionBrowserCommand(
     "rationale",
     "evidenceManifestId",
   ]);
-  for (const key of Object.keys(record)) {
-    if (!allowed.has(key)) throw new Error("工作结论输入包含不支持的字段。");
+  for (const key of Reflect.ownKeys(record)) {
+    if (typeof key !== "string" || !allowed.has(key)) {
+      throw new Error("工作结论输入包含不支持的字段。");
+    }
   }
   for (const key of [
     "expectedCurrentResolutionId",
@@ -140,8 +143,18 @@ export async function hashIssueResolutionCommand(
 }
 
 function isReceipt(value: unknown): value is PendingIssueResolutionReceipt {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  if (!value || typeof value !== "object" || Array.isArray(value)
+    || ![Object.prototype, null].includes(Object.getPrototypeOf(value))) return false;
   const receipt = value as Record<string, unknown>;
+  const allowed = new Set([
+    "projectId",
+    "issueId",
+    "requestHash",
+    "idempotencyKey",
+    "createdAt",
+    "command",
+  ]);
+  if (Reflect.ownKeys(receipt).some(key => typeof key !== "string" || !allowed.has(key))) return false;
   if (
     typeof receipt.projectId !== "string" ||
     typeof receipt.issueId !== "string" ||
