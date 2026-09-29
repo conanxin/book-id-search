@@ -104,6 +104,8 @@ describe("Issue Resolution canonical browser request hash", () => {
       issueId: SCOPE.issueId.toUpperCase(),
     }, b)).toBe(await hashIssueResolutionCommand(SCOPE, a));
     expect(await hashIssueResolutionCommand(SCOPE, a)).toMatch(/^[0-9a-f]{64}$/);
+    expect(await hashIssueResolutionCommand(SCOPE, normalizeIssueResolutionBrowserCommand(COMMAND)))
+      .toBe("7e8366c9a7afaf804b3438893326231d74896367114f1558d91f59ae3df992db");
   });
 
   it("covers scope and every meaningful command field", async () => {
