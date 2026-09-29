@@ -1100,7 +1100,7 @@ async function issueResolutionRequest<T>(
   token: string,
   path: string,
   options: RequestOptions,
-  valid: (body: any) => boolean,
+  valid: (body: any, status: number) => boolean,
 ): Promise<T> {
   try {
     const contextualErrorCodes: SafeErrorMap = options.method === "POST"
