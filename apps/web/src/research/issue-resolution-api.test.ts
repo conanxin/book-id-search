@@ -175,7 +175,8 @@ describe("M2-E issue resolution client paths", () => {
       .mockResolvedValueOnce(response(bases));
 
     await listIssueResolutions("t", "p/a", "i/b", { limit: 20, cursor: "a+b/c==" });
-    await getIssueResolution("t", "p/a", "i/b", "r/c");
+    await expect(getIssueResolution("t", "p/a", "i/b", "r/c"))
+      .rejects.toMatchObject({ status: 502 });
     await listIssueResolutionEvidenceBases("t", "p/a", "i/b", { limit: 7, cursor: "x+y/z==" });
 
     expect(fetchMock.mock.calls[0][0]).toBe(
@@ -297,6 +298,18 @@ describe("strict authoritative Resolution validation", () => {
   });
 
   it.each([
+    {
+      name: "requested Resolution mismatch with internally consistent historical row",
+      body: { ...detail, resolution: { ...detail.resolution, id: H, isCurrent: false } },
+    },
+    {
+      name: "requested Issue mismatch with internally consistent response",
+      body: {
+        ...detail,
+        issue: { ...issue, id: P },
+        resolution: { ...detail.resolution, issueId: P },
+      },
+    },
     {
       name: "detail scope mismatch",
       body: { ...detail, resolution: { ...detail.resolution, issueId: P } },
