@@ -161,6 +161,24 @@ describe("Issue Resolution Composer", () => {
     expect(vi.mocked(createIssueResolution).mock.calls[0][4]).toEqual(receipt.command);
   });
 
+  it.each([
+    [400, "ISSUE_RESOLUTION_INVALID"],
+    [404, "PROJECT_OR_ISSUE_NOT_FOUND"],
+    [404, "PREFERRED_CLAIM_NOT_AVAILABLE"],
+    [404, "EVIDENCE_MANIFEST_NOT_AVAILABLE"],
+    [409, "PROJECT_READ_ONLY"],
+    [409, "RESEARCH_ISSUE_READ_ONLY"],
+  ] as const)("clears pending receipt on definite rejection %s %s", async (status, code) => {
+    vi.mocked(createIssueResolution).mockRejectedValueOnce(
+      new ProjectApiError(status, "明确拒绝", code),
+    );
+    show();
+    await readyPreferred();
+    await userEvent.click(screen.getByRole("button", { name: "提交工作结论" }));
+    expect(await screen.findByText("明确拒绝")).toBeTruthy();
+    expect(loadPendingIssueResolutionReceipt()).toBeNull();
+  });
+
   it("clears stale receipt and refreshes authoritative pointer before another submit", async () => {
     vi.mocked(createIssueResolution).mockRejectedValueOnce(
       new ProjectApiError(409, "stale", "ISSUE_RESOLUTION_STALE"),
