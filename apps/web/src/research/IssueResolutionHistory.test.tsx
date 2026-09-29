@@ -5,6 +5,17 @@ import userEvent from "@testing-library/user-event";
 import { listIssueResolutions } from "./api";
 import { IssueResolutionHistory } from "./IssueResolutionHistory";
 
+vi.mock("../auth/session", async importOriginal => {
+  const actual = await importOriginal<typeof import("../auth/session")>();
+  return { ...actual, ensureAuthSessionLoaded: vi.fn(async () => {}) };
+});
+import { __resetWebAuthStoreForTests, __setWebAuthSnapshotForTests } from "../auth/session";
+function seedSession(status: "authenticated" | "unauthenticated" = "authenticated"): void {
+  __setWebAuthSnapshotForTests(status === "authenticated"
+    ? { status: "authenticated", user: { email: "owner@example.com", name: "Owner" }, csrfToken: "csrf-test", error: null }
+    : { status: "unauthenticated", user: null, csrfToken: null, error: null });
+}
+beforeEach(() => { seedSession(); });
 vi.mock("./api", async load => ({
   ...await load<typeof import("./api")>(),
   listIssueResolutions: vi.fn(),
@@ -39,13 +50,13 @@ describe("IssueResolutionHistory", () => {
         resolutions: [summary(R1, "更早", false)],
         nextCursor: null,
       });
-    render(<IssueResolutionHistory token="t" projectId={P} issueId={I} refreshVersion={0} />);
+    render(<IssueResolutionHistory projectId={P} issueId={I} refreshVersion={0} />);
     expect(await screen.findByText("当前")).toBeTruthy();
     expect(screen.getByText("CURRENT")).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "加载更早工作结论" }));
     expect(await screen.findByText("更早")).toBeTruthy();
     await waitFor(() => expect(listIssueResolutions).toHaveBeenCalledTimes(2));
-    expect(vi.mocked(listIssueResolutions).mock.calls[1][3]).toEqual({ limit: 20, cursor: "older" });
+    expect(vi.mocked(listIssueResolutions).mock.calls[1][2]).toEqual({ limit: 20, cursor: "older" });
   });
 
   it("rebinds prior page current markers when a later page reports an advanced pointer", async () => {
@@ -62,7 +73,7 @@ describe("IssueResolutionHistory", () => {
         resolutions: [summary(R1, "新当前", true)],
         nextCursor: null,
       });
-    render(<IssueResolutionHistory token="t" projectId={P} issueId={I} refreshVersion={0} />);
+    render(<IssueResolutionHistory projectId={P} issueId={I} refreshVersion={0} />);
     expect(await screen.findByText("原当前")).toBeTruthy();
     expect(screen.getAllByText("CURRENT")).toHaveLength(1);
     await userEvent.click(screen.getByRole("button", { name: "加载更早工作结论" }));
@@ -79,7 +90,7 @@ describe("IssueResolutionHistory", () => {
         issue: { id: I, lifecycleState: "OPEN", currentResolutionId: null, updatedAt: "2026-09-20T00:00:00.000Z" },
         currentResolution: null, resolutions: [], nextCursor: null,
       });
-    render(<IssueResolutionHistory token="t" projectId={P} issueId={I} refreshVersion={0} />);
+    render(<IssueResolutionHistory projectId={P} issueId={I} refreshVersion={0} />);
     expect(await screen.findByText("工作结论历史暂时无法加载。")).toBeTruthy();
     expect(document.body.textContent).not.toContain("private");
     await userEvent.click(screen.getByRole("button", { name: "重试工作结论历史" }));

@@ -26,7 +26,6 @@ type ComposerState =
   | "read-only";
 
 export interface AssessmentComposerProps {
-  token: string;
   projectId: string;
   issueId: string;
   claimId: string;
@@ -51,7 +50,6 @@ function matchesScope(
 }
 
 export function AssessmentComposer({
-  token,
   projectId,
   issueId,
   claimId,
@@ -129,9 +127,7 @@ export function AssessmentComposer({
     setState("submitting");
     setMessage("");
     try {
-      const result = await createAssessment(
-        token,
-        projectId,
+      const result = await createAssessment(projectId,
         issueId,
         claimId,
         receipt.idempotencyKey,

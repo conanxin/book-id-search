@@ -6,7 +6,6 @@ import {
 } from "./api";
 
 type Props = {
-  token: string;
   projectId: string;
   issueId: string;
   claimId: string;
@@ -22,7 +21,6 @@ type State =
   | { state: "error" };
 
 export function AssessmentDetail({
-  token,
   projectId,
   issueId,
   claimId,
@@ -39,9 +37,7 @@ export function AssessmentDetail({
     active.current = controller;
     setState({ state: "loading" });
     try {
-      const detail = await getAssessment(
-        token,
-        projectId,
+      const detail = await getAssessment(projectId,
         issueId,
         claimId,
         assessmentId,
@@ -65,7 +61,7 @@ export function AssessmentDetail({
   useEffect(() => {
     void load();
     return () => active.current?.abort();
-  }, [token, projectId, issueId, claimId, assessmentId]);
+  }, [projectId, issueId, claimId, assessmentId]);
 
   return <section className="assessment-detail" aria-label="完整评价">
     <div className="assessment-detail-heading">

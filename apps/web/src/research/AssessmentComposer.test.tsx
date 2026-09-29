@@ -16,6 +16,16 @@ import {
 } from "./assessment-draft";
 import type { CurrentEvidencePreview } from "./EvidenceEditor";
 
+vi.mock("../auth/session", async importOriginal => {
+  const actual = await importOriginal<typeof import("../auth/session")>();
+  return { ...actual, ensureAuthSessionLoaded: vi.fn(async () => {}) };
+});
+import { __resetWebAuthStoreForTests, __setWebAuthSnapshotForTests } from "../auth/session";
+function seedSession(status: "authenticated" | "unauthenticated" = "authenticated"): void {
+  __setWebAuthSnapshotForTests(status === "authenticated"
+    ? { status: "authenticated", user: { email: "owner@example.com", name: "Owner" }, csrfToken: "csrf-test", error: null }
+    : { status: "unauthenticated", user: null, csrfToken: null, error: null });
+}
 vi.mock("./api", async load => ({
   ...await load<typeof import("./api")>(),
   createAssessment: vi.fn(),
@@ -62,7 +72,7 @@ const CREATED: AssessmentCreateResponse = {
   },
 };
 
-beforeEach(() => {
+beforeEach(() => { seedSession();
   vi.resetAllMocks();
   sessionStorage.clear();
   resetPendingAssessmentReceiptMemoryForTest();
@@ -159,8 +169,8 @@ describe("pending committed intent", () => {
     expect(await screen.findByText("评价提交结果尚未确认。")).toBeTruthy();
     expect((screen.getByLabelText("判断理由") as HTMLTextAreaElement).value).toBe("冻结的判断。");
     await userEvent.click(screen.getByRole("button", { name: "使用同一标识重试" }));
-    expect(vi.mocked(createAssessment).mock.calls[0][4]).toBe(receipt.idempotencyKey);
-    expect(vi.mocked(createAssessment).mock.calls[0][5]).toEqual(receipt.command);
+    expect(vi.mocked(createAssessment).mock.calls[0][3]).toBe(receipt.idempotencyKey);
+    expect(vi.mocked(createAssessment).mock.calls[0][4]).toEqual(receipt.command);
   });
 
   it("requires explicit discard when another committed intent already owns the pending receipt", async () => {

@@ -6,7 +6,6 @@ import {
 } from "./api";
 
 type Props = {
-  token: string;
   projectId: string;
   issueId: string;
   claimId: string;
@@ -32,7 +31,6 @@ function confidenceLabel(value: AssessmentSummary["confidenceLevel"]): string {
 }
 
 export function AssessmentHistory({
-  token,
   projectId,
   issueId,
   claimId,
@@ -51,9 +49,7 @@ export function AssessmentHistory({
     setLoad({ state: "loading" });
     setPage({ state: "idle" });
     try {
-      const result = await listAssessments(
-        token,
-        projectId,
+      const result = await listAssessments(projectId,
         issueId,
         claimId,
         { limit: 20 },
@@ -83,7 +79,7 @@ export function AssessmentHistory({
     initial.current = controller;
     void loadInitial(controller.signal);
     return () => controller.abort();
-  }, [token, projectId, issueId, claimId, refreshVersion]);
+  }, [projectId, issueId, claimId, refreshVersion]);
 
   async function loadOlder(cursor: string) {
     older.current?.abort();
@@ -91,9 +87,7 @@ export function AssessmentHistory({
     older.current = controller;
     setPage({ state: "loading" });
     try {
-      const result = await listAssessments(
-        token,
-        projectId,
+      const result = await listAssessments(projectId,
         issueId,
         claimId,
         { limit: 20, cursor },

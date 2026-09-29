@@ -58,6 +58,14 @@ export function subscribeWebAuth(listener: () => void): () => void {
 }
 
 /** Test-only: reset the store to its pristine state. */
+/**
+ * Task 8 test helper: directly install a snapshot WITHOUT any network GET.
+ * Test-only; production code must never call this.
+ */
+export function __setWebAuthSnapshotForTests(next: WebAuthSnapshot): void {
+  setSnapshot(next);
+}
+
 export function __resetWebAuthStoreForTests(): void {
   snapshot = initialSnapshot;
   inFlightSessionLoad = null;

@@ -58,14 +58,22 @@ describe("GoogleLoginPanel", () => {
     vi.unstubAllGlobals();
   });
 
-  it("missing clientId → unconfigured notice, no GIS initialize, no session GET", async () => {
-    const fetchMock = vi.fn();
+  it("missing clientId → unconfigured notice, no GIS initialize; session GET still fires (restore)", async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ authenticated: false }));
     vi.stubGlobal("fetch", fetchMock);
     render(<GoogleLoginPanel clientId={undefined} />);
     expect(await screen.findByTestId("google-login-unconfigured")).toBeTruthy();
     expect(screen.getByText(/尚未配置/)).toBeTruthy();
     expect(initializeGoogleIdentity).not.toHaveBeenCalled();
-    expect(fetchMock).not.toHaveBeenCalled();
+    // Session restore no longer depends on the client id (Task 8 contract).
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+  });
+
+  it("missing clientId but valid session → authenticated view wins over unconfigured", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(authenticatedBody)));
+    render(<GoogleLoginPanel clientId={undefined} />);
+    expect(await screen.findByTestId("google-login-authenticated")).toBeTruthy();
+    expect(screen.getByText(/owner@example\.com/)).toBeTruthy();
   });
 
   it("unauthenticated → loads GIS and renders official button host", async () => {

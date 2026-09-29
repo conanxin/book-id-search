@@ -7,6 +7,8 @@ export interface Project {
   createdAt: string;
   updatedAt: string;
 }
+import { ensureAuthSessionLoaded, getWebAuthSnapshot } from "../auth/session";
+
 export class ProjectApiError extends Error {
   constructor(public status: number, message: string, public code?: string) { super(message); }
 }
@@ -38,8 +40,8 @@ const statusMessages: Record<number, string> = {
   400: "请检查项目或书目输入。",
   409: "项目或书目状态冲突，请刷新后再试。",
   422: "书目元数据无法加入研究。",
-  401: "请输入研究项目访问凭据。",
-  403: "访问凭据不正确，请清除后重新输入。",
+  401: "登录已失效，请重新登录。",
+  403: "登录安全校验失败，请刷新后重试。",
   404: "项目不存在，或研究项目功能尚未开启。",
   503: "研究项目服务暂不可用，请稍后再试。",
 };
@@ -61,15 +63,24 @@ export interface ProjectResearchItem {
 const S32_ROOT = "/api/private/s32";
 type SafeErrorMap = Record<string, { status: number; message: string }>;
 type RequestOptions = { method?: "GET" | "POST" | "DELETE"; input?: unknown; signal?: AbortSignal; idempotencyKey?: string; contextualErrorCodes?: SafeErrorMap };
-async function request<T>(token: string, path: string, options: RequestOptions, valid: (body: any, status: number) => boolean): Promise<T> {
+async function request<T>(path: string, options: RequestOptions, valid: (body: any, status: number) => boolean): Promise<T> {
   const { method = "GET", input, signal, idempotencyKey, contextualErrorCodes } = options;
+  const snapshot = getWebAuthSnapshot();
+  if (snapshot.status !== "authenticated") {
+    // No private request leaves the browser without an authenticated session.
+    throw new ProjectApiError(401, "请先使用 Google 登录。");
+  }
+  if (method !== "GET" && snapshot.csrfToken === null) {
+    // Unsafe method without an in-memory CSRF token: fail before any fetch.
+    throw new ProjectApiError(403, "登录安全校验失败，请刷新后重试。");
+  }
+  const headers: Record<string, string> = {
+    ...(input !== undefined ? { "Content-Type": "application/json" } : {}),
+    ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
+    ...(method !== "GET" ? { "X-CSRF-Token": snapshot.csrfToken as string } : {}),
+  };
   const response = await fetch(`${S32_ROOT}${path}`, {
-    method, cache: "no-store", signal,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      ...(input !== undefined ? { "Content-Type": "application/json" } : {}),
-      ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
-    },
+    method, cache: "no-store", credentials: "same-origin", signal, headers,
     ...(input !== undefined ? { body: JSON.stringify(input) } : {}),
   });
   if (!response.ok) {
@@ -79,6 +90,11 @@ async function request<T>(token: string, path: string, options: RequestOptions, 
       ? contextualErrorCodes[code]
       : undefined;
     const known = contextual ?? (code && Object.hasOwn(errorCodes, code) ? errorCodes[code] : undefined);
+    if (response.status === 401 || response.status === 403) {
+      // Align global session state with the server once; the safe message below
+      // never echoes the raw response body.
+      void ensureAuthSessionLoaded();
+    }
     if (known?.status === response.status) throw new ProjectApiError(response.status, known.message, code);
     throw new ProjectApiError(response.status, statusMessages[response.status] ?? "项目请求失败，请稍后再试。");
   }
@@ -90,9 +106,9 @@ async function request<T>(token: string, path: string, options: RequestOptions, 
   if (!body || !valid(body, response.status)) throw new ProjectApiError(502, "项目服务响应异常，请稍后再试。");
   return body as T;
 }
-export const listProjects = (token: string, signal?: AbortSignal) => request<{ projects: Project[] }>(token, "/projects", { signal }, b => Array.isArray(b.projects));
-export const getProject = (token: string, id: string, signal?: AbortSignal) => request<{ project: Project }>(token, `/projects/${encodeURIComponent(id)}`, { signal }, b => !!b.project);
-export const createProject = (token: string, input: { name: string; description: string | null }, signal?: AbortSignal) => request<{ project: Project }>(token, "/projects", { method: "POST", input: { name: input.name, description: input.description }, signal }, b => !!b.project);
+export const listProjects = (signal?: AbortSignal) => request<{ projects: Project[] }>("/projects", { signal }, b => Array.isArray(b.projects));
+export const getProject = (id: string, signal?: AbortSignal) => request<{ project: Project }>(`/projects/${encodeURIComponent(id)}`, { signal }, b => !!b.project);
+export const createProject = (input: { name: string; description: string | null }, signal?: AbortSignal) => request<{ project: Project }>("/projects", { method: "POST", input: { name: input.name, description: input.description }, signal }, b => !!b.project);
 
 export interface AddProjectItemResult {
   promotionStatus: "created" | "existing";
@@ -105,13 +121,13 @@ function isItem(value: any): value is ProjectResearchItem {
     && ["sourceId", "catalogBookId", "publisher", "publicationDate", "isbn"].every(k => value[k] === null || typeof value[k] === "string")
     && ["YEAR", "MONTH", "DAY"].includes(value.publicationDatePrecision);
 }
-export const addCatalogBookToProject = (token: string, projectId: string, bookId: string, signal?: AbortSignal) =>
-  request<AddProjectItemResult>(token, `/projects/${encodeURIComponent(projectId)}/catalog-books`, { method: "POST", input: { bookId }, signal },
+export const addCatalogBookToProject = (projectId: string, bookId: string, signal?: AbortSignal) =>
+  request<AddProjectItemResult>(`/projects/${encodeURIComponent(projectId)}/catalog-books`, { method: "POST", input: { bookId }, signal },
     b => ["created", "existing"].includes(b.promotionStatus) && ["created", "existing"].includes(b.bindingStatus) && isItem(b.item));
-export const listProjectItems = (token: string, projectId: string, signal?: AbortSignal) =>
-  request<{ items: ProjectResearchItem[] }>(token, `/projects/${encodeURIComponent(projectId)}/items`, { signal }, b => Array.isArray(b.items) && b.items.every(isItem));
-export const removeProjectItem = (token: string, projectId: string, bindingId: string, signal?: AbortSignal) =>
-  request<void>(token, `/projects/${encodeURIComponent(projectId)}/items/${encodeURIComponent(bindingId)}`, { method: "DELETE", signal }, () => false);
+export const listProjectItems = (projectId: string, signal?: AbortSignal) =>
+  request<{ items: ProjectResearchItem[] }>(`/projects/${encodeURIComponent(projectId)}/items`, { signal }, b => Array.isArray(b.items) && b.items.every(isItem));
+export const removeProjectItem = (projectId: string, bindingId: string, signal?: AbortSignal) =>
+  request<void>(`/projects/${encodeURIComponent(projectId)}/items/${encodeURIComponent(bindingId)}`, { method: "DELETE", signal }, () => false);
 
 export interface ProjectItemNoteRevisionSummary {
   revisionId: string;
@@ -151,14 +167,14 @@ function isNote(value: any): value is ProjectItemNote {
     && value.revisions[0].revisionId === value.currentRevision.revisionId && value.revisions[0].revisionNo === value.currentRevision.revisionNo;
 }
 const notePath = (projectId: string, bindingId: string) => `/projects/${encodeURIComponent(projectId)}/items/${encodeURIComponent(bindingId)}/note`;
-export const getProjectItemNote = (token: string, projectId: string, bindingId: string, signal?: AbortSignal) =>
-  request<{ note: ProjectItemNote | null }>(token, notePath(projectId, bindingId), { signal }, b => b.note === null || isNote(b.note));
-export const createProjectItemNote = (token: string, projectId: string, bindingId: string, content: string, signal?: AbortSignal) =>
-  request<{ note: ProjectItemNote }>(token, notePath(projectId, bindingId), { method: "POST", input: { content }, signal }, b => isNote(b.note));
-export const appendProjectItemNoteRevision = (token: string, projectId: string, bindingId: string, baseRevisionId: string, content: string, signal?: AbortSignal) =>
-  request<{ note: ProjectItemNote }>(token, `${notePath(projectId, bindingId)}/revisions`, { method: "POST", input: { baseRevisionId, content }, signal }, b => isNote(b.note));
-export const getProjectItemNoteRevision = (token: string, projectId: string, bindingId: string, revisionId: string, signal?: AbortSignal) =>
-  request<{ revision: ProjectItemNoteRevision }>(token, `${notePath(projectId, bindingId)}/revisions/${encodeURIComponent(revisionId)}`, { signal }, b => isRevision(b.revision));
+export const getProjectItemNote = (projectId: string, bindingId: string, signal?: AbortSignal) =>
+  request<{ note: ProjectItemNote | null }>(notePath(projectId, bindingId), { signal }, b => b.note === null || isNote(b.note));
+export const createProjectItemNote = (projectId: string, bindingId: string, content: string, signal?: AbortSignal) =>
+  request<{ note: ProjectItemNote }>(notePath(projectId, bindingId), { method: "POST", input: { content }, signal }, b => isNote(b.note));
+export const appendProjectItemNoteRevision = (projectId: string, bindingId: string, baseRevisionId: string, content: string, signal?: AbortSignal) =>
+  request<{ note: ProjectItemNote }>(`${notePath(projectId, bindingId)}/revisions`, { method: "POST", input: { baseRevisionId, content }, signal }, b => isNote(b.note));
+export const getProjectItemNoteRevision = (projectId: string, bindingId: string, revisionId: string, signal?: AbortSignal) =>
+  request<{ revision: ProjectItemNoteRevision }>(`${notePath(projectId, bindingId)}/revisions/${encodeURIComponent(revisionId)}`, { signal }, b => isRevision(b.revision));
 
 export interface ResearchMembership {
   projectId: string;
@@ -271,12 +287,12 @@ function isProjectOverview(value: any): value is ProjectOverview {
   return Array.isArray(value.items) && value.items.every(isOverviewItem);
 }
 
-export const getResearchMemberships = (token: string, bookIds: string[], signal?: AbortSignal) =>
-  request<MembershipResponse>(token, "/research-memberships/catalog-books", { method: "POST", input: { bookIds }, signal },
+export const getResearchMemberships = (bookIds: string[], signal?: AbortSignal) =>
+  request<MembershipResponse>("/research-memberships/catalog-books", { method: "POST", input: { bookIds }, signal },
     body => isMembershipResponse(body, bookIds));
 
-export const getProjectOverview = (token: string, projectId: string, signal?: AbortSignal) =>
-  request<ProjectOverview>(token, `/projects/${encodeURIComponent(projectId)}/overview`, { signal }, isProjectOverview);
+export const getProjectOverview = (projectId: string, signal?: AbortSignal) =>
+  request<ProjectOverview>(`/projects/${encodeURIComponent(projectId)}/overview`, { signal }, isProjectOverview);
 
 export interface ResearchIssueProjectContext {
   id: string;
@@ -355,23 +371,21 @@ function isResearchIssueDetailResponse(value: any): value is ResearchIssueDetail
 }
 
 export const createResearchIssue = (
-  token: string,
   projectId: string,
   idempotencyKey: string,
   input: { title: string; question: string },
   signal?: AbortSignal,
 ) => request<ResearchIssueDetailResponse>(
-  token,
   `/projects/${encodeURIComponent(projectId)}/issues`,
   { method: "POST", input: { title: input.title, question: input.question }, signal, idempotencyKey },
   isResearchIssueDetailResponse,
 );
 
-export const listResearchIssues = (token: string, projectId: string, signal?: AbortSignal) =>
-  request<ResearchIssueListResponse>(token, `/projects/${encodeURIComponent(projectId)}/issues`, { signal }, isResearchIssueListResponse);
+export const listResearchIssues = (projectId: string, signal?: AbortSignal) =>
+  request<ResearchIssueListResponse>(`/projects/${encodeURIComponent(projectId)}/issues`, { signal }, isResearchIssueListResponse);
 
-export const getResearchIssue = (token: string, projectId: string, issueId: string, signal?: AbortSignal) =>
-  request<ResearchIssueDetailResponse>(token, `/projects/${encodeURIComponent(projectId)}/issues/${encodeURIComponent(issueId)}`, { signal }, isResearchIssueDetailResponse);
+export const getResearchIssue = (projectId: string, issueId: string, signal?: AbortSignal) =>
+  request<ResearchIssueDetailResponse>(`/projects/${encodeURIComponent(projectId)}/issues/${encodeURIComponent(issueId)}`, { signal }, isResearchIssueDetailResponse);
 
 export interface CandidateClaim {
   id: string;
@@ -386,11 +400,11 @@ function isCandidateClaim(value: any): value is CandidateClaim {
   return ["ACTIVE", "ARCHIVED"].includes(value.lifecycleState)
     && [value.createdAt, value.updatedAt].every(v => typeof v === "string" && Number.isFinite(Date.parse(v)));
 }
-export const listCandidateClaims = (token: string, projectId: string, issueId: string, signal?: AbortSignal) =>
-  request<{ claims: CandidateClaim[] }>(token, `/projects/${encodeURIComponent(projectId)}/issues/${encodeURIComponent(issueId)}/claims`, { signal }, b => Array.isArray(b.claims) && b.claims.every(isCandidateClaim));
-export async function createCandidateClaim(token: string, projectId: string, issueId: string, idempotencyKey: string, statement: string, signal?: AbortSignal): Promise<{ claim: CandidateClaim }> {
+export const listCandidateClaims = (projectId: string, issueId: string, signal?: AbortSignal) =>
+  request<{ claims: CandidateClaim[] }>(`/projects/${encodeURIComponent(projectId)}/issues/${encodeURIComponent(issueId)}/claims`, { signal }, b => Array.isArray(b.claims) && b.claims.every(isCandidateClaim));
+export async function createCandidateClaim(projectId: string, issueId: string, idempotencyKey: string, statement: string, signal?: AbortSignal): Promise<{ claim: CandidateClaim }> {
   try {
-    return await request<{ claim: CandidateClaim }>(token, `/projects/${encodeURIComponent(projectId)}/issues/${encodeURIComponent(issueId)}/claims`, { method: "POST", input: { statement }, signal, idempotencyKey }, b => isCandidateClaim(b.claim));
+    return await request<{ claim: CandidateClaim }>(`/projects/${encodeURIComponent(projectId)}/issues/${encodeURIComponent(issueId)}/claims`, { method: "POST", input: { statement }, signal, idempotencyKey }, b => isCandidateClaim(b.claim));
   } catch (error) {
     if (error instanceof ProjectApiError && error.status === 409 && error.code === "IDEMPOTENCY_CONFLICT") throw new ProjectApiError(409, "创建请求标识与当前可能答案内容不一致。", error.code);
     throw error;
@@ -525,15 +539,13 @@ function isEvidenceDraft(value: unknown): value is EvidenceManifestDraftPreview 
   }
   return true;
 }
-export const listEvidenceCandidates = (token: string, projectId: string, issueId: string, claimId: string, signal?: AbortSignal) =>
+export const listEvidenceCandidates = (projectId: string, issueId: string, claimId: string, signal?: AbortSignal) =>
   request<{ claim: EvidenceClaimContext; candidates: EvidenceCandidate[] }>(
-    token,
     `/projects/${encodeURIComponent(projectId)}/issues/${encodeURIComponent(issueId)}/claims/${encodeURIComponent(claimId)}/evidence-candidates`,
     { signal },
     b => isPlainObject(b) && isEvidenceClaimContext(b.claim) && Array.isArray(b.candidates) && b.candidates.every(isEvidenceCandidate),
   );
 export async function previewEvidenceManifest(
-  token: string,
   projectId: string,
   issueId: string,
   claimId: string,
@@ -542,7 +554,6 @@ export async function previewEvidenceManifest(
 ): Promise<EvidencePreviewResponse> {
   try {
     return await request<EvidencePreviewResponse>(
-      token,
       `/projects/${encodeURIComponent(projectId)}/issues/${encodeURIComponent(issueId)}/claims/${encodeURIComponent(claimId)}/evidence-manifest-preview`,
       { method: "POST", input: { items }, signal },
       b => isPlainObject(b) && Object.keys(b).length === 3 && isPlainObject(b.claim) && typeof b.claim.id === "string" && uuidRe.test(b.claim.id) && typeof b.claim.statement === "string"
@@ -775,7 +786,6 @@ function assessmentPath(projectId: string, issueId: string, claimId: string): st
 }
 
 export async function createAssessment(
-  token: string,
   projectId: string,
   issueId: string,
   claimId: string,
@@ -785,7 +795,6 @@ export async function createAssessment(
 ): Promise<AssessmentCreateResponse> {
   try {
     return await request<AssessmentCreateResponse>(
-      token,
       assessmentPath(projectId, issueId, claimId),
       { method: "POST", input, signal, idempotencyKey },
       isAssessmentCreateResponse,
@@ -799,7 +808,6 @@ export async function createAssessment(
 }
 
 export function listAssessments(
-  token: string,
   projectId: string,
   issueId: string,
   claimId: string,
@@ -811,7 +819,6 @@ export function listAssessments(
   if (query.cursor) params.set("cursor", query.cursor);
   const suffix = params.size ? `?${params.toString()}` : "";
   return request<AssessmentHistoryResponse>(
-    token,
     assessmentPath(projectId, issueId, claimId) + suffix,
     { signal },
     isAssessmentHistoryResponse,
@@ -819,7 +826,6 @@ export function listAssessments(
 }
 
 export function getAssessment(
-  token: string,
   projectId: string,
   issueId: string,
   claimId: string,
@@ -827,7 +833,6 @@ export function getAssessment(
   signal?: AbortSignal,
 ): Promise<AssessmentDetailResponse> {
   return request<AssessmentDetailResponse>(
-    token,
     assessmentPath(projectId, issueId, claimId) + `/${encodeURIComponent(assessmentId)}`,
     { signal },
     isAssessmentDetailResponse,
@@ -1099,7 +1104,6 @@ const issueResolutionErrorMessages: Record<string, { status: number; message: st
 };
 
 async function issueResolutionRequest<T>(
-  token: string,
   path: string,
   options: RequestOptions,
   valid: (body: any, status: number) => boolean,
@@ -1108,7 +1112,7 @@ async function issueResolutionRequest<T>(
     const contextualErrorCodes: SafeErrorMap = options.method === "POST"
       ? issueResolutionErrorMessages
       : { PROJECT_OR_ISSUE_NOT_FOUND: issueResolutionErrorMessages.PROJECT_OR_ISSUE_NOT_FOUND };
-    return await request<T>(token, path, { ...options, contextualErrorCodes }, valid);
+    return await request<T>(path, { ...options, contextualErrorCodes }, valid);
   } catch (error) {
     if (error instanceof ProjectApiError) {
       if (options.method === "POST" && error.code) {
@@ -1133,7 +1137,6 @@ function issueResolutionPath(projectId: string, issueId: string): string {
 }
 
 export function createIssueResolution(
-  token: string,
   projectId: string,
   issueId: string,
   idempotencyKey: string,
@@ -1141,7 +1144,6 @@ export function createIssueResolution(
   signal?: AbortSignal,
 ): Promise<IssueResolutionCreateResponse> {
   return issueResolutionRequest<IssueResolutionCreateResponse>(
-    token,
     issueResolutionPath(projectId, issueId),
     {
       method: "POST",
@@ -1156,7 +1158,6 @@ export function createIssueResolution(
 }
 
 export function listIssueResolutions(
-  token: string,
   projectId: string,
   issueId: string,
   query: { limit?: number; cursor?: string | null } = {},
@@ -1167,7 +1168,6 @@ export function listIssueResolutions(
   if (query.cursor !== undefined && query.cursor !== null) params.set("cursor", query.cursor);
   const suffix = params.size ? `?${params.toString()}` : "";
   return issueResolutionRequest<IssueResolutionHistoryResponse>(
-    token,
     issueResolutionPath(projectId, issueId) + suffix,
     { signal },
     body => isIssueResolutionHistoryResponse(body)
@@ -1176,14 +1176,12 @@ export function listIssueResolutions(
 }
 
 export function getIssueResolution(
-  token: string,
   projectId: string,
   issueId: string,
   resolutionId: string,
   signal?: AbortSignal,
 ): Promise<IssueResolutionDetailResponse> {
   return issueResolutionRequest<IssueResolutionDetailResponse>(
-    token,
     issueResolutionPath(projectId, issueId) + `/${encodeURIComponent(resolutionId)}`,
     { signal },
     body => isIssueResolutionDetailResponse(body)
@@ -1193,7 +1191,6 @@ export function getIssueResolution(
 }
 
 export function listIssueResolutionEvidenceBases(
-  token: string,
   projectId: string,
   issueId: string,
   query: { limit?: number; cursor?: string | null } = {},
@@ -1204,7 +1201,6 @@ export function listIssueResolutionEvidenceBases(
   if (query.cursor !== undefined && query.cursor !== null) params.set("cursor", query.cursor);
   const suffix = params.size ? `?${params.toString()}` : "";
   return issueResolutionRequest<IssueResolutionEvidenceBasesResponse>(
-    token,
     `/projects/${encodeURIComponent(projectId)}/issues/${encodeURIComponent(issueId)}/resolution-evidence-bases${suffix}`,
     { signal },
     body => isIssueResolutionEvidenceBasesResponse(body)

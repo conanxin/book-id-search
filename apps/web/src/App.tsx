@@ -463,7 +463,7 @@ function BookCard({
   compareSelected = false,
   onToggleCompare,
   memberships = [],
-  membershipState = "no-token",
+  membershipState = "unauthenticated",
   onMembershipRefresh,
 }: {
   book: Book;

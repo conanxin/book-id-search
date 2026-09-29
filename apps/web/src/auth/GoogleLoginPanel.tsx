@@ -34,9 +34,10 @@ export function GoogleLoginPanel({
   const [panelError, setPanelError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!resolvedClientId) return;
+    // Session restore does not depend on the client id: an already-valid
+    // HttpOnly session stays usable even if the frontend id is missing.
     void ensureAuthSessionLoaded();
-  }, [resolvedClientId]);
+  }, []);
 
   useEffect(() => {
     if (!resolvedClientId) return;
@@ -65,14 +66,6 @@ export function GoogleLoginPanel({
     disableGoogleAutoSelect();
   }
 
-  if (!resolvedClientId) {
-    return (
-      <div className={className} data-testid="google-login-unconfigured">
-        Google 登录尚未配置。
-      </div>
-    );
-  }
-
   if (snapshot.status === "authenticated") {
     return (
       <div className={className} data-testid="google-login-authenticated">
@@ -89,6 +82,16 @@ export function GoogleLoginPanel({
     return (
       <div className={className} data-testid={`google-login-${snapshot.status}`}>
         {snapshot.status === "signing_in" ? "正在登录…" : "正在退出…"}
+      </div>
+    );
+  }
+
+  if (!resolvedClientId) {
+    // Only unauthenticated-without-client-id lands here (authenticated and
+    // transient states are handled above).
+    return (
+      <div className={className} data-testid="google-login-unconfigured">
+        Google 登录尚未配置。
       </div>
     );
   }

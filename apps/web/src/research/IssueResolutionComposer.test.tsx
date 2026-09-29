@@ -10,6 +10,16 @@ import {
   ProjectApiError,
 } from "./api";
 import { IssueResolutionComposer } from "./IssueResolutionComposer";
+vi.mock("../auth/session", async importOriginal => {
+  const actual = await importOriginal<typeof import("../auth/session")>();
+  return { ...actual, ensureAuthSessionLoaded: vi.fn(async () => {}) };
+});
+import { __resetWebAuthStoreForTests, __setWebAuthSnapshotForTests } from "../auth/session";
+function seedSession(status: "authenticated" | "unauthenticated" = "authenticated"): void {
+  __setWebAuthSnapshotForTests(status === "authenticated"
+    ? { status: "authenticated", user: { email: "owner@example.com", name: "Owner" }, csrfToken: "csrf-test", error: null }
+    : { status: "unauthenticated", user: null, csrfToken: null, error: null });
+}
 import {
   clearPendingIssueResolutionReceipt,
   getOrCreateIssueResolutionReceipt,
@@ -36,7 +46,7 @@ const project = { id: P, name: "研究项目", lifecycleState: "ACTIVE" as const
 const issue = { id: I, projectId: P, title: "问题", question: "为什么？", lifecycleState: "OPEN" as const, createdAt: "2026-09-20T00:00:00Z", updatedAt: "2026-09-20T01:00:00Z" };
 const claim = { id: C, statement: "可能答案 A", lifecycleState: "ACTIVE" as const, createdAt: "2026-09-20T00:00:00Z", updatedAt: "2026-09-20T00:00:00Z" };
 
-beforeEach(() => {
+beforeEach(() => { seedSession();
   vi.resetAllMocks();
   sessionStorage.clear();
   resetPendingIssueResolutionReceiptMemoryForTest();
@@ -66,13 +76,13 @@ beforeEach(() => {
   });
   vi.mocked(createIssueResolution).mockResolvedValue({ status: "created", resolutionId: R });
 });
-afterEach(() => {
+afterEach(() => { __resetWebAuthStoreForTests();
   cleanup();
   vi.restoreAllMocks();
 });
 
 function show(overrides: Partial<React.ComponentProps<typeof IssueResolutionComposer>> = {}) {
-  return render(<IssueResolutionComposer token="t" project={project} issue={issue} {...overrides} />);
+  return render(<IssueResolutionComposer project={project} issue={issue} {...overrides} />);
 }
 
 async function readyPreferred() {
@@ -97,7 +107,7 @@ describe("Issue Resolution Composer", () => {
     await userEvent.click(screen.getByRole("button", { name: "提交工作结论" }));
     await screen.findByText("工作结论已成功提交。");
     const call = vi.mocked(createIssueResolution).mock.calls[0];
-    expect(call[4]).toEqual({
+    expect(call[3]).toEqual({
       expectedCurrentResolutionId: R,
       resolutionType: "PREFERRED_CLAIM",
       preferredClaimId: C,
@@ -121,7 +131,7 @@ describe("Issue Resolution Composer", () => {
     await userEvent.type(screen.getByLabelText("结论理由"), "目前不选择任何候选。");
     await userEvent.click(screen.getByRole("button", { name: "提交工作结论" }));
     await screen.findByText("工作结论已成功提交。");
-    expect(vi.mocked(createIssueResolution).mock.calls[0][4]).toMatchObject({
+    expect(vi.mocked(createIssueResolution).mock.calls[0][3]).toMatchObject({
       resolutionType,
       preferredClaimId: null,
     });
@@ -140,8 +150,8 @@ describe("Issue Resolution Composer", () => {
     await userEvent.click(retry);
     await screen.findByText("此工作结论此前已经成功提交。");
     const calls = vi.mocked(createIssueResolution).mock.calls;
-    expect(calls[1][3]).toBe(calls[0][3]);
-    expect(calls[1][4]).toEqual(calls[0][4]);
+    expect(calls[1][2]).toBe(calls[0][2]);
+    expect(calls[1][3]).toEqual(calls[0][3]);
   });
 
   it("restores a matching pending receipt and retries without silently rotating its key", async () => {
@@ -157,8 +167,8 @@ describe("Issue Resolution Composer", () => {
     expect(await screen.findByText("工作结论提交结果尚未确认。")).toBeTruthy();
     expect((screen.getByLabelText("结论理由") as HTMLTextAreaElement).value).toBe("冻结的理由。");
     await userEvent.click(screen.getByRole("button", { name: "使用同一标识重试" }));
-    expect(vi.mocked(createIssueResolution).mock.calls[0][3]).toBe(receipt.idempotencyKey);
-    expect(vi.mocked(createIssueResolution).mock.calls[0][4]).toEqual(receipt.command);
+    expect(vi.mocked(createIssueResolution).mock.calls[0][2]).toBe(receipt.idempotencyKey);
+    expect(vi.mocked(createIssueResolution).mock.calls[0][3]).toEqual(receipt.command);
   });
 
   it.each([
@@ -204,14 +214,14 @@ describe("Issue Resolution Composer", () => {
     show();
     expect(await screen.findByText("工作结论提交结果尚未确认。")).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "使用同一标识重试" }));
-    expect(vi.mocked(createIssueResolution).mock.calls[0][3]).toBe(receipt.idempotencyKey);
+    expect(vi.mocked(createIssueResolution).mock.calls[0][2]).toBe(receipt.idempotencyKey);
   });
 
   it("is hidden for new writes when project or issue is archived", () => {
-    const first = render(<IssueResolutionComposer token="t" project={{ ...project, readOnly: true, lifecycleState: "ARCHIVED" }} issue={issue} />);
+    const first = render(<IssueResolutionComposer project={{ ...project, readOnly: true, lifecycleState: "ARCHIVED" }} issue={issue} />);
     expect(screen.queryByRole("heading", { name: "形成工作结论" })).toBeNull();
     first.unmount();
-    render(<IssueResolutionComposer token="t" project={project} issue={{ ...issue, lifecycleState: "ARCHIVED" }} />);
+    render(<IssueResolutionComposer project={project} issue={{ ...issue, lifecycleState: "ARCHIVED" }} />);
     expect(screen.queryByRole("heading", { name: "形成工作结论" })).toBeNull();
   });
 });

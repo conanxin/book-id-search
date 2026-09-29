@@ -22,6 +22,16 @@ import {
 import { clearPendingCandidateClaimReceipt } from "./candidate-claim-draft";
 import { clearPendingAssessmentReceipt } from "./assessment-draft";
 
+vi.mock("../auth/session", async importOriginal => {
+  const actual = await importOriginal<typeof import("../auth/session")>();
+  return { ...actual, ensureAuthSessionLoaded: vi.fn(async () => {}) };
+});
+import { __resetWebAuthStoreForTests, __setWebAuthSnapshotForTests } from "../auth/session";
+function seedSession(status: "authenticated" | "unauthenticated" = "authenticated"): void {
+  __setWebAuthSnapshotForTests(status === "authenticated"
+    ? { status: "authenticated", user: { email: "owner@example.com", name: "Owner" }, csrfToken: "csrf-test", error: null }
+    : { status: "unauthenticated", user: null, csrfToken: null, error: null });
+}
 vi.mock("./api", async load => ({
   ...await load<typeof import("./api")>(),
   listCandidateClaims: vi.fn(),
@@ -87,7 +97,7 @@ const previewResponse = {
   persisted: false as const,
 };
 
-beforeEach(() => {
+beforeEach(() => { seedSession();
   vi.resetAllMocks();
   clearPendingCandidateClaimReceipt();
   clearPendingAssessmentReceipt();
@@ -102,7 +112,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 function show() {
-  return render(<CandidateClaims token="t" project={project} issue={issue} />);
+  return render(<CandidateClaims project={project} issue={issue} />);
 }
 
 async function buildPreview() {

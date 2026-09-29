@@ -4,14 +4,14 @@ import {
   ProjectApiError, type ProjectItemNote, type ProjectItemNoteRevision, type ProjectResearchItem,
 } from "./api";
 
-type Props = { token: string; projectId: string; item: ProjectResearchItem; readOnly: boolean; buttonLabel?: string; onSaved?: () => void };
+type Props = { projectId: string; item: ProjectResearchItem; readOnly: boolean; buttonLabel?: string; onSaved?: () => void };
 type Mode = "closed" | "loading" | "failed" | "empty" | "reading" | "editing" | "history";
 
 export function ProjectItemNotePanel(props: Props) {
-  return <NotePanel key={JSON.stringify([props.token, props.projectId, props.item.bindingId, props.readOnly])} {...props} />;
+  return <NotePanel key={JSON.stringify([props.projectId, props.item.bindingId, props.readOnly])} {...props} />;
 }
 
-function NotePanel({ token, projectId, item, readOnly, buttonLabel = "研究笔记", onSaved }: Props) {
+function NotePanel({ projectId, item, readOnly, buttonLabel = "研究笔记", onSaved }: Props) {
   const [mode, setMode] = useState<Mode>("closed");
   const [note, setNote] = useState<ProjectItemNote | null>(null);
   const [draft, setDraft] = useState("");
@@ -55,7 +55,7 @@ function NotePanel({ token, projectId, item, readOnly, buttonLabel = "研究笔�
     const controller = begin(); if (!controller) return;
     if (!preserveDraft) setMode("loading");
     try {
-      const data = await getProjectItemNote(token, projectId, item.bindingId, controller.signal);
+      const data = await getProjectItemNote(projectId, item.bindingId, controller.signal);
       if (controller.signal.aborted) return;
       if (preserveDraft && !data.note) throw new ProjectApiError(404, "研究笔记已不可用，请保留当前草稿后重试。");
       setNote(data.note);
@@ -80,8 +80,8 @@ function NotePanel({ token, projectId, item, readOnly, buttonLabel = "研究笔�
     const controller = begin(); if (!controller) return;
     try {
       const data = note
-        ? await appendProjectItemNoteRevision(token, projectId, item.bindingId, note.currentRevision.revisionId, draft, controller.signal)
-        : await createProjectItemNote(token, projectId, item.bindingId, draft, controller.signal);
+        ? await appendProjectItemNoteRevision(projectId, item.bindingId, note.currentRevision.revisionId, draft, controller.signal)
+        : await createProjectItemNote(projectId, item.bindingId, draft, controller.signal);
       if (!controller.signal.aborted) {
         setNote(data.note); setDraft(""); setStaleDraft(null); setLatestLoaded(false); setMode("reading");
         onSaved?.();
@@ -98,7 +98,7 @@ function NotePanel({ token, projectId, item, readOnly, buttonLabel = "研究笔�
   async function history(revisionId: string) {
     const controller = begin(); if (!controller) return;
     try {
-      const data = await getProjectItemNoteRevision(token, projectId, item.bindingId, revisionId, controller.signal);
+      const data = await getProjectItemNoteRevision(projectId, item.bindingId, revisionId, controller.signal);
       if (!controller.signal.aborted) { setSelected(data.revision); setMode("history"); }
     } catch (err) { if (!controller.signal.aborted) setError(message(err)); }
     finally { finish(controller); }

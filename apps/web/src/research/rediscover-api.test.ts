@@ -1,9 +1,16 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getProjectOverview,
   getResearchMemberships,
   ProjectApiError,
 } from "./api";
+
+import { __resetWebAuthStoreForTests, __setWebAuthSnapshotForTests } from "../auth/session";
+function seedSession(): void {
+  __setWebAuthSnapshotForTests({ status: "authenticated", user: { email: "owner@example.com", name: "Owner" }, csrfToken: "csrf-test", error: null });
+}
+beforeEach(() => { seedSession(); });
+afterEach(() => { __resetWebAuthStoreForTests(); });
 
 const projectId = "11111111-1111-4111-8111-111111111111";
 const bindingId = "22222222-2222-4222-8222-222222222222";
@@ -63,7 +70,7 @@ describe("M1-E research membership client", () => {
     vi.stubGlobal("fetch", fetchMock);
     const signal = new AbortController().signal;
 
-    await expect(getResearchMemberships("secret", ["book-a", "book-b"], signal)).resolves.toEqual(body);
+    await expect(getResearchMemberships(["book-a", "book-b"], signal)).resolves.toEqual(body);
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/private/s32/research-memberships/catalog-books",
       expect.objectContaining({
@@ -71,7 +78,8 @@ describe("M1-E research membership client", () => {
         cache: "no-store",
         signal,
         body: JSON.stringify({ bookIds: ["book-a", "book-b"] }),
-        headers: expect.objectContaining({ Authorization: "Bearer secret" }),
+        headers: expect.objectContaining({ "X-CSRF-Token": "csrf-test" }),
+        credentials: "same-origin",
       }),
     );
   });
@@ -80,7 +88,7 @@ describe("M1-E research membership client", () => {
     const archived = { ...activeMembership, projectLifecycleState: "ARCHIVED" as const, hasNote: false, noteUpdatedAt: null };
     const body = { memberships: { "book-a": [activeMembership, archived] } };
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(body))));
-    await expect(getResearchMemberships("token", ["book-a"])).resolves.toEqual(body);
+    await expect(getResearchMemberships(["book-a"])).resolves.toEqual(body);
   });
 
   it.each([
@@ -91,7 +99,7 @@ describe("M1-E research membership client", () => {
     { memberships: { "book-a": [{ ...activeMembership, hasNote: "yes" }] } },
   ])("rejects missing or malformed membership truth %#", async (body) => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(body))));
-    await expect(getResearchMemberships("token", ["book-a"])).rejects.toMatchObject({ status: 502 });
+    await expect(getResearchMemberships(["book-a"])).rejects.toMatchObject({ status: 502 });
   });
 });
 
@@ -104,7 +112,7 @@ describe("M1-E Project Overview client", () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify(archived)));
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(getProjectOverview("secret", "project/a")).resolves.toEqual(archived);
+    await expect(getProjectOverview("project/a")).resolves.toEqual(archived);
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/private/s32/projects/project%2Fa/overview",
       expect.objectContaining({ method: "GET", cache: "no-store" }),
@@ -122,7 +130,7 @@ describe("M1-E Project Overview client", () => {
     { ...overview, items: [{ ...overview.items[0], noteSummary: { ...overview.items[0].noteSummary, excerpt: 7 } }] },
   ])("rejects malformed Overview payload %#", async (body) => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(body))));
-    await expect(getProjectOverview("token", projectId)).rejects.toBeInstanceOf(ProjectApiError);
-    await expect(getProjectOverview("token", projectId)).rejects.toMatchObject({ status: 502 });
+    await expect(getProjectOverview(projectId)).rejects.toBeInstanceOf(ProjectApiError);
+    await expect(getProjectOverview(projectId)).rejects.toMatchObject({ status: 502 });
   });
 });

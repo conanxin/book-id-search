@@ -17,25 +17,24 @@ export type ResearchIssuesLoad =
   | { state: "ready"; response: ResearchIssueListResponse; error: "" }
   | { state: "unavailable"; response: null; error: string };
 
-export function useProjectResearchIssues(token: string, projectId: string) {
+export function useProjectResearchIssues(projectId: string) {
   const [attempt, setAttempt] = useState(0);
   const [result, setResult] = useState<ResearchIssuesLoad>({ state: "loading", response: null, error: "" });
   useEffect(() => {
     if (!projectId) return;
     const controller = new AbortController();
     setResult({ state: "loading", response: null, error: "" });
-    void listResearchIssues(token, projectId, controller.signal)
+    void listResearchIssues(projectId, controller.signal)
       .then((response) => { if (!controller.signal.aborted) setResult({ state: "ready", response, error: "" }); })
       .catch(() => { if (!controller.signal.aborted) setResult({ state: "unavailable", response: null, error: "研究问题暂不可用。" }); });
     return () => controller.abort();
-  }, [token, projectId, attempt]);
+  }, [projectId, attempt]);
   return { result, retry: () => setAttempt((value) => value + 1) };
 }
 
 type CreateState = "idle" | "submitting" | "unconfirmed" | "rejected" | "idempotency-conflict";
 
-export function ResearchIssuesSection({ token, projectId, result, retry }: {
-  token: string;
+export function ResearchIssuesSection({ projectId, result, retry }: {
   projectId: string;
   result: ResearchIssuesLoad;
   retry: () => void;
@@ -65,7 +64,7 @@ export function ResearchIssuesSection({ token, projectId, result, retry }: {
     setMessage("");
     try {
       const receipt = await getOrCreateResearchIssueReceipt(projectId, normalized, forceNew);
-      const response = await createResearchIssue(token, projectId, receipt.idempotencyKey, normalized, controller.signal);
+      const response = await createResearchIssue(projectId, receipt.idempotencyKey, normalized, controller.signal);
       if (controller.signal.aborted) return;
       clearPendingResearchIssueReceipt();
       navigate(`/research/projects/${encodeURIComponent(projectId)}/issues/${encodeURIComponent(response.issue.id)}`);
