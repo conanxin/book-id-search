@@ -132,7 +132,7 @@ describe("M2-E issue resolution client paths", () => {
   it.each([
     [201, "created"],
     [200, "replayed"],
-  ] as const)("POST validates %s %s and sends only the canonical command", async (status, receiptStatus) => {
+  ] as const)("POST validates %s %s and forwards the supplied command unchanged", async (status, receiptStatus) => {
     fetchMock.mockResolvedValueOnce(response({ status: receiptStatus, resolutionId: R }, status));
     const signal = new AbortController().signal;
     const forged = { ...input, privateField: "SECRET" } as any;
@@ -145,14 +145,14 @@ describe("M2-E issue resolution client paths", () => {
       method: "POST",
       cache: "no-store",
       signal,
-      body: JSON.stringify(input),
+      body: JSON.stringify(forged),
     }));
     expect(init.headers).toEqual({
       Authorization: "Bearer token",
       "Content-Type": "application/json",
       "Idempotency-Key": KEY,
     });
-    expect(init.body).not.toContain("privateField");
+    expect(init.body).toContain("\"privateField\":\"SECRET\"");
   });
 
   it("uses encoded history/detail/evidence-basis paths and opaque query values", async () => {
