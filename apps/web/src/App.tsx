@@ -25,7 +25,8 @@ import AiSearchPanel from "./AiSearchPanel";
 import { QueryInfoBar, RankingChips } from "./QueryInfoBar";
 import WereadPrivatePanel from "./WereadPrivatePanel";
 import WereadBadge from "./WereadBadge";
-import { fetchWereadStatusesForBooks, fetchWereadStatus, getWereadToken, isWereadEnabled, type WereadStatus } from "./wereadPrivate";
+import { clearWereadStatusCache, fetchWereadStatusesForBooks, fetchWereadStatus, purgeLegacyWereadTokenStorage, type WereadStatus } from "./wereadPrivate";
+import { useWebAuthSession } from "./auth/useWebAuthSession";
 import WereadCenter from "./weread/WereadCenter";
 import ProjectsPage, { researchEnabled } from "./research/ProjectsPage";
 import SiteFooter from "./components/SiteFooter";
@@ -568,8 +569,15 @@ function SearchPage() {
   const [error, setError] = useState("");
   const [statsError, setStatsError] = useState("");
   const [recent, setRecent] = useState<string[]>([]);
-  const [wereadToken, setWereadToken] = useState<string | null>(getWereadToken());
+  const session = useWebAuthSession();
+  const wereadAuthenticated = session.status === "authenticated";
   const [wereadStatuses, setWereadStatuses] = useState<Record<string, WereadStatus>>({});
+
+  // Task 9: one-time purge of the legacy sessionStorage token key —
+  // never read, never used for authorization.
+  useEffect(() => {
+    purgeLegacyWereadTokenStorage();
+  }, []);
   const [wereadLoading, setWereadLoading] = useState(false);
   const [compareBooks, setCompareBooks] = useState<Book[]>([]);
   const [compareOpen, setCompareOpen] = useState(false);
@@ -610,18 +618,19 @@ function SearchPage() {
     };
   }, []);
 
-  // Load WeRead statuses for the current page when token/results change.
+  // Load WeRead statuses for the current page when session/results change (Task 9).
   useEffect(() => {
-    if (!wereadToken || !isWereadEnabled() || !data?.items.length) {
+    if (!wereadAuthenticated || !data?.items.length) {
       setWereadStatuses({});
       setWereadLoading(false);
+      if (!wereadAuthenticated) clearWereadStatusCache();
       return;
     }
     const ids = data.items.map((b) => b.id).filter(Boolean);
     if (!ids.length) return;
     let cancelled = false;
     setWereadLoading(true);
-    fetchWereadStatusesForBooks(wereadToken, ids)
+    fetchWereadStatusesForBooks(ids)
       .then((statuses) => {
         if (!cancelled) setWereadStatuses(statuses);
       })
@@ -634,7 +643,7 @@ function SearchPage() {
     return () => {
       cancelled = true;
     };
-  }, [wereadToken, data?.items]);
+  }, [wereadAuthenticated, data?.items]);
 
   // Debounce input -> debouncedQ (300ms). URL stays in sync only on submit /
   // page change so we don't shove half-typed queries into the address bar.
@@ -1140,6 +1149,8 @@ function DetailPage() {
   const [error, setError] = useState("");
   const [wereadStatus, setWereadStatus] = useState<WereadStatus | null>(null);
   const [wereadLoading, setWereadLoading] = useState(false);
+  const session = useWebAuthSession();
+  const wereadAuthenticated = session.status === "authenticated";
 
   useEffect(() => {
     let cancelled = false;
@@ -1163,17 +1174,17 @@ function DetailPage() {
     };
   }, [id]);
 
-  // Load WeRead status for the detail page book when token is available.
+  // Load WeRead status for the detail page book when the session is
+  // authenticated (Task 9). Unauthenticated/logout drops the badge.
   useEffect(() => {
-    if (!id || !isWereadEnabled()) {
+    if (!id || !wereadAuthenticated) {
       setWereadStatus(null);
+      if (!wereadAuthenticated) clearWereadStatusCache();
       return;
     }
-    const token = getWereadToken();
-    if (!token) return;
     let cancelled = false;
     setWereadLoading(true);
-    fetchWereadStatus(token, id)
+    fetchWereadStatus(id)
       .then((s) => {
         if (!cancelled) setWereadStatus(s.matched ? s : null);
       })
@@ -1186,7 +1197,7 @@ function DetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, wereadAuthenticated]);
 
   const back = () => {
     // Prefer going back if history has a search entry; otherwise navigate to

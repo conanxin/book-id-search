@@ -30,8 +30,8 @@ describe("WereadCenter layout (S27D-UI-POLISH)", () => {
     expect(wereadCenterSrc).toContain("NotesLibrary");
   });
 
-  it("renders the privacy disclosure with the required copy", () => {
-    expect(wereadCenterSrc).toContain("私有内容仅在当前 private token 会话中可见");
+  it("renders the privacy disclosure with the required copy (Task 9 session copy)", () => {
+    expect(wereadCenterSrc).toContain("私有内容仅在本站 Google 登录会话中可见");
     expect(wereadCenterSrc).toContain("不返回 wereadBookId");
     expect(wereadCenterSrc).toContain("不返回 noteId / highlightId");
     expect(wereadCenterSrc).toContain("不返回笔记正文");
@@ -102,14 +102,15 @@ describe("NotesLibrary layout (S27D-UI-POLISH)", () => {
     expect(notesLibrarySrc).toContain('e.key === "Enter"');
   });
 
-  it("load-more keeps q and filters (currentQuery is sent verbatim)", () => {
+  it("load-more keeps q and filters (currentQuery is sent verbatim, session client)", () => {
     expect(notesLibrarySrc).toContain("currentQuery");
-    expect(notesLibrarySrc).toContain("fetchWereadNotes(token, { ...currentQuery, offset })");
+    expect(notesLibrarySrc).toContain("fetchWereadNotes({ ...currentQuery, offset })");
   });
 
-  it("token change still clears q and items", () => {
+  it("notes state is reset via the query-key effect (Task 9: unmount-on-logout carries the privacy contract)", () => {
     expect(notesLibrarySrc).toContain("useEffect");
-    expect(notesLibrarySrc).toContain('}, [token]);');
+    expect(notesLibrarySrc).toContain("Reset state when the session changes");
+    expect(notesLibrarySrc).toContain("setItems([])");
   });
 
   it("does not use dangerouslySetInnerHTML", () => {

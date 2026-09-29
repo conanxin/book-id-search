@@ -113,72 +113,85 @@ export interface WereadCenterSummaryView {
   privacyCopy: string;
 }
 
-const TOKEN_KEY = "book-id-search:weread-private-token";
+import { ensureAuthSessionLoaded, getWebAuthSnapshot } from "./auth/session";
 
-function getStorage(): Storage | null {
-  try {
-    return (globalThis as unknown as Window).sessionStorage ?? null;
-  } catch {
-    return null;
-  }
-}
+/**
+ * Task 9 — the browser no longer stores a WeRead private token. The legacy
+ * key `book-id-search:weread-private-token` is removed once on WeRead UI
+ * mount so upgrading users drop the old sessionStorage secret. This helper
+ * NEVER reads the value and NEVER uses it to authorize anything.
+ */
+const LEGACY_WEREAD_TOKEN_KEY = "book-id-search:weread-private-token";
 
-export function getWereadToken(): string | null {
+export function purgeLegacyWereadTokenStorage(): void {
   try {
-    return getStorage()?.getItem(TOKEN_KEY) || null;
-  } catch {
-    return null;
-  }
-}
-
-export function saveWereadToken(token: string): void {
-  try {
-    getStorage()?.setItem(TOKEN_KEY, token);
+    (globalThis as unknown as Window).sessionStorage?.removeItem(LEGACY_WEREAD_TOKEN_KEY);
   } catch {
     /* ignore storage errors */
   }
-}
-
-export function clearWereadToken(): void {
-  try {
-    getStorage()?.removeItem(TOKEN_KEY);
-  } catch {
-    /* ignore storage errors */
-  }
-}
-
-export function isWereadEnabled(): boolean {
-  return !!getWereadToken();
 }
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3001/api";
 
-async function privateRequestJson<T>(token: string, path: string, init?: RequestInit): Promise<T> {
+export class WereadPrivateError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+  }
+}
+
+/**
+ * Task 9 — private WeRead requests ride the site's HttpOnly-cookie Google
+ * session. GET sends no CSRF token; unsafe methods attach the in-memory
+ * CSRF token from the current session snapshot. No Authorization header
+ * is ever set. Unauthenticated (or CSRF-less unsafe) calls fail before
+ * any fetch leaves the browser.
+ */
+async function privateRequestJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const method = (init?.method ?? "GET").toUpperCase();
+  const snapshot = getWebAuthSnapshot();
+  if (snapshot.status !== "authenticated") {
+    throw new WereadPrivateError(401, "请先使用 Google 登录。");
+  }
+  if (method !== "GET" && snapshot.csrfToken === null) {
+    throw new WereadPrivateError(403, "登录安全校验失败，请刷新后重试。");
+  }
+  const headers: Record<string, string> = { ...(init?.headers as Record<string, string> | undefined ?? {}) };
+  if (method !== "GET") headers["X-CSRF-Token"] = snapshot.csrfToken as string;
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
-    headers: {
-      ...(init?.headers || {}),
-      Authorization: `Bearer ${token}`,
-    },
+    credentials: "same-origin",
+    cache: "no-store",
+    headers,
   });
-  const data = await response.json().catch(() => null);
   if (!response.ok) {
-    const message = data?.error ?? "请求失败";
-    throw new Error(message);
+    const data = await response.json().catch(() => null);
+    if (response.status === 401 || response.status === 403) {
+      // Align global session state with the server once; the safe message
+      // below never echoes the raw private response body.
+      void ensureAuthSessionLoaded();
+      clearWereadStatusCache();
+      throw new WereadPrivateError(
+        response.status,
+        response.status === 401 ? "登录已失效，请重新登录。" : "登录安全校验失败，请刷新后重试。"
+      );
+    }
+    const message = typeof data?.error === "string" ? data.error : "请求失败";
+    throw new WereadPrivateError(response.status, message);
   }
+  const data = await response.json().catch(() => null);
   return data as T;
 }
 
-export function fetchWereadSummary(token: string): Promise<WereadSummary> {
-  return privateRequestJson<WereadSummary>(token, "/private/weread/summary");
+export function fetchWereadSummary(): Promise<WereadSummary> {
+  return privateRequestJson<WereadSummary>("/private/weread/summary");
 }
 
-export function fetchWereadStatus(token: string, catalogId: string): Promise<WereadStatus> {
-  return privateRequestJson<WereadStatus>(token, `/private/weread/status?catalogId=${encodeURIComponent(catalogId)}`);
+export function fetchWereadStatus(catalogId: string): Promise<WereadStatus> {
+  return privateRequestJson<WereadStatus>(`/private/weread/status?catalogId=${encodeURIComponent(catalogId)}`);
 }
 
-export function fetchWereadTrends(token: string): Promise<WereadTrendsResponse> {
-  return privateRequestJson<WereadTrendsResponse>(token, "/private/weread/trends");
+export function fetchWereadTrends(): Promise<WereadTrendsResponse> {
+  return privateRequestJson<WereadTrendsResponse>("/private/weread/trends");
 }
 
 // ---------- private notes library (S27C) ----------
@@ -254,7 +267,7 @@ export interface WereadNotesResponse {
   error?: string;
 }
 
-export function fetchWereadNotes(token: string, query: WereadNotesQuery = {}): Promise<WereadNotesResponse> {
+export function fetchWereadNotes(query: WereadNotesQuery = {}): Promise<WereadNotesResponse> {
   const params = new URLSearchParams();
   if (query.type) params.set("type", query.type);
   if (query.days) params.set("days", query.days);
@@ -278,7 +291,7 @@ export function fetchWereadNotes(token: string, query: WereadNotesQuery = {}): P
   }
   const qs = params.toString();
   const path = qs ? `/private/weread/notes?${qs}` : "/private/weread/notes";
-  return privateRequestJson<WereadNotesResponse>(token, path);
+  return privateRequestJson<WereadNotesResponse>(path);
 }
 
 /* -----------------------------------------------------------------------
@@ -289,9 +302,10 @@ export function fetchWereadNotes(token: string, query: WereadNotesQuery = {}): P
  * note text / comment / wereadBookId / noteId / highlightId /
  * chapterTitle / raw WeRead title / author.
  *
- * The browser request is a plain `GET` with an `Authorization: Bearer …`
- * header — no body, no `q`, no raw notes. Nothing is cached to
- * localStorage / sessionStorage and the response is never logged.
+ * Task 9: the browser request is a plain session-cookie `GET` — no
+ * body, no `q`, no raw notes, no Authorization header. Nothing is
+ * cached to localStorage / sessionStorage and the response is never
+ * logged.
  * ----------------------------------------------------------------------- */
 
 export interface WereadReadingMapOverview {
@@ -386,14 +400,11 @@ export interface FetchWereadReadingMapOptions {
  * GET /api/private/weread/reading-map
  *
  * The browser request carries no body and no identifiers besides the
- * `Authorization: Bearer …` header. Months and topBooks are validated
- * client-side before being attached so that a typo can never silently
- * broaden the request — any out-of-range value is silently clamped to
- * the documented default and no error is raised (the server is the
- * authoritative validator; this is purely UX polish).
+ * Task 9: the browser request carries no body and no identifiers;
+ * authentication rides the HttpOnly cookie session (no Authorization
+ * header). Months and topBooks are validated
  */
 export function fetchWereadReadingMap(
-  token: string,
   options: FetchWereadReadingMapOptions = {}
 ): Promise<WereadReadingMapResponse> {
   const params = new URLSearchParams();
@@ -417,7 +428,7 @@ export function fetchWereadReadingMap(
   const path = qs
     ? `/private/weread/reading-map?${qs}`
     : "/private/weread/reading-map";
-  return privateRequestJson<WereadReadingMapResponse>(token, path, {
+  return privateRequestJson<WereadReadingMapResponse>(path, {
     method: "GET",
     signal: options.signal,
   });
@@ -480,7 +491,6 @@ export interface FetchAllWereadBookNotesResult {
  *  - nothing is logged and the returned array is a fresh defensive copy.
  */
 export async function fetchAllWereadBookNotes(
-  token: string,
   catalogId: string,
   options: FetchAllWereadBookNotesOptions = {}
 ): Promise<FetchAllWereadBookNotesResult> {
@@ -504,7 +514,7 @@ export async function fetchAllWereadBookNotes(
     const offset = page * pageSize;
     if (offset === lastOffset) break;
     lastOffset = offset;
-    const resp = await fetchWereadNotes(token, {
+    const resp = await fetchWereadNotes({
       type: "all",
       days: "all",
       matchedOnly: true,
@@ -539,7 +549,6 @@ const CACHE_LIMIT = 200;
 const BATCH_MAX = 100;
 
 export async function fetchWereadStatusesForBooks(
-  token: string,
   catalogIds: string[]
 ): Promise<Record<string, WereadStatus>> {
   const uniqueIds = [...new Set(catalogIds)].slice(0, CACHE_LIMIT);
@@ -563,29 +572,18 @@ export async function fetchWereadStatusesForBooks(
 
   if (toFetch.length === 0) return out;
 
-  // Try batch endpoint first for uncached ids
+  // Try batch endpoint first for uncached ids (Task 9: cookie session + CSRF)
   const batchIds = toFetch.slice(0, BATCH_MAX);
   try {
-    const response = await fetch(`${API_BASE}/private/weread/status/batch`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ catalogIds: batchIds }),
-    });
-
-    if (response.status === 401 || response.status === 403) {
-      const data = await response.json().catch(() => null);
-      const message = data?.error ?? "认证失败";
-      throw new Error(message);
-    }
-
-    if (response.ok) {
-      const data = (await response.json()) as {
-        ok: boolean;
-        results?: Record<string, WereadStatus>;
-      };
+    const data = await privateRequestJson<{ ok: boolean; results?: Record<string, WereadStatus> }>(
+      "/private/weread/status/batch",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ catalogIds: batchIds }),
+      }
+    );
+    {
       const results = data.results ?? {};
       for (const [id, value] of Object.entries(results)) {
         if (statusCache.size >= CACHE_LIMIT) break;
@@ -595,7 +593,7 @@ export async function fetchWereadStatusesForBooks(
       return out;
     }
   } catch (err) {
-    if (err instanceof Error && /401|403|认证失败|Invalid token|Missing token/i.test(err.message)) {
+    if (err instanceof WereadPrivateError && (err.status === 401 || err.status === 403)) {
       throw err;
     }
     // continue to fallback on network/server errors
@@ -607,7 +605,7 @@ export async function fetchWereadStatusesForBooks(
     const batch = toFetch.slice(i, i + concurrency);
     await Promise.all(
       batch.map(async (id) => {
-        const promise = fetchWereadStatus(token, id).catch((err: Error) => {
+        const promise = fetchWereadStatus(id).catch((err: Error) => {
           statusCache.delete(id);
           return {
             ok: false,
@@ -655,7 +653,7 @@ export function formatWereadCenterSummary(summary: WereadSummary | null): Weread
     matchRatePercent,
     notesPerConfirmedMatch,
     hasNotes: notesCount > 0,
-    privacyCopy: "Token 仅保存在 sessionStorage，不显示笔记或划线的原文，不返回微信读书内部 ID。",
+    privacyCopy: "浏览器使用本站安全登录会话访问私人数据，cookie 为 HttpOnly，页面脚本不可读取；不显示笔记或划线的原文，不返回微信读书内部 ID。",
   };
 }
 
@@ -733,12 +731,11 @@ export type WereadAiSummaryErrorStatus =
 /**
  * POST /api/private/weread/notes/summarize
  *
- * `signal` lets callers abort an in-flight request when the token changes
- * or the user leaves /weread, so a stale response can never write into
- * the page after the user has moved on.
+ * `signal` lets callers abort an in-flight request when the session
+ * changes or the user leaves /weread, so a stale response can never
+ * write into the page after the user has moved on.
  */
 export function fetchWereadAiSummary(
-  token: string,
   items: WereadAiSummaryInputItem[],
   signal?: AbortSignal
 ): Promise<WereadAiSummaryResponse> {
@@ -759,7 +756,6 @@ export function fetchWereadAiSummary(
     safeItems.push({ type, text, comment });
   }
   return privateRequestJson<WereadAiSummaryResponse>(
-    token,
     "/private/weread/notes/summarize",
     {
       method: "POST",
@@ -877,7 +873,6 @@ function sanitizeRelatedBookExclusions(
  * server, or a synthetic fetch failure message.
  */
 export function fetchWereadRelatedBooks(
-  token: string,
   seeds: ReadonlyArray<unknown>,
   excludeCatalogIds: ReadonlyArray<unknown> = [],
   signal?: AbortSignal
@@ -911,7 +906,6 @@ export function fetchWereadRelatedBooks(
   );
 
   return privateRequestJson<WereadRelatedBooksResponse>(
-    token,
     "/private/weread/related-books",
     {
       method: "POST",
@@ -934,9 +928,10 @@ export function fetchWereadRelatedBooks(
  *
  * Only year / count / type / month / public catalog metadata leave the
  * server. The browser request is a plain `GET` with an
- * `Authorization: Bearer …` header — no body, no note ids, no
- * `/api/search` call. Nothing is cached to localStorage /
- * sessionStorage and the response is never logged.
+ * Task 9: the browser request is a plain session-cookie `GET` —
+ * no body, no note ids, no Authorization header, no `/api/search`
+ * call. Nothing is cached to localStorage / sessionStorage and the
+ * response is never logged.
  * ----------------------------------------------------------------------- */
 
 export interface WereadAnnualReviewOverview {
@@ -1025,7 +1020,6 @@ export interface FetchWereadAnnualReviewOptions {
 }
 
 export function fetchWereadAnnualReview(
-  token: string,
   options: FetchWereadAnnualReviewOptions = {}
 ): Promise<WereadAnnualReviewResponse> {
   const params = new URLSearchParams();
@@ -1048,7 +1042,7 @@ export function fetchWereadAnnualReview(
   const path = qs
     ? `/private/weread/annual-review?${qs}`
     : "/private/weread/annual-review";
-  return privateRequestJson<WereadAnnualReviewResponse>(token, path, {
+  return privateRequestJson<WereadAnnualReviewResponse>(path, {
     method: "GET",
     signal: options.signal,
   });

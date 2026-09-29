@@ -91,7 +91,6 @@ const MODEL_RANGE_TO_ERA_LABEL: Record<
 // ---------- props ----------
 
 export interface ReadingArchiveDashboardProps {
-  token: string;
   active: boolean;
   /**
    * Invoked when the user clicks "查看年度回顾" on a year card. The
@@ -104,11 +103,10 @@ export interface ReadingArchiveDashboardProps {
 // ---------- component ----------
 
 export default function ReadingArchiveDashboard({
-  token,
   active,
   onOpenAnnualYear,
 }: ReadingArchiveDashboardProps) {
-  const archive = useReadingArchiveMachine({ token, active });
+  const archive = useReadingArchiveMachine({ ready: true, active });
 
   const {
     state,

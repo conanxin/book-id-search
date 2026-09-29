@@ -107,7 +107,7 @@ interface ScriptedFetch {
 
 function createScriptedFetch(): ScriptedFetch {
   const calls: ScriptedCall[] = [];
-  const fetchImpl: ReadingArchiveFetchFn = (_token, options) => {
+  const fetchImpl: ReadingArchiveFetchFn = (options) => {
     return new Promise<WereadAnnualReviewResponse>((resolve, reject) => {
       const controller = new AbortController();
       if (options.signal) {
@@ -211,27 +211,27 @@ interface ControllerHarness {
   inflight: Map<number, AbortController>;
   nextId: number;
   active: boolean;
-  token: string;
+  ready: boolean;
   ctrl: ReadingArchiveController;
   apply: (action: ReadingArchiveAction) => void;
   tick: () => void;
   setActive: (active: boolean) => void;
-  setToken: (token: string) => void;
+  setReady: (ready: boolean) => void;
 }
 
 function makeHarness(
   scripted: ScriptedFetch,
-  init?: { active?: boolean; token?: string },
+  init?: { active?: boolean; ready?: boolean },
 ): ControllerHarness {
   const actions: ReadingArchiveAction[] = [];
   const inflight = new Map<number, AbortController>();
   const bag: {
     active: boolean;
-    token: string;
+    ready: boolean;
     nextId: number;
   } = {
     active: init?.active ?? false,
-    token: init?.token ?? "",
+    ready: init?.ready ?? false,
     nextId: 1,
   };
   const stateRef: { current: ReadingArchiveMachineState } = {
@@ -243,7 +243,7 @@ function makeHarness(
       stateRef.current = reduceReadingArchiveState(stateRef.current, a);
     },
     fetch: scripted.fetch,
-    getToken: () => bag.token,
+    isReady: () => bag.ready,
     getActive: () => bag.active,
     allocRequestId: () => {
       const id = bag.nextId;
@@ -276,8 +276,8 @@ function makeHarness(
     get active() {
       return bag.active;
     },
-    get token() {
-      return bag.token;
+    get ready() {
+      return bag.ready;
     },
     ctrl,
     apply: (a) => {
@@ -288,8 +288,8 @@ function makeHarness(
     setActive: (active) => {
       bag.active = active;
     },
-    setToken: (token) => {
-      bag.token = token;
+    setReady: (ready) => {
+      bag.ready = ready;
     },
   };
 }
@@ -317,14 +317,14 @@ afterEach(() => {
 
 describe("useReadingArchiveMachine — bootstrap lifecycle", () => {
   it("1. inactive: no bootstrap call", async () => {
-    const h = makeHarness(scripted, { active: false, token: "tok" });
+    const h = makeHarness(scripted, { active: false, ready: true });
     h.tick();
     expect(scripted.calls.length).toBe(0);
     expect(h.state.bootstrap.status).toBe("idle");
   });
 
   it("2. active: bootstrap fires exactly once", async () => {
-    const h = makeHarness(scripted, { active: true, token: "tok" });
+    const h = makeHarness(scripted, { active: true, ready: true });
     h.tick();
     await flush();
     expect(scripted.calls.length).toBe(1);
@@ -335,7 +335,7 @@ describe("useReadingArchiveMachine — bootstrap lifecycle", () => {
   });
 
   it("3. bootstrap success: visibleYears = availableYears.slice(0, range)", async () => {
-    const h = makeHarness(scripted, { active: true, token: "tok" });
+    const h = makeHarness(scripted, { active: true, ready: true });
     h.tick();
     await flush();
     scripted.resolveNext(
@@ -355,7 +355,7 @@ describe("useReadingArchiveMachine — bootstrap lifecycle", () => {
   });
 
   it("4. bootstrap failure: status=error, reloadBootstrap can recover", async () => {
-    const h = makeHarness(scripted, { active: true, token: "tok" });
+    const h = makeHarness(scripted, { active: true, ready: true });
     h.tick();
     await flush();
     scripted.rejectNext(new Error("network"));
@@ -367,8 +367,8 @@ describe("useReadingArchiveMachine — bootstrap lifecycle", () => {
     expect(scripted.calls.length).toBe(2);
   });
 
-  it("5. same (active, token): bootstrap fires only once", async () => {
-    const h = makeHarness(scripted, { active: true, token: "tok" });
+  it("5. same (active, ready): bootstrap fires only once", async () => {
+    const h = makeHarness(scripted, { active: true, ready: true });
     h.tick();
     await flush();
     scripted.drain();
@@ -392,7 +392,7 @@ describe("useReadingArchiveMachine — bootstrap lifecycle", () => {
 
 describe("useReadingArchiveMachine — year scheduler", () => {
   it("6. visible years → year fetch issued (bootstrap year is pre-cached)", async () => {
-    const h = makeHarness(scripted, { active: true, token: "tok" });
+    const h = makeHarness(scripted, { active: true, ready: true });
     h.tick();
     await flush();
     scripted.resolveNext(
@@ -417,7 +417,7 @@ describe("useReadingArchiveMachine — year scheduler", () => {
   });
 
   it("7. max concurrency never exceeds 2", async () => {
-    const h = makeHarness(scripted, { active: true, token: "tok" });
+    const h = makeHarness(scripted, { active: true, ready: true });
     h.tick();
     await flush();
     scripted.resolveNext(
@@ -436,7 +436,7 @@ describe("useReadingArchiveMachine — year scheduler", () => {
   });
 
   it("8. cached key is never re-requested", async () => {
-    const h = makeHarness(scripted, { active: true, token: "tok" });
+    const h = makeHarness(scripted, { active: true, ready: true });
     h.tick();
     await flush();
     scripted.resolveNext(
@@ -465,7 +465,7 @@ describe("useReadingArchiveMachine — year scheduler", () => {
   });
 
   it("9. pending key is not re-requested (no duplicate in-flight)", async () => {
-    const h = makeHarness(scripted, { active: true, token: "tok" });
+    const h = makeHarness(scripted, { active: true, ready: true });
     h.tick();
     await flush();
     scripted.resolveNext(
@@ -504,7 +504,7 @@ describe("useReadingArchiveMachine — year scheduler", () => {
   });
 
   it("10. range 5 → 10 → 5 hits cache (no new requests)", async () => {
-    const h = makeHarness(scripted, { active: true, token: "tok" });
+    const h = makeHarness(scripted, { active: true, ready: true });
     h.tick();
     await flush();
     scripted.resolveNext(
@@ -534,7 +534,7 @@ describe("useReadingArchiveMachine — year scheduler", () => {
   });
 
   it("11. Top12 → 18 → 12 keeps separate cache keys (Top N isolation)", async () => {
-    const h = makeHarness(scripted, { active: true, token: "tok" });
+    const h = makeHarness(scripted, { active: true, ready: true });
     h.tick();
     await flush();
     scripted.resolveNext(
@@ -603,7 +603,7 @@ describe("useReadingArchiveMachine — year scheduler", () => {
 
 describe("useReadingArchiveMachine — failure + retry", () => {
   it("12. a year fetch fails → key visible in failedKeys", async () => {
-    const h = makeHarness(scripted, { active: true, token: "tok" });
+    const h = makeHarness(scripted, { active: true, ready: true });
     h.tick();
     await flush();
     scripted.resolveNext(
@@ -625,7 +625,7 @@ describe("useReadingArchiveMachine — failure + retry", () => {
   });
 
   it("13. failedKeys lists the failing key only", async () => {
-    const h = makeHarness(scripted, { active: true, token: "tok" });
+    const h = makeHarness(scripted, { active: true, ready: true });
     h.tick();
     await flush();
     scripted.resolveNext(
@@ -653,7 +653,7 @@ describe("useReadingArchiveMachine — failure + retry", () => {
   });
 
   it("14. retryFailed only retries failed keys (not cached ones)", async () => {
-    const h = makeHarness(scripted, { active: true, token: "tok" });
+    const h = makeHarness(scripted, { active: true, ready: true });
     h.tick();
     await flush();
     scripted.resolveNext(
@@ -696,7 +696,7 @@ describe("useReadingArchiveMachine — failure + retry", () => {
   });
 
   it("15. retry success → failedKeys cleared, key cached", async () => {
-    const h = makeHarness(scripted, { active: true, token: "tok" });
+    const h = makeHarness(scripted, { active: true, ready: true });
     h.tick();
     await flush();
     scripted.resolveNext(
@@ -723,7 +723,7 @@ describe("useReadingArchiveMachine — failure + retry", () => {
   });
 
   it("16. retry failure → attempts increments", async () => {
-    const h = makeHarness(scripted, { active: true, token: "tok" });
+    const h = makeHarness(scripted, { active: true, ready: true });
     h.tick();
     await flush();
     scripted.resolveNext(
@@ -755,7 +755,7 @@ describe("useReadingArchiveMachine — failure + retry", () => {
   // dispatched. The full-mode smoke relies on this to keep the
   // real network request count at 1 → 2 (not 1 → many).
   it("16a. YEAR_REQUEST_FAILED → selector doesn't return the error key as 'idle' (no auto-retry)", async () => {
-    const h = makeHarness(scripted, { active: true, token: "tok" });
+    const h = makeHarness(scripted, { active: true, ready: true });
     h.tick();
     await flush();
     scripted.resolveNext(
@@ -790,7 +790,7 @@ describe("useReadingArchiveMachine — failure + retry", () => {
   });
 
   it("16b. no fetch is issued for the failed key without YEAR_RETRY_REQUESTED", async () => {
-    const h = makeHarness(scripted, { active: true, token: "tok" });
+    const h = makeHarness(scripted, { active: true, ready: true });
     h.tick();
     await flush();
     scripted.resolveNext(
@@ -835,7 +835,7 @@ describe("useReadingArchiveMachine — failure + retry", () => {
   });
 
   it("16c. dispatch retry → exactly one new fetch for the failed key", async () => {
-    const h = makeHarness(scripted, { active: true, token: "tok" });
+    const h = makeHarness(scripted, { active: true, ready: true });
     h.tick();
     await flush();
     scripted.resolveNext(
@@ -879,7 +879,7 @@ describe("useReadingArchiveMachine — failure + retry", () => {
   });
 
   it("16d. retry success → no further fetches for the same key", async () => {
-    const h = makeHarness(scripted, { active: true, token: "tok" });
+    const h = makeHarness(scripted, { active: true, ready: true });
     h.tick();
     await flush();
     scripted.resolveNext(
@@ -923,9 +923,9 @@ describe("useReadingArchiveMachine — failure + retry", () => {
 // Section D: token change + abort + unmount
 // ============================================================
 
-describe("useReadingArchiveMachine — token change + abort", () => {
-  it("17. token change aborts in-flight requests", async () => {
-    const h = makeHarness(scripted, { active: true, token: "tok-1" });
+describe("useReadingArchiveMachine — readiness change + abort", () => {
+  it("17. readiness flip aborts in-flight requests", async () => {
+    const h = makeHarness(scripted, { active: true, ready: true });
     h.tick();
     await flush();
     scripted.resolveNext(
@@ -939,16 +939,16 @@ describe("useReadingArchiveMachine — token change + abort", () => {
     await flush();
     const inflightBefore = h.inflight.size;
     expect(inflightBefore).toBeGreaterThan(0);
-    // Switch token → controller's tick will dispatch TOKEN_RESET
-    h.setToken("tok-2");
+    // Flip readiness → controller's tick will dispatch TOKEN_RESET
+    h.setReady(false);
     h.tick();
     await flush();
     // onAbortAll was called: inflight map cleared
     expect(h.inflight.size).toBe(0);
   });
 
-  it("18. token change clears cache and re-bootstraps", async () => {
-    const h = makeHarness(scripted, { active: true, token: "tok-1" });
+  it("18. readiness flip clears cache and re-bootstraps", async () => {
+    const h = makeHarness(scripted, { active: true, ready: true });
     h.tick();
     await flush();
     scripted.resolveNext(
@@ -968,8 +968,8 @@ describe("useReadingArchiveMachine — token change + abort", () => {
     await flush();
     const cacheSizeBefore = Object.keys(h.state.cache).length;
     expect(cacheSizeBefore).toBeGreaterThan(0);
-    // Switch token
-    h.setToken("tok-2");
+    // Flip readiness
+    h.setReady(false);
     h.tick();
     await flush();
     // Cache should be empty
@@ -981,7 +981,7 @@ describe("useReadingArchiveMachine — token change + abort", () => {
   });
 
   it("19. unmount aborts in-flight requests", async () => {
-    const h = makeHarness(scripted, { active: true, token: "tok" });
+    const h = makeHarness(scripted, { active: true, ready: true });
     h.tick();
     await flush();
     scripted.resolveNext(
@@ -1007,12 +1007,12 @@ describe("useReadingArchiveMachine — token change + abort", () => {
 
 describe("useReadingArchiveMachine — stale-response gating", () => {
   it("20. late bootstrap success is ignored (TOKEN_RESET bumps epoch)", async () => {
-    const h = makeHarness(scripted, { active: true, token: "tok-1" });
+    const h = makeHarness(scripted, { active: true, ready: true });
     h.tick();
     await flush();
     const firstBootstrap = scripted.calls[0];
-    // Switch token before resolving → controller dispatches TOKEN_RESET
-    h.setToken("tok-2");
+    // Flip readiness before resolving → controller dispatches TOKEN_RESET
+    h.setReady(false);
     h.tick();
     await flush();
     // Late-arriving response for the OLD bootstrap (requestId 1) — the
@@ -1030,7 +1030,7 @@ describe("useReadingArchiveMachine — stale-response gating", () => {
   });
 
   it("21. late year failure is ignored (requestId mismatch)", async () => {
-    const h = makeHarness(scripted, { active: true, token: "tok-1" });
+    const h = makeHarness(scripted, { active: true, ready: true });
     h.tick();
     await flush();
     scripted.resolveNext(
@@ -1048,7 +1048,7 @@ describe("useReadingArchiveMachine — stale-response gating", () => {
     if (!lateYearCall) throw new Error("no late year call available");
     const failedKey = makeArchiveCacheKey(lateYearCall.options.year!, 12);
     // Switch token before the year call resolves/fails
-    h.setToken("tok-2");
+    h.setReady(false);
     h.tick();
     await flush();
     lateYearCall.reject(new Error("late failure"));
@@ -1059,7 +1059,7 @@ describe("useReadingArchiveMachine — stale-response gating", () => {
   });
 
   it("22. bootstrap year is pre-cached (not re-requested as a year)", async () => {
-    const h = makeHarness(scripted, { active: true, token: "tok" });
+    const h = makeHarness(scripted, { active: true, ready: true });
     h.tick();
     await flush();
     scripted.resolveNext(
@@ -1088,7 +1088,7 @@ describe("useReadingArchiveMachine — stale-response gating", () => {
 
 describe("useReadingArchiveMachine — privacy + safety", () => {
   it("23. keys are always `${year}:${topBooks}` — no NaN", async () => {
-    const h = makeHarness(scripted, { active: true, token: "tok" });
+    const h = makeHarness(scripted, { active: true, ready: true });
     h.tick();
     await flush();
     scripted.resolveNext(

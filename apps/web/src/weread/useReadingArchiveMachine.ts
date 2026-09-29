@@ -21,8 +21,8 @@
  *          calls to make, and which dispatch calls to fire. The
  *          controller is fully testable without a DOM.
  *
- *   3. Privacy: this layer never sees note text, comment, token
- *      body, wereadBookId, AI summaries. The token is only held
+ *   3. Privacy: this layer never sees note text, comment,
+ *      body, wereadBookId, AI summaries. Auth is the site session
  *      in the React effect closure and is forwarded verbatim to
  *      `fetchWereadAnnualReview`; it never enters the reducer
  *      state and never appears in any selector result.
@@ -67,7 +67,8 @@ import {
 // ---------- public hook contract ----------
 
 export interface UseReadingArchiveMachineOptions {
-  token: string;
+  /** Task 9: true while the site session is authenticated. */
+  ready: boolean;
   active: boolean;
   /**
    * Override the fetch implementation. Defaults to
@@ -95,7 +96,6 @@ export interface UseReadingArchiveMachineResult {
 // ---------- internal: per-request abort + id bookkeeping ----------
 
 export type ReadingArchiveFetchFn = (
-  token: string,
   options: FetchWereadAnnualReviewOptions,
 ) => Promise<WereadAnnualReviewResponse>;
 
@@ -117,10 +117,10 @@ export interface ReadingArchiveControllerDeps {
   /** The actual fetch implementation. */
   fetch: ReadingArchiveFetchFn;
   /**
-   * The token to use for fetches. May be empty string when
-   * inactive. The controller never stores the token itself.
+   * Task 9: true while the site session is authenticated and private
+   * fetches may run. The controller never holds credentials.
    */
-  getToken: () => string;
+  isReady: () => boolean;
   /** True iff the workspace tab is currently active. */
   getActive: () => boolean;
   /** Allocates a monotonic request id. */
@@ -128,12 +128,12 @@ export interface ReadingArchiveControllerDeps {
   /**
    * Optional callback fired whenever the controller starts a
    * fetch. Lets the hook record the AbortController for the
-   * token-change / unmount paths. Tests can ignore this.
+   * unmount paths. Tests can ignore this.
    */
   onInflight?: (requestId: number, controller: AbortController) => void;
   /**
    * Optional callback fired when the controller aborts everything
-   * (token reset / unmount). Tests can ignore this.
+   * (unmount / reset). Tests can ignore this.
    */
   onAbortAll?: () => void;
 }
@@ -142,12 +142,12 @@ export class ReadingArchiveController {
   private readonly deps: ReadingArchiveControllerDeps;
   private destroyed = false;
   private lastActive: boolean;
-  private lastToken: string;
+  private lastReady: boolean;
 
   constructor(deps: ReadingArchiveControllerDeps) {
     this.deps = deps;
     this.lastActive = deps.getActive();
-    this.lastToken = deps.getToken();
+    this.lastReady = deps.isReady();
   }
 
   /** Mark the controller as disposed. Subsequent ticks are no-ops. */
@@ -163,28 +163,22 @@ export class ReadingArchiveController {
   tick(state: ReadingArchiveMachineState): void {
     if (this.destroyed) return;
 
-    // Token change: reset the machine, abort everything, and
-    // re-evaluate activation on the next tick.
-    const currentToken = this.deps.getToken();
-    if (currentToken !== this.lastToken) {
-      const previousToken = this.lastToken;
-      this.lastToken = currentToken;
+    // Task 9 session gate: reset the machine when readiness flips,
+    // abort everything, and re-evaluate activation on the next tick.
+    const ready = this.deps.isReady();
+    if (ready !== this.lastReady) {
+      this.lastReady = ready;
       this.deps.onAbortAll?.();
       this.deps.dispatch({ type: "TOKEN_RESET" });
-      // If we previously had a token and now have none, the
-      // reducer will not bootstrap. If we previously had nothing
-      // and now have a token, the active check below will fire
-      // the bootstrap on the next tick.
-      void previousToken;
       return;
     }
 
     if (!this.deps.getActive()) return;
-    if (!currentToken) return;
+    if (!ready) return;
 
     // Bootstrap (one-shot)
     if (state.bootstrap.status === "idle") {
-      this.startBootstrap(currentToken, state.view.topBooks);
+      this.startBootstrap(state.view.topBooks);
       return;
     }
 
@@ -194,7 +188,7 @@ export class ReadingArchiveController {
     for (const key of toStart) {
       const existing = state.requests[key];
       if (existing && existing.status === "pending") continue;
-      this.startYearFetch(currentToken, key);
+      this.startYearFetch(key);
     }
   }
 
@@ -207,7 +201,7 @@ export class ReadingArchiveController {
     if (this.destroyed) return;
     this.deps.onAbortAll?.();
     this.deps.dispatch({ type: "TOKEN_RESET" });
-    this.lastToken = this.deps.getToken();
+    this.lastReady = this.deps.isReady();
   }
 
   /**
@@ -223,13 +217,12 @@ export class ReadingArchiveController {
 
   // ---------- internals ----------
 
-  private startBootstrap(token: string, topBooks: ArchiveTopBooks): void {
+  private startBootstrap(topBooks: ArchiveTopBooks): void {
     const requestId = this.deps.allocRequestId();
     this.deps.dispatch({ type: "BOOTSTRAP_STARTED", requestId });
     const controller = new AbortController();
     this.deps.onInflight?.(requestId, controller);
     void this.runFetch({
-      token,
       options: { topBooks, signal: controller.signal },
       requestId,
       controller,
@@ -237,14 +230,13 @@ export class ReadingArchiveController {
     });
   }
 
-  private startYearFetch(token: string, key: ArchiveCacheKey): void {
+  private startYearFetch(key: ArchiveCacheKey): void {
     const requestId = this.deps.allocRequestId();
     this.deps.dispatch({ type: "YEAR_REQUEST_STARTED", key, requestId });
     const { year, topBooks } = parseArchiveCacheKey(key);
     const controller = new AbortController();
     this.deps.onInflight?.(requestId, controller);
     void this.runFetch({
-      token,
       options: { year, topBooks, signal: controller.signal },
       requestId,
       controller,
@@ -254,16 +246,15 @@ export class ReadingArchiveController {
   }
 
   private async runFetch(args: {
-    token: string;
     options: FetchWereadAnnualReviewOptions;
     requestId: number;
     controller: AbortController;
     kind: "bootstrap" | "year";
     key?: ArchiveCacheKey;
   }): Promise<void> {
-    const { token, options, requestId, controller, kind, key } = args;
+    const { options, requestId, controller, kind, key } = args;
     try {
-      const response = await this.deps.fetch(token, options);
+      const response = await this.deps.fetch(options);
       if (controller.signal.aborted) return;
       if (kind === "bootstrap") {
         this.deps.dispatch({
@@ -311,7 +302,7 @@ export class ReadingArchiveController {
 export function useReadingArchiveMachine(
   options: UseReadingArchiveMachineOptions,
 ): UseReadingArchiveMachineResult {
-  const { token, active, fetch = fetchWereadAnnualReview } = options;
+  const { ready, active, fetch = fetchWereadAnnualReview } = options;
 
   const [state, dispatch] = useReducer(
     reduceReadingArchiveState,
@@ -349,8 +340,8 @@ export function useReadingArchiveMachine(
   if (controllerRef.current === null) {
     controllerRef.current = new ReadingArchiveController({
       dispatch,
-      fetch: (t, o) => fetchRef.current(t, o),
-      getToken: () => token,
+      fetch: (o) => fetchRef.current(o),
+      isReady: () => ready,
       getActive: () => active,
       allocRequestId: () => allocRequestId(),
       onInflight: (requestId, controller) => {
@@ -368,16 +359,14 @@ export function useReadingArchiveMachine(
     });
   }
 
-  // Track current token / active via ref so the controller always
-  // sees the latest values.
+  // Track current active via ref so the controller always sees the
+  // latest values.
   const stateRef = useRef<ReadingArchiveMachineState>(state);
   stateRef.current = state;
-  const tokenRef = useRef<string>(token);
-  tokenRef.current = token;
   const activeRef = useRef<boolean>(active);
   activeRef.current = active;
 
-  // Replace the controller's view of token/active on every render.
+  // Replace the controller's view of active on every render.
   useEffect(() => {
     const ctrl = controllerRef.current;
     if (!ctrl) return;
@@ -391,17 +380,17 @@ export function useReadingArchiveMachine(
     ctrl.tick(state);
   });
 
-  // Reset request-id counter on token change so the new epoch
+  // Reset request-id counter when readiness flips so the new epoch
   // starts fresh.
-  const lastTokenRef = useRef<string>(token);
+  const lastReadyRef = useRef<boolean>(ready);
   useEffect(() => {
-    if (lastTokenRef.current === token) return;
-    lastTokenRef.current = token;
+    if (lastReadyRef.current === ready) return;
+    lastReadyRef.current = ready;
     nextRequestIdRef.current = 1;
-    // Abort everything immediately on token change. The controller
+    // Abort everything immediately on readiness change. The controller
     // will pick this up via the next tick.
     abortAll();
-  }, [token, abortAll]);
+  }, [ready, abortAll]);
 
   // Abort on unmount.
   useEffect(() => {

@@ -98,7 +98,7 @@ describe("AnnualReviewDashboard — WereadCenter wiring (4th workspace)", () => 
   });
 
   // 4
-  it("loads once per token (uses lastRequestTokenRef guard)", () => {
+  it("still names the load-once ref (kept name, Task 9)", () => {
     expect(dashboard).toMatch(/lastRequestTokenRef/);
   });
 
@@ -197,8 +197,8 @@ describe("AnnualReviewDashboard — render contract", () => {
   });
 
   // 19
-  it("clears the response when token is cleared (reset effect)", () => {
-    expect(dashboard).toMatch(/setState\(INITIAL_STATE\)/);
+  it("initializes from INITIAL_STATE (Task 9: logout unmounts the dashboard, remount resets)", () => {
+    expect(dashboard).toMatch(/useState<DashboardState>\(INITIAL_STATE\)/);
   });
 
   // 20
@@ -390,10 +390,9 @@ describe("AnnualReviewDashboard — S27J-2 Markdown export wiring", () => {
   });
 
   // 41
-  it("clears the export success state when the token is cleared", () => {
-    // The reset effect on token change must set exportStatus to
-    // idle + exportMessage to empty.
-    const resetBlock = dashboard.match(/useEffect\(\(\) => \{[\s\S]*?\}, \[token\]\)/);
+  it("reset effect clears the export success state (Task 9 remount reset)", () => {
+    // The mount reset effect must set exportStatus to idle + exportMessage empty.
+    const resetBlock = dashboard.match(/useEffect\(\(\) => \{[\s\S]*?\}, \[\]\)/);
     expect(resetBlock).not.toBeNull();
     expect(resetBlock?.[0] ?? "").toMatch(/exportStatus: "idle"/);
   });

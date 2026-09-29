@@ -15,7 +15,6 @@ import {
 } from "./wereadRelatedBooksModel";
 
 interface RelatedBooksDiscoveryProps {
-  token: string;
   /**
    * The current AI summary. When `null` the related-books button stays
    * disabled — the user MUST run an AI summary first. The summary is
@@ -39,11 +38,11 @@ type State =
  * Privacy contract (UI):
  *   - The button is DISABLED until the user has an actual AI summary.
  *   - Only short theme / direction labels leave the browser — no overview,
- *     keyPoints, raw note text, token, q, wereadBookId/noteId/highlightId /
+ *     keyPoints, raw note text, q, wereadBookId/noteId/highlightId /
  *     chapterTitle, private title/author.
  *   - The request is fired exactly once per click. Subsequent clicks cancel
  *     any in-flight request via AbortController.
- *   - The summary / token / notes mutation clears the previous result so the
+ *   - The summary / notes mutation clears the previous result so the
  *     UI never shows results derived from a stale summary.
  *   - Results are kept only in React state and never persisted to
  *     localStorage, sessionStorage, IndexedDB, query string, or files.
@@ -51,7 +50,6 @@ type State =
  *     dangerouslySetInnerHTML.
  */
 export default function RelatedBooksDiscovery({
-  token,
   summary,
   notes,
 }: RelatedBooksDiscoveryProps) {
@@ -76,7 +74,7 @@ export default function RelatedBooksDiscovery({
   // Clear stale results when the source data changes.
   useEffect(() => {
     setState({ kind: "idle" });
-  }, [token, summary, itemsCount]);
+  }, [summary, itemsCount]);
 
   // Abort on unmount.
   useEffect(() => {
@@ -98,7 +96,6 @@ export default function RelatedBooksDiscovery({
     setState({ kind: "loading" });
     try {
       const resp = await fetchWereadRelatedBooks(
-        token,
         seedsResult.seeds,
         exclusions,
         ctl.signal
@@ -124,7 +121,6 @@ export default function RelatedBooksDiscovery({
     seedsResult,
     exclusions,
     state.kind,
-    token,
   ]);
 
   const handleClear = useCallback(() => {
@@ -208,7 +204,7 @@ export default function RelatedBooksDiscovery({
       ) : (
         <p className="weread-related-books__status" data-testid="weread-related-books-meta">
           将使用 {seedsResult.seeds.length} 个主题种子 / 已排除 {exclusions.length} 本已加载书
-          。不会发送搜索词、token 或正文。
+          。不会发送搜索词或正文。
         </p>
       )}
 
@@ -288,8 +284,8 @@ function getErrorMessage(err: unknown): string {
     const msg = err.message;
     if (!msg) return "相关书检索失败，请稍后再试。";
     if (
-      msg.includes("Missing token") ||
-      msg.includes("Invalid token") ||
+      false ||
+      false ||
       msg.includes("Not Found") ||
       msg.includes("请求体过大") ||
       msg.includes("种子")

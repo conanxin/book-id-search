@@ -95,8 +95,8 @@ describe("ReviewCalendarDashboard — structural contract", () => {
   });
 
   // 5
-  it("loads once per token (uses lastRequestTokenRef guard)", () => {
-    expect(dashboard).toMatch(/lastRequestTokenRef/);
+  it("loads once per activation (response/loading guard, Task 9 session client)", () => {
+    expect(dashboard).toMatch(/if \(state\.response \|\| state\.status === "loading"\) return;/);
   });
 
   // 6 — horizon + recommend switching is local state only (no refetch)
@@ -181,9 +181,8 @@ describe("ReviewCalendarDashboard — structural contract", () => {
   });
 
   // 11 — token clear empties local state
-  it("clears response + calendar when token is cleared", () => {
-    expect(dashboard).toMatch(/if \(!token\) \{/);
-    expect(dashboard).toMatch(/setState\(INITIAL_STATE\)/);
+  it("initializes from INITIAL_STATE (Task 9: logout unmounts the dashboard, remount resets)", () => {
+    expect(dashboard).toMatch(/useState<DashboardState>\(INITIAL_STATE\)/);
   });
 
   // 12 — workspaces preserve state via hidden panels
