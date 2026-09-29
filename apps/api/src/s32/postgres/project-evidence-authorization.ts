@@ -129,7 +129,9 @@ export async function loadProjectIssueScope(
   }
   if (!validDate(row.issue_binding_created_at)) integrity("ISSUE_BINDING_TIMESTAMP_INVALID");
   if (!row.owner_project_id || !uuidPattern.test(row.owner_project_id)) integrity("ISSUE_OWNER_INVALID");
-  if (row.owner_project_id !== projectId) integrity("ISSUE_OWNER_PROJECT_MISMATCH");
+  // A canonical owner in another Project is an ownership miss, not corruption.
+  // Returning null preserves the same privacy-safe not-found contract as Claim scope.
+  if (row.owner_project_id !== projectId) return null;
   return {
     projectId, projectLifecycleState: row.project_state as ProjectIssueScope["projectLifecycleState"],
     issueId, issueLifecycleState: row.issue_state as ProjectIssueScope["issueLifecycleState"],

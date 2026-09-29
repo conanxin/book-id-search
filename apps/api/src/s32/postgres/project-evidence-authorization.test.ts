@@ -166,7 +166,8 @@ it("locks only Project then Issue for Issue scope", async () => {
 });
 it.each([
   ["zero owner", { issue_binding_id: null }],
-  ["wrong owner project", { owner_project_id: SOURCE }],
+  ["null owner project", { owner_project_id: null }],
+  ["malformed owner project", { owner_project_id: "bad-owner-id" }],
   ["non-null role", { issue_binding_role: "OWNER" }],
   ["metadata array", { issue_binding_metadata: [] }],
   ["metadata nonempty", { issue_binding_metadata: { unexpected: true } }],
@@ -187,6 +188,10 @@ it.each([
   const load = issueLoader();
   await expect(load(scopeClient([issueScopeRow(mutation)]), P, ISSUE))
     .rejects.toBeInstanceOf(scopeModule.ProjectEvidenceIntegrityError);
+});
+it("returns privacy-safe not-found for an Issue canonically owned by another Project", async () => {
+  await expect(issueLoader()(scopeClient([issueScopeRow({ owner_project_id: SOURCE })]), P, ISSUE))
+    .resolves.toBeNull();
 });
 it("rejects multiple owners even when one is the requested Project", async () => {
   await expect(issueLoader()(scopeClient([issueScopeRow(), issueScopeRow({ owner_project_id: SOURCE })]), P, ISSUE))
