@@ -48,6 +48,30 @@ describe("IssueResolutionHistory", () => {
     expect(vi.mocked(listIssueResolutions).mock.calls[1][3]).toEqual({ limit: 20, cursor: "older" });
   });
 
+  it("rebinds prior page current markers when a later page reports an advanced pointer", async () => {
+    vi.mocked(listIssueResolutions)
+      .mockResolvedValueOnce({
+        issue: { id: I, lifecycleState: "OPEN", currentResolutionId: R2, updatedAt: "2026-09-21T00:00:00.000Z" },
+        currentResolution: summary(R2, "原当前", true),
+        resolutions: [summary(R2, "原当前", true)],
+        nextCursor: "older",
+      })
+      .mockResolvedValueOnce({
+        issue: { id: I, lifecycleState: "OPEN", currentResolutionId: R1, updatedAt: "2026-09-22T00:00:00.000Z" },
+        currentResolution: summary(R1, "新当前", true),
+        resolutions: [summary(R1, "新当前", true)],
+        nextCursor: null,
+      });
+    render(<IssueResolutionHistory token="t" projectId={P} issueId={I} refreshVersion={0} />);
+    expect(await screen.findByText("原当前")).toBeTruthy();
+    expect(screen.getAllByText("CURRENT")).toHaveLength(1);
+    await userEvent.click(screen.getByRole("button", { name: "加载更早工作结论" }));
+    expect(await screen.findByText("新当前")).toBeTruthy();
+    expect(screen.getAllByText("CURRENT")).toHaveLength(1);
+    expect(screen.getByText("新当前").closest("li")?.textContent).toContain("CURRENT");
+    expect(screen.getByText("原当前").closest("li")?.textContent).not.toContain("CURRENT");
+  });
+
   it("keeps initial history failure isolated and retryable", async () => {
     vi.mocked(listIssueResolutions)
       .mockRejectedValueOnce(new Error("private"))
