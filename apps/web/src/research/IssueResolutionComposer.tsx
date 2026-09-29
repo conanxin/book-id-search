@@ -197,15 +197,12 @@ export function IssueResolutionComposer({ token, project, issue, onCommitted }: 
           return;
         }
         if (
-          (error.status === 404 && (
-            error.code === "PREFERRED_CLAIM_NOT_AVAILABLE"
-            || error.code === "EVIDENCE_MANIFEST_NOT_AVAILABLE"
-          ))
+          error.status === 400
+          || error.status === 404
           || (error.status === 409 && (
             error.code === "PROJECT_READ_ONLY"
             || error.code === "RESEARCH_ISSUE_READ_ONLY"
           ))
-          || error.status === 400
         ) {
           clearPendingIssueResolutionReceipt();
           setPendingReceipt(null);
