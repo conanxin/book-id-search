@@ -1097,7 +1097,7 @@ async function issueResolutionRequest<T>(
     return await request<T>(token, path, options, valid);
   } catch (error) {
     if (error instanceof ProjectApiError) {
-      if (error.code) {
+      if (options.method === "POST" && error.code) {
         const mapped = issueResolutionErrorMessages[error.code];
         if (mapped?.status === error.status) {
           throw new ProjectApiError(error.status, mapped.message, error.code);
@@ -1131,13 +1131,7 @@ export function createIssueResolution(
     issueResolutionPath(projectId, issueId),
     {
       method: "POST",
-      input: {
-        expectedCurrentResolutionId: input.expectedCurrentResolutionId,
-        resolutionType: input.resolutionType,
-        preferredClaimId: input.preferredClaimId,
-        rationale: input.rationale,
-        evidenceManifestId: input.evidenceManifestId,
-      },
+      input,
       signal,
       idempotencyKey,
     },
