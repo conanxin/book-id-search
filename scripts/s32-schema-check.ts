@@ -5,20 +5,29 @@
 //   1 = SCHEMA_CHECK_FAIL (any thrown error)
 //   2 = cleanup failure (docker rm unexpected error)
 import { spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
-import { resolve, dirname } from "node:path";
+import { readFileSync, writeFileSync, existsSync, unlinkSync, mkdtempSync } from "node:fs";
+import { resolve, dirname, join } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { S32_MIGRATION_PATHS, readS32MigrationChain } from "./s32-migration-chain.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const ROOT = process.env.S32_ROOT_OVERRIDE
   ? resolve(process.env.S32_ROOT_OVERRIDE)
   : resolve(__dirname, "..");
-const MIG = resolve(ROOT, "db/migrations/001_s32_core_schema.sql");
+const MIGRATIONS = S32_MIGRATION_PATHS.map(path => resolve(ROOT, path));
 const ASSERTIONS = [
   resolve(ROOT, "db/tests/001_s32_schema_assertions.sql"),
   resolve(ROOT, "db/tests/002_s32_negative_invariants.sql"),
+  resolve(ROOT, "db/tests/003_s32_m2e_schema_assertions.sql"),
+  resolve(ROOT, "db/tests/004_s32_m2e_negative_invariants.sql"),
 ];
+const UPGRADE_FIXTURES = [
+  resolve(ROOT, "scripts/fixtures/s32-m2d-browser.sql"),
+  resolve(ROOT, "scripts/fixtures/s32-m2e-schema-upgrade.sql"),
+];
+let evidenceDir = "";
 const IMAGE = "postgres:16-alpine";
 const USER = "s32test";
 const PASS = "s32testpw";
@@ -114,7 +123,7 @@ async function withContainer<T>(fn: () => Promise<T>): Promise<T> {
     CONTAINER = up.stdout.trim();
     let ready = false;
     for (let i = 0; i < 90; i++) {
-      const r = docker(["exec", CONTAINER, "pg_isready", "-U", USER]);
+      const r = docker(["exec", CONTAINER, "pg_isready", "-h", "127.0.0.1", "-U", USER]);
       if (r.status === 0) { ready = true; break; }
       await new Promise(r => setTimeout(r, 1000));
     }
@@ -139,28 +148,89 @@ function psqlFile(dbName: string, sql: string): { stdout: string; stderr: string
   }
 }
 
-async function installOn(dbName: string) {
+function createDatabase(dbName: string) {
   console.log(`[harness] ===== ${dbName} =====`);
   const dr = psqlFile("postgres", `DROP DATABASE IF EXISTS "${dbName}";`);
   if (dr.status !== 0) console.warn(`[harness] drop db warn: ${dr.stderr}`);
   const cr = psqlFile("postgres", `CREATE DATABASE "${dbName}";`);
   if (cr.status !== 0) throw new Error(`create db failed: ${cr.stderr}`);
-  const mig = psqlFile(dbName, readFileSync(MIG, "utf8"));
-  if (mig.status !== 0) throw new Error(`MIGRATION_APPLY_FAIL\n${mig.stderr}`);
+}
+
+function apply(dbName: string, sql: string) {
+  const result = psqlFile(dbName, sql);
+  if (result.status !== 0) throw new Error(`MIGRATION_APPLY_FAIL\n${result.stderr}`);
+}
+
+function assertions(dbName: string) {
   for (const a of ASSERTIONS) {
     // Existence and non-empty already enforced by checkInputs() before withContainer()
     const ar = psqlFile(dbName, readFileSync(a, "utf8"));
     if (ar.status !== 0) throw new Error(`ASSERTION_FAIL: ${a}\n${ar.stderr}`);
   }
+}
+
+function installOn(dbName: string, migrations: string[]) {
+  createDatabase(dbName);
+  for (const sql of migrations) apply(dbName, sql);
+  assertions(dbName);
   console.log(`[harness] ${dbName} install+assertions OK`);
+}
+
+function query(dbName: string, sql: string): string {
+  const r = docker(["exec", CONTAINER, "psql", "-XAt", "-U", USER, "-d", dbName, "-v", "ON_ERROR_STOP=1", "-c", sql]);
+  if (r.status !== 0) throw new Error(`SNAPSHOT_QUERY_FAILED: ${r.stderr}`);
+  return r.stdout;
+}
+
+function dataSnapshot(dbName: string): string {
+  const tables: string[] = JSON.parse(query(dbName, "SELECT json_agg(table_schema || '.' || table_name ORDER BY table_schema,table_name) FROM information_schema.tables WHERE table_schema IN ('core','ops')"));
+  if (tables.length !== 26 || tables.some(name => !/^(core|ops)\.[a-z_]+$/.test(name))) throw new Error("UPGRADE_TABLE_SET_INVALID");
+  const rows = tables.map(name => `SELECT '${name}' AS name, COALESCE(jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)::text),'[]'::jsonb) AS rows FROM ${name} t`).join(" UNION ALL ");
+  return JSON.stringify(JSON.parse(query(dbName, `SELECT jsonb_object_agg(name,rows) FROM (${rows}) s`)));
+}
+
+function upgradeOn(dbName: string, migrations: string[], invalid: boolean) {
+  createDatabase(dbName);
+  apply(dbName, migrations[0]!);
+  for (const fixture of UPGRADE_FIXTURES) apply(dbName, readFileSync(fixture, "utf8"));
+  if (invalid) {
+    apply(dbName, "UPDATE core.issue_resolutions SET preferred_claim_id='32111111-1111-4111-8111-111111111111' WHERE id='e4111111-1111-4111-8111-111111111111';");
+  }
+  const incompatible = query(dbName, "SELECT count(*) FROM core.issue_resolutions r WHERE r.preferred_claim_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM core.research_issue_claims c WHERE c.issue_id=r.issue_id AND c.claim_id=r.preferred_claim_id)");
+  if (incompatible !== (invalid ? "1" : "0")) throw new Error("UPGRADE_FAULT_SETUP_FAILED");
+  const before = dataSnapshot(dbName);
+  writeFileSync(join(evidenceDir, `${dbName}-pre.json`), before, { mode: 0o600 });
+  const result = psqlFile(dbName, migrations.slice(1).join("\n"));
+  writeFileSync(join(evidenceDir, `${dbName}-migration.json`), JSON.stringify(result), { mode: 0o600 });
+  const after = dataSnapshot(dbName);
+  writeFileSync(join(evidenceDir, `${dbName}-post.json`), after, { mode: 0o600 });
+  if (before !== after) throw new Error("UPGRADE_EXISTING_ROWS_CHANGED");
+  if (invalid) {
+    if (result.status === 0 || !result.stderr.includes("S32_M2E_LEGACY_PREFERRED_CLAIM_NOT_MEMBER")) throw new Error("INVALID_LEGACY_PREFLIGHT_NOT_REJECTED");
+    const partial = query(dbName, "SELECT (SELECT count(*) FROM pg_constraint WHERE conrelid='core.issue_resolutions'::regclass AND conname='fk_ir_preferred_claim_same_issue') + (SELECT count(*) FROM pg_trigger WHERE tgrelid='core.issue_resolutions'::regclass AND NOT tgisinternal) + (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='core' AND p.proname='fn_issue_resolutions_immutable')");
+    if (partial !== "0") throw new Error("INVALID_LEGACY_PARTIAL_DDL");
+    console.log("INVALID_LEGACY_PREFLIGHT_FAIL_CLOSED_PG16=PASS");
+  } else {
+    if (result.status !== 0) throw new Error(`VALID_UPGRADE_FAILED: ${result.stderr}`);
+    assertions(dbName);
+    console.log("VALID_001_TO_002_UPGRADE_PG16=PASS");
+  }
 }
 
 async function main() {
   // Strict pre-flight: must check files BEFORE creating container
-  checkInputs(MIG, ASSERTIONS);
+  const migrations = readS32MigrationChain(ROOT);
+  checkInputs(MIGRATIONS[0]!, [...MIGRATIONS.slice(1), ...ASSERTIONS, ...UPGRADE_FIXTURES]);
+  evidenceDir = mkdtempSync(join(tmpdir(), "s32-schema-evidence-"));
+  console.log(`SCHEMA_EVIDENCE_DIR=${evidenceDir}`);
   await withContainer(async () => {
-    await installOn("s32_test_a");
-    await installOn("s32_test_b");
+    const version = Number(query("postgres", "SHOW server_version_num"));
+    if (version < 160000 || version >= 170000) throw new Error("PG16_REQUIRED");
+    installOn("s32_test_a", migrations);
+    installOn("s32_test_b", migrations);
+    console.log("FRESH_INSTALL_PG16=PASS");
+    upgradeOn("s32_upgrade_valid", migrations, false);
+    upgradeOn("s32_upgrade_invalid", migrations, true);
   });
   // Real exit-handling logic: consult postCleanupDecision() and act accordingly.
   const decision = postCleanupDecision();

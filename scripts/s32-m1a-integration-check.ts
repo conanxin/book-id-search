@@ -1,5 +1,5 @@
+import { readS32MigrationChain } from "./s32-migration-chain.js";
 import { spawnSync, type SpawnSyncOptionsWithStringEncoding } from "node:child_process";
-import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -86,7 +86,7 @@ async function main() {
   if (!ready) throw new Error("PG_READY=NO");
   console.log("PG_READY=YES");
 
-  const migration = readFileSync(resolve(ROOT, "db/migrations/001_s32_core_schema.sql"), "utf8");
+  const migration = readS32MigrationChain(ROOT).join("\n");
   const applied = docker(
     [
       "exec", "-i", containerId,

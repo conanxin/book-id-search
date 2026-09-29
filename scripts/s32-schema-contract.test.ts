@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
@@ -122,5 +123,41 @@ describe("S32-M0 schema static contract (frozen artifact chain D1+D2+P29-C+R2+R3
   it("UUID type used for canonical IDs", () => {
     const s = readFileSync(MIG, "utf8");
     expect(s).toMatch(/\bid\s+UUID\b/i);
+  });
+});
+
+
+describe("M2-E additive schema contract", () => {
+  const path = resolve(ROOT, "db/migrations/002_s32_m2e_issue_resolution.sql");
+  function migration() { expect(existsSync(path), "002 additive migration exists").toBe(true); return readFileSync(path, "utf8"); }
+  it("preserves the three frozen v1 SQL artifacts byte for byte", () => {
+    for (const [p, hash] of [
+      [MIG, "f016197c1a4f0b89a85713ae9de6547305b12501da2163f1423751dfc5c621c6"],
+      [ASSERTIONS, "adea011da6dfa0020bfa0fe8f65b295104bcde61cd60cd3f56a11dbe95b733e4"],
+      [NEG, "ba6de881fe7ef806f19c61a23cae04bae38b1906984b1a3d9d956a516aa2da06"],
+    ]) expect(createHash("sha256").update(readFileSync(p!)).digest("hex")).toBe(hash);
+  });
+  it("adds a validated same-Issue preferred Claim foreign key", () => {
+    expect(migration()).toMatch(/FOREIGN KEY\s*\(issue_id, preferred_claim_id\)\s*REFERENCES core\.research_issue_claims\s*\(issue_id, claim_id\)\s*ON DELETE RESTRICT/);
+    expect(migration()).not.toMatch(/NOT VALID/i);
+  });
+  it("rejects incompatible legacy data before DDL without repairing it", () => {
+    const s = migration();
+    expect(s).toContain("S32_M2E_LEGACY_PREFERRED_CLAIM_NOT_MEMBER");
+    expect(s.indexOf("S32_M2E_LEGACY_PREFERRED_CLAIM_NOT_MEMBER")).toBeLessThan(s.indexOf("ADD CONSTRAINT"));
+    expect(s).not.toMatch(/(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+core\./i);
+    expect(s.trim()).toMatch(/^BEGIN;[\s\S]*COMMIT;$/);
+  });
+  it("adds both row-level immutability triggers", () => {
+    const s = migration();
+    for (const action of ["UPDATE", "DELETE"]) expect(s).toMatch(new RegExp(`BEFORE ${action} ON core\\.issue_resolutions[\\s\\S]*?FOR EACH ROW EXECUTE FUNCTION core\\.fn_issue_resolutions_immutable`));
+    expect(s).toContain("S32_M2E_ISSUE_RESOLUTION_IMMUTABLE");
+  });
+  it("does not add tables, columns, indexes or redesign enum/check semantics", () => {
+    expect(migration()).not.toMatch(/CREATE\s+(?:TABLE|TYPE|(?:UNIQUE\s+)?INDEX)|ADD\s+COLUMN|DROP\s+CONSTRAINT|supersedes_resolution_id/i);
+  });
+  it("schema runner includes both new assertion suites and upgrade gates", () => {
+    const s = readFileSync(HARNESS, "utf8");
+    for (const name of ["003_s32_m2e_schema_assertions.sql", "004_s32_m2e_negative_invariants.sql", "VALID_001_TO_002_UPGRADE_PG16", "INVALID_LEGACY_PREFLIGHT_FAIL_CLOSED_PG16"]) expect(s).toContain(name);
   });
 });

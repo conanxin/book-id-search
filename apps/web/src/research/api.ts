@@ -27,6 +27,12 @@ const errorCodes: Record<string, { status: number; message: string }> = {
   ASSESSMENT_NOT_FOUND: { status: 404, message: "该评价当前不可用。" },
   EVIDENCE_PREVIEW_STALE: { status: 409, message: "证据集自上次预览后已发生变化，请重新预览。" },
   ASSESSMENT_STORE_UNAVAILABLE: { status: 503, message: "评价服务暂不可用。" },
+  ISSUE_RESOLUTION_INVALID: { status: 400, message: "工作结论输入不正确。" },
+  ISSUE_RESOLUTION_NOT_FOUND: { status: 404, message: "该工作结论当前不可用。" },
+  PREFERRED_CLAIM_NOT_AVAILABLE: { status: 404, message: "所选可能答案当前不可用。" },
+  EVIDENCE_MANIFEST_NOT_AVAILABLE: { status: 404, message: "所选证据依据当前不可用。" },
+  ISSUE_RESOLUTION_STALE: { status: 409, message: "当前工作结论已发生变化，请刷新后再提交。" },
+  ISSUE_RESOLUTION_STORE_UNAVAILABLE: { status: 503, message: "工作结论服务暂不可用。" },
 };
 const statusMessages: Record<number, string> = {
   400: "请检查项目或书目输入。",
@@ -53,9 +59,10 @@ export interface ProjectResearchItem {
 }
 
 const S32_ROOT = "/api/private/s32";
-type RequestOptions = { method?: "GET" | "POST" | "DELETE"; input?: unknown; signal?: AbortSignal; idempotencyKey?: string };
-async function request<T>(token: string, path: string, options: RequestOptions, valid: (body: any) => boolean): Promise<T> {
-  const { method = "GET", input, signal, idempotencyKey } = options;
+type SafeErrorMap = Record<string, { status: number; message: string }>;
+type RequestOptions = { method?: "GET" | "POST" | "DELETE"; input?: unknown; signal?: AbortSignal; idempotencyKey?: string; contextualErrorCodes?: SafeErrorMap };
+async function request<T>(token: string, path: string, options: RequestOptions, valid: (body: any, status: number) => boolean): Promise<T> {
+  const { method = "GET", input, signal, idempotencyKey, contextualErrorCodes } = options;
   const response = await fetch(`${S32_ROOT}${path}`, {
     method, cache: "no-store", signal,
     headers: {
@@ -68,7 +75,10 @@ async function request<T>(token: string, path: string, options: RequestOptions, 
   if (!response.ok) {
     const body = await response.json().catch(() => null);
     const code = typeof body?.error?.code === "string" ? body.error.code : undefined;
-    const known = code && Object.hasOwn(errorCodes, code) ? errorCodes[code] : undefined;
+    const contextual = code && contextualErrorCodes && Object.hasOwn(contextualErrorCodes, code)
+      ? contextualErrorCodes[code]
+      : undefined;
+    const known = contextual ?? (code && Object.hasOwn(errorCodes, code) ? errorCodes[code] : undefined);
     if (known?.status === response.status) throw new ProjectApiError(response.status, known.message, code);
     throw new ProjectApiError(response.status, statusMessages[response.status] ?? "项目请求失败，请稍后再试。");
   }
@@ -77,7 +87,7 @@ async function request<T>(token: string, path: string, options: RequestOptions, 
     return undefined as T;
   }
   const body = await response.json().catch(() => null);
-  if (!body || !valid(body)) throw new ProjectApiError(502, "项目服务响应异常，请稍后再试。");
+  if (!body || !valid(body, response.status)) throw new ProjectApiError(502, "项目服务响应异常，请稍后再试。");
   return body as T;
 }
 export const listProjects = (token: string, signal?: AbortSignal) => request<{ projects: Project[] }>(token, "/projects", { signal }, b => Array.isArray(b.projects));
@@ -821,5 +831,383 @@ export function getAssessment(
     assessmentPath(projectId, issueId, claimId) + `/${encodeURIComponent(assessmentId)}`,
     { signal },
     isAssessmentDetailResponse,
+  );
+}
+
+
+// ===== S32 M2-E Issue Resolution =====
+function validIssueResolutionTimestamp(value: unknown): boolean {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return false;
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString() === value;
+}
+
+export type IssueResolutionType = "PREFERRED_CLAIM" | "INSUFFICIENT_EVIDENCE" | "NO_WORKING_CONCLUSION";
+
+export interface IssueResolutionIssueState {
+  id: string;
+  lifecycleState: "OPEN" | "RESOLVED" | "ARCHIVED";
+  currentResolutionId: string | null;
+  updatedAt: string;
+}
+
+export interface IssueResolutionSummary {
+  id: string;
+  issueId: string;
+  resolutionType: IssueResolutionType;
+  preferredClaimId: string | null;
+  rationaleExcerpt: string | null;
+  createdAt: string;
+  isCurrent: boolean;
+  evidenceBasisAvailable: boolean;
+  evidenceManifest: AssessmentManifestSummary | null;
+}
+
+export interface IssueResolutionRecord {
+  id: string;
+  issueId: string;
+  resolutionType: IssueResolutionType;
+  preferredClaimId: string | null;
+  rationale: string | null;
+  createdAt: string;
+  isCurrent: boolean;
+}
+
+export interface IssueResolutionHistoryResponse {
+  issue: IssueResolutionIssueState;
+  currentResolution: IssueResolutionSummary | null;
+  resolutions: IssueResolutionSummary[];
+  nextCursor: string | null;
+}
+
+export interface IssueResolutionDetailResponse {
+  issue: IssueResolutionIssueState;
+  resolution: IssueResolutionRecord;
+  evidenceBasisAvailable: boolean;
+  evidenceManifest: AssessmentDetailResponse["evidenceManifest"] | null;
+}
+
+export interface IssueResolutionEvidenceBasisSummary {
+  assessmentId: string;
+  claimId: string;
+  claimStatementExcerpt: string;
+  stance: AssessmentStance;
+  confidenceLevel: AssessmentConfidenceLevel | null;
+  manifestId: string;
+  manifestSha256: string;
+  itemCount: number;
+  assessmentCreatedAt: string;
+}
+
+export interface IssueResolutionEvidenceBasesResponse {
+  issueId: string;
+  evidenceBases: IssueResolutionEvidenceBasisSummary[];
+  nextCursor: string | null;
+}
+
+export interface CreateIssueResolutionInput {
+  expectedCurrentResolutionId: string | null;
+  resolutionType: IssueResolutionType;
+  preferredClaimId: string | null;
+  rationale: string;
+  evidenceManifestId: string | null;
+}
+
+export interface IssueResolutionCreateResponse {
+  status: "created" | "replayed";
+  resolutionId: string;
+}
+
+const issueResolutionTypes: ReadonlySet<string> = new Set([
+  "PREFERRED_CLAIM",
+  "INSUFFICIENT_EVIDENCE",
+  "NO_WORKING_CONCLUSION",
+]);
+
+function isIssueResolutionType(value: unknown): value is IssueResolutionType {
+  return typeof value === "string" && issueResolutionTypes.has(value);
+}
+
+function hasValidIssueResolutionPreferredClaim(
+  resolutionType: unknown,
+  preferredClaimId: unknown,
+): boolean {
+  if (!isIssueResolutionType(resolutionType)) return false;
+  return resolutionType === "PREFERRED_CLAIM"
+    ? isUuid(preferredClaimId)
+    : preferredClaimId === null;
+}
+
+function isIssueResolutionIssueState(value: unknown): value is IssueResolutionIssueState {
+  if (!isPlainObject(value) || !exactKeys(value, [
+    "id", "lifecycleState", "currentResolutionId", "updatedAt",
+  ])) return false;
+  return isUuid(value.id)
+    && ["OPEN", "RESOLVED", "ARCHIVED"].includes(value.lifecycleState as string)
+    && (value.currentResolutionId === null || isUuid(value.currentResolutionId))
+    && validIssueResolutionTimestamp(value.updatedAt);
+}
+
+function hasIssueResolutionEvidence(
+  value: Record<string, unknown>,
+  validateManifest: (manifest: unknown) => boolean,
+): boolean {
+  if (typeof value.evidenceBasisAvailable !== "boolean") return false;
+  return value.evidenceBasisAvailable
+    ? validateManifest(value.evidenceManifest)
+    : value.evidenceManifest === null;
+}
+
+function isIssueResolutionSummary(value: unknown): value is IssueResolutionSummary {
+  if (!isPlainObject(value) || !exactKeys(value, [
+    "id", "issueId", "resolutionType", "preferredClaimId", "rationaleExcerpt",
+    "createdAt", "isCurrent", "evidenceBasisAvailable", "evidenceManifest",
+  ])) return false;
+  return isUuid(value.id)
+    && isUuid(value.issueId)
+    && hasValidIssueResolutionPreferredClaim(value.resolutionType, value.preferredClaimId)
+    && (value.rationaleExcerpt === null || typeof value.rationaleExcerpt === "string")
+    && validIssueResolutionTimestamp(value.createdAt)
+    && typeof value.isCurrent === "boolean"
+    && hasIssueResolutionEvidence(value, isAssessmentManifestSummary);
+}
+
+function isIssueResolutionRecord(value: unknown): value is IssueResolutionRecord {
+  if (!isPlainObject(value) || !exactKeys(value, [
+    "id", "issueId", "resolutionType", "preferredClaimId", "rationale", "createdAt", "isCurrent",
+  ])) return false;
+  return isUuid(value.id)
+    && isUuid(value.issueId)
+    && hasValidIssueResolutionPreferredClaim(value.resolutionType, value.preferredClaimId)
+    && (value.rationale === null || typeof value.rationale === "string")
+    && validIssueResolutionTimestamp(value.createdAt)
+    && typeof value.isCurrent === "boolean";
+}
+
+function isIssueResolutionEvidenceManifestDetail(
+  value: unknown,
+): value is AssessmentDetailResponse["evidenceManifest"] {
+  if (!isPlainObject(value) || !exactKeys(value, [
+    "id", "schemaVersion", "purpose", "manifestSha256", "createdAt", "items",
+  ])) return false;
+  if (!isUuid(value.id)
+    || value.schemaVersion !== 1
+    || value.purpose !== "CLAIM_ASSESSMENT"
+    || typeof value.manifestSha256 !== "string"
+    || !/^[0-9a-f]{64}$/.test(value.manifestSha256)
+    || !validIssueResolutionTimestamp(value.createdAt)
+    || !Array.isArray(value.items)
+    || value.items.length < 1
+    || value.items.length > 100) return false;
+  return value.items.every((item, index) => isAssessmentManifestItem(item, index));
+}
+
+function isIssueResolutionHistoryResponse(value: unknown): value is IssueResolutionHistoryResponse {
+  if (!isPlainObject(value) || !exactKeys(value, [
+    "issue", "currentResolution", "resolutions", "nextCursor",
+  ])) return false;
+  if (!isIssueResolutionIssueState(value.issue)
+    || !Array.isArray(value.resolutions)
+    || !(value.nextCursor === null || (typeof value.nextCursor === "string" && value.nextCursor.length > 0))) return false;
+
+  const issue = value.issue;
+  if (issue.currentResolutionId === null) {
+    if (value.currentResolution !== null) return false;
+  } else {
+    if (!isIssueResolutionSummary(value.currentResolution)
+      || value.currentResolution.id !== issue.currentResolutionId
+      || value.currentResolution.issueId !== issue.id
+      || value.currentResolution.isCurrent !== true) return false;
+  }
+
+  const seen = new Set<string>();
+  for (const resolution of value.resolutions) {
+    if (!isIssueResolutionSummary(resolution)
+      || resolution.issueId !== issue.id
+      || resolution.isCurrent !== (
+        issue.currentResolutionId !== null && resolution.id === issue.currentResolutionId
+      )
+      || seen.has(resolution.id)) return false;
+    seen.add(resolution.id);
+  }
+  return true;
+}
+
+function isIssueResolutionDetailResponse(value: unknown): value is IssueResolutionDetailResponse {
+  if (!isPlainObject(value) || !exactKeys(value, [
+    "issue", "resolution", "evidenceBasisAvailable", "evidenceManifest",
+  ])) return false;
+  if (!isIssueResolutionIssueState(value.issue) || !isIssueResolutionRecord(value.resolution)) return false;
+  if (value.resolution.issueId !== value.issue.id
+    || value.resolution.isCurrent !== (
+      value.issue.currentResolutionId !== null
+      && value.resolution.id === value.issue.currentResolutionId
+    )) return false;
+  return hasIssueResolutionEvidence(value, isIssueResolutionEvidenceManifestDetail);
+}
+
+function isIssueResolutionEvidenceBasisSummary(
+  value: unknown,
+): value is IssueResolutionEvidenceBasisSummary {
+  if (!isPlainObject(value) || !exactKeys(value, [
+    "assessmentId", "claimId", "claimStatementExcerpt", "stance", "confidenceLevel",
+    "manifestId", "manifestSha256", "itemCount", "assessmentCreatedAt",
+  ])) return false;
+  return isUuid(value.assessmentId)
+    && isUuid(value.claimId)
+    && typeof value.claimStatementExcerpt === "string"
+    && assessmentStances.has(value.stance as string)
+    && (value.confidenceLevel === null || assessmentConfidences.has(value.confidenceLevel as string))
+    && isUuid(value.manifestId)
+    && typeof value.manifestSha256 === "string"
+    && /^[0-9a-f]{64}$/.test(value.manifestSha256)
+    && Number.isSafeInteger(value.itemCount)
+    && (value.itemCount as number) >= 1
+    && (value.itemCount as number) <= 100
+    && validIssueResolutionTimestamp(value.assessmentCreatedAt);
+}
+
+function isIssueResolutionEvidenceBasesResponse(
+  value: unknown,
+): value is IssueResolutionEvidenceBasesResponse {
+  if (!isPlainObject(value) || !exactKeys(value, ["issueId", "evidenceBases", "nextCursor"])) return false;
+  return isUuid(value.issueId)
+    && Array.isArray(value.evidenceBases)
+    && value.evidenceBases.every(isIssueResolutionEvidenceBasisSummary)
+    && (value.nextCursor === null
+      || (typeof value.nextCursor === "string" && value.nextCursor.length > 0));
+}
+
+function isIssueResolutionCreateResponse(value: unknown): value is IssueResolutionCreateResponse {
+  return isPlainObject(value)
+    && exactKeys(value, ["status", "resolutionId"])
+    && ["created", "replayed"].includes(value.status as string)
+    && isUuid(value.resolutionId);
+}
+
+const issueResolutionErrorMessages: Record<string, { status: number; message: string }> = {
+  ISSUE_RESOLUTION_INVALID: { status: 400, message: "工作结论输入不正确。" },
+  PROJECT_OR_ISSUE_NOT_FOUND: { status: 404, message: "研究项目或研究问题不存在。" },
+  ISSUE_RESOLUTION_NOT_FOUND: { status: 404, message: "该工作结论当前不可用。" },
+  PREFERRED_CLAIM_NOT_AVAILABLE: { status: 404, message: "所选可能答案当前不可用。" },
+  EVIDENCE_MANIFEST_NOT_AVAILABLE: { status: 404, message: "所选证据依据当前不可用。" },
+  PROJECT_READ_ONLY: { status: 409, message: "当前研究项目已归档，不能新增工作结论。" },
+  RESEARCH_ISSUE_READ_ONLY: { status: 409, message: "当前研究问题已归档，不能新增工作结论。" },
+  ISSUE_RESOLUTION_STALE: { status: 409, message: "当前工作结论已发生变化，请刷新后再提交。" },
+  IDEMPOTENCY_CONFLICT: { status: 409, message: "提交标识与当前工作结论内容不一致。" },
+  ISSUE_RESOLUTION_STORE_UNAVAILABLE: { status: 503, message: "工作结论服务暂不可用。" },
+};
+
+async function issueResolutionRequest<T>(
+  token: string,
+  path: string,
+  options: RequestOptions,
+  valid: (body: any, status: number) => boolean,
+): Promise<T> {
+  try {
+    const contextualErrorCodes: SafeErrorMap = options.method === "POST"
+      ? issueResolutionErrorMessages
+      : { PROJECT_OR_ISSUE_NOT_FOUND: issueResolutionErrorMessages.PROJECT_OR_ISSUE_NOT_FOUND };
+    return await request<T>(token, path, { ...options, contextualErrorCodes }, valid);
+  } catch (error) {
+    if (error instanceof ProjectApiError) {
+      if (options.method === "POST" && error.code) {
+        const mapped = issueResolutionErrorMessages[error.code];
+        if (mapped?.status === error.status) {
+          throw new ProjectApiError(error.status, mapped.message, error.code);
+        }
+      }
+      if (error.status === 500) {
+        throw new ProjectApiError(500, "工作结论请求失败，请稍后再试。");
+      }
+      if (error.status === 502) {
+        throw new ProjectApiError(502, "工作结论服务响应异常，请稍后再试。");
+      }
+    }
+    throw error;
+  }
+}
+
+function issueResolutionPath(projectId: string, issueId: string): string {
+  return `/projects/${encodeURIComponent(projectId)}/issues/${encodeURIComponent(issueId)}/resolutions`;
+}
+
+export function createIssueResolution(
+  token: string,
+  projectId: string,
+  issueId: string,
+  idempotencyKey: string,
+  input: CreateIssueResolutionInput,
+  signal?: AbortSignal,
+): Promise<IssueResolutionCreateResponse> {
+  return issueResolutionRequest<IssueResolutionCreateResponse>(
+    token,
+    issueResolutionPath(projectId, issueId),
+    {
+      method: "POST",
+      input,
+      signal,
+      idempotencyKey,
+    },
+    (body, status) => isIssueResolutionCreateResponse(body)
+      && ((status === 201 && body.status === "created")
+        || (status === 200 && body.status === "replayed")),
+  );
+}
+
+export function listIssueResolutions(
+  token: string,
+  projectId: string,
+  issueId: string,
+  query: { limit?: number; cursor?: string | null } = {},
+  signal?: AbortSignal,
+): Promise<IssueResolutionHistoryResponse> {
+  const params = new URLSearchParams();
+  if (query.limit !== undefined) params.set("limit", String(query.limit));
+  if (query.cursor !== undefined && query.cursor !== null) params.set("cursor", query.cursor);
+  const suffix = params.size ? `?${params.toString()}` : "";
+  return issueResolutionRequest<IssueResolutionHistoryResponse>(
+    token,
+    issueResolutionPath(projectId, issueId) + suffix,
+    { signal },
+    body => isIssueResolutionHistoryResponse(body)
+      && body.issue.id.toLowerCase() === issueId.toLowerCase(),
+  );
+}
+
+export function getIssueResolution(
+  token: string,
+  projectId: string,
+  issueId: string,
+  resolutionId: string,
+  signal?: AbortSignal,
+): Promise<IssueResolutionDetailResponse> {
+  return issueResolutionRequest<IssueResolutionDetailResponse>(
+    token,
+    issueResolutionPath(projectId, issueId) + `/${encodeURIComponent(resolutionId)}`,
+    { signal },
+    body => isIssueResolutionDetailResponse(body)
+      && body.issue.id.toLowerCase() === issueId.toLowerCase()
+      && body.resolution.id.toLowerCase() === resolutionId.toLowerCase(),
+  );
+}
+
+export function listIssueResolutionEvidenceBases(
+  token: string,
+  projectId: string,
+  issueId: string,
+  query: { limit?: number; cursor?: string | null } = {},
+  signal?: AbortSignal,
+): Promise<IssueResolutionEvidenceBasesResponse> {
+  const params = new URLSearchParams();
+  if (query.limit !== undefined) params.set("limit", String(query.limit));
+  if (query.cursor !== undefined && query.cursor !== null) params.set("cursor", query.cursor);
+  const suffix = params.size ? `?${params.toString()}` : "";
+  return issueResolutionRequest<IssueResolutionEvidenceBasesResponse>(
+    token,
+    `/projects/${encodeURIComponent(projectId)}/issues/${encodeURIComponent(issueId)}/resolution-evidence-bases${suffix}`,
+    { signal },
+    body => isIssueResolutionEvidenceBasesResponse(body)
+      && body.issueId.toLowerCase() === issueId.toLowerCase(),
   );
 }

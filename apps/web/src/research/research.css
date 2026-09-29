@@ -241,3 +241,117 @@
     width: 100%;
   }
 }
+
+
+/* ===== S32 M2-E Issue Resolution ===== */
+.issue-resolution-current,
+.issue-resolution-composer,
+.issue-resolution-history {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--color-border);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.issue-resolution-current > h2,
+.issue-resolution-composer > h2,
+.issue-resolution-history > h2 {
+  margin: 0 0 14px;
+  font-size: 20px;
+}
+.issue-resolution-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.issue-resolution-composer fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+}
+.issue-resolution-composer > label {
+  display: grid;
+  gap: 6px;
+}
+.issue-resolution-composer textarea,
+.issue-resolution-composer select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 10px 11px;
+  font: inherit;
+}
+.issue-resolution-history-list {
+  list-style: none;
+  margin: 12px 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.issue-resolution-card {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: 8px;
+  background: #f7f9fc;
+}
+.issue-resolution-card-current {
+  border-color: #abc6f8;
+  background: #f5f8ff;
+}
+.issue-resolution-card p {
+  margin: 0;
+}
+.issue-resolution-card-heading,
+.issue-resolution-detail-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.issue-resolution-rationale {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
+.issue-resolution-card code,
+.issue-resolution-detail code {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+.issue-resolution-detail {
+  min-width: 0;
+  margin-top: 6px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-card);
+}
+.issue-resolution-detail h3,
+.issue-resolution-detail h4 {
+  margin: 0;
+}
+.issue-resolution-detail h4 {
+  margin-top: 8px;
+}
+@media (max-width: 700px) {
+  .issue-resolution-composer fieldset,
+  .issue-resolution-card-heading,
+  .issue-resolution-detail-heading {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .issue-resolution-card > button,
+  .issue-resolution-detail-heading button {
+    width: 100%;
+  }
+}

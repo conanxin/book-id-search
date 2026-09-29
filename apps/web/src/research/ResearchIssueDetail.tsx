@@ -1,10 +1,14 @@
 import { CandidateClaims } from "./CandidateClaims";
+import { IssueResolutionComposer } from "./IssueResolutionComposer";
+import { IssueResolutionCurrent } from "./IssueResolutionCurrent";
+import { IssueResolutionHistory } from "./IssueResolutionHistory";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getResearchIssue, ProjectApiError, type ResearchIssueDetailResponse } from "./api";
 
 export function ResearchIssueDetail({ token, projectId, issueId }: { token: string; projectId: string; issueId: string }) {
   const [attempt, setAttempt] = useState(0);
+  const [resolutionVersion, setResolutionVersion] = useState(0);
   const [response, setResponse] = useState<ResearchIssueDetailResponse | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "missing" | "unavailable">("loading");
 
@@ -37,7 +41,15 @@ export function ResearchIssueDetail({ token, projectId, issueId }: { token: stri
     <h1>{response.issue.title}</h1>
     <p className="research-issue-question">{response.issue.question}</p>
     <dl className="research-dates"><div><dt>创建时间</dt><dd>{new Date(response.issue.createdAt).toLocaleString("zh-CN")}</dd></div><div><dt>更新时间</dt><dd>{new Date(response.issue.updatedAt).toLocaleString("zh-CN")}</dd></div></dl>
+    <IssueResolutionCurrent token={token} projectId={response.project.id} issueId={response.issue.id} refreshVersion={resolutionVersion} />
     <CandidateClaims token={token} project={response.project} issue={response.issue} />
+    <IssueResolutionComposer
+      token={token}
+      project={response.project}
+      issue={response.issue}
+      onCommitted={() => setResolutionVersion(version => version + 1)}
+    />
+    <IssueResolutionHistory token={token} projectId={response.project.id} issueId={response.issue.id} refreshVersion={resolutionVersion} />
     <Link to={`/research/projects/${response.project.id}`}>返回项目资料</Link>
   </article>;
 }

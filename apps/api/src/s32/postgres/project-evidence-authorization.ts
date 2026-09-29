@@ -32,27 +32,33 @@ function validDate(value: unknown): value is Date {
   return value instanceof Date && !Number.isNaN(value.getTime());
 }
 
-interface ScopeRow {
+interface IssueScopeRow {
   project_id: string;
   project_name: string;
   project_state: string;
+  project_created_at: Date;
+  project_updated_at: Date;
   issue_id: string | null;
   issue_title: string | null;
   issue_question: string | null;
   issue_state: string | null;
+  issue_created_at: Date | null;
+  issue_updated_at: Date | null;
+  current_resolution_id: string | null;
   issue_binding_id: string | null;
   owner_project_id: string | null;
   issue_binding_role: string | null;
   issue_binding_metadata: unknown;
-  relation_claim_id: string | null;
-  claim_statement: string | null;
-  claim_state: string | null;
-  claim_type: string | null;
-  subject_type: string | null;
-  subject_id: string | null;
-  claim_metadata: unknown;
-  claim_created_at: Date;
-  claim_updated_at: Date;
+  issue_binding_created_at: Date | null;
+}
+
+export interface ProjectIssueScope {
+  projectId: string;
+  projectLifecycleState: "ACTIVE" | "ARCHIVED";
+  issueId: string;
+  issueLifecycleState: "OPEN" | "RESOLVED" | "ARCHIVED";
+  currentResolutionId: string | null;
+  issueUpdatedAt: Date;
 }
 
 export interface ProjectClaimScope {
@@ -63,115 +69,136 @@ export interface ProjectClaimScope {
   claim: EvidenceClaimContext;
 }
 
-async function lockScopeRows(
+export async function loadProjectIssueScope(
   client: PoolClient,
   projectId: string,
   issueId: string,
-  claimId: string,
-): Promise<boolean> {
-  const project = await client.query("SELECT id FROM core.projects WHERE id=$1 FOR UPDATE", [projectId]);
-  if (!project.rows.length) return false;
-  await client.query("SELECT id FROM core.research_issues WHERE id=$1 FOR UPDATE", [issueId]);
-  await client.query(
-    "SELECT issue_id,claim_id FROM core.research_issue_claims WHERE issue_id=$1 AND claim_id=$2 FOR UPDATE",
-    [issueId, claimId],
-  );
-  await client.query("SELECT id FROM core.claims WHERE id=$1 FOR UPDATE", [claimId]);
-  return true;
-}
-
-export async function loadProjectClaimScope(
-  client: PoolClient,
-  projectId: string,
-  issueId: string,
-  claimId: string,
-  options: { lock?: boolean } = {},
-): Promise<ProjectClaimScope | null> {
-  readCandidateClaimId(claimId);
-  if (options.lock && !(await lockScopeRows(client, projectId, issueId, claimId))) return null;
-
-  const { rows } = await client.query<ScopeRow>(
-    `SELECT
-       p.id AS project_id,
-       p.name AS project_name,
-       p.lifecycle_state AS project_state,
-       ri.id AS issue_id,
-       ri.title AS issue_title,
-       ri.question AS issue_question,
-       ri.lifecycle_state AS issue_state,
-       pb.id AS issue_binding_id,
-       pb.project_id AS owner_project_id,
-       pb.binding_role AS issue_binding_role,
-       pb.metadata AS issue_binding_metadata,
-       ric.claim_id AS relation_claim_id,
-       c.statement AS claim_statement,
-       c.lifecycle_state AS claim_state,
-       c.claim_type,
-       c.subject_type,
-       c.subject_id,
-       c.metadata AS claim_metadata,
-       c.created_at AS claim_created_at,
-       c.updated_at AS claim_updated_at
+  options: { lock?: boolean; legacyClaimMetadata?: boolean } = {},
+): Promise<ProjectIssueScope | null> {
+  if (options.lock) {
+    const project = await client.query("SELECT id FROM core.projects WHERE id=$1 FOR UPDATE", [projectId]);
+    if (!project.rows.length) return null;
+    await client.query("SELECT id FROM core.research_issues WHERE id=$1 FOR UPDATE", [issueId]);
+  }
+  const { rows } = await client.query<IssueScopeRow>(
+    `SELECT p.id AS project_id, p.name AS project_name, p.lifecycle_state AS project_state,
+       p.created_at AS project_created_at, p.updated_at AS project_updated_at,
+       ri.id AS issue_id, ri.title AS issue_title, ri.question AS issue_question,
+       ri.lifecycle_state AS issue_state, ri.created_at AS issue_created_at,
+       ri.updated_at AS issue_updated_at, ri.current_resolution_id,
+       pb.id AS issue_binding_id, pb.project_id AS owner_project_id,
+       pb.binding_role AS issue_binding_role, pb.metadata AS issue_binding_metadata,
+       pb.created_at AS issue_binding_created_at
      FROM core.projects p
      LEFT JOIN core.research_issues ri ON ri.id = $2
      LEFT JOIN core.project_bindings pb
        ON pb.target_type = 'RESEARCH_ISSUE' AND pb.target_id = ri.id
-     LEFT JOIN core.research_issue_claims ric
-       ON ric.issue_id = ri.id AND ric.claim_id = $3
-     LEFT JOIN core.claims c ON c.id = ric.claim_id
      WHERE p.id = $1
      ORDER BY pb.id`,
-    [projectId, issueId, claimId],
+    [projectId, issueId],
   );
-
   if (rows.length > 1) integrity("ISSUE_OWNER_AMBIGUOUS");
   if (!rows.length) return null;
   const row = rows[0];
-
+  if (row.project_id !== projectId) integrity("PROJECT_ID_INVALID");
   if (typeof row.project_name !== "string" || !row.project_name.trim()) integrity("PROJECT_NAME_INVALID");
   if (!["ACTIVE", "ARCHIVED"].includes(row.project_state)) integrity("PROJECT_LIFECYCLE_INVALID");
-
+  if (!validDate(row.project_created_at) || !validDate(row.project_updated_at)) integrity("PROJECT_TIMESTAMP_INVALID");
   if (row.issue_id === null) {
-    const danglingProbe = await client.query<{ id: string }>(
+    const dangling = await client.query(
       `SELECT id FROM core.project_bindings pb_only
-       WHERE pb_only.target_type = 'RESEARCH_ISSUE' AND pb_only.target_id = $1
-       LIMIT 1`,
-      [issueId],
+       WHERE pb_only.target_type = 'RESEARCH_ISSUE' AND pb_only.target_id = $1 LIMIT 1`, [issueId],
     );
-    if (danglingProbe.rows.length > 0) integrity("ISSUE_BINDING_DANGLING");
+    if (dangling.rows.length) integrity("ISSUE_BINDING_DANGLING");
     return null;
   }
-  if (row.issue_id !== issueId) return null;
-  if (typeof row.issue_title !== "string" || typeof row.issue_question !== "string") {
-    integrity("ISSUE_CANONICAL_INVALID");
-  }
-
-  let normalizedIssueTitle: string;
-  let normalizedIssueQuestion: string;
+  if (row.issue_id !== issueId) integrity("ISSUE_ID_INVALID");
+  let normalized: ReturnType<typeof readResearchIssueInput>;
   try {
-    const normalized = readResearchIssueInput({ title: row.issue_title, question: row.issue_question });
-    normalizedIssueTitle = normalized.title;
-    normalizedIssueQuestion = normalized.question;
-  } catch {
-    integrity("ISSUE_CANONICAL_INVALID");
-  }
-  if (row.issue_title !== normalizedIssueTitle || row.issue_question !== normalizedIssueQuestion) {
-    integrity("ISSUE_CANONICAL_INVALID");
-  }
-  if (!row.issue_binding_id) integrity("ISSUE_BINDING_DANGLING");
-  if (!["OPEN", "RESOLVED", "ARCHIVED"].includes(row.issue_state ?? "")) {
-    integrity("ISSUE_LIFECYCLE_INVALID");
-  }
-  if (row.owner_project_id !== projectId) return null;
+    normalized = readResearchIssueInput({ title: row.issue_title, question: row.issue_question });
+  } catch { integrity("ISSUE_CANONICAL_INVALID"); }
+  if (row.issue_title !== normalized.title || row.issue_question !== normalized.question) integrity("ISSUE_CANONICAL_INVALID");
+  if (!["OPEN", "RESOLVED", "ARCHIVED"].includes(row.issue_state ?? "")) integrity("ISSUE_LIFECYCLE_INVALID");
+  if (!validDate(row.issue_created_at) || !validDate(row.issue_updated_at)) integrity("ISSUE_TIMESTAMP_INVALID");
+  if (!row.issue_binding_id || !uuidPattern.test(row.issue_binding_id)) integrity("ISSUE_BINDING_DANGLING");
   if (row.issue_binding_role !== null) integrity("ISSUE_OWNER_BINDING_ROLE_INVALID");
-  if (
-    !row.issue_binding_metadata ||
-    typeof row.issue_binding_metadata !== "object" ||
-    Array.isArray(row.issue_binding_metadata)
-  ) {
+  if (!row.issue_binding_metadata || typeof row.issue_binding_metadata !== "object"
+    || Array.isArray(row.issue_binding_metadata) || Object.getPrototypeOf(row.issue_binding_metadata) !== Object.prototype
+    || (!options.legacyClaimMetadata && Object.keys(row.issue_binding_metadata).length !== 0)) {
     integrity("ISSUE_BINDING_METADATA_INVALID");
   }
-  if (!row.relation_claim_id) return null;
+  if (!validDate(row.issue_binding_created_at)) integrity("ISSUE_BINDING_TIMESTAMP_INVALID");
+  if (!row.owner_project_id || !uuidPattern.test(row.owner_project_id)) integrity("ISSUE_OWNER_INVALID");
+  // A canonical owner in another Project is an ownership miss, not corruption.
+  // Returning null preserves the same privacy-safe not-found contract as Claim scope.
+  if (row.owner_project_id !== projectId) return null;
+  return {
+    projectId, projectLifecycleState: row.project_state as ProjectIssueScope["projectLifecycleState"],
+    issueId, issueLifecycleState: row.issue_state as ProjectIssueScope["issueLifecycleState"],
+    // A completed command replay does not depend on today's current pointer.
+    // New writers validate/compare it only after deciding this is not a replay.
+    currentResolutionId: row.current_resolution_id, issueUpdatedAt: row.issue_updated_at,
+  };
+}
+
+interface ClaimScopeRow {
+  relation_issue_id: string;
+  relation_claim_id: string;
+  claim_id: string | null;
+  claim_statement: string | null;
+  claim_state: string | null;
+  claim_type: string | null;
+  subject_type: string | null;
+  subject_id: string | null;
+  claim_metadata: unknown;
+  claim_created_at: Date;
+  claim_updated_at: Date;
+}
+
+export async function loadProjectClaimScope(
+  client: PoolClient, projectId: string, issueId: string, claimId: string,
+  options: { lock?: boolean } = {},
+): Promise<ProjectClaimScope | null> {
+  readCandidateClaimId(claimId);
+  let scope: ProjectIssueScope | null;
+  try {
+    // M2-C/D historically accept canonical nonempty owner metadata. Keep
+    // that read/write contract while new Resolution scope defaults to {}.
+    scope = await loadProjectIssueScope(client, projectId, issueId, { ...options, legacyClaimMetadata: true });
+  } catch (error) {
+    // Preserve M2-C/D's existing cross-project privacy contract.
+    if (error instanceof ProjectEvidenceIntegrityError && error.message === "ISSUE_OWNER_PROJECT_MISMATCH") return null;
+    throw error;
+  }
+  if (!scope) return null;
+  const claim = await loadIssueCandidateClaim(client, issueId, claimId, options);
+  if (!claim) return null;
+  return { projectId, projectLifecycleState: scope.projectLifecycleState,
+    issueId, issueLifecycleState: scope.issueLifecycleState, claim };
+}
+
+/** Called only after exact Project/Issue ownership has been established. */
+export async function loadIssueCandidateClaim(
+  client: PoolClient, issueId: string, claimId: string, options: { lock?: boolean } = {},
+): Promise<EvidenceClaimContext | null> {
+  readCandidateClaimId(claimId);
+  if (options.lock) {
+    await client.query("SELECT issue_id,claim_id FROM core.research_issue_claims WHERE issue_id=$1 AND claim_id=$2 FOR UPDATE", [issueId, claimId]);
+    await client.query("SELECT id FROM core.claims WHERE id=$1 FOR UPDATE", [claimId]);
+  }
+  const { rows } = await client.query<ClaimScopeRow>(
+    `SELECT ric.issue_id AS relation_issue_id, ric.claim_id AS relation_claim_id,
+       c.id AS claim_id, c.statement AS claim_statement, c.lifecycle_state AS claim_state,
+       c.claim_type, c.subject_type, c.subject_id, c.metadata AS claim_metadata,
+       c.created_at AS claim_created_at, c.updated_at AS claim_updated_at
+     FROM core.research_issue_claims ric
+     LEFT JOIN core.claims c ON c.id = ric.claim_id
+     WHERE ric.issue_id = $1 AND ric.claim_id = $2`, [issueId, claimId],
+  );
+  if (!rows.length) return null;
+  if (rows.length !== 1) integrity("CLAIM_MEMBERSHIP_AMBIGUOUS");
+  const row = rows[0];
+  if (row.relation_issue_id !== issueId || row.relation_claim_id !== claimId || row.claim_id !== claimId) integrity("CLAIM_MEMBERSHIP_INVALID");
   if (!["ACTIVE", "ARCHIVED"].includes(row.claim_state ?? "")) integrity("CLAIM_LIFECYCLE_INVALID");
   if (typeof row.claim_statement !== "string") integrity("CLAIM_STATEMENT_INVALID");
 
@@ -199,18 +226,9 @@ export async function loadProjectClaimScope(
     integrity("CLAIM_SUBJECT_ID_INVALID");
   }
 
-  return {
-    projectId,
-    projectLifecycleState: row.project_state as "ACTIVE" | "ARCHIVED",
-    issueId,
-    issueLifecycleState: row.issue_state as "OPEN" | "RESOLVED" | "ARCHIVED",
-    claim: {
-      id: claimId,
-      statement: claimStatement,
-      lifecycleState: row.claim_state as "ACTIVE" | "ARCHIVED",
-    },
-  };
+  return { id: claimId, statement: claimStatement, lifecycleState: row.claim_state as "ACTIVE" | "ARCHIVED" };
 }
+
 
 interface MaterialRow {
   binding_id: string;

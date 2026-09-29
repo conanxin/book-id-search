@@ -62,6 +62,7 @@ import {
   runPrivateAnnualReview,
 } from "./weread/private-annual-review.js";
 import { createS32Router } from "./s32/register.js";
+import { createIssueResolutionBodyParser } from "./s32/routes/issue-resolution-routes.js";
 import { readS32Config } from "./s32/config.js";
 import { createProjectItemNoteBodyParser } from "./s32/routes/project-item-note-routes.js";
 
@@ -127,6 +128,7 @@ const index = client.index<BookDocument>(indexName);
 
 app.use(cors());
 app.use("/api/private/s32/projects/:projectId/items/:bindingId/note", createProjectItemNoteBodyParser(readS32Config(process.env)));
+app.use("/api/private/s32/projects", createIssueResolutionBodyParser(readS32Config(process.env)));
 app.use(express.json({ limit: "256kb" }));
 
 app.use(

@@ -578,6 +578,7 @@ The read store also exposes an issue-wide `listEvidenceBases` query for the Reso
 Validate:
 
 - Project owns exact Issue;
+- evidence-bases response carries the canonical Issue id for Web request/response scope binding;
 - current pointer belongs to same Issue;
 - preferred Claim belongs to same Issue;
 - optional Manifest visibility/integrity before returning protected evidence metadata;
