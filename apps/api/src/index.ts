@@ -67,6 +67,7 @@ import { readS32Config } from "./s32/config.js";
 import { createProjectItemNoteBodyParser } from "./s32/routes/project-item-note-routes.js";
 import { readGoogleSessionAuthConfig } from "./auth/config.js";
 import { createAuthRouter } from "./auth/routes.js";
+import { createS32RequestAuthorizer } from "./s32/routes/private-auth.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(currentDir, "../../../");
@@ -133,9 +134,12 @@ app.use(cors());
 // POST /api/auth/google consumes its own 16kb bounded raw-body parser
 // (malformed/oversized payloads are answered here and never forwarded).
 // When GOOGLE_AUTH_ENABLED is off the router 404s, leaving legacy behavior untouched.
-app.use("/api/auth", createAuthRouter({ config: readGoogleSessionAuthConfig(process.env) }));
-app.use("/api/private/s32/projects/:projectId/items/:bindingId/note", createProjectItemNoteBodyParser(readS32Config(process.env)));
-app.use("/api/private/s32/projects", createIssueResolutionBodyParser(readS32Config(process.env)));
+const googleAuthConfig = readGoogleSessionAuthConfig(process.env);
+const s32Config = readS32Config(process.env);
+const s32RequestAuthorizer = createS32RequestAuthorizer(s32Config, googleAuthConfig);
+app.use("/api/auth", createAuthRouter({ config: googleAuthConfig }));
+app.use("/api/private/s32/projects/:projectId/items/:bindingId/note", createProjectItemNoteBodyParser(s32Config, s32RequestAuthorizer));
+app.use("/api/private/s32/projects", createIssueResolutionBodyParser(s32Config, s32RequestAuthorizer));
 app.use(express.json({ limit: "256kb" }));
 
 app.use(
@@ -143,6 +147,8 @@ app.use(
   createS32Router({
     env: process.env,
     getCatalogDocument: (id) => index.getDocument(id),
+    config: s32Config,
+    requestAuthorizer: s32RequestAuthorizer,
   }),
 );
 

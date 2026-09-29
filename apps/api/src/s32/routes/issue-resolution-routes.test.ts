@@ -398,7 +398,7 @@ describe("Resolution POST body parsing before the global JSON parser", () => {
   it("mounts the scoped parser in the actual API entrypoint before global express.json", () => {
     const source = readFileSync(new URL("../../index.ts", import.meta.url), "utf8");
     expect(source).toContain('import { createIssueResolutionBodyParser } from "./s32/routes/issue-resolution-routes.js"');
-    const scoped = source.indexOf('app.use("/api/private/s32/projects", createIssueResolutionBodyParser(readS32Config(process.env)))');
+    const scoped = source.indexOf('app.use("/api/private/s32/projects", createIssueResolutionBodyParser(s32Config, s32RequestAuthorizer))');
     const global = source.indexOf('app.use(express.json(');
     expect(scoped).toBeGreaterThanOrEqual(0);
     expect(global).toBeGreaterThan(scoped);

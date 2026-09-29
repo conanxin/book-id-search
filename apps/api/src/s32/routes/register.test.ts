@@ -119,6 +119,7 @@ describe("Issue Resolution registration", () => {
     expect(createIssueResolutionRouter).toHaveBeenCalledExactlyOnceWith(
       vi.mocked(readS32Config).mock.results[0].value,
       vi.mocked(createIssueResolutionsService).mock.results[0].value,
+      undefined,
     );
   });
 
@@ -129,7 +130,7 @@ describe("Issue Resolution registration", () => {
     const config = { enabled: options.enabled, databaseUrl: options.databaseUrl, privateToken: "t" };
     vi.mocked(readS32Config).mockReturnValueOnce(config);
     createS32Router({ env: {}, getCatalogDocument: vi.fn() });
-    expect(createIssueResolutionRouter).toHaveBeenCalledExactlyOnceWith(config, null);
+    expect(createIssueResolutionRouter).toHaveBeenCalledExactlyOnceWith(config, null, undefined);
     expect(Pool).not.toHaveBeenCalled();
     expect(createPostgresIssueResolutionCommandStore).not.toHaveBeenCalled();
     expect(createPostgresIssueResolutionReadStore).not.toHaveBeenCalled();

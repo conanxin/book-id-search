@@ -1,6 +1,6 @@
 import { Router, json, type ErrorRequestHandler, type Request, type Response } from "express";
 import type { S32Config } from "../config.js";
-import { checkS32PrivateAuth } from "./private-auth.js";
+import { authorizeS32RouteRequest, type S32RequestAuthorizer } from "./private-auth.js";
 import { InvalidNoteInputError } from "../domain/note.js";
 import { InvalidProjectInputError } from "../domain/project.js";
 import { InvalidProjectItemInputError } from "../domain/project-item.js";
@@ -12,11 +12,11 @@ import {
 
 const invalidInput = { code: "NOTE_INVALID_INPUT", message: "笔记输入不正确，正文不能为空且不能超过 65536 UTF-8 字节。" };
 
-function privateRouter(config: S32Config) {
+function privateRouter(config: S32Config, requestAuthorizer?: S32RequestAuthorizer) {
   const router = Router();
   router.use((req, res, next) => {
     res.set("Cache-Control", "no-store");
-    const auth = checkS32PrivateAuth(config, req.get("authorization"), req.get("x-private-token"));
+    const auth = authorizeS32RouteRequest(config, req, requestAuthorizer);
     if (!auth.ok) { res.status(auth.status).json({ error: { message: auth.message } }); return; }
     next();
   });
@@ -25,8 +25,8 @@ function privateRouter(config: S32Config) {
 
 // Scope the larger transport limit to Note requests. Escaped JSON can be six
 // times larger than the normalized UTF-8 content checked by the application.
-export function createProjectItemNoteBodyParser(config: S32Config) {
-  const router = privateRouter(config);
+export function createProjectItemNoteBodyParser(config: S32Config, requestAuthorizer?: S32RequestAuthorizer) {
+  const router = privateRouter(config, requestAuthorizer);
   router.use(json({ limit: "512kb" }));
   const invalidJson: ErrorRequestHandler = (_error, _req, res, _next) => {
     res.status(400).json({ error: invalidInput });
@@ -48,8 +48,8 @@ function toHttpError(error: unknown): [number, { message: string; code?: string 
   return [500, { message: "研究笔记请求失败，请稍后再试。" }];
 }
 
-export function createProjectItemNoteRouter(config: S32Config, notes: ProjectItemNotesService | null) {
-  const router = privateRouter(config);
+export function createProjectItemNoteRouter(config: S32Config, notes: ProjectItemNotesService | null, requestAuthorizer?: S32RequestAuthorizer) {
+  const router = privateRouter(config, requestAuthorizer);
   router.use((_req, res, next) => {
     if (!config.databaseUrl || !notes) { res.status(503).json({ error: { message: "研究笔记数据库尚未配置。" } }); return; }
     next();

@@ -23,6 +23,7 @@ import {
   type GetDocument,
 } from "./catalog/meili-catalog-book-reader.js";
 import { readS32Config } from "./config.js";
+import type { S32RequestAuthorizer } from "./routes/private-auth.js";
 import { createPostgresCatalogPromotionStore } from "./postgres/catalog-promotion-store.js";
 import { createCatalogPromotionHandler } from "./routes/catalog-promotion-route.js";
 import { createProjectsService, type ProjectsService } from "./application/projects.js";
@@ -44,9 +45,12 @@ import { createResearchIssueRouter } from "./routes/research-issue-routes.js";
 export function createS32Router(deps: {
   env: NodeJS.ProcessEnv;
   getCatalogDocument: GetDocument;
+  config?: ReturnType<typeof readS32Config>;
+  requestAuthorizer?: S32RequestAuthorizer;
 }) {
   const router = Router();
-  const config = readS32Config(deps.env);
+  const config = deps.config ?? readS32Config(deps.env);
+  const requestAuthorizer = deps.requestAuthorizer;
 
   let command: ReturnType<typeof createPromoteCatalogBookCommand> | null = null;
   let projects: ProjectsService | null = null;
@@ -86,18 +90,18 @@ export function createS32Router(deps: {
 
   router.post(
     "/promotions/catalog-book",
-    createCatalogPromotionHandler({ config, command }),
+    createCatalogPromotionHandler({ config, command, requestAuthorizer }),
   );
-  router.use("/research-memberships", createResearchMembershipRouter(config, researchMemberships));
-  router.use("/projects", createIssueResolutionRouter(config, issueResolutions));
-  router.use("/projects", createProjectOverviewRouter(config, projectOverview));
-  router.use("/projects", createCandidateClaimRouter(config, candidateClaims));
-  router.use("/projects", createEvidenceSelectionRouter(config, evidenceSelection));
-  router.use("/projects", createAssessmentRouter(config, assessments));
-  router.use("/projects", createResearchIssueRouter(config, researchIssues));
-  router.use("/projects", createProjectItemNoteRouter(config, projectItemNotes));
-  router.use("/projects", createProjectItemRouter(config, projectItems));
-  router.use("/projects", createProjectRouter(config, projects));
+  router.use("/research-memberships", createResearchMembershipRouter(config, researchMemberships, requestAuthorizer));
+  router.use("/projects", createIssueResolutionRouter(config, issueResolutions, requestAuthorizer));
+  router.use("/projects", createProjectOverviewRouter(config, projectOverview, requestAuthorizer));
+  router.use("/projects", createCandidateClaimRouter(config, candidateClaims, requestAuthorizer));
+  router.use("/projects", createEvidenceSelectionRouter(config, evidenceSelection, requestAuthorizer));
+  router.use("/projects", createAssessmentRouter(config, assessments, requestAuthorizer));
+  router.use("/projects", createResearchIssueRouter(config, researchIssues, requestAuthorizer));
+  router.use("/projects", createProjectItemNoteRouter(config, projectItemNotes, requestAuthorizer));
+  router.use("/projects", createProjectItemRouter(config, projectItems, requestAuthorizer));
+  router.use("/projects", createProjectRouter(config, projects, requestAuthorizer));
 
   return router;
 }

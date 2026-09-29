@@ -16,14 +16,19 @@ import {
   IssueResolutionStoreUnavailableError,
   type IssueResolutionsService,
 } from "../application/issue-resolutions.js";
-import { checkS32PrivateAuth } from "./private-auth.js";
+import { authorizeS32RouteRequest, type S32RequestAuthorizer } from "./private-auth.js";
 
 type ErrorBody = { message: string; code?: string };
 const invalidInput = { code: "ISSUE_RESOLUTION_INVALID", message: "工作结论输入不正确。" };
 
-function authenticate(config: S32Config, req: Request, res: Response): boolean {
+function authenticate(
+  config: S32Config,
+  req: Request,
+  res: Response,
+  requestAuthorizer?: S32RequestAuthorizer,
+): boolean {
   res.set("Cache-Control", "no-store");
-  const auth = checkS32PrivateAuth(config, req.get("authorization"), req.get("x-private-token"));
+  const auth = authorizeS32RouteRequest(config, req, requestAuthorizer);
   if (!auth.ok) {
     res.status(auth.status).json({ error: { message: auth.message } });
     return false;
@@ -32,7 +37,7 @@ function authenticate(config: S32Config, req: Request, res: Response): boolean {
 }
 
 /** Mount before global express.json; leave sibling routes and methods untouched. */
-export function createIssueResolutionBodyParser(config: S32Config) {
+export function createIssueResolutionBodyParser(config: S32Config, requestAuthorizer?: S32RequestAuthorizer) {
   const router = Router();
   const parse = json({ limit: "256kb" });
   router.use((req, res, next) => {
@@ -41,7 +46,7 @@ export function createIssueResolutionBodyParser(config: S32Config) {
       next();
       return;
     }
-    if (!authenticate(config, req, res)) return;
+    if (!authenticate(config, req, res, requestAuthorizer)) return;
     parse(req, res, error => {
       if (error) {
         res.status(400).json({ error: invalidInput });
@@ -96,12 +101,12 @@ function toHttpError(error: unknown): [number, ErrorBody] {
   return [500, { message: "工作结论请求失败，请稍后再试。" }];
 }
 
-export function createIssueResolutionRouter(config: S32Config, issueResolutions: IssueResolutionsService | null) {
+export function createIssueResolutionRouter(config: S32Config, issueResolutions: IssueResolutionsService | null, requestAuthorizer?: S32RequestAuthorizer) {
   const router = Router();
 
   // Authenticate before Express decodes any path parameter, including malformed IDs.
   router.use((req, res, next) => {
-    if (!authenticate(config, req, res)) return;
+    if (!authenticate(config, req, res, requestAuthorizer)) return;
     next();
   });
 
