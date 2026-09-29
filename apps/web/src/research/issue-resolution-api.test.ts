@@ -179,7 +179,8 @@ describe("M2-E issue resolution client paths", () => {
       .rejects.toMatchObject({ status: 502 });
     await expect(getIssueResolution("t", "p/a", "i/b", "r/c"))
       .rejects.toMatchObject({ status: 502 });
-    await listIssueResolutionEvidenceBases("t", "p/a", "i/b", { limit: 7, cursor: "x+y/z==" });
+    await expect(listIssueResolutionEvidenceBases("t", "p/a", "i/b", { limit: 7, cursor: "x+y/z==" }))
+      .rejects.toMatchObject({ status: 502 });
 
     expect(fetchMock.mock.calls[0][0]).toBe(
       "/api/private/s32/projects/p%2Fa/issues/i%2Fb/resolutions?limit=20&cursor=a%2Bb%2Fc%3D%3D",
@@ -194,6 +195,32 @@ describe("M2-E issue resolution client paths", () => {
 });
 
 describe("strict authoritative Resolution validation", () => {
+  it.each([bases, { ...bases, evidenceBases: [] }])("accepts a scoped evidence page including an empty page", async body => {
+    fetchMock.mockResolvedValueOnce(response(body));
+    await expect(listIssueResolutionEvidenceBases("t", P, I)).resolves.toEqual(body);
+  });
+
+  it.each([
+    { ...bases, issueId: P, evidenceBases: [] },
+    { evidenceBases: bases.evidenceBases, nextCursor: null },
+    { ...bases, issueId: null },
+    { ...bases, issueId: "bad" },
+    { ...bases, privateTargets: [SOURCE] },
+  ])("rejects evidence pages with missing, invalid, wrong or extra scope data %#", async body => {
+    fetchMock.mockResolvedValueOnce(response(body));
+    await expect(listIssueResolutionEvidenceBases("t", P, I)).rejects.toMatchObject({
+      status: 502,
+      message: "工作结论服务响应异常，请稍后再试。",
+    });
+  });
+
+  it("compares evidence Issue UUIDs case-insensitively", async () => {
+    const issueId = "abcdefab-abcd-4abc-8abc-abcdefabcdef";
+    const body = { ...bases, issueId };
+    fetchMock.mockResolvedValueOnce(response(body));
+    await expect(listIssueResolutionEvidenceBases("t", P, issueId.toUpperCase())).resolves.toEqual(body);
+  });
+
   it("accepts current outside the requested history page", async () => {
     fetchMock.mockResolvedValueOnce(response(history));
     const result = await listIssueResolutions("t", P, I);
