@@ -66,6 +66,7 @@ const detail: IssueResolutionDetailResponse = {
   evidenceBasisAvailable: false, evidenceManifest: null,
 };
 const bases: IssueResolutionEvidenceBasesResponse = {
+  issueId: I,
   evidenceBases: [{ assessmentId: R, claimId: I, claimStatementExcerpt: "可能答案 🧭",
     stance: "SUPPORTS", confidenceLevel: null, manifestId: NEWER, manifestSha256: "a".repeat(64),
     itemCount: 1, assessmentCreatedAt: issue.updatedAt }], nextCursor: "opaque-basis-next",

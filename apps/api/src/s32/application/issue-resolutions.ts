@@ -77,6 +77,8 @@ export interface IssueResolutionEvidenceBasisSummary {
 }
 
 export interface IssueResolutionEvidenceBasesResponse {
+  /** Canonical Issue scope so clients can bind the page to the requested Issue. */
+  issueId: string;
   evidenceBases: IssueResolutionEvidenceBasisSummary[];
   nextCursor: string | null;
 }

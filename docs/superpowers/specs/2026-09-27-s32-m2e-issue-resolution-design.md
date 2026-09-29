@@ -334,19 +334,23 @@ GET  /api/private/s32/projects/:projectId/issues/:issueId/resolution-evidence-ba
 
 The issue-wide `resolution-evidence-bases` read exists so the browser does not N+1 through every Claim's paginated Assessment history.
 
-It returns a compact, privacy-safe page of eligible visible Assessment/Manifest summaries, for example:
+It returns a compact, privacy-safe page of eligible visible Assessment/Manifest summaries. The page envelope also carries the authoritative Issue scope so the browser can bind the response to the requested Issue:
 
 ```ts
 {
-  assessmentId,
-  claimId,
-  claimStatementExcerpt,
-  stance,
-  confidenceLevel,
-  manifestId,
-  manifestSha256,
-  itemCount,
-  assessmentCreatedAt
+  issueId,
+  evidenceBases: [{
+    assessmentId,
+    claimId,
+    claimStatementExcerpt,
+    stance,
+    confidenceLevel,
+    manifestId,
+    manifestSha256,
+    itemCount,
+    assessmentCreatedAt
+  }],
+  nextCursor
 }
 ```
 

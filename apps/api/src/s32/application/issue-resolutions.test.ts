@@ -53,6 +53,7 @@ const DETAIL: IssueResolutionDetailResponse = {
   evidenceManifest: null,
 };
 const EVIDENCE: Application.IssueResolutionEvidenceBasesResponse = {
+  issueId: I,
   evidenceBases: [{ assessmentId: A, claimId: C, claimStatementExcerpt: "可能答案", stance: "SUPPORTS", confidenceLevel: null, manifestId: M, manifestSha256: "a".repeat(64), itemCount: 2, assessmentCreatedAt: TIME }],
   nextCursor: encodeIssueResolutionCursor({ ...CURSOR, id: A }),
 };

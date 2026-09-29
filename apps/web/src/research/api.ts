@@ -900,6 +900,7 @@ export interface IssueResolutionEvidenceBasisSummary {
 }
 
 export interface IssueResolutionEvidenceBasesResponse {
+  issueId: string;
   evidenceBases: IssueResolutionEvidenceBasisSummary[];
   nextCursor: string | null;
 }
@@ -1069,8 +1070,9 @@ function isIssueResolutionEvidenceBasisSummary(
 function isIssueResolutionEvidenceBasesResponse(
   value: unknown,
 ): value is IssueResolutionEvidenceBasesResponse {
-  if (!isPlainObject(value) || !exactKeys(value, ["evidenceBases", "nextCursor"])) return false;
-  return Array.isArray(value.evidenceBases)
+  if (!isPlainObject(value) || !exactKeys(value, ["issueId", "evidenceBases", "nextCursor"])) return false;
+  return isUuid(value.issueId)
+    && Array.isArray(value.evidenceBases)
     && value.evidenceBases.every(isIssueResolutionEvidenceBasisSummary)
     && (value.nextCursor === null
       || (typeof value.nextCursor === "string" && value.nextCursor.length > 0));
@@ -1205,6 +1207,7 @@ export function listIssueResolutionEvidenceBases(
     token,
     `/projects/${encodeURIComponent(projectId)}/issues/${encodeURIComponent(issueId)}/resolution-evidence-bases${suffix}`,
     { signal },
-    isIssueResolutionEvidenceBasesResponse,
+    body => isIssueResolutionEvidenceBasesResponse(body)
+      && body.issueId.toLowerCase() === issueId.toLowerCase(),
   );
 }

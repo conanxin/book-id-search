@@ -93,6 +93,7 @@ const detail = {
   evidenceManifest: manifestDetail,
 };
 const bases = {
+  issueId: I,
   evidenceBases: [{
     assessmentId: A,
     claimId: C,
@@ -345,6 +346,14 @@ describe("strict authoritative Resolution validation", () => {
   ])("rejects malformed detail: $name", async ({ body }) => {
     fetchMock.mockResolvedValueOnce(response(body));
     await expect(getIssueResolution("t", P, I, R)).rejects.toMatchObject({ status: 502 });
+  });
+
+  it("rejects an internally valid evidence-basis page from another Issue", async () => {
+    fetchMock.mockResolvedValueOnce(response({ ...bases, issueId: P }));
+    await expect(listIssueResolutionEvidenceBases("t", P, I)).rejects.toMatchObject({
+      status: 502,
+      message: "工作结论服务响应异常，请稍后再试。",
+    });
   });
 
   it.each([

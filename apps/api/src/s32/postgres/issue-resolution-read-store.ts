@@ -759,6 +759,7 @@ export function createPostgresIssueResolutionReadStore(
         return {
           kind: "ok",
           value: {
+            issueId: uuid(scope.issueId),
             evidenceBases: page.map((b) => b.summary),
             nextCursor:
               canonical.length > input.limit && last

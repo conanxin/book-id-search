@@ -719,6 +719,7 @@ it("evidence-bases filters authorization before LIMIT and emits compact microsec
   const r = await store(d.pool).listEvidenceBases({ ...listInput, limit: 1 });
   expect(r.kind).toBe("ok");
   if (r.kind !== "ok") return;
+  expect(r.value.issueId).toBe(I);
   expect(r.value.evidenceBases).toEqual([
     {
       assessmentId: id(21),
@@ -954,7 +955,7 @@ it("empty visible evidence list has no leaked raw identifiers", async () => {
   const d = database({ bases: [b], materials: [] });
   expect(await run(d, "bases")).toEqual({
     kind: "ok",
-    value: { evidenceBases: [], nextCursor: null },
+    value: { issueId: I, evidenceBases: [], nextCursor: null },
   });
 });
 it("historical Note batch stays bounded for20 distinct references", async () => {
