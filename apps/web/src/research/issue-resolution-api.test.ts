@@ -155,6 +155,19 @@ describe("M2-E issue resolution client paths", () => {
     expect(init.body).toContain("\"privateField\":\"SECRET\"");
   });
 
+  it.each([
+    [200, "created"],
+    [201, "replayed"],
+    [202, "created"],
+    [202, "replayed"],
+  ] as const)("rejects protocol-inconsistent create status %s / %s", async (status, receiptStatus) => {
+    fetchMock.mockResolvedValueOnce(response({ status: receiptStatus, resolutionId: R }, status));
+    await expect(createIssueResolution("t", P, I, KEY, input)).rejects.toMatchObject({
+      status: 502,
+      message: "工作结论服务响应异常，请稍后再试。",
+    });
+  });
+
   it("uses encoded history/detail/evidence-basis paths and opaque query values", async () => {
     fetchMock
       .mockResolvedValueOnce(response(history))
@@ -210,6 +223,40 @@ describe("strict authoritative Resolution validation", () => {
     expect(result.resolution.rationale).toBeNull();
     expect(result.evidenceBasisAvailable).toBe(false);
     expect(result.evidenceManifest).toBeNull();
+  });
+
+  it.each([
+    {
+      name: "issue updatedAt year-only",
+      call: () => listIssueResolutions("t", P, I),
+      body: { ...history, issue: { ...issue, updatedAt: "2026" } },
+    },
+    {
+      name: "summary createdAt impossible date",
+      call: () => listIssueResolutions("t", P, I),
+      body: { ...history, currentResolution: { ...current, createdAt: "2026-02-30T00:00:00.000Z" } },
+    },
+    {
+      name: "detail record createdAt noncanonical",
+      call: () => getIssueResolution("t", P, I, R),
+      body: { ...detail, resolution: { ...detail.resolution, createdAt: "2026-09-28T00:00:00Z" } },
+    },
+    {
+      name: "detail manifest createdAt numeric-like",
+      call: () => getIssueResolution("t", P, I, R),
+      body: { ...detail, evidenceManifest: { ...manifestDetail, createdAt: "0" } },
+    },
+    {
+      name: "evidence basis assessmentCreatedAt noncanonical",
+      call: () => listIssueResolutionEvidenceBases("t", P, I),
+      body: { ...bases, evidenceBases: [{ ...bases.evidenceBases[0], assessmentCreatedAt: "2026" }] },
+    },
+  ])("rejects noncanonical Resolution timestamp: $name", async ({ call, body }) => {
+    fetchMock.mockResolvedValueOnce(response(body));
+    await expect(call()).rejects.toMatchObject({
+      status: 502,
+      message: "工作结论服务响应异常，请稍后再试。",
+    });
   });
 
   it.each([
@@ -334,6 +381,23 @@ describe("safe M2-E error copy and collision isolation", () => {
     await expect(getIssueResolution("t", P, I, R)).rejects.toMatchObject({
       status: 500,
       message: "工作结论请求失败，请稍后再试。",
+    });
+  });
+
+  it("keeps shared project/issue not-found handling Resolution-local", async () => {
+    fetchMock
+      .mockResolvedValueOnce(response({ error: { code: "PROJECT_OR_ISSUE_NOT_FOUND", message: "SECRET" } }, 404))
+      .mockResolvedValueOnce(response({ error: { code: "PROJECT_OR_ISSUE_NOT_FOUND", message: "SECRET" } }, 404));
+
+    await expect(createCandidateClaim("t", P, I, KEY, "候选答案")).rejects.toMatchObject({
+      status: 404,
+      code: undefined,
+      message: "项目不存在，或研究项目功能尚未开启。",
+    });
+    await expect(getIssueResolution("t", P, I, R)).rejects.toMatchObject({
+      status: 404,
+      code: "PROJECT_OR_ISSUE_NOT_FOUND",
+      message: "研究项目或研究问题不存在。",
     });
   });
 
