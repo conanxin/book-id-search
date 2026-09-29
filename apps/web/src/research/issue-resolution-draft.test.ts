@@ -70,6 +70,15 @@ describe("Issue Resolution browser command normalization", () => {
     }
   });
 
+  it("matches the server strict-record boundary for prototypes and symbol keys", () => {
+    const classInput = Object.assign(new (class ResolutionInput {})(), COMMAND);
+    const symbolInput = { ...COMMAND } as Record<PropertyKey, unknown>;
+    symbolInput[Symbol("private")] = "SECRET";
+
+    expect(() => normalizeIssueResolutionBrowserCommand(classInput)).toThrow();
+    expect(() => normalizeIssueResolutionBrowserCommand(symbolInput)).toThrow();
+  });
+
   it("accepts non-preferred conclusion types only with null preferredClaimId", () => {
     for (const resolutionType of ["INSUFFICIENT_EVIDENCE", "NO_WORKING_CONCLUSION"] as const) {
       expect(normalizeIssueResolutionBrowserCommand({
@@ -177,6 +186,18 @@ describe("pending Issue Resolution receipt", () => {
       idempotencyKey: CURRENT,
       createdAt: new Date().toISOString(),
       command: COMMAND,
+    }));
+    expect(loadPendingIssueResolutionReceipt()).toBeNull();
+  });
+
+  it("rejects persisted receipts with extra top-level fields such as tokens", () => {
+    sessionStorage.setItem(ISSUE_RESOLUTION_PENDING_KEY, JSON.stringify({
+      ...SCOPE,
+      requestHash: "a".repeat(64),
+      idempotencyKey: CURRENT,
+      createdAt: new Date().toISOString(),
+      command: COMMAND,
+      token: "SECRET",
     }));
     expect(loadPendingIssueResolutionReceipt()).toBeNull();
   });
