@@ -112,7 +112,11 @@ describe("Issue Resolution Composer", () => {
     ["暂不形成工作结论", "NO_WORKING_CONCLUSION"],
   ] as const)("submits %s without a preferred Claim", async (label, resolutionType) => {
     show();
-    await screen.findByText("可能答案 A", { selector: "option" });
+    await waitFor(() => {
+      expect(listIssueResolutions).toHaveBeenCalledOnce();
+      expect(listCandidateClaims).toHaveBeenCalledOnce();
+      expect(listIssueResolutionEvidenceBases).toHaveBeenCalledOnce();
+    });
     await userEvent.click(screen.getByRole("radio", { name: label }));
     await userEvent.type(screen.getByLabelText("结论理由"), "目前不选择任何候选。");
     await userEvent.click(screen.getByRole("button", { name: "提交工作结论" }));
