@@ -1,4 +1,4 @@
-name: S32 M2-E Task 8 exact-tree verification
+name: S32 M2-E Task 9 composer verification
 
 on:
   push:
@@ -7,43 +7,36 @@ on:
     branches: [main]
 
 jobs:
-  task8-web:
+  task9-web:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 6577a4c2f579dd0937a1d01c1926b70a07f89435
+          ref: 4ae9164e89dcedcbdce2c1a0fb3332c230323b26
           fetch-depth: 0
-
       - name: Assert exact target
         run: |
-          test "$(git rev-parse HEAD)" = "6577a4c2f579dd0937a1d01c1926b70a07f89435"
+          test "$(git rev-parse HEAD)" = "4ae9164e89dcedcbdce2c1a0fb3332c230323b26"
           git status --short
-
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-
       - name: Install locked dependencies
         run: |
           corepack enable
           corepack prepare pnpm@10.33.0 --activate
           pnpm install --frozen-lockfile
-
-      - name: Task 8 scoped tests
+      - name: Task 9 scoped tests
         run: |
           pnpm exec vitest run \
+            apps/web/src/research/IssueResolutionComposer.test.tsx \
+            apps/web/src/research/ResearchIssueDetail.test.tsx \
             apps/web/src/research/issue-resolution-draft.test.ts \
-            apps/web/src/research/assessment-draft.test.ts \
-            apps/web/src/research/candidate-claim-draft.test.ts \
             apps/web/src/research/issue-resolution-api.test.ts
-
       - name: Web TypeScript
         run: pnpm --filter @book-id-search/web exec tsc --noEmit
-
       - name: Web build
         run: pnpm --filter @book-id-search/web build
-
       - name: Diff check
         run: git diff --check
