@@ -24,6 +24,12 @@ export interface PendingIssueResolutionReceipt {
 }
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isCanonicalTimestamp(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$/.test(value)) return false;
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString() === value;
+}
 const resolutionTypes = new Set<IssueResolutionType>([
   "PREFERRED_CLAIM",
   "INSUFFICIENT_EVIDENCE",
@@ -147,8 +153,7 @@ function isReceipt(value: unknown): value is PendingIssueResolutionReceipt {
     !/^[0-9a-f]{64}$/.test(receipt.requestHash) ||
     typeof receipt.idempotencyKey !== "string" ||
     !uuidPattern.test(receipt.idempotencyKey) ||
-    typeof receipt.createdAt !== "string" ||
-    !Number.isFinite(Date.parse(receipt.createdAt))
+    !isCanonicalTimestamp(receipt.createdAt)
   ) {
     return false;
   }
@@ -203,6 +208,13 @@ export async function getOrCreateIssueResolutionReceipt(
   const existing = loadPendingIssueResolutionReceipt();
 
   if (existing) {
+    const storedHash = await hashIssueResolutionCommand(
+      { projectId: existing.projectId, issueId: existing.issueId },
+      existing.command,
+    );
+    if (storedHash !== existing.requestHash) {
+      throw new PendingIssueResolutionIntentConflictError();
+    }
     const sameScope =
       existing.projectId === canonical.projectId &&
       existing.issueId === canonical.issueId;
