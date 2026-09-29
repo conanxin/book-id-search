@@ -174,7 +174,8 @@ describe("M2-E issue resolution client paths", () => {
       .mockResolvedValueOnce(response(detail))
       .mockResolvedValueOnce(response(bases));
 
-    await listIssueResolutions("t", "p/a", "i/b", { limit: 20, cursor: "a+b/c==" });
+    await expect(listIssueResolutions("t", "p/a", "i/b", { limit: 20, cursor: "a+b/c==" }))
+      .rejects.toMatchObject({ status: 502 });
     await expect(getIssueResolution("t", "p/a", "i/b", "r/c"))
       .rejects.toMatchObject({ status: 502 });
     await listIssueResolutionEvidenceBases("t", "p/a", "i/b", { limit: 7, cursor: "x+y/z==" });
@@ -261,6 +262,15 @@ describe("strict authoritative Resolution validation", () => {
   });
 
   it.each([
+    {
+      name: "requested Issue mismatch with internally consistent history",
+      body: {
+        ...history,
+        issue: { ...issue, id: P },
+        currentResolution: { ...current, issueId: P },
+        resolutions: [{ ...historical, issueId: P }],
+      },
+    },
     {
       name: "pointer object mismatch",
       body: { ...history, currentResolution: { ...current, id: H } },
