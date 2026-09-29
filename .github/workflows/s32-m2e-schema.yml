@@ -8,7 +8,10 @@ on:
     paths:
       - db/**
       - scripts/s32-*.ts
+      - scripts/fixtures/s32-m2d-browser.sql
+      - scripts/fixtures/s32-m2e-browser.sql
       - scripts/fixtures/s32-m2e-schema-upgrade.sql
+      - package.json
       - .github/workflows/s32-m2e-schema.yml
   workflow_dispatch:
 
@@ -37,7 +40,7 @@ jobs:
         run: |
           docker pull postgres:16-alpine
           pnpm s32:schema:check
-          for stage in m1a m1b m1c m1d m1e m2a m2b m2c m2d; do
+          for stage in m1a m1b m1c m1d m1e m2a m2b m2c m2d m2e; do
             pnpm "s32:$stage:check"
           done
       - name: Preserve frozen schema artifacts
