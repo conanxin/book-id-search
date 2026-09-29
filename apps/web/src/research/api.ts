@@ -28,7 +28,6 @@ const errorCodes: Record<string, { status: number; message: string }> = {
   EVIDENCE_PREVIEW_STALE: { status: 409, message: "证据集自上次预览后已发生变化，请重新预览。" },
   ASSESSMENT_STORE_UNAVAILABLE: { status: 503, message: "评价服务暂不可用。" },
   ISSUE_RESOLUTION_INVALID: { status: 400, message: "工作结论输入不正确。" },
-  PROJECT_OR_ISSUE_NOT_FOUND: { status: 404, message: "研究项目或研究问题不存在。" },
   ISSUE_RESOLUTION_NOT_FOUND: { status: 404, message: "该工作结论当前不可用。" },
   PREFERRED_CLAIM_NOT_AVAILABLE: { status: 404, message: "所选可能答案当前不可用。" },
   EVIDENCE_MANIFEST_NOT_AVAILABLE: { status: 404, message: "所选证据依据当前不可用。" },
@@ -60,9 +59,10 @@ export interface ProjectResearchItem {
 }
 
 const S32_ROOT = "/api/private/s32";
-type RequestOptions = { method?: "GET" | "POST" | "DELETE"; input?: unknown; signal?: AbortSignal; idempotencyKey?: string };
-async function request<T>(token: string, path: string, options: RequestOptions, valid: (body: any) => boolean): Promise<T> {
-  const { method = "GET", input, signal, idempotencyKey } = options;
+type SafeErrorMap = Record<string, { status: number; message: string }>;
+type RequestOptions = { method?: "GET" | "POST" | "DELETE"; input?: unknown; signal?: AbortSignal; idempotencyKey?: string; contextualErrorCodes?: SafeErrorMap };
+async function request<T>(token: string, path: string, options: RequestOptions, valid: (body: any, status: number) => boolean): Promise<T> {
+  const { method = "GET", input, signal, idempotencyKey, contextualErrorCodes } = options;
   const response = await fetch(`${S32_ROOT}${path}`, {
     method, cache: "no-store", signal,
     headers: {
@@ -75,7 +75,10 @@ async function request<T>(token: string, path: string, options: RequestOptions, 
   if (!response.ok) {
     const body = await response.json().catch(() => null);
     const code = typeof body?.error?.code === "string" ? body.error.code : undefined;
-    const known = code && Object.hasOwn(errorCodes, code) ? errorCodes[code] : undefined;
+    const contextual = code && contextualErrorCodes && Object.hasOwn(contextualErrorCodes, code)
+      ? contextualErrorCodes[code]
+      : undefined;
+    const known = contextual ?? (code && Object.hasOwn(errorCodes, code) ? errorCodes[code] : undefined);
     if (known?.status === response.status) throw new ProjectApiError(response.status, known.message, code);
     throw new ProjectApiError(response.status, statusMessages[response.status] ?? "项目请求失败，请稍后再试。");
   }
@@ -84,7 +87,7 @@ async function request<T>(token: string, path: string, options: RequestOptions, 
     return undefined as T;
   }
   const body = await response.json().catch(() => null);
-  if (!body || !valid(body)) throw new ProjectApiError(502, "项目服务响应异常，请稍后再试。");
+  if (!body || !valid(body, response.status)) throw new ProjectApiError(502, "项目服务响应异常，请稍后再试。");
   return body as T;
 }
 export const listProjects = (token: string, signal?: AbortSignal) => request<{ projects: Project[] }>(token, "/projects", { signal }, b => Array.isArray(b.projects));
@@ -833,6 +836,12 @@ export function getAssessment(
 
 
 // ===== S32 M2-E Issue Resolution =====
+function validIssueResolutionTimestamp(value: unknown): boolean {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return false;
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString() === value;
+}
+
 export type IssueResolutionType = "PREFERRED_CLAIM" | "INSUFFICIENT_EVIDENCE" | "NO_WORKING_CONCLUSION";
 
 export interface IssueResolutionIssueState {
@@ -935,7 +944,7 @@ function isIssueResolutionIssueState(value: unknown): value is IssueResolutionIs
   return isUuid(value.id)
     && ["OPEN", "RESOLVED", "ARCHIVED"].includes(value.lifecycleState as string)
     && (value.currentResolutionId === null || isUuid(value.currentResolutionId))
-    && validTimestamp(value.updatedAt);
+    && validIssueResolutionTimestamp(value.updatedAt);
 }
 
 function hasIssueResolutionEvidence(
@@ -957,7 +966,7 @@ function isIssueResolutionSummary(value: unknown): value is IssueResolutionSumma
     && isUuid(value.issueId)
     && hasValidIssueResolutionPreferredClaim(value.resolutionType, value.preferredClaimId)
     && (value.rationaleExcerpt === null || typeof value.rationaleExcerpt === "string")
-    && validTimestamp(value.createdAt)
+    && validIssueResolutionTimestamp(value.createdAt)
     && typeof value.isCurrent === "boolean"
     && hasIssueResolutionEvidence(value, isAssessmentManifestSummary);
 }
@@ -970,7 +979,7 @@ function isIssueResolutionRecord(value: unknown): value is IssueResolutionRecord
     && isUuid(value.issueId)
     && hasValidIssueResolutionPreferredClaim(value.resolutionType, value.preferredClaimId)
     && (value.rationale === null || typeof value.rationale === "string")
-    && validTimestamp(value.createdAt)
+    && validIssueResolutionTimestamp(value.createdAt)
     && typeof value.isCurrent === "boolean";
 }
 
@@ -985,7 +994,7 @@ function isIssueResolutionEvidenceManifestDetail(
     || value.purpose !== "CLAIM_ASSESSMENT"
     || typeof value.manifestSha256 !== "string"
     || !/^[0-9a-f]{64}$/.test(value.manifestSha256)
-    || !validTimestamp(value.createdAt)
+    || !validIssueResolutionTimestamp(value.createdAt)
     || !Array.isArray(value.items)
     || value.items.length < 1
     || value.items.length > 100) return false;
@@ -1054,7 +1063,7 @@ function isIssueResolutionEvidenceBasisSummary(
     && Number.isSafeInteger(value.itemCount)
     && (value.itemCount as number) >= 1
     && (value.itemCount as number) <= 100
-    && validTimestamp(value.assessmentCreatedAt);
+    && validIssueResolutionTimestamp(value.assessmentCreatedAt);
 }
 
 function isIssueResolutionEvidenceBasesResponse(
@@ -1094,7 +1103,10 @@ async function issueResolutionRequest<T>(
   valid: (body: any) => boolean,
 ): Promise<T> {
   try {
-    return await request<T>(token, path, options, valid);
+    const contextualErrorCodes: SafeErrorMap = options.method === "POST"
+      ? issueResolutionErrorMessages
+      : { PROJECT_OR_ISSUE_NOT_FOUND: issueResolutionErrorMessages.PROJECT_OR_ISSUE_NOT_FOUND };
+    return await request<T>(token, path, { ...options, contextualErrorCodes }, valid);
   } catch (error) {
     if (error instanceof ProjectApiError) {
       if (options.method === "POST" && error.code) {
@@ -1135,7 +1147,9 @@ export function createIssueResolution(
       signal,
       idempotencyKey,
     },
-    isIssueResolutionCreateResponse,
+    (body, status) => isIssueResolutionCreateResponse(body)
+      && ((status === 201 && body.status === "created")
+        || (status === 200 && body.status === "replayed")),
   );
 }
 
