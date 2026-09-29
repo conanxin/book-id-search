@@ -144,15 +144,19 @@ export function verifyWebSessionCsrf(payload: WebSessionPayload, provided: strin
 
 export function readCookie(cookieHeader: string | undefined, name: string): string | null {
   if (!cookieHeader || !name) return null;
+  let found: string | null = null;
+  let matches = 0;
   for (const part of cookieHeader.split(";")) {
     const index = part.indexOf("=");
     if (index < 1) continue;
     const key = part.slice(0, index).trim();
     if (key !== name) continue;
+    matches += 1;
+    if (matches > 1) return null; // duplicate name: ambiguous header, fail closed
     const raw = part.slice(index + 1).trim();
-    try { return decodeURIComponent(raw); } catch { return null; }
+    try { found = decodeURIComponent(raw); } catch { return null; }
   }
-  return null;
+  return found;
 }
 
 export function serializeWebSessionCookie(args: {

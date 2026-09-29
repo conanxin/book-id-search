@@ -149,4 +149,20 @@ describe("web session cookies", () => {
       .toBeNull();
     expect(readCookie(undefined, "book_id_search_session_dev")).toBeNull();
   });
+
+  it("fails closed on duplicate same-name session cookies", () => {
+    expect(readCookie(
+      "book_id_search_session_dev=first.sig; other=2; book_id_search_session_dev=second.sig",
+      "book_id_search_session_dev",
+    )).toBeNull();
+    expect(readCookie(
+      "book_id_search_session_dev=first.sig; book_id_search_session_dev=first.sig",
+      "book_id_search_session_dev",
+    )).toBeNull();
+    // adjacent duplicates separated by multiple spaces
+    expect(readCookie(
+      "book_id_search_session_dev=a.sig;  book_id_search_session_dev=b.sig",
+      "book_id_search_session_dev",
+    )).toBeNull();
+  });
 });
