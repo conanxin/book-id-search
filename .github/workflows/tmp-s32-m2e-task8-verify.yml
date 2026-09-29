@@ -3,6 +3,8 @@ name: S32 M2-E Task 8 exact-tree verification
 on:
   push:
     branches: [feat/s32-m2e-issue-resolution]
+  pull_request:
+    branches: [main]
 
 jobs:
   task8-web:
