@@ -1183,7 +1183,9 @@ export function getIssueResolution(
     token,
     issueResolutionPath(projectId, issueId) + `/${encodeURIComponent(resolutionId)}`,
     { signal },
-    isIssueResolutionDetailResponse,
+    body => isIssueResolutionDetailResponse(body)
+      && body.issue.id.toLowerCase() === issueId.toLowerCase()
+      && body.resolution.id.toLowerCase() === resolutionId.toLowerCase(),
   );
 }
 
