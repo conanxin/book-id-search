@@ -336,9 +336,19 @@ it.each(["list", "get", "bases"])(
   },
 );
 it.each(["list", "get", "bases"])(
-  "%s fails closed on corrupt owner and rolls back",
+  "%s hides a well-formed foreign Issue as missing scope",
   async (op) => {
     const d = database({ scope: { owner_project_id: OTHER } });
+    await expect(run(d, op)).resolves.toEqual({ kind: "scope-missing" });
+    expect(d.calls.at(-1)?.sql).toBe("COMMIT");
+    expect(d.calls.some(c => c.sql.includes("/* resolution-"))).toBe(false);
+    expect(d.release).toHaveBeenCalledOnce();
+  },
+);
+it.each(["list", "get", "bases"])(
+  "%s fails closed on corrupt owner and rolls back",
+  async (op) => {
+    const d = database({ scope: { owner_project_id: "bad" } });
     await expect(run(d, op)).rejects.toBeInstanceOf(
       IssueResolutionIntegrityError,
     );
