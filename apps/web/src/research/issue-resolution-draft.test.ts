@@ -181,6 +181,37 @@ describe("pending Issue Resolution receipt", () => {
     expect(loadPendingIssueResolutionReceipt()).toBeNull();
   });
 
+  it("rejects noncanonical persisted timestamps", () => {
+    sessionStorage.setItem(ISSUE_RESOLUTION_PENDING_KEY, JSON.stringify({
+      ...SCOPE,
+      requestHash: "a".repeat(64),
+      idempotencyKey: CURRENT,
+      createdAt: "2026",
+      command: COMMAND,
+    }));
+    expect(loadPendingIssueResolutionReceipt()).toBeNull();
+  });
+
+  it("never trusts a stored requestHash that is not bound to its stored command", async () => {
+    const requestHash = await hashIssueResolutionCommand(SCOPE, COMMAND);
+    const storedCommand = { ...COMMAND, rationale: "different stored intent" };
+    sessionStorage.setItem(ISSUE_RESOLUTION_PENDING_KEY, JSON.stringify({
+      ...SCOPE,
+      requestHash,
+      idempotencyKey: CURRENT,
+      createdAt: new Date().toISOString(),
+      command: storedCommand,
+    }));
+    resetPendingIssueResolutionReceiptMemoryForTest();
+
+    await expect(getOrCreateIssueResolutionReceipt(SCOPE, COMMAND))
+      .rejects.toBeInstanceOf(PendingIssueResolutionIntentConflictError);
+    expect(JSON.parse(sessionStorage.getItem(ISSUE_RESOLUTION_PENDING_KEY)!)).toMatchObject({
+      idempotencyKey: CURRENT,
+      command: storedCommand,
+    });
+  });
+
   it("clear creates an in-memory tombstone even if removeItem fails", async () => {
     await getOrCreateIssueResolutionReceipt(SCOPE, COMMAND);
     const spy = vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
