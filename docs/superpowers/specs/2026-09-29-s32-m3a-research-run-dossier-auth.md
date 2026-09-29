@@ -249,141 +249,171 @@ The Dossier assembles current and historical reasoning into one readable artifac
 
 ## 6. Google/Gmail login feasibility
 
-### 6.1 Decision
+### 6.1 Corrected credential inventory
 
-Use **Google Identity Services / OpenID Connect** for login.
+Current BOOK-ID-SEARCH has **two application-owned private bearer tokens** in the browser UX:
+
+| UI / route family | Browser storage | Server secret | Meaning |
+|---|---|---|---|
+| WeRead Center `/api/private/weread/*` | `book-id-search:weread-private-token` in sessionStorage | `WEREAD_PRIVATE_API_TOKEN` | Protects BOOK-ID-SEARCH private WeRead overlay APIs |
+| S32 Research `/api/private/s32/*` | `book-id-search:s32-private-token:v1` in sessionStorage | `S32_PRIVATE_API_TOKEN` | Protects BOOK-ID-SEARCH private research APIs |
+
+These are **not**:
+- a Google/Gmail password;
+- an upstream WeRead/Tencent login cookie;
+- a WeRead account credential;
+- a Project ID.
+
+This distinction changes the auth design substantially: Google login can replace both manual browser token prompts for human access without needing to “validate a WeRead account credential”.
+
+### 6.2 Decision
+
+Use **Google Identity Services / OpenID Connect** for human login.
 
 Do not use Gmail API just to authenticate.
 
-Requested identity scopes:
+Identity scopes:
 - `openid`
 - `email`
 - `profile`
 
-Server verifies the Google ID token and uses Google `sub` as the stable principal identifier. Email is display/allowlist metadata, not the canonical user ID.
+The server verifies the Google ID token and uses Google `sub` as the stable principal identifier. Email is display/bootstrap allowlist metadata, not the canonical account ID.
 
-Official references:
-- https://developers.google.com/identity/gsi/web/
-- https://developers.google.com/identity/openid-connect/openid-connect
-
-### 6.2 What Google login can and cannot prove
+### 6.3 What Google login can and cannot prove
 
 | Question | Decision |
 |---|---|
 | Can a Gmail/Google account log into BOOK-ID-SEARCH? | YES |
-| Can Google login replace manual browser S32 token entry? | YES |
-| Can Google itself prove a WeRead credential is valid? | NO |
-| Can a logged-in Google user submit a WeRead credential for BOOK-ID-SEARCH to validate separately? | YES |
-| Can Google identity be linked to a verified WeRead connection? | YES |
-| Is Gmail API mailbox access required? | NO |
+| Can Google session replace manual WeRead private-token entry? | YES |
+| Can Google session replace manual S32 private-token entry? | YES |
+| Does Gmail mailbox/API access need to be granted? | NO |
+| Can Google directly prove a future upstream Tencent/WeRead session or cookie is valid? | NO |
+| If future live WeRead sync exists, can a logged-in user manage that separate connection? | YES, but WeRead validation remains independent |
 
-Google proves ownership/control of the Google account. It does not attest a Tencent/WeRead session.
+Google authenticates the human principal. BOOK-ID-SEARCH then decides what that principal may access.
 
 ## 7. Recommended auth architecture
 
-### 7.1 Phase A — Google login replaces browser S32 token
+### 7.1 Phase A — one Google login, one BOOK-ID-SEARCH session
 
-This is the highest-value first change.
-
-Current browser contract:
-- manual S32 credential;
-- token stored session-only at `book-id-search:s32-private-token:v1`;
-- bearer/private token used for `/api/private/s32/*`.
-
-Target:
-1. user signs in with Google;
-2. backend verifies Google ID token;
-3. backend creates a BOOK-ID-SEARCH web session;
-4. browser receives an HttpOnly + Secure + SameSite session cookie;
-5. S32 browser routes authorize via the web session;
-6. legacy `S32_PRIVATE_API_TOKEN` remains available for machine/admin/acceptance use, not normal human browser login.
-
-For this personal single-user project:
-- initially allow only one configured Google account;
-- use Google `sub` as the actual principal ID;
-- email may be used as bootstrap display/allowlist input, but not as persistent identity.
-
-No Gmail mailbox scope is needed.
-
-### 7.2 Research access binding
-
-Two valid migration options:
-
-A. Pre-bind the owner's Google account:
-- best for current single-user deployment;
-- first successful Google login immediately grants private research access;
-- manual S32 token input disappears from the UI.
-
-B. One-time legacy-token linking:
-- Google login first;
-- user enters current S32 token once;
-- backend validates it;
-- backend records “Google principal has research access”;
-- token is never needed again in the browser.
-
-For the current personal deployment, **A is preferred**.
-
-### 7.3 WeRead credential linking
-
-Google login is the identity gate, but WeRead must be verified independently.
+This is the recommended first implementation for the current single-user personal deployment.
 
 Flow:
 
-1. authenticated Google session;
-2. “连接微信读书”;
-3. user supplies the current WeRead credential in the format the existing adapter expects;
-4. backend makes a read-only authenticated WeRead validation request;
-5. success → mark connection VALID and show non-secret account/status metadata;
-6. failure/expiry → mark EXPIRED/INVALID and ask to reconnect.
+1. user clicks “使用 Google 账号登录”;
+2. Google returns an ID token;
+3. backend verifies signature / issuer / audience / expiry;
+4. backend requires the configured owner Google principal;
+5. stable identity = Google `sub`;
+6. backend creates a BOOK-ID-SEARCH web session;
+7. browser receives an `HttpOnly; Secure; SameSite=Lax` (or stricter where compatible) session cookie;
+8. both private route families accept the human web session:
+   - `/api/private/weread/*`
+   - `/api/private/s32/*`
+9. the two manual browser token forms disappear from the normal user flow.
 
-Important:
-- do not infer WeRead validity from Gmail address;
-- do not assume Gmail and WeRead account emails are related;
-- do not put WeRead credential in a URL;
-- do not expose it in browser logs or public static assets.
+Legacy tokens remain:
+- `WEREAD_PRIVATE_API_TOKEN` for machine/admin/acceptance compatibility;
+- `S32_PRIVATE_API_TOKEN` for machine/admin/acceptance compatibility.
 
-### 7.4 WeRead credential persistence phases
+Human Google-session auth and machine bearer-token auth are parallel authentication methods for the same private capabilities, not aliases of each other.
 
-Phase A (recommended first):
-- validate credential;
-- retain only for the active server/browser session using the current mechanism where practical;
-- improve connection status UI;
-- no new long-term credential vault yet.
+### 7.2 Single-user owner binding
 
-Phase B:
-- if repeated manual re-entry is still painful, add a server-side credential vault keyed by Google `sub`;
-- encrypted at rest / secret-file backed;
-- never return raw credential to browser;
-- explicit reconnect/forget controls.
+For this personal project, prefer explicit pre-binding over one-time token linking.
 
-Phase B is not required for Google login itself.
+Recommended bootstrap configuration:
+
+```text
+GOOGLE_CLIENT_ID=...
+BOOK_ID_SEARCH_OWNER_GOOGLE_SUB=...
+```
+
+Optional display/bootstrap metadata:
+
+```text
+BOOK_ID_SEARCH_OWNER_EMAIL=...@gmail.com
+```
+
+Rules:
+- `sub` is the durable principal key;
+- email may be shown and checked during initial setup, but should not become the durable database identity;
+- no Gmail read/send scopes.
+
+### 7.3 Session persistence decision
+
+For v0.1, prefer a **server-verifiable signed session cookie** without adding an account/session table, because:
+- single user;
+- low traffic;
+- no multi-device session administration requirement yet;
+- minimizes schema delta.
+
+Cookie/session payload should contain only:
+- principal `sub`;
+- issued-at / expiry;
+- auth version;
+- optional display email.
+
+It must not contain:
+- S32 token;
+- WeRead private token;
+- WeRead upstream credentials;
+- database URL/password.
+
+If later requirements include explicit remote session revocation, device lists, or multiple users, add a server session table then.
+
+### 7.4 Upstream WeRead connection is a separate future concern
+
+The current WeRead Center does **not** ask for an upstream Tencent/WeRead account credential. It asks for BOOK-ID-SEARCH's own private API token.
+
+Therefore Phase A does **not** need:
+- `/weread/verify` against Tencent;
+- a WeRead credential vault;
+- Gmail-to-WeRead account linking.
+
+If a future feature performs live WeRead synchronization, define a separate connection model then:
+
+```text
+Google principal
+  → BOOK-ID-SEARCH session
+  → manage upstream WeRead connection
+  → WeRead-specific read-only validation
+```
+
+Google login would authorize who may manage that connection; it would not validate the WeRead session itself.
 
 ## 8. UI target
 
-Logged out:
+### 8.1 Shared logged-out state
 
 ```text
-我的研究项目
+私人空间
 
-[ 使用 Google 登录 ]
+[ 使用 Google 账号登录 ]
 
-登录后可访问私人研究项目。
-微信读书连接将在登录后单独验证。
+登录后可访问：
+✓ 我的研究项目
+✓ 私人微信读书数据
 ```
 
-Logged in:
+No private-token textbox in the normal UI.
+
+### 8.2 Logged-in header / account panel
 
 ```text
 账户
-Google             已登录
-私人研究空间       已授权
-微信读书           已连接 / 已过期 / 未连接
+Google                  已登录
+研究项目                可访问
+微信读书私人数据        可访问
 
-[进入我的研究项目]
-[管理微信读书连接]
+[进入研究项目]
+[进入微信读书中心]
+[退出登录]
 ```
 
-The current “研究项目访问凭据” textbox should disappear from the normal browser flow once Google-session authorization is active.
+### 8.3 Transitional fallback
+
+During rollout only, an operator/debug affordance may retain “使用私有令牌” behind a non-primary advanced path. It is not the normal human UX.
 
 ## 9. Minimal server API candidate
 
@@ -391,29 +421,40 @@ The current “研究项目访问凭据” textbox should disappear from the nor
 POST /api/auth/google
 POST /api/auth/logout
 GET  /api/auth/session
-
-POST /api/private/account/weread/verify
-GET  /api/private/account/connections
-DELETE /api/private/account/weread
 ```
 
-S32 domain endpoints remain unchanged.
+Private domain routes remain unchanged.
 
-Auth/session infrastructure must not be modeled as Actor or Contribution:
-- login account != research Actor;
+Auth middleware becomes dual-mode:
+
+```text
+human browser:
+  valid BOOK-ID-SEARCH session cookie
+
+OR
+
+machine/admin:
+  existing Bearer / X-Private-Token
+```
+
+The session must be checked before reaching domain services, preserving the existing privacy-safe route behavior.
+
+Auth/session infrastructure is not a research-domain concept:
+- login account != Actor;
 - Google identity != authorship;
-- WeRead credential != canonical Source identity.
+- authentication event != Contribution;
+- private API token != Source identity.
 
 ## 10. Relationship to old PR #19 / #20
 
-PR #19 and #20 are historical research-v0 prototypes.
+PR #19 and PR #20 are historical research-v0 prototypes.
 
 Useful ideas to retain:
 - explicit source capabilities;
 - policy/entitlement separation;
 - false-closure protection;
 - typed research runtime errors;
-- isolated `/api/research/v0` experiments.
+- isolated research-runtime experiments.
 
 They predate the now-production S32 M1/M2 canonical model and must not be merged directly into current main.
 
@@ -421,20 +462,22 @@ M3-A should reuse their lessons, not their parallel in-memory truth model.
 
 Recommended state:
 - keep draft/unmerged during M3-A design;
-- annotate as superseded-by/research prior art;
-- close or archive after M3-A spec is accepted.
+- annotate both PRs as prior art superseded by PR #47's canonical design direction;
+- close/archive after M3-A spec is accepted.
 
 ## 11. Implementation order
 
-### Gate 0 — design only
+### Gate 0 — design review
 - freeze this spec;
 - no production mutation.
 
-### Gate 1 — auth UX / Google session
-- add Google login;
-- replace manual human S32 token prompt;
-- keep machine S32 token path;
-- add WeRead validation status.
+### Gate 1 — Google session auth
+- add Google Identity sign-in;
+- add server verification + owner binding;
+- issue HttpOnly session cookie;
+- make both WeRead-private and S32-private route middleware accept the session;
+- keep existing token auth for machines/admin;
+- remove the two token boxes from normal human UX.
 
 ### Gate 2 — ResearchRun backend
 - issue-scoped v0.1;
@@ -449,43 +492,74 @@ Recommended state:
 
 ### Gate 4 — Dossier derived view
 - no Dossier table;
-- Current/Claims/Evidence/Assessments/History/Runs/What Changed.
+- Current / Claims / Evidence / Assessments / History / Runs / What Changed.
 
 ### Gate 5 — whole-slice acceptance
-- real PG16;
-- Google-session auth;
-- credential boundary;
+- real PostgreSQL 16;
+- Google-session auth for both private surfaces;
+- legacy bearer compatibility;
 - ResearchRun lifecycle;
 - Dossier rendering;
-- existing M2 regression.
+- existing M1/M2 regressions.
 
-## 12. Open questions before implementation
+## 12. Implementation decisions now sufficiently resolved
 
-1. Exact current WeRead credential format and verification endpoint in BOOK-ID-SEARCH must be re-read from the implementation before writing the validator.
-2. Decide Google-login session storage:
-   - signed/encrypted cookie only, or
-   - server session table.
-3. Decide whether WeRead credential is session-only in Phase A or stored server-side immediately.
-4. Decide whether M3-A requires a first-class reproducibility-level column now; default recommendation: no migration for v0.1.
-5. Decide whether v0.1 Run output JSON references are sufficient for produced objects; default recommendation: yes.
-6. Multi-Issue / Project-level ResearchRun is deferred.
+### Auth
+- provider: Google Identity Services / OIDC;
+- Gmail API: not required;
+- principal key: Google `sub`;
+- deployment model: single configured owner;
+- human session: signed HttpOnly cookie v0.1;
+- manual S32 browser token: remove from normal path;
+- manual WeRead browser token: remove from normal path;
+- machine/admin token paths: retain.
 
-## 13. Current checkpoint
+### ResearchRun
+- v0.1 scope: one ResearchIssue;
+- `issue_id` required by application for new M3-A runs;
+- Project ownership derived through existing authorization;
+- one immutable EvidenceManifest per Run;
+- no schema migration required for first slice unless implementation review finds an invariant impossible to enforce safely;
+- reproducibility level lives in versioned `execution_contract` JSON initially;
+- produced canonical IDs live in versioned `output` references initially.
+
+### Dossier
+- derived view;
+- no canonical Dossier table;
+- current conclusion always comes from authoritative IssueResolution pointer.
+
+## 13. Remaining implementation questions
+
+1. Pick concrete cookie signing/encryption library already compatible with the API runtime; avoid a new session framework if not needed.
+2. Define CSRF treatment for cookie-authenticated write routes.
+3. Define Google client ID / owner-`sub` production env wiring and health checks.
+4. Decide token-form transition period (immediate removal vs one-release advanced fallback).
+5. Decide whether to implement auth Gate 1 as a separate PR before ResearchRun, recommended YES.
+6. Re-read old PR #19/#20 only for transferable tests/ideas; do not merge their in-memory runtime.
+
+## 14. Current checkpoint
 
 ```text
-TASK_ID=S32_M3A_RESEARCH_RUN_DOSSIER_AUTH_DESIGN_R1
-STATUS=DESIGN_READY_FOR_REVIEW
+TASK_ID=S32_M3A_RESEARCH_RUN_DOSSIER_AUTH_DESIGN_R2
+STATUS=DESIGN_ALIGNED_WITH_EXECUTABLE_CODE
 M2E_PRODUCTION=PASS
 RESEARCHRUN_EXECUTABLE_SCHEMA=EXISTS
 RESEARCHRUN_V0_1_SCOPE=ISSUE_SCOPED
 DOSSIER=DERIVED_VIEW
+
 GOOGLE_LOGIN_FEASIBLE=YES
 GMAIL_API_REQUIRED=NO
-GOOGLE_CAN_VALIDATE_S32_BROWSER_ACCESS=YES_VIA_SESSION_AUTHORIZATION
-GOOGLE_CAN_VALIDATE_WEREAD_CREDENTIAL_DIRECTLY=NO
-WEREAD_SEPARATE_VERIFICATION_REQUIRED=YES
+GOOGLE_PRINCIPAL=SUB
+GOOGLE_SESSION_REPLACES_WEREAD_PRIVATE_BROWSER_TOKEN=YES
+GOOGLE_SESSION_REPLACES_S32_PRIVATE_BROWSER_TOKEN=YES
+CURRENT_WEREAD_UI_TOKEN_IS_APP_PRIVATE_TOKEN=YES
+CURRENT_S32_UI_TOKEN_IS_APP_PRIVATE_TOKEN=YES
+UPSTREAM_WEREAD_CREDENTIAL_IN_CURRENT_LOGIN_FLOW=NO
+FUTURE_UPSTREAM_WEREAD_VALIDATION_SEPARATE=YES
+
+AUTH_IMPLEMENTATION_RECOMMENDATION=SEPARATE_GATE1_PR
 IMPLEMENTATION_STARTED=NO
 SCHEMA_CHANGED=NO
 PRODUCTION_CHANGED=NO
-NEXT_ACTION=REVIEW_AUTH_SESSION_AND_WEREAD_LINKING_DECISIONS
+NEXT_ACTION=REVIEW_PR47_THEN_IMPLEMENT_GOOGLE_SESSION_AUTH_GATE1
 ```
