@@ -1168,7 +1168,8 @@ export function listIssueResolutions(
     token,
     issueResolutionPath(projectId, issueId) + suffix,
     { signal },
-    isIssueResolutionHistoryResponse,
+    body => isIssueResolutionHistoryResponse(body)
+      && body.issue.id.toLowerCase() === issueId.toLowerCase(),
   );
 }
 
