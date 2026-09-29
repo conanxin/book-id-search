@@ -1,4 +1,5 @@
 import { CandidateClaims } from "./CandidateClaims";
+import { IssueResolutionComposer } from "./IssueResolutionComposer";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getResearchIssue, ProjectApiError, type ResearchIssueDetailResponse } from "./api";
@@ -38,6 +39,7 @@ export function ResearchIssueDetail({ token, projectId, issueId }: { token: stri
     <p className="research-issue-question">{response.issue.question}</p>
     <dl className="research-dates"><div><dt>创建时间</dt><dd>{new Date(response.issue.createdAt).toLocaleString("zh-CN")}</dd></div><div><dt>更新时间</dt><dd>{new Date(response.issue.updatedAt).toLocaleString("zh-CN")}</dd></div></dl>
     <CandidateClaims token={token} project={response.project} issue={response.issue} />
+    <IssueResolutionComposer token={token} project={response.project} issue={response.issue} />
     <Link to={`/research/projects/${response.project.id}`}>返回项目资料</Link>
   </article>;
 }
