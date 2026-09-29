@@ -80,7 +80,8 @@ export function IssueResolutionComposer({ token, project, issue, onCommitted }: 
   const [state, setState] = useState<ComposerState>(restored ? "unconfirmed" : "idle");
   const [message, setMessage] = useState(restored ? "工作结论提交结果尚未确认。" : "");
 
-  const frozen = state === "submitting" || state === "unconfirmed" || state === "idempotency-conflict";
+  const isSubmitting = state === "submitting";
+  const frozen = isSubmitting || state === "unconfirmed" || state === "idempotency-conflict";
 
   useEffect(() => {
     const controller = new AbortController();
@@ -339,10 +340,10 @@ export function IssueResolutionComposer({ token, project, issue, onCommitted }: 
       </div> : state === "read-only" ? null : <button
         type="button"
         className="research-primary"
-        disabled={!canSubmit || state === "submitting"}
+        disabled={!canSubmit || isSubmitting}
         onClick={() => void submit()}
       >
-        {state === "submitting" ? "正在提交…" : "提交工作结论"}
+        {isSubmitting ? "正在提交…" : "提交工作结论"}
       </button>}
     </> : null}
   </section>;
