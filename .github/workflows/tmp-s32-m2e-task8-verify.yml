@@ -25,12 +25,25 @@ jobs:
           corepack enable
           corepack prepare pnpm@10.33.0 --activate
           pnpm install --frozen-lockfile
-      - name: Task 8 and sibling receipt regressions
+      - name: Add diagnostic logging only
         run: |
-          pnpm exec vitest run             apps/web/src/research/issue-resolution-draft.test.ts             apps/web/src/research/assessment-draft.test.ts             apps/web/src/research/candidate-claim-draft.test.ts             apps/web/src/research/issue-resolution-api.test.ts
-      - name: Web TypeScript
-        run: pnpm --filter @book-id-search/web exec tsc --noEmit
-      - name: Web build
-        run: pnpm --filter @book-id-search/web build
-      - name: Diff check
-        run: git diff --check
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("apps/web/src/research/issue-resolution-draft.ts")
+          s = p.read_text()
+          old = 'if (!isReceipt(receipt)) throw new Error("Pending Issue Resolution receipt is invalid.");'
+          new = '''if (!isReceipt(receipt)) {
+            console.error("TASK8_RECEIPT_DIAG", JSON.stringify(receipt), {
+              receiptPrototype: Object.getPrototypeOf(receipt)?.constructor?.name ?? null,
+              commandPrototype: Object.getPrototypeOf(receipt.command)?.constructor?.name ?? null,
+              idempotencyKey: receipt.idempotencyKey,
+              createdAt: receipt.createdAt,
+            });
+            throw new Error("Pending Issue Resolution receipt is invalid.");
+          }'''
+          if old not in s:
+              raise SystemExit("diagnostic target not found")
+          p.write_text(s.replace(old, new))
+          PY
+      - name: Task 8 diagnostic tests
+        run: pnpm exec vitest run apps/web/src/research/issue-resolution-draft.test.ts --reporter=verbose
