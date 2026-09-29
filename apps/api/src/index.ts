@@ -18,7 +18,8 @@ import {
   AiInsightDisabledError,
 } from "./ai/book-insight.js";
 import {
-  checkPrivateAuth,
+  authorizeWereadRouteRequest,
+  createWereadRequestAuthorizer,
 } from "./weread/private-auth.js";
 import {
   buildNotesTrend,
@@ -137,6 +138,7 @@ app.use(cors());
 const googleAuthConfig = readGoogleSessionAuthConfig(process.env);
 const s32Config = readS32Config(process.env);
 const s32RequestAuthorizer = createS32RequestAuthorizer(s32Config, googleAuthConfig);
+const wereadRequestAuthorizer = createWereadRequestAuthorizer(googleAuthConfig);
 app.use("/api/auth", createAuthRouter({ config: googleAuthConfig }));
 app.use("/api/private/s32/projects/:projectId/items/:bindingId/note", createProjectItemNoteBodyParser(s32Config, s32RequestAuthorizer));
 app.use("/api/private/s32/projects", createIssueResolutionBodyParser(s32Config, s32RequestAuthorizer));
@@ -698,7 +700,7 @@ async function addRelated(
 }
 
 app.get("/api/private/weread/summary", async (_req: Request, res: Response) => {
-  const auth = checkPrivateAuth(_req.headers.authorization, _req.headers["x-private-token"] as string | undefined);
+  const auth = authorizeWereadRouteRequest(_req, wereadRequestAuthorizer);
   if (!auth.ok) {
     return res.status(auth.status).json({ ok: false, error: auth.message });
   }
@@ -721,7 +723,7 @@ app.get("/api/private/weread/summary", async (_req: Request, res: Response) => {
 });
 
 app.get("/api/private/weread/trends", async (_req: Request, res: Response) => {
-  const auth = checkPrivateAuth(_req.headers.authorization, _req.headers["x-private-token"] as string | undefined);
+  const auth = authorizeWereadRouteRequest(_req, wereadRequestAuthorizer);
   if (!auth.ok) {
     return res.status(auth.status).json({ ok: false, error: auth.message });
   }
@@ -737,7 +739,7 @@ app.get("/api/private/weread/trends", async (_req: Request, res: Response) => {
 });
 
 app.get("/api/private/weread/status", async (req: Request, res: Response) => {
-  const auth = checkPrivateAuth(req.headers.authorization, req.headers["x-private-token"] as string | undefined);
+  const auth = authorizeWereadRouteRequest(req, wereadRequestAuthorizer);
   if (!auth.ok) {
     return res.status(auth.status).json({ ok: false, error: auth.message });
   }
@@ -755,7 +757,7 @@ app.get("/api/private/weread/status", async (req: Request, res: Response) => {
 });
 
 app.post("/api/private/weread/status/batch", async (req: Request, res: Response) => {
-  const auth = checkPrivateAuth(req.headers.authorization, req.headers["x-private-token"] as string | undefined);
+  const auth = authorizeWereadRouteRequest(req, wereadRequestAuthorizer);
   if (!auth.ok) {
     return res.status(auth.status).json({ ok: false, error: auth.message });
   }
@@ -784,7 +786,7 @@ app.post("/api/private/weread/status/batch", async (req: Request, res: Response)
 });
 
 app.get("/api/private/weread/notes", async (req: Request, res: Response) => {
-  const auth = checkPrivateAuth(req.headers.authorization, req.headers["x-private-token"] as string | undefined);
+  const auth = authorizeWereadRouteRequest(req, wereadRequestAuthorizer);
   if (!auth.ok) {
     return res.status(auth.status).json({ ok: false, error: auth.message });
   }
@@ -907,10 +909,7 @@ app.get("/api/private/weread/notes", async (req: Request, res: Response) => {
 app.get(
   "/api/private/weread/reading-map",
   async (req: Request, res: Response) => {
-    const auth = checkPrivateAuth(
-      req.headers.authorization,
-      req.headers["x-private-token"] as string | undefined
-    );
+    const auth = authorizeWereadRouteRequest(req, wereadRequestAuthorizer);
     if (!auth.ok) {
       return res.status(auth.status).json({ ok: false, error: auth.message });
     }
@@ -1034,10 +1033,7 @@ app.get(
 app.get(
   "/api/private/weread/annual-review",
   async (req: Request, res: Response) => {
-    const auth = checkPrivateAuth(
-      req.headers.authorization,
-      req.headers["x-private-token"] as string | undefined
-    );
+    const auth = authorizeWereadRouteRequest(req, wereadRequestAuthorizer);
     if (!auth.ok) {
       return res.status(auth.status).json({ ok: false, error: auth.message });
     }
@@ -1167,10 +1163,7 @@ app.get(
 app.post(
   "/api/private/weread/related-books",
   async (req: Request, res: Response) => {
-    const auth = checkPrivateAuth(
-      req.headers.authorization,
-      req.headers["x-private-token"] as string | undefined
-    );
+    const auth = authorizeWereadRouteRequest(req, wereadRequestAuthorizer);
     if (!auth.ok) {
       return res.status(auth.status).json({ ok: false, error: auth.message });
     }
@@ -1255,10 +1248,7 @@ app.post(
 app.post(
   "/api/private/weread/notes/summarize",
   async (req: Request, res: Response) => {
-    const auth = checkPrivateAuth(
-      req.headers.authorization,
-      req.headers["x-private-token"] as string | undefined
-    );
+    const auth = authorizeWereadRouteRequest(req, wereadRequestAuthorizer);
     if (!auth.ok) {
       return res.status(auth.status).json({ ok: false, error: auth.message });
     }
