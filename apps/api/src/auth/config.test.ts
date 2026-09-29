@@ -28,7 +28,7 @@ describe("readGoogleSessionAuthConfig", () => {
       GOOGLE_AUTH_ENABLED: "true",
       GOOGLE_CLIENT_ID: " client.apps.googleusercontent.com ",
       BOOK_ID_SEARCH_OWNER_GOOGLE_SUB: " owner-sub ",
-      BOOK_ID_SEARCH_SESSION_SECRET: " session-secret ",
+      BOOK_ID_SEARCH_SESSION_SECRET: " ssssssssssssssssssssssssssssssss ",
       BOOK_ID_SEARCH_PUBLIC_ORIGIN: " https://books.conanxin.com ",
       S32_PRIVATE_API_TOKEN: "must-not-be-used",
       WEREAD_PRIVATE_API_TOKEN: "must-not-be-used",
@@ -64,11 +64,25 @@ describe("readGoogleSessionAuthConfig", () => {
       GOOGLE_CLIENT_ID: "client",
       BOOK_ID_SEARCH_OWNER_GOOGLE_SUB: "sub",
     }],
+    ["short secret", {
+      GOOGLE_AUTH_ENABLED: "true",
+      GOOGLE_CLIENT_ID: "client",
+      BOOK_ID_SEARCH_OWNER_GOOGLE_SUB: "sub",
+      BOOK_ID_SEARCH_SESSION_SECRET: "short",
+      BOOK_ID_SEARCH_PUBLIC_ORIGIN: "https://books.conanxin.com",
+    }],
     ["missing public origin", {
       GOOGLE_AUTH_ENABLED: "true",
       GOOGLE_CLIENT_ID: "client",
       BOOK_ID_SEARCH_OWNER_GOOGLE_SUB: "sub",
-      BOOK_ID_SEARCH_SESSION_SECRET: "secret",
+      BOOK_ID_SEARCH_SESSION_SECRET: "ssssssssssssssssssssssssssssssss",
+    }],
+    ["origin has a path", {
+      GOOGLE_AUTH_ENABLED: "true",
+      GOOGLE_CLIENT_ID: "client",
+      BOOK_ID_SEARCH_OWNER_GOOGLE_SUB: "sub",
+      BOOK_ID_SEARCH_SESSION_SECRET: "ssssssssssssssssssssssssssssssss",
+      BOOK_ID_SEARCH_PUBLIC_ORIGIN: "https://books.conanxin.com/login",
     }],
   ] as const)("reports %s as not configured", (_label, env) => {
     expect(isGoogleSessionAuthConfigured(readGoogleSessionAuthConfig(env))).toBe(false);
