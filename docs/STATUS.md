@@ -1,5 +1,22 @@
 # BOOK-ID-SEARCH status
 
+## 2026-09-30 — M3-A Auth Gate 1 production terminal PASS
+
+- task_id: `S32_M3A_AUTH_GATE1_PRODUCTION_CLOSEOUT_R1`.
+- **Production product source:** `c3766768c21f1e2625adccda64436aa1d9a5ae4f` (PR #51 merge commit). This is the API code now running in production; subsequent status-only documentation commits do not change the deployed product bytes.
+- Auth Gate 1 source history is complete: PR #48 (Google session/auth), PR #49 (Web Dockerfile `VITE_GOOGLE_CLIENT_ID`), PR #50 (canonical Web build-script arg forwarding), PR #51 (ESM-safe `google-auth-library` lazy load) are all merged.
+- Google owner login is **production PASS**: real browser account chooser → `POST /api/auth/google = 200` → session restore authenticated → private Research + WeRead surfaces → logout `204` → session returns unauthenticated.
+- WeRead private smoke PASS: bookshelf **1586**, notes **6989**, matched books **323**, private dashboards/trends rendered.
+- Research private smoke PASS: authenticated Projects surface and existing Project/Issue/Claim/Evidence/Assessment/Resolution/Notes routes remained accessible under the unified Google session.
+- Public smoke PASS: home/search/detail/stats/health; legacy S32 and WeRead machine-auth paths remain operational.
+- Production Google-verification egress uses the dedicated Tencent→DMIT encrypted SSH local-forward path to loopback tinyproxy; API uses the scoped proxy environment. DMIT proxy is not exposed publicly.
+- PR #51 production rollout replaced **API only**. Web, PostgreSQL, Meilisearch, Caddy and database schema/data were unchanged; `DB_MIGRATION=NONE`.
+- Production incident closed: the compiled API is ESM; the previous bare `require("google-auth-library")` failed in real dist with `ReferenceError`. PR #51 now uses `createRequire(import.meta.url)` and includes a production-style dist regression guard.
+- `M3A_AUTH_GATE1=TERMINAL_PASS`; `GOOGLE_LOGIN=PASS`; `GOOGLE_SESSION_RESTORE=PASS`; `GOOGLE_LOGOUT=PASS`; `PRODUCTION_CLOSEOUT=PASS`.
+- Gate 1 stop boundary is honored: **ResearchRun writes and Dossier UI have not started**.
+- **Next development gate:** `S32_M3A_GATE2_RESEARCHRUN_BACKEND` — Issue-scoped ResearchRun v0.1 backend, using the existing executable schema contract unless implementation review proves a migration is required.
+
+
 ## S32 Production Rollout tooling — PR #21 merged
 
 - task_id: `S32_PRODUCTION_ROLLOUT_PR21_MERGE_R1`; PR #21 merged into `main` as `ec6843954addd8cee3def7a3a3f340b06e0bc298`; merged reviewed head `47640cf30467802d4c1393f58654b87616978247`.
