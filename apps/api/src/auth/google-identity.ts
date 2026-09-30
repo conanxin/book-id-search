@@ -1,4 +1,16 @@
+import { createRequire } from "node:module";
 import type { GoogleSessionAuthConfig } from "./config.js";
+
+/**
+ * ESM-safe lazy require. The API package compiles to ESM ("type": "module"),
+ * where a bare `require(...)` inside a module body throws ReferenceError at
+ * call time — exactly what broke POST /api/auth/google in production (500
+ * AUTH_INTERNAL before any network call). `createRequire` keeps the lazy-load
+ * semantics (google-auth-library stays out of cold paths) while working in
+ * the compiled dist. Vitest did not catch this because its transform supplies
+ * an interop `require`.
+ */
+const require = createRequire(import.meta.url);
 
 /**
  * Verified Google identity. `sub` is the ONLY authorization principal;
@@ -56,8 +68,8 @@ function isReasonableCredential(credential: string): boolean {
 
 export function createDefaultGoogleIdTokenClient(clientId: string): GoogleIdTokenClient {
   // Lazy import keeps google-auth-library out of cold paths and lets tests
-  // inject fakes without touching the network.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  // inject fakes without touching the network. `require` here is the
+  // module-scope createRequire shim declared above (ESM-safe).
   const { OAuth2Client } = require("google-auth-library") as typeof import("google-auth-library");
   const client = new OAuth2Client(clientId);
   return {
