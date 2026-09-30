@@ -1498,7 +1498,6 @@ function isResearchRunDetailPayload(value: any, projectId: string, issueId: stri
   }
   if (!isResearchRunEvidenceSnapshot(value.evidenceManifest)) return false;
   if (value.evidenceManifest.id.toLowerCase() !== run.evidenceManifestId.toLowerCase()) return false;
-  if (process.env.VV_DEBUG) process.stdout.write(`DBG reached lineage: arr=${Array.isArray(value.ancestors)} every=${Array.isArray(value.ancestors) ? value.ancestors.every(isResearchRunSummary) : "-"} lineage=${Array.isArray(value.ancestors) && value.ancestors.every(isResearchRunSummary) ? isResearchRunLineage(run, value.ancestors) : "-"}\n`);
   return Array.isArray(value.ancestors)
     && value.ancestors.every((ancestor: any) => isResearchRunSummary(ancestor) && ancestor.issueId.toLowerCase() === issueId.toLowerCase())
     && isResearchRunLineage(run, value.ancestors);

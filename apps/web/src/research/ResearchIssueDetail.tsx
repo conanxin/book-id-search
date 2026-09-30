@@ -2,6 +2,7 @@ import { CandidateClaims } from "./CandidateClaims";
 import { IssueResolutionComposer } from "./IssueResolutionComposer";
 import { IssueResolutionCurrent } from "./IssueResolutionCurrent";
 import { IssueResolutionHistory } from "./IssueResolutionHistory";
+import { ResearchRunHistory } from "./ResearchRunHistory";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getResearchIssue, ProjectApiError, type ResearchIssueDetailResponse } from "./api";
@@ -49,6 +50,7 @@ export function ResearchIssueDetail({ projectId, issueId }: { projectId: string;
       onCommitted={() => setResolutionVersion(version => version + 1)}
     />
     <IssueResolutionHistory projectId={response.project.id} issueId={response.issue.id} refreshVersion={resolutionVersion} />
+    <ResearchRunHistory projectId={response.project.id} issueId={response.issue.id} />
     <Link to={`/research/projects/${response.project.id}`}>返回项目资料</Link>
   </article>;
 }

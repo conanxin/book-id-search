@@ -355,3 +355,65 @@
     width: 100%;
   }
 }
+
+/* ===== S32 M3-A Gate 3 ResearchRun history (read-only) ===== */
+.research-run-history {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--color-border);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.research-run-history > h2 {
+  margin: 0 0 14px;
+  font-size: 20px;
+}
+.research-run-history-list {
+  list-style: none;
+  margin: 12px 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.research-run-card {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: 8px;
+  background: #f7f9fc;
+}
+.research-run-card p {
+  margin: 0;
+}
+.research-run-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.research-run-status {
+  font-weight: 650;
+}
+.research-run-status--running { color: #8a6d1a; }
+.research-run-status--succeeded { color: #1c7a3d; }
+.research-run-status--failed { color: #b3362b; }
+.research-run-status--cancelled { color: var(--color-text-muted); }
+.research-run-meta {
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+.research-run-card code {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+.research-run-evidence,
+.research-run-replay {
+  font-size: 14px;
+}
+.research-run-replay code {
+  font-size: 13px;
+}

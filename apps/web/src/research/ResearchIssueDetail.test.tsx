@@ -8,6 +8,7 @@ import {
   listCandidateClaims,
   listIssueResolutionEvidenceBases,
   listIssueResolutions,
+  listResearchRuns,
   ProjectApiError,
 } from "./api";
 import { ResearchIssueDetail } from "./ResearchIssueDetail";
@@ -28,6 +29,7 @@ vi.mock("./api", async (load) => ({
   listCandidateClaims: vi.fn(),
   listIssueResolutionEvidenceBases: vi.fn(),
   listIssueResolutions: vi.fn(),
+  listResearchRuns: vi.fn(),
 }));
 const projectId = "11111111-1111-4111-8111-111111111111";
 const issueId = "22222222-2222-4222-8222-222222222222";
@@ -53,6 +55,7 @@ beforeEach(() => { seedSession();
     resolutions: [],
     nextCursor: null,
   });
+  vi.mocked(listResearchRuns).mockReset().mockResolvedValue({ runs: [], nextCursor: null });
 });
 afterEach(() => { __resetWebAuthStoreForTests(); cleanup(); vi.clearAllMocks(); });
 
@@ -74,10 +77,19 @@ describe("Research Issue detail", () => {
     const claims = container.querySelector(".research-candidate-claims");
     const composer = container.querySelector(".issue-resolution-composer");
     const history = container.querySelector(".issue-resolution-history");
-    expect(current && claims && composer && history).toBeTruthy();
+    const runs = container.querySelector(".research-run-history");
+    const back = screen.getByRole("link", { name: "返回项目资料" });
+    expect(current && claims && composer && history && runs).toBeTruthy();
     expect(current!.compareDocumentPosition(claims!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(claims!.compareDocumentPosition(composer!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(composer!.compareDocumentPosition(history!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(history!.compareDocumentPosition(runs!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(runs!.compareDocumentPosition(back) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(await screen.findByText("还没有研究轮次。")).toBeTruthy();
+    const firstCall = listResearchRuns.mock.calls[0];
+    expect(firstCall?.[0]).toBe(projectId);
+    expect(firstCall?.[1]).toBe(issueId);
+    expect(firstCall?.[2]).toEqual({ limit: 20 });
 
     expect(screen.getByRole("link", { name: /北京古道研究/ }).getAttribute("href")).toBe(`/research/projects/${projectId}`);
     await waitFor(() => expect(document.title).toBe(`${issue.title} · BOOK-ID-SEARCH`));
@@ -113,4 +125,34 @@ it("keeps Issue visible and retries Claims independently", async () => {
  await userEvent.click(screen.getByRole("button",{name:"重试可能答案"}));
  expect(await screen.findByText("还没有可能答案。")).toBeTruthy();
  expect(getResearchIssue).toHaveBeenCalledOnce();
+});
+
+describe("Research Issue detail — ResearchRun history integration (Gate 3 Task 2)", () => {
+  it("still mounts and reads ResearchRun history on archived Project/Issue", async () => {
+    vi.mocked(getResearchIssue).mockResolvedValue({ project: { ...project, lifecycleState: "ARCHIVED", readOnly: true }, issue: { ...issue, lifecycleState: "ARCHIVED" } });
+    render(<MemoryRouter><ResearchIssueDetail projectId={projectId} issueId={issueId} /></MemoryRouter>);
+    expect(await screen.findByRole("heading", { name: "研究轮次" })).toBeTruthy();
+    await waitFor(() => expect(listResearchRuns.mock.calls[0]?.[2]).toEqual({ limit: 20 }));
+  });
+
+  it("ResearchRun history failure does NOT hide Issue, Claims or Resolution sections", async () => {
+    vi.mocked(listResearchRuns).mockRejectedValueOnce(new ProjectApiError(503, "SECRET RUN DETAIL"));
+    render(<MemoryRouter><ResearchIssueDetail projectId={projectId} issueId={issueId} /></MemoryRouter>);
+    expect(await screen.findByRole("heading", { name: issue.title })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "可能答案" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "工作结论历史" })).toBeTruthy();
+    expect(await screen.findByText("研究轮次暂时无法加载。")).toBeTruthy();
+    expect(document.body.textContent).not.toContain("SECRET RUN DETAIL");
+    await userEvent.click(screen.getByRole("button", { name: "重试研究轮次" }));
+    await waitFor(() => expect(listResearchRuns).toHaveBeenCalledTimes(2));
+  });
+
+  it("renders no start/complete/fail/cancel/replay action in Task 2", async () => {
+    vi.mocked(listResearchRuns).mockResolvedValue({ runs: [], nextCursor: null });
+    render(<MemoryRouter><ResearchIssueDetail projectId={projectId} issueId={issueId} /></MemoryRouter>);
+    expect(await screen.findByRole("heading", { name: "研究轮次" })).toBeTruthy();
+    for (const banned of ["开始研究轮次", "开始新的研究轮次", "完成轮次", "标记失败", "取消轮次", "重放轮次", "查看详情"]) {
+      expect(screen.queryByRole("button", { name: banned })).toBeNull();
+    }
+  });
 });
