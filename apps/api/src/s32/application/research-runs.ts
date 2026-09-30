@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { readProjectId } from "../domain/project.js";
 import { readIdempotencyKey, readResearchIssueId } from "../domain/research-issue.js";
+import { decodeResearchRunCursor } from "../domain/research-run.js";
 import {
   InvalidResearchRunInputError,
   InvalidResearchRunTransitionError,
@@ -88,6 +89,48 @@ export interface ResearchRunRecord {
   executionContract: ResearchRunExecutionContract;
   environment: ResearchRunEnvironment;
   output: ResearchRunOutput | null;
+  knowledgeCutoff: string | null;
+  startedAt: string;
+  completedAt: string | null;
+  createdAt: string;
+}
+
+/** Compact list summary (Task 3): identity + lifecycle + immediate replayOf. */
+export interface ResearchRunSummary {
+  runId: string;
+  issueId: string;
+  status: ResearchRunStatus;
+  replayOf: string | null;
+  startedAtMicros: string;
+  startedAt: string;
+  completedAt: string | null;
+  evidenceManifest: {
+    id: string;
+    manifestSha256: string;
+    itemCount: number;
+    available: boolean;
+  };
+}
+
+/** Evidence snapshot view — item details only when available=true. */
+export interface ResearchRunEvidenceSnapshot {
+  id: string;
+  manifestSha256: string;
+  itemCount: number;
+  available: boolean;
+  items?: ReadonlyArray<{
+    ordinal: number;
+    role: string;
+    targetType: string;
+    note: string | null;
+  }>;
+}
+
+export interface ResearchRunDetail {
+  run: ResearchRunRecord;
+  evidenceManifest: ResearchRunEvidenceSnapshot;
+  /** Ancestor lineage (prior → prior's prior …), oldest-first order. */
+  ancestors: ResearchRunSummary[];
 }
 
 export type ResearchRunCommandResult =
@@ -103,7 +146,7 @@ export interface ResearchRunListCommand {
 
 export type ResearchRunListLookup =
   | { kind: "scope-missing" }
-  | { kind: "ok"; value: { runs: ResearchRunRecord[]; nextCursor: string | null } };
+  | { kind: "ok"; value: { runs: ResearchRunSummary[]; nextCursor: string | null } };
 
 /**
  * Command store surface for Task 2. All failure modes throw typed errors
@@ -116,18 +159,58 @@ export interface ResearchRunCommandStore {
   replay(command: ResearchRunReplayCommand): Promise<ResearchRunCommandResult>;
 }
 
+export interface ResearchRunGetCommand {
+  projectId: string;
+  issueId: string;
+  runId: string;
+}
+
 export interface ResearchRunReadStore {
   list(command: ResearchRunListCommand): Promise<ResearchRunListLookup>;
-  get(command: { projectId: string; issueId: string; runId: string }): Promise<ResearchRunGetLookup>;
+  get(command: ResearchRunGetCommand): Promise<ResearchRunGetLookup>;
 }
 
 export type ResearchRunGetLookup =
   | { kind: "scope-missing" }
   | { kind: "not-visible" }
   | { kind: "not-found" }
-  | { kind: "ok"; value: ResearchRunRecord };
+  | { kind: "ok"; value: ResearchRunDetail };
 
 const UUID = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
+
+/**
+ * Strict list-query parser (Task 3): malformed explicit limit/cursor reject
+ * instead of silently defaulting. Valid shapes: {} | {limit:1..100} |
+ * {cursor:ResearchRunCursorToken}. Unknown keys reject.
+ */
+export function parseResearchRunListQuery(queryInput: unknown): { limit: number; cursor: string | null } {
+  if (queryInput === undefined || queryInput === null) return { limit: 20, cursor: null };
+  if (typeof queryInput !== "object" || Array.isArray(queryInput)) {
+    throw new ResearchRunInvalidInputError("查询参数必须是对象。");
+  }
+  const query = queryInput as Record<string, unknown>;
+  const keys = Object.keys(query);
+  if (keys.some(key => key !== "limit" && key !== "cursor")) {
+    throw new ResearchRunInvalidInputError("查询参数只允许 limit 与 cursor。");
+  }
+  let limit = 20;
+  if (query.limit !== undefined) {
+    if (typeof query.limit !== "number" || !Number.isInteger(query.limit) || query.limit < 1 || query.limit > 100) {
+      throw new ResearchRunInvalidInputError("limit 必须是 1..100 的整数。");
+    }
+    limit = query.limit;
+  }
+  let cursor: string | null = null;
+  if (query.cursor !== undefined) {
+    if (typeof query.cursor !== "string" || !query.cursor) {
+      throw new ResearchRunInvalidInputError("cursor 必须是非空字符串。");
+    }
+    // Reject malformed cursors eagerly via the domain decoder.
+    decodeResearchRunCursor(query.cursor);
+    cursor = query.cursor;
+  }
+  return { limit, cursor };
+}
 
 function readEvidenceManifestId(value: unknown): string {
   if (typeof value !== "string" || !UUID.test(value)) {
@@ -298,14 +381,12 @@ export function createResearchRunsService(
       projectInput: unknown,
       issueInput: unknown,
       queryInput: unknown,
-    ): Promise<{ runs: ResearchRunRecord[]; nextCursor: string | null }> {
+    ): Promise<{ runs: ResearchRunSummary[]; nextCursor: string | null }> {
       const projectId = readProjectId(projectInput).toLowerCase();
       const issueId = readResearchIssueId(issueInput);
-      const query = (queryInput ?? {}) as Record<string, unknown>;
-      const limit = typeof query.limit === "number" && query.limit > 0 && query.limit <= 100 ? Math.floor(query.limit) : 20;
-      const cursor = typeof query.cursor === "string" && query.cursor ? query.cursor : null;
+      const { limit, cursor } = parseResearchRunListQuery(queryInput);
       const result = await readStore.list({ projectId, issueId, limit, cursor });
-      if (result.kind === "scope-missing") throw new ResearchRunInvalidInputError("PROJECT_OR_ISSUE_NOT_FOUND");
+      if (result.kind === "scope-missing") throw new ResearchRunScopeNotFoundError("PROJECT_OR_ISSUE_NOT_FOUND");
       return result.value;
     },
 
@@ -313,14 +394,14 @@ export function createResearchRunsService(
       projectInput: unknown,
       issueInput: unknown,
       runInput: unknown,
-    ): Promise<ResearchRunRecord> {
+    ): Promise<ResearchRunDetail> {
       const projectId = readProjectId(projectInput).toLowerCase();
       const issueId = readResearchIssueId(issueInput);
       const runId = readResearchRunId(runInput);
       const result = await readStore.get({ projectId, issueId, runId });
-      if (result.kind === "scope-missing") throw new ResearchRunInvalidInputError("PROJECT_OR_ISSUE_NOT_FOUND");
+      if (result.kind === "scope-missing") throw new ResearchRunScopeNotFoundError("PROJECT_OR_ISSUE_NOT_FOUND");
       if (result.kind === "not-visible" || result.kind === "not-found") {
-        throw new ResearchRunInvalidInputError("RESEARCH_RUN_NOT_FOUND");
+        throw new ResearchRunNotFoundError("RESEARCH_RUN_NOT_FOUND");
       }
       return result.value;
     },

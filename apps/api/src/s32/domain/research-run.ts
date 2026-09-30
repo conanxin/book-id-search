@@ -373,3 +373,57 @@ export function canonicalResearchRunJson(value: unknown): string {
 export function sha256ResearchRunCanonical(value: unknown): string {
   return createHash("sha256").update(canonicalResearchRunJson(value), "utf8").digest("hex");
 }
+
+// ---------------------------------------------------------------------------
+// Read-side cursor (exact PostgreSQL microseconds, never JS Date ms)
+// ---------------------------------------------------------------------------
+
+export class InvalidResearchRunCursorError extends Error {}
+
+export interface ResearchRunCursor {
+  startedAtMicros: string;
+  id: string;
+}
+
+const MICROS_PATTERN = /^\d{1,19}$/;
+
+function validStartedAtMicros(value: unknown): value is string {
+  return typeof value === "string" && MICROS_PATTERN.test(value) && value !== "0";
+}
+
+export function encodeResearchRunCursor(cursor: ResearchRunCursor): string {
+  if (!validStartedAtMicros(cursor.startedAtMicros) || !UUID.test(cursor.id)) {
+    throw new InvalidResearchRunCursorError("研究执行历史游标不正确。");
+  }
+  return Buffer.from(JSON.stringify({
+    v: 1,
+    startedAtMicros: cursor.startedAtMicros,
+    id: cursor.id.toLowerCase(),
+  }), "utf8").toString("base64url");
+}
+
+export function decodeResearchRunCursor(value: string): ResearchRunCursor {
+  if (typeof value !== "string" || !value) {
+    throw new InvalidResearchRunCursorError("研究执行历史游标不正确。");
+  }
+  try {
+    const decoded = Buffer.from(value, "base64url").toString("utf8");
+    const parsed: unknown = JSON.parse(decoded);
+    if (!isPlainObject(parsed)) throw new Error("shape");
+    if (
+      Object.keys(parsed).length !== 3 ||
+      parsed.v !== 1 ||
+      !validStartedAtMicros(parsed.startedAtMicros) ||
+      typeof parsed.id !== "string" ||
+      !UUID.test(parsed.id)
+    ) {
+      throw new Error("shape");
+    }
+    const canonical = { v: 1, startedAtMicros: parsed.startedAtMicros, id: parsed.id.toLowerCase() };
+    const canonicalToken = Buffer.from(JSON.stringify(canonical), "utf8").toString("base64url");
+    if (canonicalToken !== value) throw new Error("noncanonical");
+    return { startedAtMicros: canonical.startedAtMicros, id: canonical.id };
+  } catch {
+    throw new InvalidResearchRunCursorError("研究执行历史游标不正确。");
+  }
+}
