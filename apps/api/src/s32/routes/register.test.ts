@@ -11,7 +11,10 @@ vi.mock("../postgres/issue-resolution-command-store.js", () => ({ createPostgres
 vi.mock("../postgres/issue-resolution-read-store.js", () => ({ createPostgresIssueResolutionReadStore: vi.fn(() => ({ marker: "resolution-read" })) }));
 vi.mock("../application/issue-resolutions.js", () => ({ createIssueResolutionsService: vi.fn(() => ({ marker: "resolution-service" })) }));
 const { createIssueResolutionRouter } = vi.hoisted(() => ({
-  createIssueResolutionRouter: vi.fn(() => (_req: express.Request, res: express.Response) => res.json({ route: "resolution" })),
+  createIssueResolutionRouter: vi.fn(() => (req: express.Request, res: express.Response, next: () => void) => {
+    if (/\/resolutions?(\/|$)|\/resolution-evidence-bases(\/|$)/.test(req.path)) { res.json({ route: "resolution" }); return; }
+    next();
+  }),
 }));
 vi.mock("./issue-resolution-routes.js", () => ({ createIssueResolutionRouter }));
 vi.mock("../postgres/evidence-selection-store.js", () => ({ createPostgresEvidenceSelectionStore: vi.fn(() => ({ marker: "evidence-store" })) }));
@@ -49,6 +52,16 @@ vi.mock("../postgres/research-membership-store.js", () => ({ createPostgresResea
 vi.mock("../application/project-overview.js", () => ({ createProjectOverviewService: vi.fn(() => ({})) }));
 vi.mock("../postgres/project-overview-store.js", () => ({ createPostgresProjectOverviewStore: vi.fn(() => ({})) }));
 vi.mock("../application/research-issues.js", () => ({ createResearchIssuesService: vi.fn(() => ({})) }));
+vi.mock("../postgres/research-run-command-store.js", () => ({ createPostgresResearchRunCommandStore: vi.fn(() => ({ marker: "run-command-store" })) }));
+vi.mock("../postgres/research-run-read-store.js", () => ({ createPostgresResearchRunReadStore: vi.fn(() => ({ marker: "run-read-store" })) }));
+vi.mock("../application/research-runs.js", async (load) => {
+  const actual = await load<typeof import("../application/research-runs.js")>();
+  return { ...actual, createResearchRunsService: vi.fn(() => ({ marker: "run-service" })) };
+});
+const { createResearchRunRouter } = vi.hoisted(() => ({
+  createResearchRunRouter: vi.fn(() => (_req: express.Request, res: express.Response) => res.json({ route: "research-run" })),
+}));
+vi.mock("./research-run-routes.js", () => ({ createResearchRunRouter }));
 vi.mock("../postgres/research-issue-store.js", () => ({ createPostgresResearchIssueStore: vi.fn(() => ({})) }));
 vi.mock("../application/promote-catalog-book.js", () => ({ createPromoteCatalogBookCommand: vi.fn(() => ({})) }));
 vi.mock("../catalog/meili-catalog-book-reader.js", () => ({ createMeiliCatalogBookReader: vi.fn(() => ({})) }));
@@ -98,6 +111,9 @@ import { createPostgresIssueResolutionCommandStore } from "../postgres/issue-res
 import { createPostgresIssueResolutionReadStore } from "../postgres/issue-resolution-read-store.js";
 import { createIssueResolutionsService } from "../application/issue-resolutions.js";
 import { createProjectRouter } from "./project-routes.js";
+import { createPostgresResearchRunCommandStore } from "../postgres/research-run-command-store.js";
+import { createPostgresResearchRunReadStore } from "../postgres/research-run-read-store.js";
+import { createResearchRunsService } from "../application/research-runs.js";
 
 beforeEach(() => { vi.clearAllMocks(); });
 
@@ -155,6 +171,67 @@ describe("Issue Resolution registration", () => {
       const res = await fetch(`http://127.0.0.1:${port}/api/private/s32/projects/project-id/issues/issue-id/${suffix}`, { method });
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ route: "resolution" });
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    }
+  });
+});
+
+
+describe("ResearchRun registration", () => {
+  it("constructs command/read stores with the one shared Pool and passes their exact instances to service/router", () => {
+    createS32Router({ env: {}, getCatalogDocument: vi.fn() });
+    expect(Pool).toHaveBeenCalledOnce();
+    expect(createPostgresResearchRunCommandStore).toHaveBeenCalledOnce();
+    expect(createPostgresResearchRunReadStore).toHaveBeenCalledOnce();
+    const pool = vi.mocked(createPostgresEvidenceSelectionStore).mock.calls[0][0];
+    expect(createPostgresResearchRunCommandStore).toHaveBeenCalledWith(pool);
+    expect(createPostgresResearchRunReadStore).toHaveBeenCalledWith(pool);
+    const command = vi.mocked(createPostgresResearchRunCommandStore).mock.results[0].value;
+    const read = vi.mocked(createPostgresResearchRunReadStore).mock.results[0].value;
+    expect(createResearchRunsService).toHaveBeenCalledExactlyOnceWith(command, read);
+    expect(createResearchRunRouter).toHaveBeenCalledExactlyOnceWith(
+      vi.mocked(readS32Config).mock.results[0].value,
+      vi.mocked(createResearchRunsService).mock.results[0].value,
+      undefined,
+    );
+  });
+
+  it.each([
+    { name: "disabled", enabled: false, databaseUrl: "postgresql://x" },
+    { name: "no database", enabled: true, databaseUrl: null },
+  ])("$name still mounts the router with null service without constructing a Pool", options => {
+    const config = { enabled: options.enabled, databaseUrl: options.databaseUrl, privateToken: "t" };
+    vi.mocked(readS32Config).mockReturnValueOnce(config);
+    createS32Router({ env: {}, getCatalogDocument: vi.fn() });
+    expect(createResearchRunRouter).toHaveBeenCalledExactlyOnceWith(config, null, undefined);
+    expect(Pool).not.toHaveBeenCalled();
+    expect(createPostgresResearchRunCommandStore).not.toHaveBeenCalled();
+    expect(createPostgresResearchRunReadStore).not.toHaveBeenCalled();
+    expect(createResearchRunsService).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { method: "POST", suffix: "runs" },
+    { method: "GET", suffix: "runs" },
+    { method: "GET", suffix: "runs/run-id" },
+    { method: "POST", suffix: "runs/run-id/complete" },
+    { method: "POST", suffix: "runs/run-id/fail" },
+    { method: "POST", suffix: "runs/run-id/cancel" },
+    { method: "POST", suffix: "runs/run-id/replay" },
+  ])("mounts $method $suffix before generic project routes", async ({ method, suffix }) => {
+    const generic = express.Router();
+    generic.use((_req, res) => { res.status(418).json({ route: "generic" }); });
+    vi.mocked(createProjectRouter).mockReturnValueOnce(generic);
+    const app = express();
+    app.use("/api/private/s32", createS32Router({ env: {}, getCatalogDocument: vi.fn() }));
+    const server = app.listen(0, "127.0.0.1");
+    try {
+      await new Promise<void>(resolve => server.once("listening", resolve));
+      const port = (server.address() as AddressInfo).port;
+      const res = await fetch(`http://127.0.0.1:${port}/api/private/s32/projects/project-id/issues/issue-id/${suffix}`, { method });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ route: "research-run" });
     } finally {
       await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
     }

@@ -39,6 +39,10 @@ import { createProjectOverviewService, type ProjectOverviewService } from "./app
 import { createPostgresProjectOverviewStore } from "./postgres/project-overview-store.js";
 import { createProjectOverviewRouter } from "./routes/project-overview-route.js";
 import { createResearchIssuesService, type ResearchIssuesService } from "./application/research-issues.js";
+import { createResearchRunsService, type ResearchRunsService } from "./application/research-runs.js";
+import { createPostgresResearchRunCommandStore } from "./postgres/research-run-command-store.js";
+import { createPostgresResearchRunReadStore } from "./postgres/research-run-read-store.js";
+import { createResearchRunRouter } from "./routes/research-run-routes.js";
 import { createPostgresResearchIssueStore } from "./postgres/research-issue-store.js";
 import { createResearchIssueRouter } from "./routes/research-issue-routes.js";
 
@@ -63,6 +67,7 @@ export function createS32Router(deps: {
   let assessments: AssessmentsService | null = null;
   let issueResolutions: IssueResolutionsService | null = null;
   let researchIssues: ResearchIssuesService | null = null;
+  let researchRuns: ResearchRunsService | null = null;
   if (config.enabled && config.databaseUrl) {
     const pool = new Pool({ connectionString: config.databaseUrl, connectionTimeoutMillis: 3000, query_timeout: 5000 });
     pool.on("error", () => console.warn("[s32] idle database connection unavailable"));
@@ -81,6 +86,10 @@ export function createS32Router(deps: {
       createPostgresIssueResolutionReadStore(pool),
     );
     researchIssues = createResearchIssuesService(createPostgresResearchIssueStore(pool));
+    researchRuns = createResearchRunsService(
+      createPostgresResearchRunCommandStore(pool),
+      createPostgresResearchRunReadStore(pool),
+    );
     command = createPromoteCatalogBookCommand({
       reader: createMeiliCatalogBookReader(deps.getCatalogDocument),
       store: createPostgresCatalogPromotionStore(pool),
@@ -94,6 +103,7 @@ export function createS32Router(deps: {
   );
   router.use("/research-memberships", createResearchMembershipRouter(config, researchMemberships, requestAuthorizer));
   router.use("/projects", createIssueResolutionRouter(config, issueResolutions, requestAuthorizer));
+  router.use("/projects", createResearchRunRouter(config, researchRuns, requestAuthorizer));
   router.use("/projects", createProjectOverviewRouter(config, projectOverview, requestAuthorizer));
   router.use("/projects", createCandidateClaimRouter(config, candidateClaims, requestAuthorizer));
   router.use("/projects", createEvidenceSelectionRouter(config, evidenceSelection, requestAuthorizer));
