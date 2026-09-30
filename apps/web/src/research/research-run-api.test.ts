@@ -185,6 +185,9 @@ describe("ResearchRun detail + lineage validator (via getResearchRun valid predi
     await expect(getResearchRun(P, I, RUN)).rejects.toMatchObject({ status: 502 });
     fetchMock.mockResolvedValueOnce(response(detail({ output: { ...output(), produced: { ...output().produced, claimIds: ["nope"] } } })));
     await expect(getResearchRun(P, I, RUN)).rejects.toMatchObject({ status: 502 });
+    const dupId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    fetchMock.mockResolvedValueOnce(response(detail({ output: { ...output(), produced: { ...output().produced, assessmentIds: [dupId, dupId] } } })));
+    await expect(getResearchRun(P, I, RUN)).rejects.toMatchObject({ status: 502 });
     fetchMock.mockResolvedValueOnce(response(detail({ output: { ...output(), gaps: [{ description: "x", status: "MAYBE" }] } })));
     await expect(getResearchRun(P, I, RUN)).rejects.toMatchObject({ status: 502 });
   });

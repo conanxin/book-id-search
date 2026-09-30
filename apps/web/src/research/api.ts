@@ -1424,7 +1424,10 @@ function isResearchRunOutput(value: any): value is ResearchRunOutput {
   const produced = value.produced;
   if (!produced || typeof produced !== "object" || !exactKeys(produced, ["claimIds", "assessmentIds", "resolutionIds", "noteRevisionIds"])) return false;
   for (const key of ["claimIds", "assessmentIds", "resolutionIds", "noteRevisionIds"] as const) {
-    if (!Array.isArray(produced[key]) || !produced[key].every((id: unknown) => isUuid(id))) return false;
+    if (!Array.isArray(produced[key])) return false;
+    const ids = produced[key] as unknown[];
+    if (!ids.every((id: unknown) => isUuid(id))) return false;
+    if (new Set(ids).size !== ids.length) return false;
   }
   if (!Array.isArray(value.gaps)) return false;
   return value.gaps.every((gap: any) =>
