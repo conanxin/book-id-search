@@ -41,6 +41,7 @@ git archive "$FULL_SHA" | DOCKER_BUILDKIT=1 $DOCKER_SUDO docker build --no-cache
   -f apps/web/Dockerfile \
   --build-arg "SOURCE_COMMIT=$FULL_SHA" \
   --build-arg "VITE_S32_ENABLED=true" \
+  --build-arg "VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID:-}" \
   -t "$TAG" \
   - >"${OUT_DIR}/docker-build.log" 2>&1
 
