@@ -1207,3 +1207,385 @@ export function listIssueResolutionEvidenceBases(
       && body.issueId.toLowerCase() === issueId.toLowerCase(),
   );
 }
+
+// ===== S32 M3-A Gate 3 ResearchRun API client =====
+
+export type ResearchRunStatus = "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
+
+export interface ResearchRunProcedureStep {
+  kind: "SEARCH" | "READ" | "COMPARE" | "FIELDWORK" | "MAP_ANALYSIS" | "IMAGE_ANALYSIS" | "OTHER";
+  description: string;
+}
+export interface ResearchRunProcedure {
+  version: 1;
+  objective: string;
+  method: string;
+  steps: ResearchRunProcedureStep[];
+}
+export interface ResearchRunTool {
+  name: string;
+  version: string | null;
+}
+export interface ResearchRunExecutionContract {
+  version: 1;
+  mode: "HUMAN" | "HUMAN_AI" | "AUTOMATED";
+  reproducibilityLevel: "EXACT" | "PROCEDURE" | "AUDIT";
+  tools: ResearchRunTool[];
+}
+export interface ResearchRunOutputGap {
+  description: string;
+  status: "OPEN" | "BLOCKED" | "DEFERRED";
+}
+export interface ResearchRunOutput {
+  version: 1;
+  summary: string;
+  produced: {
+    claimIds: string[];
+    assessmentIds: string[];
+    resolutionIds: string[];
+    noteRevisionIds: string[];
+  };
+  gaps: ResearchRunOutputGap[];
+}
+/** JSON-safe nested value tree (read-side shape check only). */
+export type ResearchRunEnvironment = Record<string, unknown>;
+
+export interface ResearchRunEvidenceSnapshotSummary {
+  id: string;
+  manifestSha256: string;
+  itemCount: number;
+  available: false;
+}
+export interface ResearchRunEvidenceSnapshotItem {
+  ordinal: number;
+  role: EvidenceRole;
+  targetType: EvidenceTargetType;
+  note: string | null;
+}
+export interface ResearchRunEvidenceSnapshotDetail {
+  id: string;
+  manifestSha256: string;
+  itemCount: number;
+  available: true;
+  items: ResearchRunEvidenceSnapshotItem[];
+}
+export type ResearchRunEvidenceSnapshot = ResearchRunEvidenceSnapshotSummary | ResearchRunEvidenceSnapshotDetail;
+
+export interface ResearchRunSummary {
+  runId: string;
+  issueId: string;
+  status: ResearchRunStatus;
+  replayOf: string | null;
+  startedAtMicros: string;
+  startedAt: string;
+  completedAt: string | null;
+  evidenceManifest: ResearchRunEvidenceSnapshotSummary | ResearchRunEvidenceSnapshotDetail;
+}
+export interface ResearchRunListResponse {
+  runs: ResearchRunSummary[];
+  nextCursor: string | null;
+}
+
+export interface ResearchRunRecord {
+  runId: string;
+  projectId: string;
+  issueId: string;
+  status: ResearchRunStatus;
+  evidenceManifestId: string;
+  replayOf: string | null;
+  procedure: ResearchRunProcedure;
+  executionContract: ResearchRunExecutionContract;
+  environment: ResearchRunEnvironment;
+  output: ResearchRunOutput | null;
+  knowledgeCutoff: string | null;
+  startedAt: string;
+  completedAt: string | null;
+  createdAt: string;
+}
+export interface ResearchRunDetailResponse {
+  run: ResearchRunRecord;
+  evidenceManifest: ResearchRunEvidenceSnapshot;
+  ancestors: ResearchRunSummary[];
+}
+
+export interface StartResearchRunInput {
+  procedure: ResearchRunProcedure;
+  executionContract: ResearchRunExecutionContract;
+  environment: ResearchRunEnvironment;
+  evidenceManifestId: string;
+  replayOf: string | null;
+}
+export interface ReplayResearchRunInput {
+  procedure: ResearchRunProcedure;
+  executionContract: ResearchRunExecutionContract;
+  environment: ResearchRunEnvironment;
+  evidenceManifestId: string;
+}
+export interface ResearchRunCommandResponse {
+  status: "created" | "replayed";
+  runId: string;
+}
+
+const researchRunErrorMessages: Record<string, { status: number; message: string }> = {
+  RESEARCH_RUN_INVALID: { status: 400, message: "研究执行记录输入不正确。" },
+  PROJECT_OR_ISSUE_NOT_FOUND: { status: 404, message: "研究项目或研究问题不存在。" },
+  RESEARCH_RUN_NOT_FOUND: { status: 404, message: "该研究执行记录当前不可用。" },
+  EVIDENCE_MANIFEST_NOT_AVAILABLE: { status: 404, message: "所选证据依据当前不可用。" },
+  PROJECT_READ_ONLY: { status: 409, message: "当前研究项目已归档，不能变更研究执行记录。" },
+  RESEARCH_ISSUE_READ_ONLY: { status: 409, message: "当前研究问题已归档，不能变更研究执行记录。" },
+  RESEARCH_RUN_ALREADY_TERMINAL: { status: 409, message: "该研究执行记录已结束，不能再变更。" },
+  RESEARCH_RUN_REPLAY_INVALID: { status: 409, message: "重放条件不满足，请刷新后重试。" },
+  IDEMPOTENCY_CONFLICT: { status: 409, message: "提交标识与当前研究执行记录内容不一致。" },
+  RESEARCH_RUN_STORE_UNAVAILABLE: { status: 503, message: "研究执行服务暂不可用。" },
+};
+
+async function researchRunRequest<T>(
+  path: string,
+  options: RequestOptions,
+  valid: (body: any, status: number) => boolean,
+): Promise<T> {
+  try {
+    const contextualErrorCodes: SafeErrorMap = options.method === "POST"
+      ? researchRunErrorMessages
+      : { PROJECT_OR_ISSUE_NOT_FOUND: researchRunErrorMessages.PROJECT_OR_ISSUE_NOT_FOUND, RESEARCH_RUN_NOT_FOUND: researchRunErrorMessages.RESEARCH_RUN_NOT_FOUND };
+    return await request<T>(path, { ...options, contextualErrorCodes }, valid);
+  } catch (error) {
+    if (error instanceof ProjectApiError) {
+      if (options.method === "POST" && error.code) {
+        const mapped = researchRunErrorMessages[error.code];
+        if (mapped?.status === error.status) {
+          throw new ProjectApiError(error.status, mapped.message, error.code);
+        }
+      }
+      if (error.status === 500) {
+        throw new ProjectApiError(500, "研究执行记录请求失败，请稍后再试。");
+      }
+      if (error.status === 502) {
+        throw new ProjectApiError(502, "研究执行记录服务响应异常，请稍后再试。");
+      }
+    }
+    throw error;
+  }
+}
+
+function researchRunPath(projectId: string, issueId: string): string {
+  return `/projects/${encodeURIComponent(projectId)}/issues/${encodeURIComponent(issueId)}/runs`;
+}
+
+// --- validators ---------------------------------------------------------
+
+const RESEARCH_RUN_STATUSES: readonly string[] = ["RUNNING", "SUCCEEDED", "FAILED", "CANCELLED"];
+const PROCEDURE_STEP_KINDS: readonly string[] = ["SEARCH", "READ", "COMPARE", "FIELDWORK", "MAP_ANALYSIS", "IMAGE_ANALYSIS", "OTHER"];
+const CONTRACT_MODES: readonly string[] = ["HUMAN", "HUMAN_AI", "AUTOMATED"];
+const REPRO_LEVELS: readonly string[] = ["EXACT", "PROCEDURE", "AUDIT"];
+const OUTPUT_GAP_STATUSES: readonly string[] = ["OPEN", "BLOCKED", "DEFERRED"];
+const EVIDENCE_ROLES: readonly string[] = ["SUPPORTING", "CONTRADICTORY", "CONTEXTUAL"];
+const EVIDENCE_TARGET_TYPES: readonly string[] = ["SOURCE", "SOURCE_ASSET", "NOTE_REVISION"];
+const SHA256_RE = /^[0-9a-f]{64}$/;
+const MICROS_RE = /^[0-9]+$/;
+const MAX_LINEAGE_DEPTH = 100;
+
+function isIsoOrNull(value: unknown, orNull: boolean): boolean {
+  if (value === null) return orNull;
+  return typeof value === "string" && Number.isFinite(Date.parse(value));
+}
+function isJsonSafe(value: unknown): boolean {
+  if (value === null) return true;
+  const t = typeof value;
+  if (t === "string") return true;
+  if (t === "number") return Number.isFinite(value);
+  if (t === "boolean") return true;
+  if (Array.isArray(value)) return value.every(isJsonSafe);
+  if (t === "object") return Object.values(value as Record<string, unknown>).every(isJsonSafe);
+  return false;
+}
+
+function isResearchRunProcedure(value: any): value is ResearchRunProcedure {
+  if (!value || typeof value !== "object" || !exactKeys(value, ["version", "objective", "method", "steps"])) return false;
+  if (value.version !== 1 || typeof value.objective !== "string" || typeof value.method !== "string") return false;
+  if (!Array.isArray(value.steps)) return false;
+  return value.steps.every((step: any) =>
+    step && typeof step === "object" && exactKeys(step, ["kind", "description"])
+    && PROCEDURE_STEP_KINDS.includes(step.kind) && typeof step.description === "string");
+}
+
+function isResearchRunExecutionContract(value: any): value is ResearchRunExecutionContract {
+  if (!value || typeof value !== "object" || !exactKeys(value, ["version", "mode", "reproducibilityLevel", "tools"])) return false;
+  if (value.version !== 1 || !CONTRACT_MODES.includes(value.mode) || !REPRO_LEVELS.includes(value.reproducibilityLevel)) return false;
+  if (!Array.isArray(value.tools)) return false;
+  return value.tools.every((tool: any) =>
+    tool && typeof tool === "object" && exactKeys(tool, ["name", "version"])
+    && typeof tool.name === "string" && (tool.version === null || typeof tool.version === "string"));
+}
+
+function isResearchRunOutput(value: any): value is ResearchRunOutput {
+  if (!value || typeof value !== "object" || !exactKeys(value, ["version", "summary", "produced", "gaps"])) return false;
+  if (value.version !== 1 || typeof value.summary !== "string") return false;
+  const produced = value.produced;
+  if (!produced || typeof produced !== "object" || !exactKeys(produced, ["claimIds", "assessmentIds", "resolutionIds", "noteRevisionIds"])) return false;
+  for (const key of ["claimIds", "assessmentIds", "resolutionIds", "noteRevisionIds"] as const) {
+    if (!Array.isArray(produced[key]) || !produced[key].every((id: unknown) => isUuid(id))) return false;
+  }
+  if (!Array.isArray(value.gaps)) return false;
+  return value.gaps.every((gap: any) =>
+    gap && typeof gap === "object" && exactKeys(gap, ["description", "status"])
+    && typeof gap.description === "string" && OUTPUT_GAP_STATUSES.includes(gap.status));
+}
+
+function isResearchRunEnvironment(value: any): value is ResearchRunEnvironment {
+  return !!value && typeof value === "object" && !Array.isArray(value) && isJsonSafe(value);
+}
+
+/** Privacy contract: available=false must expose ONLY {id,manifestSha256,itemCount,available}. */
+export function isResearchRunEvidenceSnapshot(value: any): value is ResearchRunEvidenceSnapshot {
+  if (!value || typeof value !== "object") return false;
+  if (!isUuid(value.id) || typeof value.manifestSha256 !== "string" || !SHA256_RE.test(value.manifestSha256)) return false;
+  if (!Number.isInteger(value.itemCount) || value.itemCount < 1) return false;
+  if (value.available === false) return exactKeys(value, ["id", "manifestSha256", "itemCount", "available"]);
+  if (value.available !== true) return false;
+  if (!exactKeys(value, ["id", "manifestSha256", "itemCount", "available", "items"])) return false;
+  if (!Array.isArray(value.items) || value.items.length !== value.itemCount) return false;
+  return value.items.every((item: any, index: number) =>
+    item && typeof item === "object" && exactKeys(item, ["ordinal", "role", "targetType", "note"])
+    && item.ordinal === index + 1
+    && EVIDENCE_ROLES.includes(item.role)
+    && EVIDENCE_TARGET_TYPES.includes(item.targetType)
+    && (item.note === null || typeof item.note === "string"));
+}
+
+export function isResearchRunSummary(value: any): value is ResearchRunSummary {
+  if (!value || typeof value !== "object") return false;
+  if (!exactKeys(value, ["runId", "issueId", "status", "replayOf", "startedAtMicros", "startedAt", "completedAt", "evidenceManifest"])) return false;
+  if (!isUuid(value.runId) || !isUuid(value.issueId)) return false;
+  if (!RESEARCH_RUN_STATUSES.includes(value.status)) return false;
+  if (value.replayOf !== null && !isUuid(value.replayOf)) return false;
+  if (typeof value.startedAtMicros !== "string" || !MICROS_RE.test(value.startedAtMicros) || value.startedAtMicros === "0") return false;
+  if (typeof value.startedAt !== "string" || !Number.isFinite(Date.parse(value.startedAt))) return false;
+  const terminal = value.status !== "RUNNING";
+  if (terminal && !isIsoOrNull(value.completedAt, false)) return false;
+  if (!terminal && value.completedAt !== null) return false;
+  return isResearchRunEvidenceSnapshot(value.evidenceManifest);
+}
+
+function isResearchRunDetailPayload(value: any, projectId: string, issueId: string): value is ResearchRunDetailResponse {
+  if (!value || typeof value !== "object") return false;
+  if (!exactKeys(value, ["run", "evidenceManifest", "ancestors"])) return false;
+  const run = value.run;
+  if (!run || typeof run !== "object") return false;
+  if (!exactKeys(run, ["runId", "projectId", "issueId", "status", "evidenceManifestId", "replayOf", "procedure", "executionContract", "environment", "output", "knowledgeCutoff", "startedAt", "completedAt", "createdAt"])) return false;
+
+  if (!isUuid(run.runId) || !isUuid(run.evidenceManifestId)) return false;
+  if (run.projectId.toLowerCase() !== projectId.toLowerCase() || run.issueId.toLowerCase() !== issueId.toLowerCase()) return false;
+  if (!RESEARCH_RUN_STATUSES.includes(run.status)) return false;
+  if (run.replayOf !== null && !isUuid(run.replayOf)) return false;
+  if (!isResearchRunProcedure(run.procedure)) return false;
+  if (!isResearchRunExecutionContract(run.executionContract)) return false;
+  if (!isResearchRunEnvironment(run.environment)) return false;
+  if (run.knowledgeCutoff !== null && typeof run.knowledgeCutoff !== "string") return false;
+  if (typeof run.startedAt !== "string" || !Number.isFinite(Date.parse(run.startedAt))) return false;
+  if (typeof run.createdAt !== "string" || !Number.isFinite(Date.parse(run.createdAt))) return false;
+  if (run.status === "RUNNING") {
+    if (run.output !== null || run.completedAt !== null) return false;
+  } else if (run.status === "SUCCEEDED") {
+    if (!isResearchRunOutput(run.output)) return false;
+    if (!isIsoOrNull(run.completedAt, false)) return false;
+  } else {
+    if (run.output !== null && !isResearchRunOutput(run.output)) return false;
+    if (!isIsoOrNull(run.completedAt, false)) return false;
+  }
+  if (!isResearchRunEvidenceSnapshot(value.evidenceManifest)) return false;
+  if (value.evidenceManifest.id.toLowerCase() !== run.evidenceManifestId.toLowerCase()) return false;
+  if (process.env.VV_DEBUG) process.stdout.write(`DBG reached lineage: arr=${Array.isArray(value.ancestors)} every=${Array.isArray(value.ancestors) ? value.ancestors.every(isResearchRunSummary) : "-"} lineage=${Array.isArray(value.ancestors) && value.ancestors.every(isResearchRunSummary) ? isResearchRunLineage(run, value.ancestors) : "-"}\n`);
+  return Array.isArray(value.ancestors)
+    && value.ancestors.every((ancestor: any) => isResearchRunSummary(ancestor) && ancestor.issueId.toLowerCase() === issueId.toLowerCase())
+    && isResearchRunLineage(run, value.ancestors);
+}
+
+/** Lineage invariants: unique ids, oldest-first chain, terminal-only, replayOf linkage, cap 100. */
+function isResearchRunLineage(run: ResearchRunRecord, ancestors: ResearchRunSummary[]): boolean {
+  if (ancestors.length > MAX_LINEAGE_DEPTH) return false;
+  const ids = new Set<string>();
+  for (const ancestor of ancestors) {
+    if (ids.has(ancestor.runId)) return false;
+    ids.add(ancestor.runId);
+    if (ancestor.runId === run.runId) return false;
+    if (ancestor.status === "RUNNING") return false;
+  }
+  if (run.replayOf === null) return ancestors.length === 0;
+  if (ancestors.length === 0) return false;
+  if (ancestors[ancestors.length - 1].runId !== run.replayOf) return false;
+  for (let i = 1; i < ancestors.length; i += 1) {
+    if (ancestors[i].replayOf !== ancestors[i - 1].runId) return false;
+  }
+  return ancestors[0].replayOf === null;
+}
+
+export function startResearchRun(projectId: string, issueId: string, idempotencyKey: string, input: StartResearchRunInput, signal?: AbortSignal): Promise<ResearchRunCommandResponse> {
+  return researchRunRequest<ResearchRunCommandResponse>(
+    researchRunPath(projectId, issueId),
+    { method: "POST", input, signal, idempotencyKey },
+    (body, status) => isResearchRunCommandResponse(body)
+      && ((status === 201 && body.status === "created") || (status === 200 && body.status === "replayed")),
+  );
+}
+
+export function listResearchRuns(projectId: string, issueId: string, query?: { limit?: number; cursor?: string | null }, signal?: AbortSignal): Promise<ResearchRunListResponse> {
+  const params = new URLSearchParams();
+  if (query?.limit !== undefined) params.set("limit", String(query.limit));
+  if (query?.cursor != null) params.set("cursor", query.cursor);
+  const suffix = params.size > 0 ? `?${params.toString()}` : "";
+  const requestedIssueId = issueId;
+  return researchRunRequest<ResearchRunListResponse>(
+    `${researchRunPath(projectId, issueId)}${suffix}`,
+    { signal },
+    (body, status) => status === 200
+      && !!body && typeof body === "object" && exactKeys(body, ["runs", "nextCursor"])
+      && (body.nextCursor === null || (typeof body.nextCursor === "string" && body.nextCursor.length > 0))
+      && Array.isArray(body.runs)
+      && body.runs.every((run: any) => isResearchRunSummary(run) && run.issueId.toLowerCase() === requestedIssueId.toLowerCase())
+      && new Set(body.runs.map((run: ResearchRunSummary) => run.runId)).size === body.runs.length,
+  );
+}
+
+export function getResearchRun(projectId: string, issueId: string, runId: string, signal?: AbortSignal): Promise<ResearchRunDetailResponse> {
+  return researchRunRequest<ResearchRunDetailResponse>(
+    `${researchRunPath(projectId, issueId)}/${encodeURIComponent(runId)}`,
+    { signal },
+    (body, status) => status === 200 && isResearchRunDetailPayload(body, projectId, issueId),
+  );
+}
+
+function isResearchRunCommandResponse(value: any): value is ResearchRunCommandResponse {
+  return !!value && typeof value === "object" && exactKeys(value, ["status", "runId"])
+    && (value.status === "created" || value.status === "replayed") && isUuid(value.runId);
+}
+
+function transitionResearchRun(
+  projectId: string, issueId: string, runId: string, idempotencyKey: string,
+  action: "complete" | "fail" | "cancel", output: ResearchRunOutput | null, signal?: AbortSignal,
+): Promise<ResearchRunCommandResponse> {
+  return researchRunRequest<ResearchRunCommandResponse>(
+    `${researchRunPath(projectId, issueId)}/${encodeURIComponent(runId)}/${action}`,
+    { method: "POST", input: { output }, signal, idempotencyKey },
+    (body, status) => status === 200 && isResearchRunCommandResponse(body) && body.runId.toLowerCase() === runId.toLowerCase(),
+  );
+}
+
+export function completeResearchRun(projectId: string, issueId: string, runId: string, idempotencyKey: string, output: ResearchRunOutput, signal?: AbortSignal): Promise<ResearchRunCommandResponse> {
+  return transitionResearchRun(projectId, issueId, runId, idempotencyKey, "complete", output, signal);
+}
+export function failResearchRun(projectId: string, issueId: string, runId: string, idempotencyKey: string, output: ResearchRunOutput | null, signal?: AbortSignal): Promise<ResearchRunCommandResponse> {
+  return transitionResearchRun(projectId, issueId, runId, idempotencyKey, "fail", output, signal);
+}
+export function cancelResearchRun(projectId: string, issueId: string, runId: string, idempotencyKey: string, output: ResearchRunOutput | null, signal?: AbortSignal): Promise<ResearchRunCommandResponse> {
+  return transitionResearchRun(projectId, issueId, runId, idempotencyKey, "cancel", output, signal);
+}
+
+export function replayResearchRun(projectId: string, issueId: string, priorRunId: string, idempotencyKey: string, input: ReplayResearchRunInput, signal?: AbortSignal): Promise<ResearchRunCommandResponse> {
+  return researchRunRequest<ResearchRunCommandResponse>(
+    `${researchRunPath(projectId, issueId)}/${encodeURIComponent(priorRunId)}/replay`,
+    { method: "POST", input, signal, idempotencyKey },
+    (body, status) => isResearchRunCommandResponse(body)
+      && ((status === 201 && body.status === "created") || (status === 200 && body.status === "replayed")),
+  );
+}
