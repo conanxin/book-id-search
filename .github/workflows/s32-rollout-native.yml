@@ -13,6 +13,10 @@ jobs:
   verification:
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    env:
+      # Recovery browser tests require a clean checkout; avoid untracked caches
+      # from earlier importlib-based Python contract tests.
+      PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -49,6 +53,7 @@ jobs:
           python3 scripts/test-s32-control-plane-sync.py
           python3 scripts/test-s32-production-authorization.py
           python3 scripts/test-s32-r7-browser-receipt-producer.py
+          python3 scripts/test-s32-r7-browser-recovery.py
           python3 scripts/test-s32-api-rollback.py
           python3 scripts/test-s32-production-baseline-with-grace.py
           python3 scripts/test-recover-s32-api-rollback.py
