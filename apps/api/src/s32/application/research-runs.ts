@@ -195,10 +195,13 @@ export function parseResearchRunListQuery(queryInput: unknown): { limit: number;
   }
   let limit = 20;
   if (query.limit !== undefined) {
-    if (typeof query.limit !== "number" || !Number.isInteger(query.limit) || query.limit < 1 || query.limit > 100) {
+    // HTTP query strings arrive as text; accept exact integer strings or numbers.
+    const raw = typeof query.limit === "string" ? query.limit.trim() : query.limit;
+    const parsedLimit = typeof raw === "string" && /^\d+$/.test(raw) ? Number(raw) : raw;
+    if (typeof parsedLimit !== "number" || !Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 100) {
       throw new ResearchRunInvalidInputError("limit 必须是 1..100 的整数。");
     }
-    limit = query.limit;
+    limit = parsedLimit;
   }
   let cursor: string | null = null;
   if (query.cursor !== undefined) {
