@@ -5,6 +5,7 @@ import { readIdempotencyKey, readResearchIssueId } from "../domain/research-issu
 import {
   createResearchRunsService,
   ResearchRunInvalidInputError,
+  ResearchRunEvidenceNotAvailableError,
   type ResearchRunCommandStore,
   type ResearchRunReadStore,
   type ResearchRunStartCommand,
@@ -51,7 +52,7 @@ function expectReject(promise: Promise<unknown>, messageIncludes?: string): Prom
       const err = error as Error;
       // Input validation may surface as either the application error or a
       // reused domain error (readProjectId / readResearchIssueId / ...).
-      if (err instanceof ResearchRunInvalidInputError || /格式不正确|Idempotency|密钥/.test(err.message)) {
+      if (err instanceof ResearchRunInvalidInputError || /格式不正确|Idempotency|密钥|EVIDENCE_NOT_AVAILABLE/.test(err.message)) {
         if (messageIncludes) expect(err.message).toContain(messageIncludes);
         return;
       }
@@ -66,7 +67,7 @@ describe("createResearchRunsService.start", () => {
     const store: ResearchRunCommandStore = {
       start: async (command) => {
         seen.push(command);
-        return { kind: "ok", value: { status: "created", runId: command.runId } };
+        return { status: "created", runId: command.runId };
       },
       transition: async () => {
         throw new Error("not under test");
@@ -112,7 +113,7 @@ describe("createResearchRunsService.start", () => {
     const store: ResearchRunCommandStore = {
       start: async (command) => {
         hashes.push(command.requestHash);
-        return { kind: "ok", value: { status: "created", runId: command.runId } };
+        return { status: "created", runId: command.runId };
       },
       transition: async () => {
         throw new Error("not under test");
@@ -260,7 +261,7 @@ describe("replay", () => {
       },
       replay: async (command) => {
         seen.push(command);
-        return { kind: "ok", value: { status: "created", runId: command.runId } };
+        return { status: "created", runId: command.runId };
       },
     };
     const readStore: ResearchRunReadStore = {
@@ -333,7 +334,7 @@ describe("replay", () => {
       transition: async () => {
         throw new Error("not under test");
       },
-      replay: async () => ({ kind: "evidence-not-available" }),
+      replay: async () => { throw new ResearchRunEvidenceNotAvailableError("EVIDENCE_NOT_AVAILABLE"); },
     };
     const readStore: ResearchRunReadStore = {
       list: async () => {

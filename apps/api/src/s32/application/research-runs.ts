@@ -28,6 +28,16 @@ import {
  */
 
 export class ResearchRunInvalidInputError extends Error {}
+export class ResearchRunScopeNotFoundError extends Error {}
+export class ResearchRunNotFoundError extends Error {}
+export class ProjectReadOnlyForResearchRunError extends Error {}
+export class ResearchIssueReadOnlyForResearchRunError extends Error {}
+export class ResearchRunEvidenceNotAvailableError extends Error {}
+export class ResearchRunAlreadyTerminalError extends Error {}
+export class ResearchRunReplayInvalidError extends Error {}
+export class ResearchRunIdempotencyConflictError extends Error {}
+export class ResearchRunIntegrityError extends Error {}
+export class ResearchRunStoreUnavailableError extends Error {}
 
 export interface ResearchRunStartCommand {
   projectId: string;
@@ -49,6 +59,8 @@ export interface ResearchRunTransitionCommand {
   runId: string;
   status: ResearchRunStatus;
   output: ResearchRunOutput | null;
+  idempotencyKey: string;
+  requestHash: string;
 }
 
 export interface ResearchRunReplayCommand {
@@ -82,17 +94,6 @@ export type ResearchRunCommandResult =
   | { status: "created"; runId: string }
   | { status: "replayed"; runId: string };
 
-export type ResearchRunStartLookup =
-  | { kind: "scope-missing" }
-  | { kind: "evidence-not-available" }
-  | { kind: "ok"; value: ResearchRunCommandResult };
-
-export type ResearchRunGetLookup =
-  | { kind: "scope-missing" }
-  | { kind: "not-visible" }
-  | { kind: "not-found" }
-  | { kind: "ok"; value: ResearchRunRecord };
-
 export interface ResearchRunListCommand {
   projectId: string;
   issueId: string;
@@ -105,20 +106,26 @@ export type ResearchRunListLookup =
   | { kind: "ok"; value: { runs: ResearchRunRecord[]; nextCursor: string | null } };
 
 /**
- * Command store surface for Task 2. Transitions receive the CURRENT status
- * plus the validated domain transition, so the store only enforces
- * persistence-level invariants (optimistic concurrency, idempotency).
+ * Command store surface for Task 2. All failure modes throw typed errors
+ * (scope/read-only/not-found/evidence/terminal/replay/idempotency/integrity/
+ * unavailable); only success returns a command result.
  */
 export interface ResearchRunCommandStore {
-  start(command: ResearchRunStartCommand): Promise<ResearchRunStartLookup>;
+  start(command: ResearchRunStartCommand): Promise<ResearchRunCommandResult>;
   transition(command: ResearchRunTransitionCommand, from: ResearchRunStatus): Promise<ResearchRunCommandResult>;
-  replay(command: ResearchRunReplayCommand): Promise<ResearchRunStartLookup>;
+  replay(command: ResearchRunReplayCommand): Promise<ResearchRunCommandResult>;
 }
 
 export interface ResearchRunReadStore {
   list(command: ResearchRunListCommand): Promise<ResearchRunListLookup>;
   get(command: { projectId: string; issueId: string; runId: string }): Promise<ResearchRunGetLookup>;
 }
+
+export type ResearchRunGetLookup =
+  | { kind: "scope-missing" }
+  | { kind: "not-visible" }
+  | { kind: "not-found" }
+  | { kind: "ok"; value: ResearchRunRecord };
 
 const UUID = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
 
@@ -197,9 +204,7 @@ export function createResearchRunsService(
         environment,
         replayOf,
       });
-      if (result.kind === "scope-missing") throw new ResearchRunInvalidInputError("PROJECT_OR_ISSUE_NOT_FOUND");
-      if (result.kind === "evidence-not-available") throw new ResearchRunInvalidInputError("EVIDENCE_NOT_AVAILABLE");
-      return result.value;
+      return result;
     },
 
     /** RUNNING → SUCCEEDED (output required) | FAILED/CANCELLED (output nullable). */
@@ -286,9 +291,7 @@ export function createResearchRunsService(
         environment,
         replayOf: priorRunId,
       });
-      if (result.kind === "scope-missing") throw new ResearchRunInvalidInputError("PROJECT_OR_ISSUE_NOT_FOUND");
-      if (result.kind === "evidence-not-available") throw new ResearchRunInvalidInputError("EVIDENCE_NOT_AVAILABLE");
-      return result.value;
+      return result;
     },
 
     async list(
@@ -329,16 +332,25 @@ export function createResearchRunsService(
     issueInput: unknown,
     runInput: unknown,
     outputInput: unknown,
+    idempotencyKeyInput?: unknown,
   ): Promise<ResearchRunCommandResult> {
     const projectId = readProjectId(projectInput).toLowerCase();
     const issueId = readResearchIssueId(issueInput);
     const runId = readResearchRunId(runInput);
+    const idempotencyKey = readIdempotencyKey(idempotencyKeyInput ?? randomUUID());
     const output = readOptionalOutput(outputInput);
     // Domain lifecycle gate throws InvalidResearchRunTransitionError for
     // invalid output shape relative to target status (e.g. SUCCEEDED + null).
     validateResearchRunTransition("RUNNING", to, output);
+    const requestHash = sha256ResearchRunCanonical({
+      kind: `research-run/${to.toLowerCase()}`,
+      projectId,
+      issueId,
+      runId,
+      output,
+    });
     return commandStore.transition(
-      { projectId, issueId, runId, status: to, output },
+      { projectId, issueId, runId, status: to, output, idempotencyKey, requestHash },
       "RUNNING",
     );
   }
