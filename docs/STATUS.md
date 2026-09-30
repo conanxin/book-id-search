@@ -1,5 +1,21 @@
 # BOOK-ID-SEARCH status
 
+## 2026-09-30 — PR #52 WeRead logout production closeout
+
+- task_id: `S32_M3A_PR52_PRODUCTION_CLOSEOUT_R1`.
+- PR: https://github.com/conanxin/book-id-search/pull/52
+- **Production API source:** `c3766768c21f1e2625adccda64436aa1d9a5ae4f` (PR #51 merge commit).
+- **Production Web source:** `747894145424d553804959402fdc159f2f44206a` (PR #52 merge commit).
+- Google auth remains production PASS: real owner login 200, session restore authenticated, logout 204, then session returns unauthenticated.
+- PR #52 closed the last post-closeout UX gap: authenticated `/weread` now mounts the shared `GoogleLoginPanel`, so the WeRead surface exposes the same unified logout control as Research.
+- WeRead post-rollout smoke PASS: private data panel rendered, logout control visible, logout cleared private state and restored the login button.
+- Research auth regression PASS after the Web-only rollout; authenticated Research session remained valid and ProjectsPage behavior was unchanged.
+- Public smoke PASS; API unchanged; PostgreSQL, Meilisearch, Caddy, Google-verification SSH egress tunnel and DB/schema were unchanged.
+- `M3A_AUTH_GATE1=TERMINAL_PASS`; `PR52_PRODUCTION=PASS`; `WEREAD_LOGOUT=PASS`; `RESEARCH_AUTH_REGRESSION=PASS`.
+- Gate 1 remains closed. ResearchRun writes / Dossier UI are still **NOT STARTED**.
+- **Next development gate:** `S32_M3A_GATE2_RESEARCHRUN_BACKEND`.
+
+
 ## 2026-09-30 — M3-A Auth Gate 1 production terminal PASS
 
 - task_id: `S32_M3A_AUTH_GATE1_PRODUCTION_CLOSEOUT_R1`.
