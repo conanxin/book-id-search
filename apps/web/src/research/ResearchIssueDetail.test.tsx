@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import {
   getResearchIssue,
+  getResearchRun,
   listCandidateClaims,
   listIssueResolutionEvidenceBases,
   listIssueResolutions,
@@ -26,6 +27,7 @@ function seedSession(status: "authenticated" | "unauthenticated" = "authenticate
 vi.mock("./api", async (load) => ({
   ...(await load<typeof import("./api")>()),
   getResearchIssue: vi.fn(),
+  getResearchRun: vi.fn(),
   listCandidateClaims: vi.fn(),
   listIssueResolutionEvidenceBases: vi.fn(),
   listIssueResolutions: vi.fn(),
@@ -38,6 +40,7 @@ const issue = { id: issueId, projectId, title: "刘祥店迁出时间", question
 
 beforeEach(() => { seedSession();
   vi.mocked(getResearchIssue).mockReset().mockResolvedValue({ project, issue });
+  vi.mocked(getResearchRun).mockReset();
   vi.mocked(listCandidateClaims).mockReset().mockResolvedValue({ claims: [] });
   vi.mocked(listIssueResolutionEvidenceBases).mockReset().mockResolvedValue({
     issueId,
@@ -147,12 +150,13 @@ describe("Research Issue detail — ResearchRun history integration (Gate 3 Task
     await waitFor(() => expect(listResearchRuns).toHaveBeenCalledTimes(2));
   });
 
-  it("renders no start/complete/fail/cancel/replay action in Task 2", async () => {
+  it("renders no start/complete/fail/cancel/replay action and never fetches run detail in Task 2", async () => {
     vi.mocked(listResearchRuns).mockResolvedValue({ runs: [], nextCursor: null });
     render(<MemoryRouter><ResearchIssueDetail projectId={projectId} issueId={issueId} /></MemoryRouter>);
     expect(await screen.findByRole("heading", { name: "研究轮次" })).toBeTruthy();
     for (const banned of ["开始研究轮次", "开始新的研究轮次", "完成轮次", "标记失败", "取消轮次", "重放轮次", "查看详情"]) {
       expect(screen.queryByRole("button", { name: banned })).toBeNull();
     }
+    expect(getResearchRun).not.toHaveBeenCalled();
   });
 });
