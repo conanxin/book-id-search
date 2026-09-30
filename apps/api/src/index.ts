@@ -64,6 +64,7 @@ import {
 } from "./weread/private-annual-review.js";
 import { createS32Router } from "./s32/register.js";
 import { createIssueResolutionBodyParser } from "./s32/routes/issue-resolution-routes.js";
+import { createResearchRunBodyParser } from "./s32/routes/research-run-routes.js";
 import { readS32Config } from "./s32/config.js";
 import { createProjectItemNoteBodyParser } from "./s32/routes/project-item-note-routes.js";
 import { readGoogleSessionAuthConfig } from "./auth/config.js";
@@ -142,6 +143,7 @@ const wereadRequestAuthorizer = createWereadRequestAuthorizer(googleAuthConfig);
 app.use("/api/auth", createAuthRouter({ config: googleAuthConfig }));
 app.use("/api/private/s32/projects/:projectId/items/:bindingId/note", createProjectItemNoteBodyParser(s32Config, s32RequestAuthorizer));
 app.use("/api/private/s32/projects", createIssueResolutionBodyParser(s32Config, s32RequestAuthorizer));
+app.use("/api/private/s32/projects", createResearchRunBodyParser(s32Config, s32RequestAuthorizer));
 app.use(express.json({ limit: "256kb" }));
 
 app.use(

@@ -23,6 +23,7 @@ const MIGRATED_ROUTE_FILES = [
   "project-routes.ts",
   "research-issue-routes.ts",
   "research-membership-route.ts",
+  "research-run-routes.ts",
 ] as const;
 
 function source(name: string): string {
@@ -30,8 +31,8 @@ function source(name: string): string {
 }
 
 describe("S32 session-auth migration completeness", () => {
-  it("covers exactly the 11 known route modules", () => {
-    expect(MIGRATED_ROUTE_FILES).toHaveLength(11);
+  it("covers exactly the 12 known route modules", () => {
+    expect(MIGRATED_ROUTE_FILES).toHaveLength(12);
   });
 
   for (const file of MIGRATED_ROUTE_FILES) {
@@ -58,10 +59,10 @@ describe("S32 session-auth migration completeness", () => {
 
   it("register.ts injects the same requestAuthorizer into all factories", () => {
     const reg = readFileSync(join(ROUTES_DIR, "..", "register.ts"), "utf8");
-    // 10 router.use factory calls + 1 deps-object handler = 11 injections.
+    // 11 router.use factory calls + 1 deps-object handler = 12 injections.
     const routerInjections = reg.match(/, requestAuthorizer\)/g) ?? [];
     const depsInjection = reg.match(/\{ config, command, requestAuthorizer \}/g) ?? [];
-    expect(routerInjections.length).toBe(10);
+    expect(routerInjections.length).toBe(11);
     expect(depsInjection.length).toBe(1);
     // Authorizer comes from deps (production wiring) and is reused everywhere.
     expect(reg).toContain("const requestAuthorizer = deps.requestAuthorizer;");

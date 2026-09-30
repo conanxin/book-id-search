@@ -5,10 +5,14 @@ import type { AddressInfo } from "node:net";
 import type { S32Config } from "../config.js";
 import { createProjectRouter } from "./project-routes.js";
 import { createIssueResolutionBodyParser } from "./issue-resolution-routes.js";
+import { createResearchRunBodyParser } from "./research-run-routes.js";
 import { createProjectItemNoteBodyParser } from "./project-item-note-routes.js";
 import { createS32RequestAuthorizer } from "./private-auth.js";
 import { readGoogleSessionAuthConfig } from "../../auth/config.js";
 import { issueWebSession } from "../../auth/web-session.js";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { ProjectsService } from "../application/projects.js";
 import type { Project } from "../domain/project.js";
 
@@ -149,6 +153,7 @@ describe("Task 5 pre-body parser gates (auth before body)", () => {
     // path-scoped mounts like production index.ts
     app.use("/api/private/s32/projects/:projectId/items/:bindingId/note", createProjectItemNoteBodyParser(s32, authorizer));
     app.use("/api/private/s32/projects", createIssueResolutionBodyParser(s32, authorizer));
+    app.use("/api/private/s32/projects", createResearchRunBodyParser(s32, authorizer));
     // downstream handler that would only see parsed bodies
     app.use((req, res) => { res.status(200).json({ reached: true, body: req.body ?? null }); });
     return app;
@@ -229,5 +234,66 @@ describe("Task 5 pre-body parser gates (auth before body)", () => {
     expect(malformed.status).toBe(400);
     const body = await malformed.json();
     expect(body.error.code).toBe("NOTE_INVALID_INPUT");
+  });
+});
+
+describe("ResearchRun parser mount proof (index.ts ordering)", () => {
+  it("createResearchRunBodyParser is imported and mounted before the global express.json", () => {
+    const indexSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "..", "..", "index.ts"),
+      "utf8",
+    );
+    const parserMount = indexSource.indexOf('createResearchRunBodyParser(s32Config, s32RequestAuthorizer)');
+    const globalJson = indexSource.indexOf('app.use(express.json({ limit: "256kb" }))');
+    expect(parserMount).toBeGreaterThan(-1);
+    expect(globalJson).toBeGreaterThan(parserMount);
+    expect(indexSource).toContain('import { createResearchRunBodyParser } from "./s32/routes/research-run-routes.js"');
+  });
+
+  function runApp(): express.Express {
+    const app = express();
+    const s32: S32Config = { enabled: true, databaseUrl: "postgresql://x", privateToken: "t" };
+    const googleConfig = readGoogleSessionAuthConfig(process.env);
+    const authorizer = createS32RequestAuthorizer(s32, googleConfig);
+    app.use("/api/private/s32/projects", createResearchRunBodyParser(s32, authorizer));
+    app.use(express.json({ limit: "256kb" }));
+    app.use((req, res) => { res.status(200).json({ reached: true, body: req.body ?? null }); });
+    return app;
+  }
+
+  it("research-run POST paths: unauthenticated malformed JSON is answered by auth, not the JSON parser", async () => {
+    const app = runApp();
+    const server = app.listen(0, "127.0.0.1");
+    await new Promise<void>(resolve => server.once("listening", resolve));
+    const port = (server.address() as AddressInfo).port;
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/api/private/s32/projects/p1/issues/i1/runs`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{not-json",
+      });
+      expect(res.status).toBe(401);
+      const body = await res.json();
+      expect(body.error?.code).toBeUndefined();
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(e => e ? reject(e) : resolve()));
+    }
+  });
+
+  it("research-run transition POST paths: same auth-first guarantee", async () => {
+    const app = runApp();
+    const server = app.listen(0, "127.0.0.1");
+    await new Promise<void>(resolve => server.once("listening", resolve));
+    const port = (server.address() as AddressInfo).port;
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/api/private/s32/projects/p1/issues/i1/runs/r1/complete`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{not-json",
+      });
+      expect(res.status).toBe(401);
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(e => e ? reject(e) : resolve()));
+    }
   });
 });

@@ -219,7 +219,7 @@ describe("lifecycle application: complete / fail / cancel", () => {
   it("complete requires output and forwards SUCCEEDED transition", async () => {
     const { seen, service } = makeTransitionStore();
     const runId = "66666666-6666-4666-8666-666666666666";
-    const result = await service.complete(PROJECT_ID, ISSUE_ID, runId, OUTPUT);
+    const result = await service.complete(PROJECT_ID, ISSUE_ID, runId, IDEMPOTENCY_KEY, { output: OUTPUT });
     expect(result.runId).toBe(runId);
     expect(seen[0].command.status).toBe("SUCCEEDED");
     expect(seen[0].command.output?.summary).toBe("完成。");
@@ -228,7 +228,7 @@ describe("lifecycle application: complete / fail / cancel", () => {
 
   it("complete rejects null output (SUCCEEDED requires output)", async () => {
     const { service } = makeTransitionStore();
-    await service.complete(PROJECT_ID, ISSUE_ID, "66666666-6666-4666-8666-666666666666", null).then(
+    await service.complete(PROJECT_ID, ISSUE_ID, "66666666-6666-4666-8666-666666666666", IDEMPOTENCY_KEY, { output: null }).then(
       () => {
         throw new Error("expected rejection");
       },
@@ -241,8 +241,8 @@ describe("lifecycle application: complete / fail / cancel", () => {
 
   it("fail and cancel allow null output or safe output", async () => {
     const { seen, service } = makeTransitionStore();
-    await service.fail(PROJECT_ID, ISSUE_ID, "66666666-6666-4666-8666-666666666666", null);
-    await service.cancel(PROJECT_ID, ISSUE_ID, "77777777-7777-4777-8777-777777777777", OUTPUT);
+    await service.fail(PROJECT_ID, ISSUE_ID, "66666666-6666-4666-8666-666666666666", IDEMPOTENCY_KEY, { output: null });
+    await service.cancel(PROJECT_ID, ISSUE_ID, "77777777-7777-4777-8777-777777777777", IDEMPOTENCY_KEY, { output: OUTPUT });
     expect(seen.map((entry) => entry.command.status)).toEqual(["FAILED", "CANCELLED"]);
     expect(seen[0].command.output).toBeNull();
     expect(seen[1].command.output?.version).toBe(1);

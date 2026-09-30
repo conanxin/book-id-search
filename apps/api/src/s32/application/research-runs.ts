@@ -291,31 +291,35 @@ export function createResearchRunsService(
     },
 
     /** RUNNING → SUCCEEDED (output required) | FAILED/CANCELLED (output nullable). */
+    /** Transition body: strict exact key set {output}; unknown/missing keys reject. */
     async complete(
       projectInput: unknown,
       issueInput: unknown,
       runInput: unknown,
-      outputInput: unknown,
+      idempotencyKeyInput: unknown,
+      bodyInput: unknown,
     ): Promise<ResearchRunCommandResult> {
-      return transitionTo("SUCCEEDED", projectInput, issueInput, runInput, outputInput);
+      return transitionTo("SUCCEEDED", projectInput, issueInput, runInput, idempotencyKeyInput, bodyInput);
     },
 
     async fail(
       projectInput: unknown,
       issueInput: unknown,
       runInput: unknown,
-      outputInput: unknown,
+      idempotencyKeyInput: unknown,
+      bodyInput: unknown,
     ): Promise<ResearchRunCommandResult> {
-      return transitionTo("FAILED", projectInput, issueInput, runInput, outputInput);
+      return transitionTo("FAILED", projectInput, issueInput, runInput, idempotencyKeyInput, bodyInput);
     },
 
     async cancel(
       projectInput: unknown,
       issueInput: unknown,
       runInput: unknown,
-      outputInput: unknown,
+      idempotencyKeyInput: unknown,
+      bodyInput: unknown,
     ): Promise<ResearchRunCommandResult> {
-      return transitionTo("CANCELLED", projectInput, issueInput, runInput, outputInput);
+      return transitionTo("CANCELLED", projectInput, issueInput, runInput, idempotencyKeyInput, bodyInput);
     },
 
     /**
@@ -412,14 +416,22 @@ export function createResearchRunsService(
     projectInput: unknown,
     issueInput: unknown,
     runInput: unknown,
-    outputInput: unknown,
-    idempotencyKeyInput?: unknown,
+    idempotencyKeyInput: unknown,
+    bodyInput: unknown,
   ): Promise<ResearchRunCommandResult> {
     const projectId = readProjectId(projectInput).toLowerCase();
     const issueId = readResearchIssueId(issueInput);
     const runId = readResearchRunId(runInput);
-    const idempotencyKey = readIdempotencyKey(idempotencyKeyInput ?? randomUUID());
-    const output = readOptionalOutput(outputInput);
+    const idempotencyKey = readIdempotencyKey(idempotencyKeyInput);
+    if (bodyInput === null || typeof bodyInput !== "object" || Array.isArray(bodyInput)) {
+      throw new ResearchRunInvalidInputError("transition 请求体必须是 JSON 对象。");
+    }
+    const record = bodyInput as Record<string, unknown>;
+    const keys = Object.keys(record);
+    if (keys.length !== 1 || keys[0] !== "output") {
+      throw new ResearchRunInvalidInputError("transition 请求体字段必须恰好为：output。");
+    }
+    const output = readOptionalOutput(record.output);
     // Domain lifecycle gate throws InvalidResearchRunTransitionError for
     // invalid output shape relative to target status (e.g. SUCCEEDED + null).
     validateResearchRunTransition("RUNNING", to, output);
@@ -438,3 +450,5 @@ export function createResearchRunsService(
 }
 
 export { InvalidResearchRunInputError, InvalidResearchRunTransitionError };
+
+export type ResearchRunsService = ReturnType<typeof createResearchRunsService>;
