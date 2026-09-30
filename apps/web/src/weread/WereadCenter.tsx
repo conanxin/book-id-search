@@ -325,6 +325,7 @@ export default function WereadCenter() {
                 <RefreshCw size={14} />
                 刷新数据
               </button>
+              <GoogleLoginPanel className="weread-google-login" />
             </div>
           </div>
           {(status === "error" || status === "disabled") && error ? (
