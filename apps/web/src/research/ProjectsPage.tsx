@@ -7,6 +7,7 @@ import { useWebAuthSession } from "../auth/useWebAuthSession";
 import { GoogleLoginPanel } from "../auth/GoogleLoginPanel";
 import { ResearchIssuesSection, useProjectResearchIssues } from "./ResearchIssues";
 import { ResearchIssueDetail } from "./ResearchIssueDetail";
+import { ResearchDossierPage } from "./ResearchDossierPage";
 import "./research.css";
 
 export const researchEnabled = import.meta.env.VITE_S32_ENABLED === "true";
@@ -114,14 +115,14 @@ export function ProjectWorkspace({ projectId }: { projectId?: string }) {
   </div>;
 }
 
-export default function ProjectsPage() {
+export default function ProjectsPage({ dossier = false }: { dossier?: boolean }) {
   const { projectId, issueId } = useParams();
   const session = useWebAuthSession();
   useEffect(() => {
     const previousTitle = document.title;
-    document.title = issueId ? "研究问题 · BOOK-ID-SEARCH" : projectId ? "项目详情 · BOOK-ID-SEARCH" : "我的研究项目 · BOOK-ID-SEARCH";
+    document.title = dossier ? "研究档案 · BOOK-ID-SEARCH" : issueId ? "研究问题 · BOOK-ID-SEARCH" : projectId ? "项目详情 · BOOK-ID-SEARCH" : "我的研究项目 · BOOK-ID-SEARCH";
     return () => { document.title = previousTitle; };
-  }, [projectId, issueId]);
+  }, [projectId, issueId, dossier]);
   return <main className="page research-page">
     <nav className="research-nav" aria-label="研究导航"><Link to="/">查书</Link><Link to="/weread">微信读书</Link><Link to="/research/projects" aria-current={projectId ? undefined : "page"}>我的研究项目</Link></nav>
     {projectId && !issueId ? <Link className="research-back" to="/research/projects"><ArrowLeft size={16} />返回项目列表</Link> : !projectId ? <header className="research-header"><div className="brand-row"><FolderOpen size={28} /><h1>我的研究项目</h1></div><p>为想深入了解的主题，留下一处起点。</p></header> : null}
@@ -130,7 +131,9 @@ export default function ProjectsPage() {
         <p className="research-muted">私人研究空间 · 使用 Google 账号登录，与微信读书凭据独立。</p>
         <GoogleLoginPanel className="research-google-login" />
       </section>
-      {session.status === "authenticated" && projectId && issueId ? <ResearchIssueDetail key={`${projectId}:${issueId}`} projectId={projectId} issueId={issueId} /> : session.status === "authenticated" ? <ProjectWorkspace key={`${projectId ?? "list"}`} projectId={projectId} /> : null}
+      {session.status === "authenticated" && projectId && issueId ? (dossier
+        ? <ResearchDossierPage key={"dossier:" + projectId + ":" + issueId} projectId={projectId} issueId={issueId} />
+        : <ResearchIssueDetail key={`${projectId}:${issueId}`} projectId={projectId} issueId={issueId} />) : session.status === "authenticated" ? <ProjectWorkspace key={`${projectId ?? "list"}`} projectId={projectId} /> : null}
     </>}
   </main>;
 }
