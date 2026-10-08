@@ -33,3 +33,33 @@ jobs:
         run: pnpm --filter @book-id-search/web build
       - name: Diff check
         run: git diff --check HEAD^ HEAD
+
+  browser-pg16:
+    name: Disposable PG16 + real Chromium Dossier
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+      - name: Install workspace
+        run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Real PostgreSQL16 and real-browser Dossier acceptance
+        run: pnpm exec tsx scripts/s32-m3a-gate4-browser-check.ts
+      - name: Upload browser acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate4-dossier-browser
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
