@@ -157,7 +157,7 @@ export function ResearchDossierPage({ projectId, issueId }: { projectId: string;
         {selectedAssessment ? <div className="dossier-detail">
           <h4>评价详情</h4>
           <p>{selectedAssessment.assessment.reasoning || "未记录完整理由"}</p>
-          <p className="research-muted">已授权证据清单 {selectedAssessment.evidenceManifest.itemCount} 项 · {selectedAssessment.evidenceManifest.manifestSha256}</p>
+          <p className="research-muted">已授权证据清单 {selectedAssessment.evidenceManifest.items.length} 项 · {selectedAssessment.evidenceManifest.manifestSha256}</p>
         </div> : null}
       </div> : null}
     </Panel>
