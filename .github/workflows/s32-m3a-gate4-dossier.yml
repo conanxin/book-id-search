@@ -29,6 +29,12 @@ jobs:
             apps/web/src/research/dossier-reader.test.ts \
             apps/web/src/research/dossier-reader.integration.test.ts \
             apps/web/src/research/dossier-page.test.tsx
+      - name: Full Research scoped regression
+        run: pnpm exec vitest run apps/web/src/research
+      - name: S32 API scoped regression
+        run: pnpm exec vitest run apps/api/src/s32
+      - name: API build
+        run: pnpm --filter @book-id-search/api build
       - name: Web build
         run: pnpm --filter @book-id-search/web build
       - name: Diff check
