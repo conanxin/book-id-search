@@ -26,7 +26,7 @@ const OWNER_SUB = "gate3-browser-owner-sub";
 const API_PORT = 3001;
 const WEB_PORT = 5173;
 
-let container = CONTAINER;
+let container: string | null = null; // set only after a successful docker run
 let apiProc: ChildProcess | null = null;
 let webProc: ChildProcess | null = null;
 
@@ -51,11 +51,24 @@ async function waitFor(label: string, check: () => Promise<boolean>, attempts = 
 }
 
 async function main(): Promise<void> {
-  // ---- 0. Port ownership: fail closed if unrelated processes own our ports.
+  // ---- 0. Port ownership: fail closed if ANY process is already listening on
+  // our ports. A plain HTTP probe only sees successful roots; an unrelated
+  // listener returning 404/401/500 would look "free". Probe the TCP layer
+  // instead: a completed connect() means the port is owned — refuse without
+  // touching that process.
+  const net = await import("node:net");
   for (const port of [API_PORT, WEB_PORT]) {
-    const probe = spawnSync("curl", ["-fsS", `http://127.0.0.1:${port}/`, "-o", "/dev/null"], { encoding: "utf8", timeout: 4000 });
-    if (probe.status === 0) {
-      throw new Error(`Port ${port} already serving an unrelated process; refusing to start (fail closed).`);
+    const owned = await new Promise<boolean>(resolveProbe => {
+      const socket = new net.Socket();
+      const done = (ownedPort: boolean) => { socket.destroy(); resolveProbe(ownedPort); };
+      socket.setTimeout(1500);
+      socket.once("connect", () => done(true));
+      socket.once("timeout", () => done(false));
+      socket.once("error", () => done(false));
+      socket.connect(port, "127.0.0.1");
+    });
+    if (owned) {
+      throw new Error(`Port ${port} is already owned by an existing listener; refusing to start (fail closed, TCP probe).`);
     }
   }
 
@@ -72,6 +85,7 @@ async function main(): Promise<void> {
     "-e", `POSTGRES_DB=${DB_NAME}`,
     "postgres:16-alpine",
   ]);
+  container = CONTAINER;
   log(`PG16 container ${CONTAINER} started`);
 
   // Readiness = real TCP SQL SELECT 1 (pg_isready then real query).
@@ -79,7 +93,7 @@ async function main(): Promise<void> {
     const r = spawnSync("docker", ["--host", DOCKER_HOST, "exec", CONTAINER, "pg_isready", "-h", "127.0.0.1", "-U", DB_USER, "-d", DB_NAME], { encoding: "utf8", timeout: 8000 });
     return r.status === 0;
   });
-  const one = docker(["exec", "-i", CONTAINER, "psql", "-X", "-U", DB_USER, "-d", DB_NAME, "-Atc", "SELECT 1"]);
+  const one = docker(["exec", "-i", CONTAINER, "psql", "-X", "-h", "127.0.0.1", "-U", DB_USER, "-d", DB_NAME, "-Atc", "SELECT 1"]);
   if (one !== "1") throw new Error(`Real SQL readiness failed: ${JSON.stringify(one)}`);
   log("PG16 real TCP SELECT 1 = 1");
 
@@ -93,11 +107,11 @@ async function main(): Promise<void> {
   const migrationSqls = readS32MigrationChain(root);
   const migrationFiles = ["db/migrations/001_s32_core_schema.sql", "db/migrations/002_s32_m2e_issue_resolution.sql"];
   migrationSqls.forEach((sql, i) => {
-    docker(["exec", "-i", CONTAINER, "psql", "-X", "-U", DB_USER, "-d", DB_NAME, "-v", "ON_ERROR_STOP=1", "-f", "-"], sql);
+    docker(["exec", "-i", CONTAINER, "psql", "-X", "-h", "127.0.0.1", "-U", DB_USER, "-d", DB_NAME, "-v", "ON_ERROR_STOP=1", "-f", "-"], sql);
     log(`migration applied: ${migrationFiles[i]}`);
   });
   for (const fixture of ["scripts/fixtures/s32-m3a-gate2-researchrun.sql", "scripts/fixtures/s32-m3a-gate3-browser.sql"]) {
-    docker(["exec", "-i", CONTAINER, "psql", "-X", "-U", DB_USER, "-d", DB_NAME, "-v", "ON_ERROR_STOP=1", "-f", "-"], readFileSync(resolve(root, fixture), "utf8"));
+    docker(["exec", "-i", CONTAINER, "psql", "-X", "-h", "127.0.0.1", "-U", DB_USER, "-d", DB_NAME, "-v", "ON_ERROR_STOP=1", "-f", "-"], readFileSync(resolve(root, fixture), "utf8"));
     log(`fixture applied: ${fixture}`);
   }
 
@@ -186,25 +200,63 @@ async function main(): Promise<void> {
 main().catch(error => {
   console.error(error instanceof Error ? error.message : "gate3 browser orchestrator failed");
   process.exitCode = 1;
-}).finally(() => {
+}).finally(async () => {
+  // ---- Teardown: bounded, verified, fail-closed.
   let teardownOk = true;
+  // 1. Stop our own detached process groups (API + Web) without touching
+  //    unrelated services.
+  const ownedPids: number[] = [];
   for (const proc of [apiProc, webProc]) {
     if (proc?.pid) {
+      ownedPids.push(proc.pid);
       try { process.kill(-proc.pid, "SIGTERM"); } catch { try { proc.kill("SIGTERM"); } catch { /* already gone */ } }
     }
   }
-  setTimeout(() => {
-    if (container) {
-      try {
-        const owner = docker(["inspect", "--format", `{{ index .Config.Labels "book-id-search.s32-m3a-gate3-browser" }}`, container]);
-        if (owner !== container) throw new Error("ownership mismatch");
-        docker(["rm", "--force", container]);
-        log("DISPOSABLE_PG_REMOVED=YES");
-      } catch {
-        teardownOk = false;
-        log("DISPOSABLE_PG_REMOVED=NO");
-      }
+  // 2. Bounded drain: wait until both process groups are gone (max 10s).
+  const drained = await new Promise<boolean>(resolve => {
+    const deadline = Date.now() + 10_000;
+    const tick = () => {
+      const alive = ownedPids.filter(pid => { try { process.kill(-pid, 0); return true; } catch { return false; } });
+      if (alive.length === 0) return resolve(true);
+      if (Date.now() > deadline) return resolve(false);
+      setTimeout(tick, 250);
+    };
+    setTimeout(tick, 250);
+  });
+  if (!drained) {
+    // Escalate once to SIGKILL on our own groups only, then re-verify.
+    for (const pid of ownedPids) { try { process.kill(-pid, "SIGKILL"); } catch { /* already gone */ } }
+    await new Promise(r => setTimeout(r, 500));
+    const stillAlive = ownedPids.filter(pid => { try { process.kill(-pid, 0); return true; } catch { return false; } });
+    if (stillAlive.length > 0) { teardownOk = false; log(`TEST_SERVERS_STOPPED=NO (pids ${stillAlive.join(",")})`); }
+  }
+  if (teardownOk) log("TEST_SERVERS_STOPPED=YES");
+  // 3. Verify our API/Web ports are actually released (bounded).
+  const net = await import("node:net");
+  for (const port of [API_PORT, WEB_PORT]) {
+    const stillOwned = await new Promise<boolean>(resolveProbe => {
+      const socket = new net.Socket();
+      const done = (ownedPort: boolean) => { socket.destroy(); resolveProbe(ownedPort); };
+      socket.setTimeout(1500);
+      socket.once("connect", () => done(true));
+      socket.once("timeout", () => done(false));
+      socket.once("error", () => done(false));
+      socket.connect(port, "127.0.0.1");
+    });
+    if (stillOwned) { teardownOk = false; log(`PORT_${port}_RELEASED=NO`); }
+  }
+  // 4. Remove the owned disposable PG container (label-verified), only if we
+  //    actually started one.
+  if (container) {
+    try {
+      const owner = docker(["inspect", "--format", `{{ index .Config.Labels "book-id-search.s32-m3a-gate3-browser" }}`, container]);
+      if (owner !== container) throw new Error("ownership mismatch");
+      docker(["rm", "--force", container]);
+      log("DISPOSABLE_PG_REMOVED=YES");
+    } catch {
+      teardownOk = false;
+      log("DISPOSABLE_PG_REMOVED=NO");
     }
-    if (!teardownOk) process.exitCode = 1;
-  }, 1500);
+  }
+  if (!teardownOk) process.exitCode = 1;
 });
