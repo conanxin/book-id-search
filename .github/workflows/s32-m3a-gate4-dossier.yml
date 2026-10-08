@@ -25,7 +25,8 @@ jobs:
           pnpm exec vitest run \
             apps/web/src/research/dossier-model.test.ts \
             apps/web/src/research/dossier-reader.test.ts \
-            apps/web/src/research/dossier-reader.integration.test.ts
+            apps/web/src/research/dossier-reader.integration.test.ts \
+            apps/web/src/research/dossier-page.test.tsx
       - name: Web build
         run: pnpm --filter @book-id-search/web build
       - name: Diff check
