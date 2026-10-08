@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { IssueResolutionType, ResearchRunStatus } from "./api";
 import type { DossierView } from "./dossier-reader";
@@ -31,7 +31,7 @@ function StreamFoot({ noun, coverage, error, onMore }: {
       </button> : null}
   </div>;
 }
-function Panel({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
+function Panel({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return <section id={id} className="research-panel dossier-section" aria-labelledby={id + "-heading"}>
     <h2 id={id + "-heading"}>{title}</h2>{children}
   </section>;
