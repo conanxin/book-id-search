@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { ArrowLeft, FolderOpen, Plus } from "lucide-react";
 import { createProject, getProjectOverview, listProjects, type Project, type ProjectOverview } from "./api";
 import { useWebAuthSession } from "../auth/useWebAuthSession";
+import { getWebAuthAuthGeneration } from "../auth/session";
 import { GoogleLoginPanel } from "../auth/GoogleLoginPanel";
 import { ResearchIssuesSection, useProjectResearchIssues } from "./ResearchIssues";
 import { ResearchIssueDetail } from "./ResearchIssueDetail";
@@ -118,6 +119,7 @@ export function ProjectWorkspace({ projectId }: { projectId?: string }) {
 export default function ProjectsPage({ dossier = false }: { dossier?: boolean }) {
   const { projectId, issueId } = useParams();
   const session = useWebAuthSession();
+  const authGeneration = getWebAuthAuthGeneration();
   useEffect(() => {
     const previousTitle = document.title;
     document.title = dossier ? "研究档案 · BOOK-ID-SEARCH" : issueId ? "研究问题 · BOOK-ID-SEARCH" : projectId ? "项目详情 · BOOK-ID-SEARCH" : "我的研究项目 · BOOK-ID-SEARCH";
@@ -132,7 +134,7 @@ export default function ProjectsPage({ dossier = false }: { dossier?: boolean })
         <GoogleLoginPanel className="research-google-login" />
       </section>
       {session.status === "authenticated" && projectId && issueId ? (dossier
-        ? <ResearchDossierPage key={"dossier:" + projectId + ":" + issueId} projectId={projectId} issueId={issueId} />
+        ? <ResearchDossierPage key={"dossier:" + projectId + ":" + issueId + ":" + authGeneration} projectId={projectId} issueId={issueId} authGeneration={authGeneration} />
         : <ResearchIssueDetail key={`${projectId}:${issueId}`} projectId={projectId} issueId={issueId} />) : session.status === "authenticated" ? <ProjectWorkspace key={`${projectId ?? "list"}`} projectId={projectId} /> : null}
     </>}
   </main>;
