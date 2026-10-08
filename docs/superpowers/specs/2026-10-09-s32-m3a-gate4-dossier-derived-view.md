@@ -8,9 +8,9 @@ Source baseline: `main@42cf1b7b4a10a6edfa53d688012728dded0b3049`
 
 Branch: `feat/s32-m3a-gate4-dossier`
 
-Status: **TASK1_CONTRACT_AUDIT_COMPLETE / REVIEWABLE_WITH_OPEN_DECISION_D01**.
+Status: **TASK1_CONTRACT_FROZEN / D01_A_SELECTED_BY_DESIGN_REVIEW**.
 
-This document freezes the observed read contracts and the proposed composition boundaries. D01, the presentation of chronology with unequal timestamp precision, remains explicitly open for review. It does not claim that a Dossier implementation, tests, a pull request, or a deployment exists.
+This document freezes the observed read contracts and the proposed composition boundaries. The Task 1 design review selects D01-A: separate source-ordered chronology streams with explicit precision and coverage limits. It does not claim that a Dossier implementation, tests, a pull request, or a deployment exists.
 
 ## 0. Authority and result
 
@@ -26,7 +26,7 @@ The source audit uses the exact baseline above. Older design headers, the obsole
 |---|---|
 | `getResearchIssue` has no `currentResolutionId` field. | Read the current pointer and its separately returned current summary from `listIssueResolutions`. |
 | Assessment, Resolution, and Run have different evidence visibility contracts. | Use separate adapters; do not invent a universal unavailable-manifest DTO. |
-| Run summaries expose `startedAtMicros`; Resolution `createdAt` and Run `completedAt` expose only millisecond ISO strings. | Existing APIs cannot support a fully precise cross-stream total event order. D01 must be resolved before Task 2 implements the chronology policy. |
+| Run summaries expose `startedAtMicros`; Resolution `createdAt` and Run `completedAt` expose only millisecond ISO strings. | Existing APIs cannot support a fully precise cross-stream total event order. D01-A preserves source order without asserting that unsupported total order. |
 | Run history is paginated by start time, not completion time. | A first page cannot represent every recently completed Run. |
 | Run evidence items intentionally omit `targetId`, even when available. | Do not reconstruct targets by joining a Run snapshot to another manifest response. |
 | Run `output.produced` references are not independent authorization to read those objects. | Resolve content through the object's own authorized reader; preserve failures. |
@@ -99,7 +99,7 @@ All functions below are private, authenticated Web readers under `/api/private/s
 | Assessments | `listAssessments(P,I,C,{limit,cursor})` and `getAssessment(P,I,C,A)` | Per-Claim pagination, current visibility filtering; no Issue-wide full Assessment-detail endpoint | Use evidence-bases for initial Issue overview, then load selected Claim history/detail on demand. Do not label filtered results as all historical Assessments. |
 | Resolution History | `listIssueResolutions` → `resolutions[]`, `nextCursor` | Server microsecond keyset order; each row has summary fields, `isCurrent`, and availability | Preserve returned order. The first history row does not define Current. |
 | Research Runs | `listResearchRuns(P,I,{limit,cursor})` → `runs[],nextCursor`; `getResearchRun(P,I,U)` → `run,evidenceManifest,ancestors` | List order uses start time. Summary has `startedAtMicros`; detail has richer procedure/output but no root microsecond fields | Preserve status, observed timing, replay relation, and source coverage. Do not make terminal or write controls part of the Dossier. |
-| What Changed | Resolution records plus Run chronology already obtained | Loaded records only; unequal timestamp precision; D01 open | Derive factual record events only. Never infer causal findings or a full change log from a partial page. |
+| What Changed | Resolution records plus Run chronology already obtained | Loaded records only; unequal timestamp precision; D01-A separate streams | Derive factual record events only. Never infer causal findings or a full change log from a partial page. |
 | Sources / Object References | IDs and authorized fields from the readers above; optional current `listEvidenceCandidates(P,I,C)` metadata enrichment | Locator and excerpt fields in existing A/R manifests are null; Run targets are withheld | Display grounded identities/fingerprints. Add a link only for a route/locator actually supported and authorized. |
 
 ### 3.1 Assessment fields
@@ -210,9 +210,18 @@ Free-text `note`, procedure, environment, and output summaries are not a semanti
 
 Keep private data in page memory only. On scope/auth-generation change, cancel all requests and clear the old view before any new scope is displayed. Do not persist Dossier payloads or target details in browser storage.
 
-Within one scope, a freshly observed unavailable response invalidates corresponding previously displayed target details. If readers disagree within a refresh window, keep the narrower disclosure and require a new authorized detail read; never merge into a richer manifest. This is conservative client composition, not a claim of immediate server-push revocation.
+Within one scope, apply a negative authorization observation to every already-loaded representation of the same typed object, including summaries, open details, Current/History copies, and derived references:
 
-No new background synchronization, persistent cache, or source snapshot store is required.
+- Assessment detail 404: hide that Assessment's whole summary and detail, including reasoning excerpt, actor, manifest identity/hash/count, and derived references. Do not leave an old list row visible merely because only its detail was re-read. Refresh its visible history on explicit request; absence from a partial page alone does not prove revocation.
+- Resolution `evidenceBasisAvailable:false` with `evidenceManifest:null`: keep its authorized conclusion/rationale, but invalidate the previous manifest in Current, History, detail, and references for that Resolution. Do not retain a remembered manifest ID/hash/count. Recomputing `isCurrent` alone is insufficient.
+- Run `available:false`: retain its authorized execution record and its four-key compact manifest, and remove prior root `items` wherever that same Run was expanded. List and ancestor projections remain compact even after a later successful detail read.
+- Propagate only the need to invalidate shared target-bearing caches across manifest-related projections; never propagate richer fields into a narrower projection. A separately authorized record may remain readable in its own shape. When the relationship is not known from authorized state, do not guess it from prose or hashes.
+
+Invalidate related in-flight reads at the same time, using a per-object acceptance generation (or a broader page generation) as well as AbortController. An earlier request must not repopulate a summary or manifest after a narrower result has been observed. Only a new authorized read begun after that invalidation can restore content, and only in that reader's permitted projection. Identity/type is part of every cache key; manifest ID/hash alone is not a cache key for a universal richest object.
+
+An explicit whole-page refresh starts a new generation, clears lists/cursors/counts, opened details and derived references, and repeats the initial scope-plus-three-reader plan. Assessment history, the evidence-bases index and all details return to `notRequested` until opened again. If a focus/visibility refresh is later enabled, it must use this same reset and coalesce duplicate triggers. This avoids retaining old filtered Assessment summaries without eager full-history reauthorization.
+
+This is conservative client composition. It does not claim immediate server-push revocation. No background polling, persistent cache, or source snapshot store is required.
 
 ## 6. Pagination, time precision, and coverage
 
@@ -259,7 +268,7 @@ A later page failure retains accepted prior rows and offers retry for that curso
 
 The unpaginated Claims endpoint has no server-side page limit. Render a bounded subset initially if useful, disclose “已显示 X / 已读取 Y”, and never pretend a client display limit is a server cursor.
 
-## 7. What Changed — factual derivation and open decision D01
+## 7. What Changed — factual derivation and decision D01
 
 ### 7.1 Allowed event meanings
 
@@ -286,13 +295,13 @@ A text comparison can be labeled a comparison of two explicitly selected loaded 
 
 Two cross-stream records in the same displayed millisecond have an unresolved actual order. Run-start keys can be precise while adjacent Resolution or terminal-event keys are not. A fixed type/ID tie-breaker is only presentation, not a historical sequence.
 
-**Recommended proposal — D01-A:** Retain the separate authoritative Resolution and Run streams. The What Changed section groups the factual events from loaded records and explicitly leaves same-millisecond cross-stream ordering unresolved. Preserve server order within each source stream. Label source coverage and do not advertise a precise merged event log. Do not create backend work for the first useful read-only dossier.
+**Selected policy — D01-A:** Retain the separate authoritative Resolution and Run streams. The What Changed section groups the factual events from loaded records and explicitly leaves same-millisecond cross-stream ordering unresolved. Preserve server order within each source stream. Label source coverage and do not advertise a precise merged event log. Do not create backend work for the first useful read-only dossier.
 
-If a merged presentation is used after D01-A is accepted, compare only established non-overlapping time bounds; represent a millisecond value as an uncertainty interval, not an invented exact microsecond. Events with overlapping intervals must be visibly grouped without a “before/after” claim. A display tie-breaker must never erase the source-stream order or imply causality.
+For v0.1, render Resolution records in their server history order and Run cards in their server start-time order. A Run termination remains a factual annotation/event within that Run card; do not reorder start-ordered pages into a supposedly complete completion-time feed. Do not create a merged event-order UI in this slice. Any later merged presentation must compare only established non-overlapping time bounds and visibly group overlapping uncertainty intervals, without a before/after or causality claim.
 
 **Alternative — D01-B:** If Gate 4 requires a fully precise merged order, prepare a separately scoped additive read-contract change. At minimum audit/expose Resolution `createdAtMicros` and Run `completedAtMicros` in the actual chronology-bearing DTOs, plus any detail key required by direct reads. Update the existing validators and targeted pagination tests. No Dossier table or database migration follows from this gap. A completion-ordered endpoint is a different requirement and is unnecessary unless the product needs an exhaustive “latest completions” feed.
 
-**Decision status: OPEN_DECISION.** This task documents the gap and recommends D01-A; it does not silently replace #55's precision requirement with an approximate total order. Task 2 must start from a recorded D01 choice. It must not invent missing fields or implement D01-B under a frontend-only task.
+**Decision status: D01-A SELECTED by the Task 1 design review on 2026-10-09.** This is an explicit design ruling, not a claim of new user approval or feature implementation. The existing Issue-scoped read-only goal is met by preserving each source's real order and exposing the precision gap; #55 does not require inventing a total order. D01-B remains a possible separately scoped future change. Task 2 must carry D01-A forward and must not invent missing fields or implement D01-B under a frontend-only task.
 
 ## 8. Sources, citations, and provenance
 
@@ -394,7 +403,7 @@ Use headings and navigation usable on a 390px-wide viewport. Long IDs/hashes wra
 | Claims and visible Assessments | YES, with per-Claim detail/history | Use issue-wide evidence-bases for overview and lazy per-Claim reads |
 | Evidence with revocation-aware disclosure | YES, different per source | Preserve section 5 contracts; no universal manifest DTO |
 | Run lifecycle history and replay ancestry | YES | Read only; no new lifecycle commands |
-| Precise merged microsecond event order | NO | D01 open; recommend honest source streams/ambiguous groups |
+| Precise merged microsecond event order | NO | D01-A selected: separate source streams, no total-order claim |
 | Full “latest completed Runs” coverage from a start-ordered first page | NO | Explicit loaded-record coverage; no such completeness claim |
 | Entire Dossier as one atomic database snapshot | NO | Per-reader read window; no snapshot persistence claim |
 | Produced-object loss represented as per-item unavailable while every Run detail succeeds | NO | Preserve actual 404/500; separate future backend change if needed |
@@ -402,7 +411,7 @@ Use headings and navigation usable on a 390px-wide viewport. Long IDs/hashes wra
 | Historical source content reconstruction from manifest alone | NO | Never call a manifest a saved copy of all source content |
 | Spatial panel and export | NO verified inputs / intentionally deferred | Defer; no new schema |
 
-**No new endpoint is required for the recommended first useful dossier.** The exact chronology requirement remains an explicit review decision. If D01-B is selected, the minimal candidate is extension of existing read fields and validators, not automatic creation of an aggregation endpoint or a new domain model.
+**No new endpoint is required for the selected first useful dossier.** D01-A is the frozen v0.1 chronology policy. A later D01-B proposal would extend existing read fields and validators under its own scope, not automatically create an aggregation endpoint or a new domain model.
 
 ## 11. Implementation handoff
 
@@ -410,7 +419,7 @@ Use headings and navigation usable on a 390px-wide viewport. Long IDs/hashes wra
 
 Proposed task ID: `S32_M3A_GATE4_TASK2_DOSSIER_VIEW_MODEL_AND_TESTS_R1`.
 
-Prerequisites: review this exact document commit, record D01-A or D01-B, and verify that the implementation base includes the same source contracts. This document does not start Task 2.
+Prerequisites: review this exact document commit, carry the selected D01-A policy forward, and verify that the implementation base includes the same source contracts. This document does not start Task 2.
 
 Proposed new files, to confirm at Task 2 start:
 
@@ -421,7 +430,7 @@ Task 2 accepts explicit, already-read source responses and coverage/scope state.
 
 RED→GREEN should prove a real failure mode before implementing each behavior. Do not execute those tests in Task 1, install dependencies just for this document, or broaden into unrelated baseline failures.
 
-Task 2 stops with its source and relevant test evidence. It does not add the UI, create a PR, merge, migrate, or deploy. If D01-B is selected, reconcile its separate backend contract scope before changing API files.
+Task 2 stops with its source and relevant test evidence. It does not add the UI, create a PR, merge, migrate, or deploy. A future D01-B proposal requires a separate backend contract scope before changing API files.
 
 ### Task 3 — UI and navigation
 
@@ -435,7 +444,7 @@ Proposed components:
 - `ResearchIssueDetail.tsx` — add “研究档案” navigation.
 - `research.css` — only needed Dossier wrapping/layout rules.
 
-Reuse existing display components only if their read behavior and controls fit this contract. Existing Run history/detail components include lifecycle integrations; importing them wholesale must not reintroduce write controls.
+Reuse existing display components only if their read behavior and controls fit this contract. Existing Run history/detail components include lifecycle integrations; importing them wholesale must not reintroduce write controls. At this baseline, `writeAllowed=false` is not sufficient: `ResearchRunDetail` allows actions when a pending receipt matches, and `ResearchRunHistory` can render a pending-action retry. Test the Dossier with a pre-existing pending receipt on an active Issue; no domain mutation or receipt replay may occur.
 
 ### Task 4 — real-browser acceptance
 
@@ -462,15 +471,15 @@ These are required future checks, not tests claimed as executed by this document
 | D-07 | Cross-stream same-millisecond events | D01's accepted ambiguity/precision policy; no false before/after assertion |
 | D-08 | Old Run completes after newer Runs started | Loaded-record coverage stays honest; no “all recent changes” claim |
 | D-09 | RUNNING vs terminal; replay ancestry | No terminal event for RUNNING; ancestry is not full Issue history |
-| D-10 | Assessment evidence loses visibility | Row/detail follows filtered/404 contract; no stale reasoning/items restored |
-| D-11 | Resolution has absent or unavailable evidence | Conclusion retained; false/null with no remembered manifest fields |
-| D-12 | Run compact vs root snapshot | Four-key list/ancestor; five-key available root; no targetId reconstruction |
+| D-10 | Loaded Assessment summary followed by detail 404 | Hide the whole same-object row/detail and derived references; an older in-flight success cannot restore reasoning, actor, or manifest fields |
+| D-11 | Resolution History has a manifest, then Current/detail returns false/null | Retain conclusion; invalidate manifest ID/hash/count/items in every same-Resolution copy and ignore older in-flight enrichment |
+| D-12 | Run compact vs root snapshot and later unavailable read | Four-key list/ancestor; five-key available root; unavailable removes old items while retaining execution/compact summary; no targetId reconstruction |
 | D-13 | Produced Assessment has no Claim mapping; mapping is later loaded; target is 404 or 503 | Use only authorized A-to-C mapping, distinguish unresolved/unavailable/error, and never guess or perform eager Claim scans; actual Run detail 500 remains error |
 | D-14 | Historical NoteRevision | Exact old revision remains referenced; never replaced by current revision |
 | D-15 | Cross-Project Issue and foreign detail ID | Neutral 404/scope failure; no payload from another scope |
 | D-16 | Well-shaped wrong requested record ID | Loader rejects identity mismatch even when upstream structural validation passes |
 | D-17 | Malformed success / 500 / 503 / network error | Error, not zero data; unaffected sections stay usable |
-| D-18 | Scope switch during initial, retry, more, or detail read | Every stale result ignored; no previous-Issue data flash |
+| D-18 | Scope switch or whole-page refresh during initial, retry, more, or detail read | Every stale result ignored; reset lists/cursors/counts and optional detail/Assessment reads; no previous-Issue data flash |
 | D-19 | Logout/session loss with in-flight reads | Private subtree cleared immediately; no later response repopulates it |
 | D-20 | Archived Project/Issue | Authorized history readable; no Dossier write controls or mutation calls |
 | D-21 | Missing locator/source metadata | No invented links, source title, page, coordinates, quotation, or file checksum |
@@ -487,7 +496,7 @@ TASK_ID=S32_M3A_GATE4_TASK1_DOSSIER_DERIVED_READ_CONTRACT_R1
 BASE_MAIN_HEAD=42cf1b7b4a10a6edfa53d688012728dded0b3049
 SOURCE_OF_TRUTH_MATRIX=SOURCE_AUDITED
 CURRENT_RESOLUTION_POINTER=RESOLUTION_READER_AUTHORITY_CONFIRMED
-WHAT_CHANGED_DERIVATION=FACTUAL_EVENTS_DEFINED_D01_OPEN
+WHAT_CHANGED_DERIVATION=FACTUAL_EVENTS_DEFINED_D01_A_SELECTED
 EVIDENCE_PRIVACY=THREE_SOURCE_CONTRACTS_AUDITED
 SOURCE_CITATIONS=GROUNDED_OBJECT_REFERENCES_ONLY
 PAGINATION_PRECISION=PER_STREAM_PRESERVED_CROSS_STREAM_GAP_RECORDED
@@ -501,10 +510,10 @@ DEPLOY_CHANGED=NO
 PRODUCTION_CHANGED=NO
 FEATURE_IMPLEMENTATION_STARTED=NO
 TASK2_STARTED=NO
-STATUS=TASK1_CONTRACT_AUDIT_COMPLETE_REVIEWABLE_D01_OPEN
-NEXT_ACTION=REVIEW_D01_THEN_S32_M3A_GATE4_TASK2_DOSSIER_VIEW_MODEL_AND_TESTS_R1
+STATUS=TASK1_CONTRACT_FROZEN_D01_A
+NEXT_ACTION=S32_M3A_GATE4_TASK2_DOSSIER_VIEW_MODEL_AND_TESTS_R1
 ~~~
 
 Record the actual documentation commit, remote branch SHA, diff check, and document-review result in the existing Notion phase page after verification. Do not put invented future hashes or passing test counts into this file.
 
-**STOP after Task 1.** Preserve the open decision visibly. No PR, merge, production work, or automatic Task 2 follows from this receipt.
+**STOP after Task 1.** Preserve D01-A and its explicit limits. No PR, merge, production work, or automatic Task 2 follows from this receipt.
