@@ -58,7 +58,12 @@ export function ResearchIssueDetail({ projectId, issueId }: { projectId: string;
       writeAllowed={!response.project.readOnly && (response.issue.lifecycleState === "OPEN" || response.issue.lifecycleState === "RESOLVED")}
       onCommitted={() => setRunVersion(version => version + 1)}
     />
-    <ResearchRunHistory projectId={response.project.id} issueId={response.issue.id} refreshVersion={runVersion} />
+    <ResearchRunHistory
+      projectId={response.project.id}
+      issueId={response.issue.id}
+      refreshVersion={runVersion}
+      writeAllowed={!response.project.readOnly && (response.issue.lifecycleState === "OPEN" || response.issue.lifecycleState === "RESOLVED")}
+    />
     <Link to={`/research/projects/${response.project.id}`}>返回项目资料</Link>
   </article>;
 }

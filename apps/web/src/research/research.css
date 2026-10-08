@@ -531,3 +531,108 @@
     width: 100%;
   }
 }
+
+/* ===== S32 M3-A Gate 3 Task 4: run detail / terminal actions / replay ===== */
+.research-run-detail {
+  min-width: 0;
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: #f7f9fc;
+  display: grid;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.research-run-detail h4 {
+  margin: 8px 0 4px;
+  font-size: 15px;
+}
+.research-run-detail-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.research-run-detail code {
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  font-size: 13px;
+}
+.research-run-detail-steps,
+.research-run-detail-tools,
+.research-run-detail-produced,
+.research-run-detail-gaps,
+.research-run-detail-ancestors,
+.research-run-detail-evidence-items {
+  margin: 4px 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.research-run-detail-environment {
+  margin: 0;
+  display: grid;
+  gap: 4px;
+}
+.research-run-detail-environment div {
+  display: grid;
+  grid-template-columns: minmax(80px, auto) 1fr;
+  gap: 8px;
+  min-width: 0;
+}
+.research-run-detail-environment dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.research-run-evidence-unavailable {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+.research-run-actions,
+.research-run-replay {
+  min-width: 0;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--color-border);
+  display: grid;
+  gap: 10px;
+}
+.research-run-complete-form {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.research-run-complete-form label {
+  display: grid;
+  gap: 6px;
+}
+.research-run-complete-form textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 10px 11px;
+  font: inherit;
+}
+.research-run-replay-plan {
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
+}
+.research-run-replay-plan p { margin: 0; }
+.research-run-open-detail {
+  font: inherit;
+  justify-self: start;
+}
+@media (max-width: 700px) {
+  .research-run-detail-environment div {
+    grid-template-columns: 1fr;
+  }
+}

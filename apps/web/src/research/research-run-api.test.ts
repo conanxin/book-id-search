@@ -154,6 +154,7 @@ describe("ResearchRun detail + lineage validator (via getResearchRun valid predi
     return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
   }
 
+
   it("accepts RUNNING detail with null output and no ancestors", async () => {
     fetchMock.mockResolvedValueOnce(response(detail({ status: "RUNNING", output: null, completedAt: null })));
     await expect(getResearchRun(P, I, RUN)).resolves.toBeTruthy();
@@ -267,6 +268,57 @@ describe("ResearchRun HTTP client", () => {
   function response(body: unknown, status = 200): Response {
     return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
   }
+
+  // ---- Task 4 Phase 0: real Gate 2 read-store shape (compact four-key manifest
+  // in LIST + ancestors even when available=true; items only on root detail).
+  describe("real-backend summary contract (Task 4 Phase 0)", () => {
+    const availableFourKey = {
+      id: M, manifestSha256: "a".repeat(64), itemCount: 2, available: true,
+    };
+
+    it("accepts available=true four-key summary in LIST response", async () => {
+      fetchMock.mockResolvedValueOnce(response({ runs: [summary({ evidenceManifest: { ...availableFourKey } as ResearchRunSummary["evidenceManifest"] })], nextCursor: null }));
+      const result = await listResearchRuns(P, I);
+      expect(result.runs[0].runId).toBe(RUN);
+    });
+
+    it("accepts available=true four-key ancestor in DETAIL", async () => {
+      const parent = summary({
+        runId: "99999999-9999-4999-8999-999999999999",
+        replayOf: null,
+        evidenceManifest: { ...availableFourKey } as ResearchRunSummary["evidenceManifest"],
+      });
+      fetchMock.mockResolvedValueOnce(response(
+        detail({ runId: RUN, replayOf: "99999999-9999-4999-8999-999999999999", status: "RUNNING", output: null, completedAt: null }, { ...snapshotAvailable }, [parent]),
+      ));
+      const result = await getResearchRun(P, I, RUN);
+      expect(result.ancestors).toHaveLength(1);
+      expect(result.ancestors[0].evidenceManifest.available).toBe(true);
+    });
+
+    it("still rejects items/targetId/extra keys in a LIST summary (fail-closed)", async () => {
+      for (const poisoned of [
+        { ...availableFourKey, items: [] },
+        { ...availableFourKey, targetId: "x" },
+        { ...availableFourKey, extra: 1 },
+      ]) {
+        fetchMock.mockResolvedValueOnce(response({ runs: [summary({ evidenceManifest: poisoned as ResearchRunSummary["evidenceManifest"] })], nextCursor: null }));
+        await expect(listResearchRuns(P, I)).rejects.toMatchObject({ status: 502 });
+      }
+    });
+
+    it("root DETAIL available=true without items still fails (fail-closed)", async () => {
+      fetchMock.mockResolvedValueOnce(response(detail({}, { ...availableFourKey })));
+      await expect(getResearchRun(P, I, RUN)).rejects.toMatchObject({ status: 502 });
+    });
+
+    it("malformed non-string projectId/issueId payloads throw safe 502, not TypeError", async () => {
+      fetchMock.mockResolvedValueOnce(response({ runs: [{ ...summary({ evidenceManifest: { ...availableFourKey } as ResearchRunSummary["evidenceManifest"] }), issueId: 42 }], nextCursor: null }));
+      await expect(listResearchRuns(P, I)).rejects.toMatchObject({ status: 502 });
+      fetchMock.mockResolvedValueOnce(response({ ...detail({}), run: { ...detail({}).run, projectId: 42 } }));
+      await expect(getResearchRun(P, I, RUN)).rejects.toMatchObject({ status: 502 });
+    });
+  });
 
   it.each([
     [201, "created"],

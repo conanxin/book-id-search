@@ -3,11 +3,13 @@ import {
   listResearchRuns,
   type ResearchRunSummary,
 } from "./api";
+import { ResearchRunDetail } from "./ResearchRunDetail";
 
 type Props = {
   projectId: string;
   issueId: string;
   refreshVersion?: number;
+  writeAllowed?: boolean;
 };
 
 type LoadState = "loading" | "ready" | "unavailable";
@@ -32,13 +34,14 @@ function statusClass(status: ResearchRunSummary["status"]): string {
   }[status];
 }
 
-export function ResearchRunHistory({ projectId, issueId, refreshVersion = 0 }: Props) {
+export function ResearchRunHistory({ projectId, issueId, refreshVersion = 0, writeAllowed = false }: Props) {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [runs, setRuns] = useState<ResearchRunSummary[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [pageState, setPageState] = useState<PageState>({ state: "idle" });
   const initial = useRef<AbortController | null>(null);
   const older = useRef<AbortController | null>(null);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
   async function loadInitial(signal?: AbortSignal) {
     setLoadState("loading");
@@ -61,9 +64,21 @@ export function ResearchRunHistory({ projectId, issueId, refreshVersion = 0 }: P
     initial.current = controller;
     setRuns([]);
     setNextCursor(null);
+    setSelectedRunId(null);
     void loadInitial(controller.signal);
     return () => controller.abort();
   }, [projectId, issueId, refreshVersion]);
+
+  function refreshSelf(): void {
+    initial.current?.abort();
+    older.current?.abort();
+    const controller = new AbortController();
+    initial.current = controller;
+    setRuns([]);
+    setNextCursor(null);
+    void loadInitial(controller.signal);
+    return void controller; // keep abort-cleanup semantics local
+  }
 
   async function loadOlder(cursor: string) {
     older.current?.abort();
@@ -104,6 +119,16 @@ export function ResearchRunHistory({ projectId, issueId, refreshVersion = 0 }: P
         <p className="research-run-meta">{run.status === "RUNNING" ? "尚未结束" : `结束：${new Date(run.completedAt as string).toLocaleString("zh-CN")}`}</p>
         <p className="research-run-evidence">证据快照：{run.evidenceManifest.itemCount} 项 · {run.evidenceManifest.available ? "当前可用" : "当前不可访问"}</p>
         {run.replayOf !== null ? <p className="research-run-replay">重放自：<code>{run.replayOf}</code></p> : null}
+        <button type="button" className="research-run-open-detail" aria-expanded={selectedRunId === run.runId} onClick={() => setSelectedRunId(selected => selected === run.runId ? null : run.runId)}>
+          {selectedRunId === run.runId ? "收起完整研究轮次" : "查看完整研究轮次"}
+        </button>
+        {selectedRunId === run.runId ? <ResearchRunDetail
+          projectId={projectId}
+          issueId={issueId}
+          runId={run.runId}
+          writeAllowed={writeAllowed ?? false}
+          onHistoryRefresh={refreshSelf}
+        /> : null}
       </li>)}
     </ol> : null}
     {nextCursor ? <button

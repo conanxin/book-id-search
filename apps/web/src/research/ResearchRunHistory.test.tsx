@@ -216,3 +216,32 @@ describe("ResearchRunHistory — scope/abort", () => {
     await Promise.resolve();
   });
 });
+
+describe("ResearchRunHistory — real client passthrough (Task 4 Phase 0)", () => {
+  it("accepts a real backend LIST payload through listResearchRuns into the UI", async () => {
+    const runId = "33333333-3333-4333-8333-333333333333";
+    const payload = {
+      runs: [{
+        runId,
+        issueId: I,
+        status: "SUCCEEDED",
+        replayOf: null,
+        startedAtMicros: "1760486400123456",
+        startedAt: "2026-09-28T00:00:00.123456Z",
+        completedAt: "2026-09-28T01:00:00.654321Z",
+        // Real Gate 2 read-store shape: compact four keys even when available=true.
+        evidenceManifest: { id: M, manifestSha256: "a".repeat(64), itemCount: 2, available: true },
+      }],
+      nextCursor: null,
+    };
+    // The api module is mocked at file level in this suite; bypass by calling the real client directly.
+    const { listResearchRuns: realList } = await vi.importActual<typeof import("./api")>("./api");
+    // restore session state: this test suite already sets authenticated snapshot in beforeEach
+    const fetchStub = vi.fn(async () => new Response(JSON.stringify(payload), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchStub);
+    const result = await realList(P, I, { limit: 20 });
+    expect(result.runs[0].evidenceManifest.available).toBe(true);
+    expect((result.runs[0].evidenceManifest as Record<string, unknown>)["items"]).toBeUndefined();
+    vi.unstubAllGlobals();
+  });
+});

@@ -1250,6 +1250,12 @@ export interface ResearchRunOutput {
 /** JSON-safe nested value tree (read-side shape check only). */
 export type ResearchRunEnvironment = Record<string, unknown>;
 
+export interface ResearchRunEvidenceCompactSummary {
+  id: string;
+  manifestSha256: string;
+  itemCount: number;
+  available: boolean;
+}
 export interface ResearchRunEvidenceSnapshotSummary {
   id: string;
   manifestSha256: string;
@@ -1279,7 +1285,7 @@ export interface ResearchRunSummary {
   startedAtMicros: string;
   startedAt: string;
   completedAt: string | null;
-  evidenceManifest: ResearchRunEvidenceSnapshotSummary | ResearchRunEvidenceSnapshotDetail;
+  evidenceManifest: ResearchRunEvidenceCompactSummary;
 }
 export interface ResearchRunListResponse {
   runs: ResearchRunSummary[];
@@ -1456,6 +1462,15 @@ export function isResearchRunEvidenceSnapshot(value: any): value is ResearchRunE
     && (item.note === null || typeof item.note === "string"));
 }
 
+/** Compact four-key manifest summary as emitted in LIST rows and DETAIL ancestors (both availability values). */
+export function isResearchRunEvidenceCompactSummary(value: any): value is ResearchRunEvidenceCompactSummary {
+  if (!value || typeof value !== "object") return false;
+  if (!isUuid(value.id) || typeof value.manifestSha256 !== "string" || !SHA256_RE.test(value.manifestSha256)) return false;
+  if (!Number.isInteger(value.itemCount) || value.itemCount < 1) return false;
+  if (typeof value.available !== "boolean") return false;
+  return exactKeys(value, ["id", "manifestSha256", "itemCount", "available"]);
+}
+
 export function isResearchRunSummary(value: any): value is ResearchRunSummary {
   if (!value || typeof value !== "object") return false;
   if (!exactKeys(value, ["runId", "issueId", "status", "replayOf", "startedAtMicros", "startedAt", "completedAt", "evidenceManifest"])) return false;
@@ -1467,7 +1482,7 @@ export function isResearchRunSummary(value: any): value is ResearchRunSummary {
   const terminal = value.status !== "RUNNING";
   if (terminal && !isIsoOrNull(value.completedAt, false)) return false;
   if (!terminal && value.completedAt !== null) return false;
-  return isResearchRunEvidenceSnapshot(value.evidenceManifest);
+  return isResearchRunEvidenceCompactSummary(value.evidenceManifest);
 }
 
 function isResearchRunDetailPayload(value: any, projectId: string, issueId: string): value is ResearchRunDetailResponse {
@@ -1478,6 +1493,7 @@ function isResearchRunDetailPayload(value: any, projectId: string, issueId: stri
   if (!exactKeys(run, ["runId", "projectId", "issueId", "status", "evidenceManifestId", "replayOf", "procedure", "executionContract", "environment", "output", "knowledgeCutoff", "startedAt", "completedAt", "createdAt"])) return false;
 
   if (!isUuid(run.runId) || !isUuid(run.evidenceManifestId)) return false;
+  if (typeof run.projectId !== "string" || typeof run.issueId !== "string") return false;
   if (run.projectId.toLowerCase() !== projectId.toLowerCase() || run.issueId.toLowerCase() !== issueId.toLowerCase()) return false;
   if (!RESEARCH_RUN_STATUSES.includes(run.status)) return false;
   if (run.replayOf !== null && !isUuid(run.replayOf)) return false;
@@ -1499,7 +1515,8 @@ function isResearchRunDetailPayload(value: any, projectId: string, issueId: stri
   if (!isResearchRunEvidenceSnapshot(value.evidenceManifest)) return false;
   if (value.evidenceManifest.id.toLowerCase() !== run.evidenceManifestId.toLowerCase()) return false;
   return Array.isArray(value.ancestors)
-    && value.ancestors.every((ancestor: any) => isResearchRunSummary(ancestor) && ancestor.issueId.toLowerCase() === issueId.toLowerCase())
+    && typeof issueId === "string"
+    && value.ancestors.every((ancestor: any) => isResearchRunSummary(ancestor) && typeof ancestor.issueId === "string" && ancestor.issueId.toLowerCase() === issueId.toLowerCase())
     && isResearchRunLineage(run, value.ancestors);
 }
 
