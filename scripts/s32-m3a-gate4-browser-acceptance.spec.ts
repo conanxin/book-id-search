@@ -62,7 +62,7 @@ test("A — owner session and anonymous private isolation", async ({ browser }) 
   const anon = await browser.newContext();
   const page2 = await anon.newPage();
   await page2.goto(dossierUrl(P1, I1));
-  await expect(page2.getByText("使用 Google 账号登录").first()).toBeVisible({ timeout: 20_000 });
+  await expect(page2.getByTestId("google-login-button-host")).toBeVisible({ timeout: 20_000 });
   await expect(page2.getByText("Gate2 working conclusion")).toHaveCount(0);
   const response = await page2.request.get(WEB + "/api/private/s32/projects/" + P1 + "/issues/" + I1);
   expect(response.status()).toBe(401);
