@@ -42,8 +42,8 @@ function ReadErrorText({ status }: { status: "loading" | "unavailable" | "error"
   if (status === "unavailable") return <p className="research-muted">该对象目前不可访问。</p>;
   return null;
 }
-export function ResearchDossierPage({ projectId, issueId }: { projectId: string; issueId: string }) {
-  const { view, read, refresh } = useResearchDossier(projectId, issueId);
+export function ResearchDossierPage({ projectId, issueId, authGeneration = 1 }: { projectId: string; issueId: string; authGeneration?: number }) {
+  const { view, read, refresh } = useResearchDossier(projectId, issueId, authGeneration);
   const [claimId, setClaimId] = useState<string | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
   const [resolutionId, setResolutionId] = useState<string | null>(null);
