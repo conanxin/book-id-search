@@ -58,6 +58,16 @@ export interface DossierReader {
 
 const DEFAULT_MAX_CONCURRENCY = 4;
 function jobKey(request: DossierRequest): string { return JSON.stringify(request); }
+function modelSourceKey(request: DossierRequest): string {
+  switch (request.kind) {
+    case "resolution": return JSON.stringify([request.kind, request.resolutionId]);
+    case "run": return JSON.stringify([request.kind, request.runId]);
+    case "assessments": case "candidates": return JSON.stringify([request.kind, request.claimId]);
+    case "assessment": return JSON.stringify([request.kind, request.claimId, request.assessmentId]);
+    case "revision": return JSON.stringify([request.kind, request.bindingId, request.revisionId]);
+    default: return request.kind;
+  }
+}
 function streamKey(request: DossierRequest): string {
   switch (request.kind) {
     case "assessments": return JSON.stringify(["assessments", request.claimId]);
@@ -136,11 +146,10 @@ export function createDossierReader(
           if (closed || controller.signal.aborted || requestEpoch !== epoch) return false;
           model = receiveDossierRead(model, ticket, value, new Date().toISOString());
           publish();
-          const outcome = dossierView(model);
-          // The model can reject an inconsistent success as a 502 without throwing.
-          if (job.request.kind === "question") return outcome.question.status === "ready";
-          const matchingRead = outcome.reads.some(read => read.kind === job.request.kind && read.status !== "error" && read.status !== "unavailable");
-          return matchingRead;
+          // Accept only this exact ticket's committed source, not a previously
+          // loaded page of the same kind after a rejected cursor/record conflict.
+          const accepted = model.sources[modelSourceKey(job.request)];
+          return accepted?.readSequence === ticket.sequence && accepted.error === null;
         })
         .catch(error => {
           if (closed || controller.signal.aborted || requestEpoch !== epoch) return false;
