@@ -2,6 +2,8 @@ import { CandidateClaims } from "./CandidateClaims";
 import { IssueResolutionComposer } from "./IssueResolutionComposer";
 import { IssueResolutionCurrent } from "./IssueResolutionCurrent";
 import { IssueResolutionHistory } from "./IssueResolutionHistory";
+import { ResearchRunHistory } from "./ResearchRunHistory";
+import { ResearchRunStartComposer } from "./ResearchRunStartComposer";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getResearchIssue, ProjectApiError, type ResearchIssueDetailResponse } from "./api";
@@ -9,6 +11,7 @@ import { getResearchIssue, ProjectApiError, type ResearchIssueDetailResponse } f
 export function ResearchIssueDetail({ projectId, issueId }: { projectId: string; issueId: string }) {
   const [attempt, setAttempt] = useState(0);
   const [resolutionVersion, setResolutionVersion] = useState(0);
+  const [runVersion, setRunVersion] = useState(0);
   const [response, setResponse] = useState<ResearchIssueDetailResponse | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "missing" | "unavailable">("loading");
 
@@ -49,6 +52,18 @@ export function ResearchIssueDetail({ projectId, issueId }: { projectId: string;
       onCommitted={() => setResolutionVersion(version => version + 1)}
     />
     <IssueResolutionHistory projectId={response.project.id} issueId={response.issue.id} refreshVersion={resolutionVersion} />
+    <ResearchRunStartComposer
+      projectId={response.project.id}
+      issueId={response.issue.id}
+      writeAllowed={!response.project.readOnly && (response.issue.lifecycleState === "OPEN" || response.issue.lifecycleState === "RESOLVED")}
+      onCommitted={() => setRunVersion(version => version + 1)}
+    />
+    <ResearchRunHistory
+      projectId={response.project.id}
+      issueId={response.issue.id}
+      refreshVersion={runVersion}
+      writeAllowed={!response.project.readOnly && (response.issue.lifecycleState === "OPEN" || response.issue.lifecycleState === "RESOLVED")}
+    />
     <Link to={`/research/projects/${response.project.id}`}>返回项目资料</Link>
   </article>;
 }

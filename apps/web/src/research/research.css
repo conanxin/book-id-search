@@ -355,3 +355,284 @@
     width: 100%;
   }
 }
+
+/* ===== S32 M3-A Gate 3 ResearchRun history (read-only) ===== */
+.research-run-history {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--color-border);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.research-run-history > h2 {
+  margin: 0 0 14px;
+  font-size: 20px;
+}
+.research-run-history-list {
+  list-style: none;
+  margin: 12px 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.research-run-card {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: 8px;
+  background: #f7f9fc;
+}
+.research-run-card p {
+  margin: 0;
+}
+.research-run-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.research-run-status {
+  font-weight: 650;
+}
+.research-run-status--running { color: #8a6d1a; }
+.research-run-status--succeeded { color: #1c7a3d; }
+.research-run-status--failed { color: #b3362b; }
+.research-run-status--cancelled { color: var(--color-text-muted); }
+.research-run-meta {
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+.research-run-card code {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+.research-run-evidence,
+.research-run-replay {
+  font-size: 14px;
+}
+.research-run-replay code {
+  font-size: 13px;
+}
+
+/* ===== S32 M3-A Gate 3 ResearchRun start composer ===== */
+.research-run-start {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--color-border);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.research-run-start-entry {
+  font: inherit;
+  font-weight: 600;
+  color: var(--color-primary-strong);
+  background: transparent;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 12px 18px;
+  width: 100%;
+}
+.research-run-start-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.research-run-start-form > h2 {
+  margin: 0 0 4px;
+  font-size: 20px;
+}
+.research-run-start-form label {
+  display: grid;
+  gap: 6px;
+}
+.research-run-start-form textarea,
+.research-run-start-form input,
+.research-run-start-form select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 10px 11px;
+  font: inherit;
+}
+.research-run-start-form fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.research-run-step-list,
+.research-run-tool-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.research-run-step,
+.research-run-tool {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(0, 3fr) auto auto auto;
+  gap: 8px;
+  align-items: center;
+}
+.research-run-tool {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+}
+.research-run-choice {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+}
+.research-run-note {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  margin: 0;
+}
+.research-run-pending-note {
+  font-size: 14px;
+  color: #8a6d1a;
+  background: #fdf6e3;
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin: 0;
+}
+.research-run-success {
+  color: #1c7a3d;
+  font-weight: 600;
+}
+.research-run-evidence-empty {
+  color: var(--color-text-muted);
+}
+.research-run-start-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+@media (max-width: 700px) {
+  .research-run-step,
+  .research-run-tool {
+    grid-template-columns: 1fr;
+  }
+  .research-run-start-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .research-run-start-actions > button {
+    width: 100%;
+  }
+}
+
+/* ===== S32 M3-A Gate 3 Task 4: run detail / terminal actions / replay ===== */
+.research-run-detail {
+  min-width: 0;
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: #f7f9fc;
+  display: grid;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.research-run-detail h4 {
+  margin: 8px 0 4px;
+  font-size: 15px;
+}
+.research-run-detail-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.research-run-detail code {
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  font-size: 13px;
+}
+.research-run-detail-steps,
+.research-run-detail-tools,
+.research-run-detail-produced,
+.research-run-detail-gaps,
+.research-run-detail-ancestors,
+.research-run-detail-evidence-items {
+  margin: 4px 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.research-run-detail-environment {
+  margin: 0;
+  display: grid;
+  gap: 4px;
+}
+.research-run-detail-environment div {
+  display: grid;
+  grid-template-columns: minmax(80px, auto) 1fr;
+  gap: 8px;
+  min-width: 0;
+}
+.research-run-detail-environment dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.research-run-evidence-unavailable {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+.research-run-actions,
+.research-run-replay {
+  min-width: 0;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--color-border);
+  display: grid;
+  gap: 10px;
+}
+.research-run-complete-form {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.research-run-complete-form label {
+  display: grid;
+  gap: 6px;
+}
+.research-run-complete-form textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 10px 11px;
+  font: inherit;
+}
+.research-run-replay-plan {
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
+}
+.research-run-replay-plan p { margin: 0; }
+.research-run-open-detail {
+  font: inherit;
+  justify-self: start;
+}
+@media (max-width: 700px) {
+  .research-run-detail-environment div {
+    grid-template-columns: 1fr;
+  }
+}
