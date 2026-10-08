@@ -4,6 +4,7 @@ import {
   completeResearchRun,
   failResearchRun,
   ProjectApiError,
+  type ResearchRunStatus,
 } from "./api";
 import {
   clearPendingResearchRunActionReceipt,
@@ -18,6 +19,7 @@ type Props = {
   projectId: string;
   issueId: string;
   runId: string;
+  runStatus?: ResearchRunStatus;
   pending: PendingResearchRunActionReceipt | null;
   onCommitted: () => void;
 };
@@ -39,7 +41,7 @@ const producedGroups = [
 
 const initialForm = { summary: "", claimIds: "", assessmentIds: "", resolutionIds: "", noteRevisionIds: "", gaps: "" };
 
-export function ResearchRunTerminalActions({ projectId, issueId, runId, pending, onCommitted }: Props) {
+export function ResearchRunTerminalActions({ projectId, issueId, runId, runStatus, pending, onCommitted }: Props) {
   const [actionState, setActionState] = useState<ActionState>({ state: "idle" });
   const [form, setForm] = useState(initialForm);
   const [pendingReceipt, setPendingReceipt] = useState<PendingResearchRunActionReceipt | null>(pending);
@@ -151,9 +153,10 @@ export function ResearchRunTerminalActions({ projectId, issueId, runId, pending,
 
     {relevantPending && (actionState.state === "idle" || actionState.state === "unconfirmed" || actionState.state === "conflict") ? <p className="research-run-pending-note" role="status">
       检测到尚未确认的「{relevantPending.action === "COMPLETE" ? "完成" : relevantPending.action === "FAIL" ? "失败" : "取消"}」提交，已保留原提交标识。
+      {runStatus !== undefined && runStatus !== "RUNNING" && actionState.state === "idle" ? <button type="button" onClick={retryPending}>使用同一标识重试</button> : null}
     </p> : null}
 
-    {actionState.state === "idle" && !confirming ? <div className="research-run-start-actions">
+    {actionState.state === "idle" && !confirming && (runStatus === undefined || runStatus === "RUNNING") ? <div className="research-run-start-actions">
       <button type="button" onClick={() => setActionState({ state: "confirming", action: "COMPLETE" })}>标记完成</button>
       <button type="button" onClick={() => setActionState({ state: "confirming", action: "FAIL" })}>标记失败</button>
       <button type="button" onClick={() => setActionState({ state: "confirming", action: "CANCEL" })}>取消轮次</button>

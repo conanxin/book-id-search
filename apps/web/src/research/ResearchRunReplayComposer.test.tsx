@@ -123,6 +123,7 @@ describe("ResearchRunReplayComposer — submit", () => {
   });
 
   it("503 keeps receipt; same-key retry resends exact persisted command (not mutable form)", async () => {
+    vi.mocked(listIssueResolutionEvidenceBases).mockReset().mockResolvedValue({ issueId: I, evidenceBases: [base(M1), base(M2)], nextCursor: null });
     vi.mocked(replayResearchRun).mockRejectedValueOnce(new ProjectApiError(503, "研究执行服务暂不可用。", "RESEARCH_RUN_STORE_UNAVAILABLE"));
     const user = userEvent.setup();
     render(<ResearchRunReplayComposer {...props} pending={null} onCommitted={() => {}} />);
@@ -132,8 +133,9 @@ describe("ResearchRunReplayComposer — submit", () => {
     expect(await screen.findByText("研究轮次重放结果尚未确认。可以使用同一标识重试。")).toBeTruthy();
     const firstKey = vi.mocked(replayResearchRun).mock.calls[0]?.[3];
     const firstBody = vi.mocked(replayResearchRun).mock.calls[0]?.[4];
-    // user mutates the select before retry — retry must still send the persisted command
-    await user.selectOptions(screen.getByLabelText(/证据快照/), M2 === "88888888-8888-4888-8888-888888888888" ? M1 : M1).catch(() => {});
+    // User REALLY mutates the select to the other manifest before retry — the
+    // retry must still send the persisted command (manifest M1), not M2.
+    await user.selectOptions(screen.getByLabelText(/证据快照/), M2);
     vi.mocked(replayResearchRun).mockResolvedValueOnce({ status: "created", runId: NEW_RUN });
     await user.click(screen.getByRole("button", { name: "使用同一标识重试" }));
     await waitFor(() => expect(vi.mocked(replayResearchRun)).toHaveBeenCalledTimes(2));

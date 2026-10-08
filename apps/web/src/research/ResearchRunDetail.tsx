@@ -56,7 +56,9 @@ export function ResearchRunDetail({ projectId, issueId, runId, writeAllowed, onH
   const controllerRef = useRef<AbortController | null>(null);
 
   const reload = useCallback((signal?: AbortSignal) => {
-    setState("loading");
+    // Keep the previous ready content visible during a silent refresh (post-action
+    // reload); only the initial load shows the loading state.
+    setState(previous => previous === "ready" ? "ready" : "loading");
     getResearchRun(projectId, issueId, runId, signal)
       .then(result => {
         if (signal?.aborted) return;
@@ -68,11 +70,18 @@ export function ResearchRunDetail({ projectId, issueId, runId, writeAllowed, onH
       });
   }, [projectId, issueId, runId]);
 
+  const firstLoad = useRef(true);
   useEffect(() => {
     controllerRef.current?.abort();
     const controller = new AbortController();
     controllerRef.current = controller;
-    setDetail(null);
+    // Only a scope change (first load / different run) clears the detail; a
+    // post-action reload must keep the previous detail mounted so committed
+    // feedback (created runId / pending recovery) is not unmounted mid-display.
+    if (firstLoad.current) {
+      setDetail(null);
+      firstLoad.current = false;
+    }
     reload(controller.signal);
     return () => controller.abort();
   }, [projectId, issueId, runId, reloadVersion, reload]);
@@ -167,10 +176,11 @@ export function ResearchRunDetail({ projectId, issueId, runId, writeAllowed, onH
           </ol>
         </> : null}
 
-        {actionsAllowed && run.status === "RUNNING" ? <ResearchRunTerminalActions
+        {(actionsAllowed && run.status === "RUNNING") || (pendingMatchesRun && state === "ready" && detail !== null) ? <ResearchRunTerminalActions
           projectId={projectId}
           issueId={issueId}
           runId={runId}
+          runStatus={run.status}
           pending={pendingMatchesRun ? pending : null}
           onCommitted={afterActionChange}
         /> : null}

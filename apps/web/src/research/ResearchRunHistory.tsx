@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  clearPendingResearchRunActionReceipt,
+  loadPendingResearchRunActionReceipt,
+  type PendingResearchRunActionReceipt,
+} from "./research-run-action-draft";
+import { cancelResearchRun, completeResearchRun, failResearchRun, ProjectApiError } from "./api";
+import {
   listResearchRuns,
   type ResearchRunSummary,
 } from "./api";
@@ -42,6 +48,38 @@ export function ResearchRunHistory({ projectId, issueId, refreshVersion = 0, wri
   const initial = useRef<AbortController | null>(null);
   const older = useRef<AbortController | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [offPagePending, setOffPagePending] = useState<{ runId: string; action: string } | null>(null);
+  const [offPageRetry, setOffPageRetry] = useState<{ state: "idle" } | { state: "submitting" } | { state: "unconfirmed"; message: string } | { state: "rejected"; message: string }>({ state: "idle" });
+
+  async function retryOffPagePending(): Promise<void> {
+    const stored = loadPendingResearchRunActionReceipt();
+    if (!stored || stored.runId !== offPagePending?.runId) return;
+    const receipt: PendingResearchRunActionReceipt = stored;
+    const command = receipt.command as { output: unknown };
+    setOffPageRetry({ state: "submitting" });
+    const send = receipt.action === "COMPLETE"
+      ? () => completeResearchRun(projectId, issueId, receipt.runId, receipt.idempotencyKey, command.output as never)
+      : receipt.action === "FAIL"
+        ? () => failResearchRun(projectId, issueId, receipt.runId, receipt.idempotencyKey, null)
+        : () => cancelResearchRun(projectId, issueId, receipt.runId, receipt.idempotencyKey, null);
+    try {
+      await send();
+      clearPendingResearchRunActionReceipt();
+      setOffPagePending(null);
+      setOffPageRetry({ state: "idle" });
+      await loadInitial();
+    } catch (error) {
+      if (error instanceof ProjectApiError && (error.status >= 500 || error.status === 503)) {
+        setOffPageRetry({ state: "unconfirmed", message: "研究轮次操作结果尚未确认。可以使用同一标识重试。" });
+        return;
+      }
+      // Definitive outcome (already terminal / conflict / invalid): receipt 已被服务器判定, 清除本地 pending.
+      clearPendingResearchRunActionReceipt();
+      setOffPagePending(null);
+      setOffPageRetry({ state: "idle" });
+      await loadInitial();
+    }
+  }
 
   async function loadInitial(signal?: AbortSignal) {
     setLoadState("loading");
@@ -52,30 +90,48 @@ export function ResearchRunHistory({ projectId, issueId, refreshVersion = 0, wri
       setRuns(result.runs);
       setNextCursor(result.nextCursor);
       setLoadState("ready");
+      const stored = loadPendingResearchRunActionReceipt();
+      if (stored && stored.projectId === projectId && stored.issueId === issueId) {
+        const onPage = result.runs.some(run => run.runId === stored.runId);
+        setOffPagePending(onPage ? null : { runId: stored.runId, action: stored.action });
+      } else {
+        setOffPagePending(null);
+      }
     } catch {
       if (!signal?.aborted) setLoadState("unavailable");
     }
   }
 
+  const scopeKey = `${projectId}:${issueId}`;
+  const lastScope = useRef(scopeKey);
+
   useEffect(() => {
+    const scopeChanged = lastScope.current !== scopeKey;
+    lastScope.current = scopeKey;
     initial.current?.abort();
     older.current?.abort();
     const controller = new AbortController();
     initial.current = controller;
-    setRuns([]);
-    setNextCursor(null);
-    setSelectedRunId(null);
+    // Only a real scope change clears the list and selection; a refreshVersion
+    // bump must keep rows and any open detail mounted (pending receipt /
+    // created state must survive a post-action history refresh).
+    if (scopeChanged) {
+      setRuns([]);
+      setNextCursor(null);
+      setSelectedRunId(null);
+    }
     void loadInitial(controller.signal);
     return () => controller.abort();
-  }, [projectId, issueId, refreshVersion]);
+  }, [projectId, issueId, refreshVersion, scopeKey]);
 
   function refreshSelf(): void {
     initial.current?.abort();
     older.current?.abort();
     const controller = new AbortController();
     initial.current = controller;
-    setRuns([]);
-    setNextCursor(null);
+    // Keep existing rows mounted (a refresh must not unmount an open detail
+    // and its pending-receipt/created state); loadInitial replaces the list
+    // atomically once fresh data arrives.
     void loadInitial(controller.signal);
     return void controller; // keep abort-cleanup semantics local
   }
@@ -103,13 +159,21 @@ export function ResearchRunHistory({ projectId, issueId, refreshVersion = 0, wri
 
   return <section className="research-run-history" aria-label="研究轮次">
     <h2>研究轮次</h2>
+    {offPagePending ? <div className="research-run-pending-note" role="status" data-run-id={offPagePending.runId}>
+      <p>
+        检测到尚未确认的「{offPagePending.action === "COMPLETE" ? "完成" : offPagePending.action === "FAIL" ? "失败" : "取消"}」提交（研究轮次 <code>{offPagePending.runId}</code>），已保留原提交标识。
+        {offPageRetry.state === "idle" ? <button type="button" onClick={() => void retryOffPagePending()}>使用同一标识重试</button> : null}
+      </p>
+      {offPageRetry.state === "submitting" ? <p role="status">正在提交…</p> : null}
+      {offPageRetry.state === "unconfirmed" ? <p className="research-error" role="alert">{offPageRetry.message}</p> : null}
+    </div> : null}
     {loadState === "loading" ? <p role="status">正在读取研究轮次…</p> : null}
     {loadState === "unavailable" ? <div className="research-error" role="alert">
       研究轮次暂时无法加载。
       <button type="button" onClick={() => void loadInitial()}>重试研究轮次</button>
     </div> : null}
     {loadState === "ready" && runs.length === 0 ? <p>还没有研究轮次。</p> : null}
-    {loadState === "ready" && runs.length > 0 ? <ol className="research-run-history-list">
+    {(loadState === "ready" || (loadState === "loading" && runs.length > 0)) && runs.length > 0 ? <ol className="research-run-history-list">
       {runs.map(run => <li key={run.runId} className="research-run-card">
         <div className="research-run-card-heading">
           <span className={`research-run-status ${statusClass(run.status)}`} title={run.status}>{STATUS_LABELS[run.status]}</span>

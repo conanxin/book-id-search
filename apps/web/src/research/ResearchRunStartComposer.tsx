@@ -113,6 +113,7 @@ export function ResearchRunStartComposer({ projectId, issueId, writeAllowed, onC
       setRepro(command.executionContract.reproducibilityLevel);
       setTools(command.executionContract.tools.map(tool => ({ name: tool.name, version: tool.version ?? "" })));
       setEvidenceId(command.evidenceManifestId);
+      setSubmitState({ state: "unconfirmed" });
     }
   }, [projectId, issueId]);
 

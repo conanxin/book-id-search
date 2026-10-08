@@ -154,6 +154,23 @@ describe("ResearchRunStartComposer — evidence source", () => {
     expect((select as HTMLSelectElement).value).toBe(M2);
     expect(screen.getByRole("status").textContent).toContain("尚未确认");
   });
+
+  it("reloaded pending receipt immediately offers the same-key retry button (Task5 C1 regression)", async () => {
+    sessionStorage.setItem(RESEARCH_RUN_START_PENDING_KEY, JSON.stringify({
+      projectId: P, issueId: I, requestHash: "a".repeat(64),
+      idempotencyKey: "99999999-9999-4999-8999-999999999999",
+      createdAt: new Date().toISOString(),
+      command: {
+        procedure: { version: 1, objective: "重载目标", method: "重载方法", steps: [{ kind: "READ", description: "重载步骤" }] },
+        executionContract: { version: 1, mode: "HUMAN", reproducibilityLevel: "AUDIT", tools: [] },
+        environment: {}, evidenceManifestId: M1, replayOf: null,
+      },
+    }));
+    render(<ResearchRunStartComposer projectId={P} issueId={I} writeAllowed onCommitted={() => {}} />);
+    // After a pure reload the composer must land in the unconfirmed state with a usable retry button.
+    expect(await screen.findByRole("button", { name: "使用同一标识重试" })).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("尚未确认");
+  });
 });
 
 describe("ResearchRunStartComposer — form", () => {

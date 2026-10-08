@@ -132,12 +132,16 @@ export function ResearchRunReplayComposer({ projectId, issueId, parentRunId, par
 
   async function submit(receiptForRetry?: PendingResearchRunActionReceipt): Promise<void> {
     setReplayState({ state: "submitting" });
-    const command = {
-      procedure: parentProcedure,
-      executionContract: parentContract,
-      environment: parentEnvironment,
-      evidenceManifestId: evidenceId,
-    };
+    // A retry must resend the exact persisted command (receipt.command), never
+    // rebuild from mutable current form state (Task 5 review finding #1).
+    const command = receiptForRetry
+      ? (receiptForRetry.command as unknown as { procedure: typeof parentProcedure; executionContract: typeof parentContract; environment: typeof parentEnvironment; evidenceManifestId: string })
+      : {
+        procedure: parentProcedure,
+        executionContract: parentContract,
+        environment: parentEnvironment,
+        evidenceManifestId: evidenceId,
+      };
     let receipt = receiptForRetry;
     if (!receipt) {
       try {

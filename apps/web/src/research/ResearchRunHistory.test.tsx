@@ -4,6 +4,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { listResearchRuns, ProjectApiError } from "./api";
 import { ResearchRunHistory } from "./ResearchRunHistory";
+import { getOrCreateResearchRunActionReceipt, resetPendingResearchRunActionReceiptMemoryForTest } from "./research-run-action-draft";
 
 vi.mock("../auth/session", async importOriginal => {
   const actual = await importOriginal<typeof import("../auth/session")>();
@@ -218,6 +219,21 @@ describe("ResearchRunHistory — scope/abort", () => {
 });
 
 describe("ResearchRunHistory — real client passthrough (Task 4 Phase 0)", () => {
+  it("shows scope-matched pending banner when pending run is not on page 1", async () => {
+    vi.mocked(listResearchRuns).mockResolvedValueOnce({
+      runs: [run()],
+      nextCursor: "cursor-2",
+    });
+    const pendingRunId = "77777777-7777-4777-8777-777777777777";
+    const receipt = await getOrCreateResearchRunActionReceipt({ projectId: P, issueId: I, runId: pendingRunId }, "COMPLETE", { output: { version: 1, summary: "摘要", produced: { claimIds: [], assessmentIds: [], resolutionIds: [], noteRevisionIds: [] }, gaps: [] } });
+    sessionStorage.setItem("book-id-search:s32-m3a-research-run-action-v1", JSON.stringify(receipt));
+    render(<ResearchRunHistory projectId={P} issueId={I} />);
+    expect(await screen.findByText(/尚未确认的「完成」提交/)).toBeTruthy();
+    expect(screen.getByText(new RegExp(pendingRunId.slice(0, 8)))).toBeTruthy();
+    sessionStorage.removeItem("book-id-search:s32-m3a-research-run-action-v1");
+    resetPendingResearchRunActionReceiptMemoryForTest();
+  });
+
   it("accepts a real backend LIST payload through listResearchRuns into the UI", async () => {
     const runId = "33333333-3333-4333-8333-333333333333";
     const payload = {
