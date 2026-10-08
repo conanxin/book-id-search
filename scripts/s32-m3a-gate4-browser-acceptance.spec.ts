@@ -92,6 +92,7 @@ test("B — Current outside first history page, exact paging and separate timeli
   const timeline = page.locator("#dossier-change");
   await expect(timeline).toContainText("D01-A");
   await expect(timeline).toContainText("同一毫秒内跨类型记录不推断先后");
+  await expect(timeline).toContainText("已完成于");
   expect(await timeline.locator("ol").count()).toBe(2);
   expect(writes).toEqual([]);
   expect(psql("SELECT COUNT(*) FROM core.research_runs")).toBe(runsBefore);
@@ -114,6 +115,7 @@ test("C — existing pending Run action receipt cannot escape read-only Dossier"
   await activeDossier(page);
   await page.locator("#dossier-runs .dossier-item").first().getByRole("button", { name: "只读查看轮次详情" }).click();
   await expect(page.locator("#dossier-runs .dossier-detail")).toContainText("Gate4 研究轮次", { timeout: 20_000 });
+  await expect(page.locator("#dossier-runs .dossier-detail")).toContainText("Gate4 terminal summary");
   await expect(page.locator("#dossier-runs .dossier-detail")).not.toContainText(SOURCE);
   expect(await page.evaluate(key => sessionStorage.getItem(key), RUN_PENDING_KEY)).toBe(receipt);
   await page.reload();
@@ -160,9 +162,12 @@ test("F — revocation removes unavailable Run evidence without target-ID recons
   const page = await ctx.newPage();
   await activeDossier(page);
   const before = psql("SELECT COUNT(*) FROM core.research_runs");
+  await expect(page.locator("#dossier-history .dossier-item").first()).toContainText("证据当前可用");
   psql("DELETE FROM core.project_bindings WHERE id='" + EDITION_BINDING + "'");
   await page.getByRole("button", { name: "刷新整个档案" }).click();
   await expect(page.locator("#dossier-runs .dossier-item").first()).toContainText("当前不可展开", { timeout: 20_000 });
+  await expect(page.locator("#dossier-history .dossier-item").first()).toContainText("证据未指定或不可展开");
+  await expect(page.locator("#dossier-history")).toContainText("Gate4 historical Resolution #24");
   await page.locator("#dossier-runs .dossier-item").first().getByRole("button", { name: "只读查看轮次详情" }).click();
   await expect(page.locator("#dossier-runs .dossier-detail")).toContainText("当前不可展开原始证据条目", { timeout: 20_000 });
   await expect(page.locator("#dossier-runs .dossier-detail")).not.toContainText(SOURCE);
@@ -203,5 +208,54 @@ test("H — 390px viewport, keyboard opening and scope switch wipe old content",
   await expect(page.locator("#dossier-current")).toContainText("尚未形成当前工作结论", { timeout: 20_000 });
   await expect(page.getByText("Gate2 working conclusion")).toHaveCount(0);
   await test.info().attach("gate4-mobile-empty.png", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
+  await ctx.close();
+});
+
+test("I — actual Issue navigation opens the authorized Dossier route", async ({ browser }) => {
+  const ctx = await owner(browser);
+  const page = await ctx.newPage();
+  await page.goto(WEB + "/research/projects/" + P1 + "/issues/" + I1);
+  await expect(page.getByRole("heading", { name: "Gate2 Open Issue" })).toBeVisible({ timeout: 25_000 });
+  const entry = page.getByRole("link", { name: "查看研究档案（只读）" });
+  await expect(entry).toBeVisible();
+  await entry.click();
+  await expect(page).toHaveURL(dossierUrl(P1, I1));
+  await expect(page.locator("#dossier-current")).toContainText("Gate2 working conclusion", { timeout: 20_000 });
+  await ctx.close();
+});
+
+test("J — malformed Run success becomes section 502, retry keeps Current intact", async ({ browser }) => {
+  const ctx = await owner(browser);
+  const page = await ctx.newPage();
+  let corruptOnce = true;
+  await page.route(/\/runs(?:\?.*)?$/, async route => {
+    if (corruptOnce) {
+      corruptOnce = false;
+      await route.fulfill({ status: 200, contentType: "application/json",
+        body: JSON.stringify({ runs: "invalid", nextCursor: null }) });
+    } else {
+      await route.continue();
+    }
+  });
+  await page.goto(dossierUrl(P1, I1));
+  await expect(page.getByRole("heading", { name: "Gate2 Open Issue" })).toBeVisible({ timeout: 25_000 });
+  await expect(page.locator("#dossier-runs")).toContainText("读取失败（502）", { timeout: 20_000 });
+  await expect(page.locator("#dossier-current")).toContainText("Gate2 working conclusion", { timeout: 20_000 });
+  await page.locator("#dossier-runs").getByRole("button", { name: "重试读取" }).click();
+  await expect(page.locator("#dossier-runs .dossier-item")).toHaveCount(20, { timeout: 20_000 });
+  await ctx.close();
+});
+
+test("K — signing out clears the Dossier subtree, never exposing private Issue data", async ({ browser }) => {
+  const ctx = await owner(browser);
+  const page = await ctx.newPage();
+  const domainWrites = collectWrites(page);
+  await activeDossier(page);
+  await page.getByRole("button", { name: "退出登录" }).click();
+  await expect(page.getByRole("heading", { name: "Gate2 Open Issue" })).toHaveCount(0, { timeout: 20_000 });
+  await expect(page.getByText("Gate2 working conclusion")).toHaveCount(0);
+  const response = await ctx.request.get(WEB + "/api/private/s32/projects/" + P1 + "/issues/" + I1);
+  expect(response.status()).toBe(401);
+  expect(domainWrites).toEqual([]);
   await ctx.close();
 });
