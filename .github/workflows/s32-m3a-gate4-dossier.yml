@@ -1,0 +1,32 @@
+name: S32 M3-A Gate 4 Dossier verification
+
+on:
+  push:
+    branches:
+      - feat/s32-m3a-gate4-dossier
+
+jobs:
+  dossier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+      - name: Install workspace
+        run: pnpm install --frozen-lockfile
+      - name: Dossier focused tests
+        run: |
+          pnpm exec vitest run \
+            apps/web/src/research/dossier-model.test.ts \
+            apps/web/src/research/dossier-reader.test.ts \
+            apps/web/src/research/dossier-reader.integration.test.ts
+      - name: Web build
+        run: pnpm --filter @book-id-search/web build
+      - name: Diff check
+        run: git diff --check HEAD^ HEAD
