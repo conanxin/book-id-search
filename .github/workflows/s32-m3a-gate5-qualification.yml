@@ -10,6 +10,8 @@ jobs:
     name: Auth + Research + WeRead + S32 regression
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      TZ: Asia/Shanghai
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,6 +25,8 @@ jobs:
           corepack prepare pnpm@10.33.0 --activate
       - name: Frozen dependency installation
         run: pnpm install --frozen-lockfile
+      - name: Compile API dist for the production-ESM regression test
+        run: pnpm --filter @book-id-search/api build
       - name: Cross-stage unit and component tests
         run: pnpm exec vitest run apps/web/src/auth apps/web/src/research apps/web/src/weread apps/api/src/auth apps/api/src/s32
       - name: Frozen S32 schema static test
