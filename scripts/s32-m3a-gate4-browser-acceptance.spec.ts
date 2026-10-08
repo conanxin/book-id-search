@@ -3,6 +3,7 @@
  * Only the orchestrator owns disposable services. Never accesses production.
  */
 import { execFileSync } from "node:child_process";
+import { mkdirSync } from "node:fs";
 import { expect, test, type Browser, type Page } from "@playwright/test";
 const WEB = process.env.GATE4_BROWSER_WEB ?? "http://127.0.0.1:5173";
 const COOKIE = process.env.GATE4_BROWSER_SESSION_COOKIE!;
@@ -97,7 +98,8 @@ test("B — Current outside first history page, exact paging and separate timeli
   expect(writes).toEqual([]);
   expect(psql("SELECT COUNT(*) FROM core.research_runs")).toBe(runsBefore);
   expect(psql("SELECT COUNT(*) FROM core.issue_resolutions")).toBe(resBefore);
-  await test.info().attach("gate4-populated-dossier.png", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
+  mkdirSync("test-results", { recursive: true });
+  await page.screenshot({ path: "test-results/gate4-populated-dossier.png", fullPage: true });
   await ctx.close();
 });
 
@@ -207,7 +209,8 @@ test("H — 390px viewport, keyboard opening and scope switch wipe old content",
   await page.goto(dossierUrl(P1, I_EMPTY));
   await expect(page.locator("#dossier-current")).toContainText("尚未形成当前工作结论", { timeout: 20_000 });
   await expect(page.getByText("Gate2 working conclusion")).toHaveCount(0);
-  await test.info().attach("gate4-mobile-empty.png", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
+  mkdirSync("test-results", { recursive: true });
+  await page.screenshot({ path: "test-results/gate4-mobile-empty.png", fullPage: true });
   await ctx.close();
 });
 
