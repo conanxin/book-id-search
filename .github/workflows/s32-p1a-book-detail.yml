@@ -1,0 +1,45 @@
+name: S32 P1-A Book Detail research entry
+
+on:
+  push:
+    branches:
+      - feat/s32-p1a-book-detail-research-entry
+  pull_request:
+    paths:
+      - "apps/web/src/App.tsx"
+      - "apps/web/src/research/**"
+      - "apps/web/src/styles.css"
+      - ".github/workflows/s32-p1a-book-detail.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  p1a:
+    name: P1-A source/Owner-scope and Web regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+      - name: Install workspace
+        run: pnpm install --frozen-lockfile
+      - name: Targeted P1-A Owner-scope tests
+        run: pnpm exec vitest run apps/web/src/research/p1a-auth-scope.test.tsx
+      - name: Research and session regression
+        run: |
+          pnpm exec vitest run apps/web/src/research apps/web/src/weread/SearchDetailWereadSession.test.tsx
+      - name: Web production build
+        run: pnpm --filter @book-id-search/web build
+      - name: API production build
+        run: pnpm --filter @book-id-search/api build
+      - name: No whitespace defects
+        run: git diff --check HEAD^ HEAD
