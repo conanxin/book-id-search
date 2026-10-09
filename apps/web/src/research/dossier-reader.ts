@@ -135,12 +135,16 @@ export function createDossierReader(
         continue;
       }
       model = started.state;
-      publish();
       const controller = new AbortController();
       active.set(job.key, { controller, job });
       activeStreams.add(job.stream);
       const ticket = started.ticket;
       const requestEpoch = epoch;
+      // Register the controller before publishing a loading notification.
+      // Subscribers may synchronously queue work, refresh or switch scope.
+      publish();
+      // A reentrant scope reset must not dispatch the now-invalidated GET.
+      if (closed || controller.signal.aborted || requestEpoch !== epoch) return;
       void fetcher({ ...model.scope }, job.request, controller.signal)
         .then(value => {
           if (closed || controller.signal.aborted || requestEpoch !== epoch) return false;
