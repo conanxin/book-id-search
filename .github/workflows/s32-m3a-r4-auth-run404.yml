@@ -1,0 +1,46 @@
+name: S32 R4 auth isolation and Run-404 regression
+
+on:
+  push:
+    branches:
+      - test/s32-m3a-r4-auth-run404
+  pull_request:
+    paths:
+      - apps/web/src/research/shared-auth-generation-r4.test.tsx
+      - apps/web/src/research/ProjectsPage.tsx
+      - apps/web/src/research/dossier-model.test.ts
+      - apps/web/src/research/dossier-model.ts
+      - .github/workflows/s32-m3a-r4-auth-run404.yml
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-r4-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Activate locked pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+      - name: Install workspace
+        run: pnpm install --frozen-lockfile
+      - name: R4 scoped reproduction and Dossier auth baseline
+        run: |
+          pnpm exec vitest run \
+            apps/web/src/research/shared-auth-generation-r4.test.tsx \
+            apps/web/src/research/dossier-model.test.ts \
+            apps/web/src/research/dossier-auth-generation.test.tsx
+      - name: Full Research regression
+        run: pnpm exec vitest run apps/web/src/research
+      - name: Web build and TypeScript
+        run: pnpm --filter @book-id-search/web build
+      - name: Diff hygiene
+        run: git diff --check HEAD^ HEAD
