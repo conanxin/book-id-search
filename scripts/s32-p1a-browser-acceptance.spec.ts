@@ -18,7 +18,7 @@ const fixture = (id: string, title: string) => ({
   ssid: "SYNTH-01", dxid: "SYNTH-02", rawInfo: "SYNTHETIC_ONLY",
   parseStatus: "ok", parseWarnings: [],
 });
-const bookA = fixture(A, "P1A Synthetic Primary");
+const bookA = fixture(A, "Gate2 Evidence Work");
 const bookB = fixture(B, "P1A Synthetic Secondary");
 
 async function context(browser: Browser, authorized: boolean, viewport?: { width: number; height: number }) {
@@ -52,8 +52,8 @@ test("P1A-B01: authenticated Book Detail → existing real PG project, mocked ad
     expect(route.request().method()).toBe("POST");
     expect(route.request().postDataJSON()).toEqual({ bookId: A });
     // Isolated UI contract stub ONLY: binding itself already exists in PG fixture.
-    await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({
-      promotionStatus: "created", bindingStatus: "created",
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+      promotionStatus: "existing", bindingStatus: "existing",
       item: { bindingId: BINDING, projectId: P,
         workId: "41111111-1111-4111-8111-111111111111",
         editionId: "51111111-1111-4111-8111-111111111111",
@@ -76,7 +76,9 @@ test("P1A-B01: authenticated Book Detail → existing real PG project, mocked ad
   expect(addCalls).toBe(1);
   await section.getByRole("link", { name: "查看这本书在项目中的资料" }).click();
   await expect(page).toHaveURL(destination);
-  await expect(page.locator("[data-binding-id='" + BINDING + "']")).toBeVisible({ timeout: 20000 });
+  const boundItem = page.locator("[data-binding-id='" + BINDING + "']");
+  await expect(boundItem).toBeVisible({ timeout: 20000 });
+  await expect(boundItem.getByRole("heading", { name: bookA.title })).toBeVisible();
   await ctx.close();
 });
 
