@@ -107,6 +107,8 @@ describe("assessment detail", () => {
     expect(screen.getByText("SUPPORTING · SOURCE")).toBeTruthy();
     expect(screen.getByText("CONTEXTUAL · NOTE_REVISION")).toBeTruthy();
     expect(screen.getByText("来源支持")).toBeTruthy();
+    expect(screen.getByRole("note").textContent).toContain("页码、图版、段落与原文摘录均未记录");
+    expect(screen.getByRole("note").textContent).toContain("说明属于研究者备注");
   });
 
   it("shows 未记录判断理由 for schema-valid null reasoning", async () => {
