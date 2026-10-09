@@ -10,6 +10,9 @@ on:
       - "apps/web/src/research/**"
       - "apps/web/src/styles.css"
       - ".github/workflows/s32-p1a-book-detail.yml"
+      - "scripts/s32-p1a-browser-acceptance.spec.ts"
+      - "scripts/s32-m3a-gate4-browser-check.ts"
+      - "package.json"
 
 permissions:
   contents: read
@@ -47,3 +50,35 @@ jobs:
         run: pnpm --filter @book-id-search/api build
       - name: No whitespace defects
         run: git diff --check HEAD^ HEAD
+
+  browser-pg16:
+    name: Disposable PG16 + Chromium P1-A product journey
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+      - name: Install workspace
+        run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Real browser and disposable PG16 P1-A flow
+        env:
+          S32_BROWSER_SUITE: P1A
+        run: pnpm exec tsx scripts/s32-m3a-gate4-browser-check.ts
+      - name: Upload P1-A browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p1a-browser-acceptance
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
