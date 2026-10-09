@@ -170,7 +170,11 @@ async function main(): Promise<void> {
   log("Synthetic owner session issued (real issueWebSession, ephemeral secret)");
 
   // ---- 6. Run the real-browser Playwright suite.
-  const spec = resolve(root, "scripts/s32-m3a-gate4-browser-acceptance.spec.ts");
+  // A fixed, opt-in synthetic P1-A suite reuses the proven disposable PG16,
+  // Owner cookie, real Web/API and teardown. Default Gate4 acceptance unchanged.
+  const spec = resolve(root, process.env.S32_BROWSER_SUITE === "P1A"
+    ? "scripts/s32-p1a-browser-acceptance.spec.ts"
+    : "scripts/s32-m3a-gate4-browser-acceptance.spec.ts");
   const run = spawnSync(
     resolve(root, "node_modules/.bin/playwright"),
     ["test", spec, "--browser=chromium", "--workers=1", "--reporter=line"],
