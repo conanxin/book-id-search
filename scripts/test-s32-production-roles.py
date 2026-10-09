@@ -4,6 +4,7 @@ import subprocess
 import time
 import unittest
 import uuid
+from unittest.mock import patch
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SQL = ROOT / "deploy/s32-production-roles.sql"
@@ -48,6 +49,9 @@ class RealPostgresRoleTests(unittest.TestCase):
         while time.time() < deadline:
             p = subprocess.run([
                 "docker", "exec", cls.name, "pg_isready",
+                # The entrypoint bootstrap server listens only on a Unix socket.
+                # Wait for the final TCP server before issuing fixture SQL.
+                "-h", "127.0.0.1",
                 "-U", "s32_admin", "-d", "book_id_search_s32",
             ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             if p.returncode == 0:
@@ -114,6 +118,32 @@ class RealPostgresRoleTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         exists = self.psql_admin("SELECT count(*) FROM pg_roles WHERE rolname='s32_fail'").stdout.strip()
         self.assertEqual(exists, "0")
+
+
+class StartupReadinessTests(unittest.TestCase):
+    def test_bootstrap_unix_socket_is_not_final_server_readiness(self):
+        state = {"tcp_polls": 0, "final_server": False, "sql": False}
+
+        def docker(args, **kwargs):
+            if "pg_isready" in args:
+                if "-h" not in args:
+                    return subprocess.CompletedProcess(args, 0)
+                self.assertEqual(args[args.index("-h") + 1], "127.0.0.1")
+                state["tcp_polls"] += 1
+                state["final_server"] = state["tcp_polls"] >= 2
+                return subprocess.CompletedProcess(args, 0 if state["final_server"] else 1)
+            if "psql" in args:
+                if not state["final_server"]:
+                    raise subprocess.CalledProcessError(2, args, stderr="bootstrap server stopped")
+                state["sql"] = True
+            return subprocess.CompletedProcess(args, 0, stdout="")
+
+        with patch.object(subprocess, "run", side_effect=docker), patch.object(time, "sleep"):
+            RealPostgresRoleTests.setUpClass()
+            RealPostgresRoleTests.tearDownClass()
+        self.assertTrue(state["sql"])
+        self.assertTrue(state["final_server"])
+        self.assertEqual(state["tcp_polls"], 2)
 
 
 if __name__ == "__main__":

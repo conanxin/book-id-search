@@ -15,11 +15,14 @@
 
 const fs = require("fs");
 const { createHash } = require("crypto");
-const os = require("os");
 const path = require("path");
-const { spawn, spawnSync } = require("child_process");
+const { spawn } = require("child_process");
 
-const MODE = process.argv[2] || "";
+const REQUESTED_MODE = process.argv[2] || "";
+const LOCAL_RECOVERY_BROWSER = REQUESTED_MODE === "recovery-browser-fixture";
+const RECOVERY = LOCAL_RECOVERY_BROWSER || ["recovery-fixture", "recovery-browser"].includes(REQUESTED_MODE);
+const MODE = LOCAL_RECOVERY_BROWSER ? "browser" : RECOVERY ? REQUESTED_MODE.slice("recovery-".length) : REQUESTED_MODE;
+const RECEIPT_MODE = LOCAL_RECOVERY_BROWSER ? "fixture" : MODE;
 const OUT = process.argv[3] || "";
 const FP = process.argv[4] || "";
 const PROJECT_ID = process.argv[5] || "";
@@ -96,13 +99,18 @@ function findChromium() {
     }
   }
 
-  const which = spawnSync(
-    "sh",
-    ["-lc", "command -v chromium || command -v chromium-browser || command -v google-chrome || command -v chrome"],
-    { encoding: "utf8" },
-  );
-  if (which.status === 0 && which.stdout.trim()) {
-    return which.stdout.trim().split("\n")[0];
+  // Inspect PATH directly. A login shell could execute unreviewed profile code
+  // with the token in its environment before the recovery authorization gate.
+  for (const name of ["chromium", "chromium-browser", "google-chrome", "chrome"]) {
+    for (const directory of (process.env.PATH || "").split(path.delimiter)) {
+      if (!path.isAbsolute(directory)) continue;
+      const candidate = path.join(directory, name);
+      try {
+        if (!fs.statSync(candidate).isFile()) continue;
+        fs.accessSync(candidate, fs.constants.X_OK);
+        return candidate;
+      } catch { /* next PATH entry */ }
+    }
   }
   return null;
 }
@@ -123,10 +131,35 @@ if (MODE === "browser") {
   const normalizedPath = BROWSER_TARGET.pathname.replace(/\/+$/, "");
   if (normalizedPath !== "/research/projects") fail("BROWSER_URL_NOT_PROJECT_LIST");
   const loopback = BROWSER_TARGET.hostname === "127.0.0.1" || BROWSER_TARGET.hostname === "localhost";
+  if (RECOVERY && !LOCAL_RECOVERY_BROWSER && TARGET_URL !== "https://books.conanxin.com/research/projects") {
+    fail("RECOVERY_PRODUCTION_URL_REQUIRED");
+  }
+  if (LOCAL_RECOVERY_BROWSER && (!loopback || BROWSER_TARGET.protocol !== "http:")) {
+    fail("RECOVERY_FIXTURE_LOOPBACK_REQUIRED");
+  }
   if (!loopback) {
     if (BROWSER_TARGET.protocol !== "https:" || BROWSER_TARGET.origin !== "https://books.conanxin.com") {
       fail("BROWSER_URL_UNTRUSTED_ORIGIN");
     }
+  }
+}
+
+let recoveryProvenance = [];
+if (RECOVERY) {
+  const capsule = globalThis[Symbol.for("s32.r7.recovery.capsule")];
+  if (MODE === "browser" && (!capsule || capsule.toolSha !== process.env.S32_R7_RECOVERY_TOOL_SHA)) {
+    fail("RECOVERY_LAUNCHER_REQUIRED");
+  }
+  if (MODE === "browser" && (process.execArgv.length !== 2 || process.execArgv[0] !== "-e")) {
+    fail("RECOVERY_NODE_ARGUMENTS_REJECTED");
+  }
+  try {
+    recoveryProvenance = require("./s32-r7-browser-recovery.cjs").prepareRecovery({
+      stateDir: process.env.S32_R7_RECOVERY_STATE_DIR, fp: FP, projectId: PROJECT_ID,
+      ctrl: RUNNER_SOURCE_SHA, toolSha: process.env.S32_R7_RECOVERY_TOOL_SHA,
+    }, { fixture: MODE === "fixture" });
+  } catch (error) {
+    fail(error.code || error.message);
   }
 }
 
@@ -225,11 +258,31 @@ async function withTimeout(promise, ms, label) {
   }
 }
 
+async function requireDevtoolsClosed(port) {
+  let refusals = 0;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const refused = await new Promise((resolve) => {
+      const socket = require("net").createConnection({ host: "127.0.0.1", port });
+      const finish = (closed) => { socket.destroy(); resolve(closed); };
+      socket.once("connect", () => finish(false));
+      socket.once("error", (error) => finish(error.code === "ECONNREFUSED"));
+      socket.setTimeout(250, () => finish(false));
+    });
+    refusals = refused ? refusals + 1 : 0;
+    if (refusals === 2) return;
+    await sleep(50);
+  }
+  throw new Error("DEVTOOLS_ENDPOINT_NOT_CLOSED");
+}
+
 async function produce() {
   if (MODE === "fixture") fixtureServer = await startFixtureServer();
 
   const port = 10000 + (process.pid % 50000);
-  const chromeProfileDir = fs.mkdtempSync(path.join(os.tmpdir(), "s32-r7-chrome-profile-"));
+  // Chrome creates additional Unix-domain sockets under TMPDIR. Keep both
+  // that directory and the profile short, independently of the caller's TMPDIR.
+  let chromeRoot = null;
+  let chromeProfileDir = null;
   const chromeEnv = {
     ...process.env,
     NO_PROXY: "127.0.0.1,localhost",
@@ -382,6 +435,15 @@ async function produce() {
   }).catch(() => null);
 
   try {
+    chromeRoot = fs.mkdtempSync("/tmp/s32-r7-");
+    fs.chmodSync(chromeRoot, 0o700);
+    chromeProfileDir = path.join(chromeRoot, "profile");
+    const chromeTmpDir = path.join(chromeRoot, "chrome-tmp");
+    fs.mkdirSync(chromeProfileDir, { mode: 0o700 });
+    fs.mkdirSync(chromeTmpDir, { mode: 0o700 });
+    chromeEnv.TMPDIR = chromeTmpDir;
+    chromeEnv.TMP = chromeTmpDir;
+    chromeEnv.TEMP = chromeTmpDir;
     try {
       chrome = spawn(CHROMIUM, [
         "--headless=new",
@@ -595,7 +657,8 @@ async function produce() {
         `RUNNER_VERSION=${RUNNER_VERSION}`,
         `RUNNER_SOURCE_SHA=${RUNNER_SOURCE_SHA}`,
         `RUNNER_ID=${RUNNER_ID}`,
-        `RUNNER_MODE=${MODE}`,
+        `RUNNER_MODE=${RECEIPT_MODE}`,
+        ...recoveryProvenance,
       ];
 
       const secretPattern = /(^|_)(TOKEN|PASSWORD|SECRET|DATABASE_URL)=/;
@@ -627,16 +690,35 @@ async function produce() {
     clearTimeout(watchdog);
     try {
       await terminateChromeGroup();
-    } catch {
-      cleanupFailure = "CHROMIUM_PROCESS_GROUP_TIMEOUT";
+    } catch (error) {
+      // Do not mislabel a failed /proc proof as a live-group timeout. Preserve
+      // only our bounded non-secret reason codes, never arbitrary error text.
+      const reason = String(error && error.message);
+      cleanupFailure = /^(CHROMIUM_PROCESS_GROUP_TIMEOUT|PROC_(SCAN_FAILED|STAT_FAILED):[A-Z0-9_]+|PROC_STAT_PARSE_FAILED)$/.test(reason)
+        ? reason : "CHROMIUM_PROCESS_GROUP_CLEANUP_FAILED";
     }
     try {
-      fs.rmSync(chromeProfileDir, { recursive: true, force: true });
-      if (fs.existsSync(chromeProfileDir)) {
+      if (chromeProfileDir) fs.rmSync(chromeProfileDir, { recursive: true, force: true });
+      if (chromeProfileDir && fs.existsSync(chromeProfileDir)) {
         cleanupFailure = cleanupFailure || "CHROME_PROFILE_CLEANUP_FAILED";
       }
     } catch {
       cleanupFailure = cleanupFailure || "CHROME_PROFILE_CLEANUP_FAILED";
+    }
+    try {
+      if (chromeRoot) fs.rmSync(chromeRoot, { recursive: true, force: true });
+      if (chromeRoot && fs.existsSync(chromeRoot)) {
+        cleanupFailure = cleanupFailure || "CHROME_ROOT_CLEANUP_FAILED";
+      }
+    } catch {
+      cleanupFailure = cleanupFailure || "CHROME_ROOT_CLEANUP_FAILED";
+    }
+    if (chromePgid() !== null) {
+      try {
+        await requireDevtoolsClosed(port);
+      } catch {
+        cleanupFailure = cleanupFailure || "DEVTOOLS_ENDPOINT_NOT_CLOSED";
+      }
     }
     if (fixtureServer) fixtureServer.close();
   }
@@ -678,8 +760,9 @@ async function produce() {
   try {
     fs.unlinkSync(pendingReceiptPath);
   } catch {
-    // Canonical receipt publication is already atomic and complete.
-    // The hidden non-secret temp link may be cleaned manually if needed.
+    // A surviving pending link is not a completed local proof. Withdraw only
+    // this invocation's canonical inode before reporting the cleanup failure.
+    failPublishedReceipt("RECEIPT_TEMP_CLEANUP_FAILED");
   }
 
   // link/unlink can also block signal dispatch. A queued termination withdraws
@@ -691,7 +774,7 @@ async function produce() {
   process.stdout.on("error", failPassOutput);
   try {
     await new Promise((resolve) => {
-      process.stdout.write(`R7_BROWSER_RECEIPT=PASS\nRUNNER_MODE=${MODE}\nRECEIPT=${OUT}\n`, (error) => {
+      process.stdout.write(`R7_BROWSER_RECEIPT=PASS\nRUNNER_MODE=${RECEIPT_MODE}\nRECEIPT=${OUT}\n`, (error) => {
         if (error) failPassOutput(error);
         resolve();
       });

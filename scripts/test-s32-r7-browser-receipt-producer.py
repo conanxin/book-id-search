@@ -12,6 +12,7 @@ Covers the fail-closed receipt contract:
 """
 
 import hashlib
+import json
 import http.server
 import os
 import re
@@ -152,6 +153,24 @@ class ProducerTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.out = Path(self.tmp.name) / "R7.web.env"
+        self.observation = Path(self.tmp.name) / "spawn.json"
+        preload = Path(self.tmp.name) / "observe-spawn.cjs"
+        preload.write_text("""
+const cp = require('child_process');
+const original = cp.spawn;
+cp.spawn = function(exe, args, opts) {
+  const child = original.apply(this, arguments);
+  require('fs').writeFileSync(process.env.S32_TEST_SPAWN, JSON.stringify({
+    profile: args.find(a => a.startsWith('--user-data-dir=')).split('=')[1],
+    pid: child.pid, port: Number(args.find(a => a.startsWith('--remote-debugging-port=')).split('=')[1])
+  }));
+  return child;
+};
+""")
+        from unittest.mock import patch
+        self.env_patch = patch.dict(os.environ, NODE_OPTIONS=f"--require={preload}", S32_TEST_SPAWN=str(self.observation))
+        self.env_patch.start()
+        self.addCleanup(self.env_patch.stop)
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -213,7 +232,7 @@ const fs = require('fs');
 const path = require('path');
 const originalRm = fs.rmSync;
 fs.rmSync = function(target, ...args) {
-  if (path.basename(String(target)).startsWith('s32-r7-chrome-profile-')) {
+  if (path.basename(String(target)) === 'profile' && String(target).startsWith('/tmp/s32-r7-')) {
     fs.writeFileSync(path.join(process.env.TMPDIR, 'cleanup-entered'), 'ready');
     const deadline = Date.now() + 5000;
     while (!fs.existsSync(path.join(process.env.TMPDIR, 'cleanup-release')) && Date.now() < deadline) {
@@ -241,7 +260,7 @@ fs.rmSync = function(target, ...args) {
             )
             profile_deadline = time.monotonic() + 5
             while time.monotonic() < profile_deadline:
-                profiles = list(Path(self.tmp.name).glob("s32-r7-chrome-profile-*"))
+                profiles = [Path(json.loads(self.observation.read_text())["profile"])] if self.observation.exists() else []
                 if profiles:
                     break
                 time.sleep(0.05)
@@ -304,7 +323,7 @@ function pauseAt(phase) {
   }
 }
 fs.rmSync = function(target, ...args) {
-  if (path.basename(String(target)).startsWith('s32-r7-chrome-profile-')) pauseAt('profile');
+  if (path.basename(String(target)) === 'profile' && String(target).startsWith('/tmp/s32-r7-')) pauseAt('profile');
   return originalRm.call(this, target, ...args);
 };
 const originalLink = fs.linkSync;
@@ -405,13 +424,13 @@ process.stdout.write = function(chunk, ...args) {
             # An actual OS pipe with no reader, not a mocked callback/error.
             proc.stdout.close()
             proc.stdout = None
-        _, stderr = proc.communicate(timeout=60)
+        stdout, stderr = proc.communicate(timeout=60)
         self.assertNotEqual(proc.returncode, 0)
         self.assert_no_runtime_profile_leak()
         self.assertTrue(self.wait_for_devtools_closed(10000 + proc.pid % 50000))
         self.assertFalse(self.out.exists(), "failed PASS output left canonical evidence")
         self.assertEqual(list(Path(self.tmp.name).glob(".r7-web-receipt.*.tmp")), [])
-        self.assertIn("R7_BROWSER_RECEIPT=FAIL", stderr)
+        self.assertIn("R7_BROWSER_RECEIPT=FAIL", stderr, f"stdout={stdout!r}; stderr={stderr!r}")
         self.assertIn("PASS_STDOUT_FAILED:" + ("EPIPE" if broken_pipe else "EIO"), stderr)
         self.assertNotIn("Unhandled 'error' event", stderr)
 
@@ -434,6 +453,191 @@ process.stdout.write = function(chunk, ...args) {
                 except subprocess.TimeoutExpired:
                     self.fail("settled CDP race left its 10-second timer alive")
                 self.assertEqual(result.returncode, 0, result.stderr)
+
+    def run_temp_topology_case(self, *, long_parent, fake=False):
+        parent = Path(self.tmp.name) / ("orchestrator-" + "x" * (65 if long_parent else 1))
+        parent.mkdir(mode=0o700)
+        observation = Path(self.tmp.name) / "chrome-topology.json"
+        preload = Path(self.tmp.name) / "observe-topology.cjs"
+        preload.write_text("""
+const fs = require('fs');
+const cp = require('child_process');
+const original = cp.spawn;
+cp.spawn = function(exe, args, options) {
+  const child = original.apply(this, arguments);
+  const profile = args.find(x => x.startsWith('--user-data-dir=')).split('=')[1];
+  fs.writeFileSync(process.env.S32_TEST_TOPOLOGY, JSON.stringify({
+    profile, tmpdir: options.env.TMPDIR, pid: child.pid,
+    profileMode: fs.statSync(profile).mode & 0o777,
+    tmpMode: fs.statSync(options.env.TMPDIR).mode & 0o777,
+    rootMode: fs.statSync(require('path').dirname(profile)).mode & 0o777,
+    port: Number(args.find(x => x.startsWith('--remote-debugging-port=')).split('=')[1]),
+  }));
+  return child;
+};
+""")
+        env = dict(os.environ, TMPDIR=str(parent), S32_TEST_TOPOLOGY=str(observation),
+                   NODE_OPTIONS=f"--require={preload}", S32_R7_BROWSER_TOKEN="LOCAL_ONLY_SENTINEL")
+        child_report = Path(self.tmp.name) / "fake-child.json"
+        if fake:
+            fake_chrome = Path(self.tmp.name) / "fake-chrome"
+            fake_chrome.write_text("#!/usr/bin/env python3\nimport os,json,sys\n"
+                + f"open({str(child_report)!r}, 'w').write(json.dumps({{'tmpdir':os.environ['TMPDIR'], 'hasToken':'S32_R7_BROWSER_TOKEN' in os.environ}}))\n")
+            fake_chrome.chmod(0o700)
+            env['S32_R7_CHROMIUM'] = str(fake_chrome)
+        with socket.socket() as sock:
+            sock.bind(('127.0.0.1', 0))
+            env['S32_R7_FIXTURE_PORT'] = str(sock.getsockname()[1])
+        r = subprocess.run(['node', str(PRODUCER), 'fixture', str(self.out), FP, PID, CTRL],
+                           env=env, capture_output=True, text=True, timeout=100)
+        self.assertTrue(observation.exists(), r.stdout + r.stderr)
+        observed = json.loads(observation.read_text())
+        if fake:
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn('DEVTOOLS_ENDPOINT_TIMEOUT', r.stdout)
+            self.assertTrue(child_report.exists(), 'fake Chrome did not start')
+            report = json.loads(child_report.read_text())
+            self.assertEqual(report['tmpdir'], observed['tmpdir'])
+            self.assertFalse(report['hasToken'])
+            self.assertFalse(self.out.exists())
+        else:
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn('R7_BROWSER_RECEIPT=PASS', r.stdout)
+            content = self.out.read_text()
+            fields = dict(line.split('=', 1) for line in content.splitlines())
+            body = ''.join(line + '\n' for line in content.splitlines() if not line.startswith('RECEIPT_SHA256='))
+            self.assertEqual(fields['RECEIPT_SHA256'], hashlib.sha256(body.encode()).hexdigest())
+            self.assertEqual(stat.S_IMODE(self.out.stat().st_mode), 0o600)
+            self.assertNotRegex(content, r'TOKEN|PASSWORD|SECRET|DATABASE_URL|LOCAL_ONLY_SENTINEL')
+        self.assertNotEqual(observed['tmpdir'], str(parent))
+        profile = Path(observed['profile']); root = profile.parent
+        self.assertEqual(root.parent, Path('/tmp'))
+        self.assertTrue(root.name.startswith('s32-r7-'))
+        self.assertEqual(Path(observed['tmpdir']).parent, root)
+        self.assertLess(len(observed['profile']), 60)
+        self.assertLess(len(observed['tmpdir']), 60)
+        self.assertEqual([observed[k] for k in ('profileMode','tmpMode','rootMode')], [0o700]*3)
+        self.assertFalse(root.exists(), 'producer-owned temp root leaked')
+        self.assertFalse(profile.exists())
+        self.assertEqual(list(parent.iterdir()), [], 'Chrome wrote in orchestrator TMPDIR')
+        self.assertEqual(list(Path(self.tmp.name).glob('.r7-web-receipt.*.tmp')), [])
+        self.assertTrue(self.wait_for_devtools_closed(observed['port']))
+        for entry in Path('/proc').glob('[0-9]*/stat'):
+            try:
+                fields = entry.read_text().rsplit(')', 1)[1].split()
+            except FileNotFoundError:
+                continue
+            self.assertFalse(int(fields[2]) == observed['pid'] and fields[0] not in ('Z','X'),
+                             'live Chromium process group remains')
+
+    def test_reachable_devtools_port_after_group_teardown_blocks_publication(self):
+        # Keep a real TCP proxy listening on the producer's advertised port.
+        # Chrome/CDP run on a second port; the proxy survives Chrome PGID exit.
+        preload=Path(self.tmp.name)/'surviving-devtools-proxy.cjs'
+        preload.write_text("""
+const http=require('http'),cp=require('child_process');const spawn=cp.spawn;
+cp.spawn=function(exe,args,opts) {
+  const index=args.findIndex(a=>a.startsWith('--remote-debugging-port='));
+  const advertised=Number(args[index].split('=')[1]);
+  const actual=Number(process.env.S32_TEST_CHROME_PORT);
+  const proxy=http.createServer((req,res)=>{
+    const upstream=http.get(`http://127.0.0.1:${actual}${req.url}`,r=>r.pipe(res));
+    upstream.on('error',()=>{res.writeHead(503);res.end('not ready');});
+  });
+  proxy.listen(advertised,'127.0.0.1');proxy.unref();
+  args[index]=`--remote-debugging-port=${actual}`;
+  return spawn.call(this,exe,args,opts);
+};
+""")
+        with socket.socket() as free:
+            free.bind(('127.0.0.1',0));actual=free.getsockname()[1]
+        r=self.run_producer(f"NODE_OPTIONS={os.environ['NODE_OPTIONS']} --require={preload}",
+                            f"S32_TEST_CHROME_PORT={actual}")
+        self.assertNotEqual(r.returncode,0,r.stdout+r.stderr)
+        self.assertIn('DEVTOOLS_ENDPOINT_NOT_CLOSED',r.stdout)
+        self.assertFalse(self.out.exists())
+        self.assertEqual(list(Path(self.tmp.name).glob('.r7-web-receipt.*.tmp')),[])
+        self.assert_no_runtime_profile_leak()
+
+    def test_pending_unlink_failure_withdraws_canonical_receipt(self):
+        preload = Path(self.tmp.name) / 'fail-unlink.cjs'
+        preload.write_text("""
+const fs=require('fs'); const unlink=fs.unlinkSync; let rejected=false;
+fs.unlinkSync=function(target, ...args) {
+  if (!rejected && require('path').basename(String(target)).startsWith('.r7-web-receipt.')) {
+    rejected=true;
+    throw Object.assign(new Error('test sink failure'),{code:'EACCES'});
+  }
+  return unlink.call(this,target,...args);
+};
+""")
+        r=self.run_producer(f"NODE_OPTIONS={os.environ['NODE_OPTIONS']} --require={preload}")
+        self.assertNotEqual(r.returncode,0,r.stdout+r.stderr)
+        self.assertIn('RECEIPT_TEMP_CLEANUP_FAILED',r.stdout+r.stderr)
+        self.assertNotIn('R7_BROWSER_RECEIPT=PASS',r.stdout)
+        self.assertFalse(self.out.exists())
+        self.assertEqual(list(Path(self.tmp.name).glob('.r7-web-receipt.*.tmp')),[])
+        self.assert_no_runtime_profile_leak()
+
+    def test_owned_root_cleanup_failure_blocks_canonical_receipt(self):
+        preload=Path(self.tmp.name)/'fail-root-remove.cjs'
+        preload.write_text(r"""
+const fs=require('fs'); const rm=fs.rmSync;
+fs.rmSync=function(target,...args) {
+  if (/^\/tmp\/s32-r7-[^/]+$/.test(String(target))) {
+    throw Object.assign(new Error('test removal failure'),{code:'EACCES'});
+  }
+  return rm.call(this,target,...args);
+};
+""")
+        r=self.run_producer(f"NODE_OPTIONS={os.environ['NODE_OPTIONS']} --require={preload}")
+        self.assertNotEqual(r.returncode,0,r.stdout+r.stderr)
+        self.assertIn('CHROME_ROOT_CLEANUP_FAILED',r.stdout)
+        self.assertFalse(self.out.exists())
+        self.assertEqual(list(Path(self.tmp.name).glob('.r7-web-receipt.*.tmp')),[])
+        observed=json.loads(self.observation.read_text())
+        root=Path(observed['profile']).parent
+        self.assertTrue(root.exists(), 'test did not actually inhibit root cleanup')
+        self.assertTrue(self.wait_for_devtools_closed(observed['port']))
+        # This intentionally injected deletion failure is a producer FAIL.
+        # Only the test-created directory is removed after asserting evidence.
+        import shutil
+        self.addCleanup(shutil.rmtree,root)
+
+    def test_long_parent_tmpdir_fixture_and_owned_root_cleanup(self):
+        self.run_temp_topology_case(long_parent=True)
+
+    def test_short_parent_tmpdir_control_and_owned_root_cleanup(self):
+        self.run_temp_topology_case(long_parent=False)
+
+    def test_proc_scan_read_and_parse_errors_fail_closed_with_precise_reason(self):
+        preload = Path(self.tmp.name) / 'proc-failure.cjs'
+        preload.write_text(r"""
+const fs=require('fs');const list=fs.readdirSync,read=fs.readFileSync;
+fs.readdirSync=function(p,...args){
+  if(p==='/proc' && process.env.PROC_FAULT==='scan')throw Object.assign(new Error('injected'),{code:'EACCES'});
+  return list.call(this,p,...args);
+};
+fs.readFileSync=function(p,...args){
+  if(/^\/proc\/[0-9]+\/stat$/.test(String(p))){
+    if(process.env.PROC_FAULT==='read')throw Object.assign(new Error('injected'),{code:'EIO'});
+    if(process.env.PROC_FAULT==='parse')return 'malformed';
+  }
+  return read.call(this,p,...args);
+};
+""")
+        for fault,reason in [('scan','PROC_SCAN_FAILED:EACCES'),('read','PROC_STAT_FAILED:EIO'),
+                             ('parse','PROC_STAT_PARSE_FAILED')]:
+            with self.subTest(fault=fault):
+                r=self.run_producer(f"NODE_OPTIONS={os.environ['NODE_OPTIONS']} --require={preload}",f'PROC_FAULT={fault}')
+                self.assertNotEqual(r.returncode,0)
+                self.assertIn('REASON='+reason,r.stdout)
+                self.assertFalse(self.out.exists())
+                self.assertEqual(list(Path(self.tmp.name).glob('.r7-web-receipt.*.tmp')),[])
+                self.assert_no_runtime_profile_leak()
+
+    def test_fake_chrome_receives_private_short_tmpdir_without_token(self):
+        self.run_temp_topology_case(long_parent=True, fake=True)
 
     def test_happy_path_writes_receipt(self):
         r = self.run_producer()
@@ -569,17 +773,22 @@ process.stdout.write = function(chunk, ...args) {
         self.assertIn("env: chromeEnv", text)
 
     def assert_no_runtime_profile_leak(self):
-        leftovers = list(Path(self.tmp.name).glob("s32-r7-chrome-profile-*"))
-        self.assertEqual(leftovers, [], f"leftover profile dirs: {leftovers}")
-        ps = subprocess.run(
-            ["ps", "-eo", "args="],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
+        self.assertTrue(self.observation.exists(), "spawn was not observed")
+        observed = json.loads(self.observation.read_text())
+        profile = Path(observed['profile'])
+        self.assertFalse(profile.exists(), f"leftover profile: {profile}")
+        self.assertFalse(profile.parent.exists(), f"leftover Chrome root: {profile.parent}")
+        self.assertTrue(self.wait_for_devtools_closed(observed['port']))
+        for entry in Path('/proc').glob('[0-9]*/stat'):
+            try:
+                fields = entry.read_text().rsplit(')', 1)[1].split()
+            except FileNotFoundError:
+                continue
+            self.assertFalse(int(fields[2]) == observed.get('pid') and fields[0] not in ('Z', 'X'),
+                             f"live Chromium group: {observed.get('pid')}")
+        ps = subprocess.run(['ps', '-eo', 'args='], capture_output=True, text=True, timeout=10)
         self.assertEqual(ps.returncode, 0, ps.stderr)
-        marker = f"--user-data-dir={self.tmp.name}/s32-r7-chrome-profile-"
-        self.assertNotIn(marker, ps.stdout)
+        self.assertNotIn(f"--user-data-dir={profile}", ps.stdout)
 
     def test_chromium_profile_and_process_cleanup_on_success(self):
         r = self.run_producer()
@@ -673,7 +882,7 @@ process.stdout.write = function(chunk, ...args) {
 
     def test_chromium_uses_isolated_nondefault_user_data_dir(self):
         text = PRODUCER.read_text()
-        self.assertIn('fs.mkdtempSync(path.join(os.tmpdir(), "s32-r7-chrome-profile-"))', text)
+        self.assertIn('fs.mkdtempSync("/tmp/s32-r7-")', text)
         self.assertIn('--user-data-dir=${chromeProfileDir}', text)
         self.assertIn('process.kill(-pgid, "SIGKILL")', text)
         self.assertIn('fs.readdirSync("/proc", { withFileTypes: true })', text)
@@ -681,7 +890,7 @@ process.stdout.write = function(chunk, ...args) {
         self.assertIn('await terminateChromeGroup()', text)
         self.assertNotIn('if (chrome.exitCode !== null || chrome.signalCode !== null) return;', text)
         self.assertIn('fs.rmSync(chromeProfileDir, { recursive: true, force: true })', text)
-        self.assertIn('if (fs.existsSync(chromeProfileDir))', text)
+        self.assertIn('if (chromeProfileDir && fs.existsSync(chromeProfileDir))', text)
         self.assertNotIn("process.exit(0)", text)
 
     def test_pass_receipt_is_published_only_after_teardown(self):
