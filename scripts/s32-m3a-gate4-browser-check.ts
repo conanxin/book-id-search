@@ -151,7 +151,14 @@ async function main(): Promise<void> {
   // ---- 4. Real Vite web.
   webProc = spawn("pnpm", ["--filter", "@book-id-search/web", "dev"], {
     cwd: root,
-    env: { ...process.env, VITE_S32_ENABLED: "true" },
+    env: {
+      ...process.env,
+      VITE_S32_ENABLED: "true",
+      // The normal public API default points to localhost:3001 (different
+      // origin). Full real-write mode uses the actual Vite same-origin /api
+      // proxy so synthetic book GET and authenticated POST use one origin.
+      ...(p1aRealBinding ? { VITE_API_BASE_URL: "/api" } : {}),
+    },
     stdio: ["ignore", "pipe", "pipe"],
     detached: true,
   });
