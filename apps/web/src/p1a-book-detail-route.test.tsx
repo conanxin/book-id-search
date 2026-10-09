@@ -79,7 +79,7 @@ function mountAt(path = "/books/book-a") {
 describe("P1-A Book Detail route integration", () => {
   it("renders one current-edition research action after authoritative main book loads", async () => {
     mountAt();
-    expect(await screen.findByTestId("detail-research-action")).toHaveTextContent("book-a");
+    expect((await screen.findByTestId("detail-research-action")).textContent).toContain("book-a");
     expect(screen.getByRole("heading", { name: "图书甲" })).toBeTruthy();
     expect(mocks.getBook).toHaveBeenCalledWith("book-a");
   });
@@ -90,11 +90,11 @@ describe("P1-A Book Detail route integration", () => {
       ? Promise.resolve({ item: A })
       : new Promise(resolve => { finishB = resolve; }));
     mountAt();
-    expect(await screen.findByTestId("detail-research-action")).toHaveTextContent("book-a");
+    expect((await screen.findByTestId("detail-research-action")).textContent).toContain("book-a");
     await userEvent.click(screen.getByRole("link", { name: "切换到图书乙" }));
     expect(screen.queryByText("当前书目研究操作：book-a")).toBeNull();
     await act(async () => finishB({ item: B }));
-    expect(await screen.findByTestId("detail-research-action")).toHaveTextContent("book-b");
+    expect((await screen.findByTestId("detail-research-action")).textContent).toContain("book-b");
     expect(screen.queryByRole("heading", { name: "图书甲" })).toBeNull();
   });
 
@@ -102,7 +102,7 @@ describe("P1-A Book Detail route integration", () => {
     mocks.getRelatedBooks.mockRejectedValueOnce(new Error("auxiliary service unavailable"));
     mountAt();
     expect(await screen.findByRole("heading", { name: "图书甲" })).toBeTruthy();
-    expect(screen.getByTestId("detail-research-action")).toHaveTextContent("book-a");
+    expect(screen.getByTestId("detail-research-action").textContent).toContain("book-a");
     expect(await screen.findByText(/相关图书暂时无法加载/)).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "重试相关图书" }));
     await waitFor(() => expect(mocks.getRelatedBooks).toHaveBeenCalledTimes(2));
