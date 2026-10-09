@@ -84,7 +84,7 @@ jobs:
           path: test-results/
           if-no-files-found: ignore
           retention-days: 7
- 
+
   real-binding-pg16:
     name: Real Owner + S32 HTTP → disposable PG16 write acceptance
     runs-on: ubuntu-latest
