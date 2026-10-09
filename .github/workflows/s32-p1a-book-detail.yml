@@ -32,11 +32,15 @@ jobs:
           corepack prepare pnpm@10.33.0 --activate
       - name: Install workspace
         run: pnpm install --frozen-lockfile
-      - name: Targeted P1-A Owner-scope tests
-        run: pnpm exec vitest run apps/web/src/research/p1a-auth-scope.test.tsx
+      - name: Targeted P1-A Book Detail/Owner-scope tests
+        run: |
+          pnpm exec vitest run \
+            apps/web/src/research/p1a-auth-scope.test.tsx \
+            apps/web/src/research/BookDetailResearchActions.test.tsx \
+            apps/web/src/p1a-book-detail-route.test.tsx
       - name: Research and session regression
         run: |
-          pnpm exec vitest run apps/web/src/research apps/web/src/weread/SearchDetailWereadSession.test.tsx
+          pnpm exec vitest run apps/web/src/research apps/web/src/weread/SearchDetailWereadSession.test.tsx apps/web/src/p1a-book-detail-route.test.tsx
       - name: Web production build
         run: pnpm --filter @book-id-search/web build
       - name: API production build
