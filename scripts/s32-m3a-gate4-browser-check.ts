@@ -121,7 +121,7 @@ async function main(): Promise<void> {
   // test-only real S32 service backed by our ephemeral PG16 and static catalog.
   // Normal Gate4/P1A runners continue to use the unchanged production API.
   apiProc = spawn("pnpm", p1aRealBinding
-    ? ["exec", "tsx", "scripts/s32-p1a-real-binding-test-api.ts"]
+    ? ["exec", "tsx", "apps/api/test-support/s32-p1a-real-binding-test-api.ts"]
     : ["--filter", "@book-id-search/api", "dev"], {
     cwd: root,
     env: {
