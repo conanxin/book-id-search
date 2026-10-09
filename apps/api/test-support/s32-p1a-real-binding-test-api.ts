@@ -57,6 +57,12 @@ export const TEST_BOOKS = Object.freeze({
   // requests; never fetched from production Meili or a user's catalog.
   "p1a-synthetic-concurrent": book("p1a-synthetic-concurrent", "P1A Concurrent Same Project", 3),
   "p1a-synthetic-cross-race": book("p1a-synthetic-cross-race", "P1A Concurrent Cross Project", 4),
+  // Deliberately aliases the primary book's SSID to prove canonical rollback
+  // when two distinct catalog IDs claim one secondary identity.
+  "p1a-synthetic-conflict": {
+    ...book("p1a-synthetic-conflict", "P1A Synthetic Identity Collision", 5),
+    ssid: "P1A-SSID-1",
+  },
 });
 function knownBook(id: string): CatalogBookSnapshot | null {
   return Object.hasOwn(TEST_BOOKS, id)
