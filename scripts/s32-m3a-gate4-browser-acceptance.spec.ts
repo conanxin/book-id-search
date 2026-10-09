@@ -262,3 +262,14 @@ test("K — signing out clears the Dossier subtree, never exposing private Issue
   expect(domainWrites).toEqual([]);
   await ctx.close();
 });
+
+test("L — source-project reference labels never masquerade as verified page/plate citations", async ({ browser }) => {
+  const ctx = await owner(browser);
+  const page = await ctx.newPage();
+  await activeDossier(page);
+  await expect(page.getByText(/证据对象及项目资料可追溯，不表示已核实原书页码/)).toBeVisible();
+  await expect(page.locator("#dossier-references")).toContainText("项目资料链接不等于原文页码、图版或段落定位");
+  await expect(page.locator("#dossier-references")).not.toContainText("查看已核实的引用");
+  console.log("P1B_DOSSIER_LOCATOR_DISCLOSURE_REAL_CHROMIUM=PASS");
+  await ctx.close();
+});
