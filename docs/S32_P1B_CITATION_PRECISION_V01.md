@@ -1,7 +1,7 @@
 # S32 P1-B — Evidence citation scope v0.1 (read-only)
 
-TASK_ID: `S32_P1B_CITATION_PRECISION_IMPLEMENTATION_R1`  
-Date: 2026-10-09  
+TASK_ID: `S32_P1B_CITATION_PRECISION_IMPLEMENTATION_R1`
+Date: 2026-10-09
 Phase: **READ_ONLY_SOURCE_LEVEL_DISCLOSURE**; locator-domain expansion remains **PENDING_REVIEW**.
 
 ## Observed source of truth
