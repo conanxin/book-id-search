@@ -161,6 +161,10 @@ export function failDossierRead(
   }
   const next = structuredClone(state);
   if (status === 404 && ticket.request.kind === "assessment") invalidateObject(next, "assessment", ticket.request.assessmentId);
+  // A 404 on an already listed Run invalidates its previous positive evidence
+  // availability. Older list GETs must not reintroduce that stale disclosure.
+  // A transient 5xx does not revoke an independently authorized Run.
+  if (status === 404 && ticket.request.kind === "run") invalidateObject(next, "run", ticket.request.runId);
   if (status === 404 && ticket.request.kind === "resolution") {
     const id = ticket.request.resolutionId;
     invalidateObject(next, "resolution", id);
