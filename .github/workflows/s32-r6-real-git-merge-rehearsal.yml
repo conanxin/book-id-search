@@ -1,0 +1,155 @@
+name: S32 R6 real local Git merge rehearsal — no remote merge
+
+on:
+  push:
+    branches:
+      - research/s32-r6-git-merge-rehearsal
+
+permissions:
+  contents: read
+
+jobs:
+  actual-git-merge-and-regression:
+    name: Five actual local merges + Auth Research WeRead S32
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      TZ: Asia/Shanghai
+      R6_LOCAL_ONLY: "YES"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify and perform five actual Git merge commits locally
+        run: |
+          cp scripts/s32-r6-local-git-merge-rehearsal.sh "$RUNNER_TEMP/r6-local-merge.sh"
+          bash "$RUNNER_TEMP/r6-local-merge.sh"
+      - name: Activate locked pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+      - name: Install frozen workspace
+        run: pnpm install --frozen-lockfile
+      - name: API dist prerequisite
+        run: pnpm --filter @book-id-search/api build
+      - name: Auth Research WeRead S32 and Book Detail regression
+        run: |
+          pnpm exec vitest run \
+            apps/web/src/auth \
+            apps/web/src/research \
+            apps/web/src/weread \
+            apps/web/src/p1a-book-detail-route.test.tsx \
+            apps/api/src/auth \
+            apps/api/src/s32
+      - name: Static schema and Gate5 test discovery
+        run: |
+          pnpm exec vitest run \
+            scripts/s32-schema-contract.test.ts \
+            scripts/s32-m3a-gate5-test-discovery.test.ts
+      - name: CandidateClaims 12 strict repetitions on actual merge tree
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 12); do
+            echo "R6_CLAIMS_ITERATION=$i"
+            pnpm exec vitest run apps/web/src/research/CandidateClaims.test.tsx --maxWorkers=1
+          done
+          echo "R6_CLAIMS_STRESS_12=PASS"
+      - name: API and Web production builds
+        run: |
+          pnpm --filter @book-id-search/api build
+          pnpm --filter @book-id-search/web build
+      - name: Exact merged source hygiene
+        run: git diff --check 42cf1b7b4a10a6edfa53d688012728dded0b3049...HEAD
+
+  actual-merge-chromium:
+    name: Five actual local merges + disposable PG16 Chromium UI
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TZ: Asia/Shanghai
+      R6_LOCAL_ONLY: "YES"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify and perform five actual Git merge commits locally
+        run: |
+          cp scripts/s32-r6-local-git-merge-rehearsal.sh "$RUNNER_TEMP/r6-local-merge.sh"
+          bash "$RUNNER_TEMP/r6-local-merge.sh"
+      - name: Activate locked pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+      - name: Install frozen workspace
+        run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Gate3 disposable PG16 Chromium
+        run: pnpm exec tsx scripts/s32-m3a-gate3-browser-check.ts
+      - name: Gate4 P1B Dossier disposable PG16 Chromium
+        run: pnpm exec tsx scripts/s32-m3a-gate4-browser-check.ts
+      - name: P1A Book Detail disposable PG16 Chromium
+        env:
+          S32_BROWSER_SUITE: P1A
+        run: pnpm exec tsx scripts/s32-m3a-gate4-browser-check.ts
+      - name: Retain synthetic browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r6-real-merge-browser
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  actual-merge-http-pg16:
+    name: Five actual local merges + synthetic Owner HTTP PG16 writes
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TZ: Asia/Shanghai
+      R6_LOCAL_ONLY: "YES"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify and perform five actual Git merge commits locally
+        run: |
+          cp scripts/s32-r6-local-git-merge-rehearsal.sh "$RUNNER_TEMP/r6-local-merge.sh"
+          bash "$RUNNER_TEMP/r6-local-merge.sh"
+      - name: Activate locked pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+      - name: Install frozen workspace
+        run: pnpm install --frozen-lockfile
+      - name: Test-only API refuses direct invocation
+        run: |
+          if env -u S32_P1A_REAL_BINDING_TEST_ONLY -u S32_BROWSER_SUITE pnpm exec tsx apps/api/test-support/s32-p1a-real-binding-test-api.ts > /tmp/r6-blocked.stdout 2> /tmp/r6-blocked.stderr; then
+            echo "ERROR: synthetic API accepted unsafe invocation"
+            exit 1
+          fi
+          grep -q "STATUS=BLOCKED reason=P1A_SYNTHETIC_DISPOSABLE_ONLY" /tmp/r6-blocked.stderr
+          rm -f /tmp/r6-blocked.stdout /tmp/r6-blocked.stderr
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Real synthetic Owner HTTP to disposable PG16 write acceptance
+        env:
+          S32_BROWSER_SUITE: P1A_REAL
+        run: pnpm exec tsx scripts/s32-m3a-gate4-browser-check.ts
+      - name: Retain synthetic binding evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r6-real-merge-binding
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
