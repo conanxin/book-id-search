@@ -1,7 +1,7 @@
 # S32 P0 — 独立故障域的 PostgreSQL 加密备份与恢复策略（设计稿）
 
-Task: `S32_P0_OFFHOST_BACKUP_POLICY_DESIGN_R1` · 2026-10-09  
-Canonical tracker: [GitHub Issue #56](https://github.com/conanxin/book-id-search/issues/56).  
+Task: `S32_P0_OFFHOST_BACKUP_POLICY_DESIGN_R1` · 2026-10-09
+Canonical tracker: [GitHub Issue #56](https://github.com/conanxin/book-id-search/issues/56).
 **Decision status: `DESIGN_PENDING_DESTINATION` · `BACKUP_OFF_HOST=NO` · `PRODUCTION_CHANGED=NO`.**
 
 本文件是可审核的**备份实施决策设计**，不是生产操作手册的执行授权，也不暗示任何服务已经被选为备份目的地。相应 CI 仅使用合成数据和一次性 Docker PostgreSQL 16；不能称作真实用户数据的异机备份验证。
