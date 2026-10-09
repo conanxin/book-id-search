@@ -44,3 +44,47 @@ jobs:
         run: pnpm --filter @book-id-search/web build
       - name: Diff hygiene
         run: git diff --check HEAD^ HEAD
+
+  real-chromium-gate4:
+    name: Disposable PG16 + Chromium Dossier regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      TZ: Asia/Shanghai
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Activate locked pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+      - name: Install workspace
+        run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Real Dossier PostgreSQL16/Chromium acceptance
+        run: pnpm exec tsx scripts/s32-m3a-gate4-browser-check.ts
+
+  real-chromium-gate3:
+    name: Disposable PG16 + Chromium prior Research gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      TZ: Asia/Shanghai
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Activate locked pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+      - name: Install workspace
+        run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Prior Gate3 PostgreSQL16/Chromium acceptance
+        run: pnpm exec tsx scripts/s32-m3a-gate3-browser-check.ts
