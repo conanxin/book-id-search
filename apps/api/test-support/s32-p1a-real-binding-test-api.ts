@@ -53,6 +53,10 @@ const book = (id: string, title: string, ordinal: number): CatalogBookSnapshot =
 export const TEST_BOOKS = Object.freeze({
   "p1a-synthetic-book": book("p1a-synthetic-book", "P1A Synthetic Primary", 1),
   "p1a-synthetic-other": book("p1a-synthetic-other", "P1A Synthetic Secondary", 2),
+  // R3: fixed synthetic fixtures for concurrent same-project/cross-project
+  // requests; never fetched from production Meili or a user's catalog.
+  "p1a-synthetic-concurrent": book("p1a-synthetic-concurrent", "P1A Concurrent Same Project", 3),
+  "p1a-synthetic-cross-race": book("p1a-synthetic-cross-race", "P1A Concurrent Cross Project", 4),
 });
 function knownBook(id: string): CatalogBookSnapshot | null {
   return Object.hasOwn(TEST_BOOKS, id)
