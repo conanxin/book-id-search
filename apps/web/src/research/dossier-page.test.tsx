@@ -83,6 +83,25 @@ describe("Research Dossier read-only rendering", () => {
     expect(read).toHaveBeenCalledWith({ kind: "resolutions", cursor: "opaque_%2B/%3D" });
   });
 
+  it("distinguishes project material links from verified original page or plate citations", () => {
+    const view = prepare();
+    const projectItem = "88888888-8888-4888-8888-888888888888";
+    vi.mocked(useResearchDossier).mockReturnValue({
+      view: { ...view, references: [{
+        origin: "assessment", recordId: R, targetType: "SOURCE",
+        targetId: R, manifestId: M, manifestSha256: "a".repeat(64),
+        materialTitle: "古道地方志来源对象", href: `/research/projects/${P}?item=${projectItem}`,
+      }] },
+      read, refresh,
+    });
+    render(<MemoryRouter><ResearchDossierPage projectId={P} issueId={I} /></MemoryRouter>);
+    expect(screen.getByText(/项目资料链接不等于原文页码、图版或段落定位/)).toBeTruthy();
+    const link = screen.getByRole("link", { name: "查看项目资料：古道地方志来源对象" });
+    expect(link.getAttribute("href")).toBe(`/research/projects/${P}?item=${projectItem}`);
+    expect(screen.queryByRole("link", { name: /已核实的引用|原文第/ })).toBeNull();
+    expect(screen.getByText(/证据对象及项目资料可追溯，不表示已核实原书页码/)).toBeTruthy();
+  });
+
   it("whole-page refresh never submits a Run or a Resolution", async () => {
     show();
     await userEvent.click(screen.getByRole("button", { name: "刷新整个档案" }));
