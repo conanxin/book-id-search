@@ -15,6 +15,7 @@ const DB_USER = process.env.GATE4_BROWSER_DB_USER ?? "s32browser";
 const DB_NAME = process.env.GATE4_BROWSER_DB_NAME ?? "s32_m3a_gate3_browser";
 const P = "11111111-1111-4111-8111-111111111111";
 const ARCHIVED = "13111111-1111-4111-8111-111111111111";
+const FOREIGN = "12111111-1111-4111-8111-111111111111";
 const A = "p1a-synthetic-book";
 const B = "p1a-synthetic-other";
 const TITLE_A = "P1A Synthetic Primary";
@@ -30,7 +31,7 @@ function psql(sql: string): string {
 
 function bindingCount(bookId: string, projectId = P): number {
   const allowed = [A, B];
-  if (!allowed.includes(bookId) || ![P, ARCHIVED].includes(projectId)) throw Error("invalid fixture");
+  if (!allowed.includes(bookId) || ![P, ARCHIVED, FOREIGN].includes(projectId)) throw Error("invalid fixture");
   return Number(psql(
     "SELECT count(*) FROM core.project_bindings WHERE target_type='EDITION' " +
     "AND project_id='" + projectId + "' AND metadata->>'catalogBookId'='" + bookId + "'",
@@ -191,4 +192,68 @@ test.describe.serial("P1A real owner session + synthetic catalog → actual PG16
     console.log("P1A_REAL_DISTINCT_BOOK_NO_IDENTITY_COLLISION=PASS");
     await ctx.close();
   });
+  test("R06 — one canonical edition may enter another ACTIVE project with a second binding, not a second Work", async ({ browser }) => {
+    expect(createdBinding).toBeTruthy();
+    expect(bindingCount(A, FOREIGN)).toBe(0);
+    const ctx = await context(browser, true);
+    const page = await ctx.newPage();
+    const section = await detail(page, A, TITLE_A);
+    await expect(section.getByRole("link", { name: "Gate2 Run Project" })).toBeVisible();
+    await section.getByRole("button", { name: "加入研究" }).click();
+    await expect(section.getByRole("button", { name: "Gate2 Run Project" })).toHaveCount(0);
+    const network = page.waitForResponse(response =>
+      response.url().endsWith("/api/private/s32/projects/" + FOREIGN + "/catalog-books")
+      && response.request().method() === "POST");
+    await section.getByRole("button", { name: "Gate2 Foreign Project" }).click();
+    const response = await network;
+    expect(response.status()).toBe(201);
+    const receipt = await response.json();
+    expect(receipt).toMatchObject({
+      promotionStatus: "existing",
+      bindingStatus: "created",
+      item: { projectId: FOREIGN, catalogBookId: A, title: TITLE_A },
+    });
+    const foreignBinding = receipt.item.bindingId as string;
+    expect(foreignBinding).not.toBe(createdBinding);
+    expect(bindingCount(A)).toBe(1);
+    expect(bindingCount(A, FOREIGN)).toBe(1);
+    expect(identityCount(A)).toBe(1);
+    expect(Number(psql("SELECT count(*) FROM core.works WHERE title='" + TITLE_A + "'"))).toBe(1);
+    expect(Number(psql(
+      "SELECT count(DISTINCT target_id) FROM core.project_bindings " +
+      "WHERE target_type='EDITION' AND project_id IN ('" + P + "','" + FOREIGN + "') " +
+      "AND metadata->>'catalogBookId'='" + A + "'",
+    ))).toBe(1);
+    const link = section.getByRole("link", { name: "查看这本书在项目中的资料" });
+    await expect(link).toHaveAttribute("href", "/research/projects/" + FOREIGN + "?item=" + foreignBinding);
+    await link.click();
+    await expect(page.locator("[data-binding-id='" + foreignBinding + "']")
+      .getByRole("heading", { name: TITLE_A })).toBeVisible({ timeout: 20_000 });
+    console.log("P1A_REAL_CROSS_PROJECT_REUSES_EDITION_NEW_BINDING=PASS");
+    await ctx.close();
+  });
+
+  test("R07 — missing synthetic catalog ID yields 404 with zero new identities, Works or Project bindings", async ({ browser }) => {
+    const ctx = await context(browser, true);
+    const page = await ctx.newPage();
+    await detail(page, A, TITLE_A);
+    const before = psql("SELECT (SELECT count(*) FROM core.works)::text || ':' || " +
+      "(SELECT count(*) FROM core.editions)::text || ':' || " +
+      "(SELECT count(*) FROM core.sources)::text || ':' || " +
+      "(SELECT count(*) FROM core.external_identities)::text || ':' || " +
+      "(SELECT count(*) FROM core.project_bindings)::text");
+    const missingId = "p1a-synthetic-missing";
+    const result = await postBinding(page, P, missingId);
+    expect(result.status).toBe(404);
+    expect(result.body.error).toBeTruthy();
+    const after = psql("SELECT (SELECT count(*) FROM core.works)::text || ':' || " +
+      "(SELECT count(*) FROM core.editions)::text || ':' || " +
+      "(SELECT count(*) FROM core.sources)::text || ':' || " +
+      "(SELECT count(*) FROM core.external_identities)::text || ':' || " +
+      "(SELECT count(*) FROM core.project_bindings)::text");
+    expect(after).toBe(before);
+    console.log("P1A_REAL_MISSING_CATALOG_ZERO_WRITE=PASS");
+    await ctx.close();
+  });
+
 });
