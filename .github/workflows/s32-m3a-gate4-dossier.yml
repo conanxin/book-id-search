@@ -27,6 +27,7 @@ jobs:
           pnpm exec vitest run \
             apps/web/src/research/dossier-model.test.ts \
             apps/web/src/research/dossier-reader.test.ts \
+            apps/web/src/research/dossier-reader.reentrancy.test.ts \
             apps/web/src/research/dossier-reader.integration.test.ts \
             apps/web/src/research/dossier-page.test.tsx
       - name: Full Research scoped regression
