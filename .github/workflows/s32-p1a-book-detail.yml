@@ -11,6 +11,8 @@ on:
       - "apps/web/src/styles.css"
       - ".github/workflows/s32-p1a-book-detail.yml"
       - "scripts/s32-p1a-browser-acceptance.spec.ts"
+      - "scripts/s32-p1a-real-binding.spec.ts"
+      - "scripts/s32-p1a-real-binding-test-api.ts"
       - "scripts/s32-m3a-gate4-browser-check.ts"
       - "package.json"
 
@@ -79,6 +81,46 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: p1a-browser-acceptance
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+ 
+  real-binding-pg16:
+    name: Real Owner + S32 HTTP → disposable PG16 write acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+      - name: Install workspace
+        run: pnpm install --frozen-lockfile
+      - name: Fail-closed direct invocation of test-only API
+        run: |
+          if env -u S32_P1A_REAL_BINDING_TEST_ONLY -u S32_BROWSER_SUITE pnpm exec tsx             scripts/s32-p1a-real-binding-test-api.ts > /tmp/p1a-blocked.stdout 2> /tmp/p1a-blocked.stderr; then
+            echo "ERROR: test-only API accepted unsafe direct invocation"
+            exit 1
+          fi
+          grep -q "STATUS=BLOCKED reason=P1A_SYNTHETIC_DISPOSABLE_ONLY" /tmp/p1a-blocked.stderr
+          rm -f /tmp/p1a-blocked.stdout /tmp/p1a-blocked.stderr
+      - name: Install isolated Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Actual HTTP add and fresh PG16 database assertions
+        env:
+          S32_BROWSER_SUITE: P1A_REAL
+        run: pnpm exec tsx scripts/s32-m3a-gate4-browser-check.ts
+      - name: Upload isolated browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p1a-real-binding-evidence
           path: test-results/
           if-no-files-found: ignore
           retention-days: 7
