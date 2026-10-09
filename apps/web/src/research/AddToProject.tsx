@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useWebAuthSession } from "../auth/useWebAuthSession";
+import { getWebAuthAuthGeneration } from "../auth/session";
 import { addCatalogBookToProject, listProjects, ProjectApiError, type Project, type ProjectResearchItem, type ResearchMembership } from "./api";
 import { researchEnabled } from "./ProjectsPage";
 import type { MembershipLoadState } from "./SearchMemberships";
@@ -17,7 +18,7 @@ export function AddToProject(props: Props) {
   const session = useWebAuthSession();
   if (!researchEnabled) return null;
   // A changed auth state/book owns a fresh panel; stale responses cannot mark it as added.
-  return <ProjectSelector key={`${session.status}:${props.bookId}`} session={session} {...props} />;
+  return <ProjectSelector key={`${session.status}:${props.bookId}:${getWebAuthAuthGeneration()}`} session={session} {...props} />;
 }
 type SessionSnapshot = ReturnType<typeof useWebAuthSession>;
 function ProjectSelector({ bookId, bookTitle, onAdded, memberships, membershipState, onMembershipInvalidated, session }: Props & { session: SessionSnapshot }) {
@@ -76,7 +77,7 @@ function ProjectSelector({ bookId, bookTitle, onAdded, memberships, membershipSt
     <button type="button" className="toolbar-button" aria-expanded={open} disabled={pending && open} onClick={() => void show()}>加入研究</button>
     {added ? <span role="status" className="research-add-success">{awaitingMembershipRefresh && membershipState === "unavailable" ? "已加入项目；研究状态暂未能重新确认。" : `已加入「${added}」`}</span> : null}
     {open ? <section className="research-add-panel" aria-label={`将《${bookTitle}》加入研究项目`}>
-      {!token ? <p>先登录<Link to="/research/projects">私人研究空间</Link>，再加入盐研究项目。</p> : <>
+      {!token ? <p>先登录<Link to="/research/projects">私人研究空间</Link>，再加入研究项目。</p> : <>
         <strong>选择一个研究项目</strong>
         {loading ? <p role="status">正在读取项目…</p> : null}
         {error ? <p role="alert" className="research-error">{error}</p> : null}
