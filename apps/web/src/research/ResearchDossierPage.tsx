@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import type { IssueResolutionType, ResearchRunStatus } from "./api";
 import type { DossierView } from "./dossier-reader";
 import { useResearchDossier } from "./useResearchDossier";
+import { EvidenceCitationScope } from "./EvidenceCitationScope";
 
 const resolutionLabels: Record<IssueResolutionType, string> = {
   PREFERRED_CLAIM: "采用一个可能答案",
@@ -93,6 +94,7 @@ export function ResearchDossierPage({ projectId, issueId, authGeneration = 1 }: 
       <p className="research-muted">研究项目：{project.name} · 更新：{dateLabel(issue.updatedAt)}</p>
       <button type="button" className="research-text-button" onClick={refreshAll}>刷新整个档案</button>
       <p className="research-muted">各分区独立读取，仅代表当前可见且已加载的记录；不是单一数据库时点的完整快照。</p>
+      <p className="research-muted">证据对象及项目资料可追溯，不表示已核实原书页码、图版、段落或原文摘录。</p>
     </header>
 
     <nav className="dossier-index" aria-label="研究档案目录">
@@ -158,6 +160,7 @@ export function ResearchDossierPage({ projectId, issueId, authGeneration = 1 }: 
           <h4>评价详情</h4>
           <p>{selectedAssessment.assessment.reasoning || "未记录完整理由"}</p>
           <p className="research-muted">已授权证据清单 {selectedAssessment.evidenceManifest.items.length} 项 · {selectedAssessment.evidenceManifest.manifestSha256}</p>
+          <EvidenceCitationScope items={selectedAssessment.evidenceManifest.items} />
         </div> : null}
       </div> : null}
     </Panel>
@@ -194,6 +197,8 @@ export function ResearchDossierPage({ projectId, issueId, authGeneration = 1 }: 
         <h3>选中结论的原始理由</h3>
         <p>{selectedResolution.resolution.rationale || "未记录完整理由"}</p>
         <p className="research-muted">依据：{selectedResolution.evidenceBasisAvailable ? "当前可用" : "未指定或不可展开"}</p>
+        {selectedResolution.evidenceBasisAvailable && selectedResolution.evidenceManifest
+          ? <EvidenceCitationScope items={selectedResolution.evidenceManifest.items} /> : null}
       </div> : null}
     </Panel>
 
@@ -221,12 +226,13 @@ export function ResearchDossierPage({ projectId, issueId, authGeneration = 1 }: 
         <h4>证据快照</h4>
         <p className="dossier-fingerprint">{selectedRun.evidenceManifest.manifestSha256}</p>
         {selectedRun.evidenceManifest.available ?
-          <ol>{selectedRun.evidenceManifest.items.map(item => <li key={item.ordinal}>{item.role} · {item.targetType}{item.note ? " · " + item.note : ""}</li>)}</ol> :
+          <><p className="research-muted">这里仅保留证据对象快照，不含可核验的原文页码、图版或段落定位。</p>
+          <ol>{selectedRun.evidenceManifest.items.map(item => <li key={item.ordinal}>{item.role} · {item.targetType}{item.note ? " · " + item.note : ""}</li>)}</ol></> :
           <p className="research-muted">当前不可展开原始证据条目。</p>}
         {selectedRun.producedReferences.length ? <><h4>本轮关联对象（逐项授权后展示）</h4>
           <ul>{selectedRun.producedReferences.map(ref => <li key={ref.kind + ":" + ref.ordinal}>
             {ref.kind} #{ref.ordinal}：{ref.status === "resolved" ?
-              (ref.href ? <Link to={ref.href}>查看已核实的引用</Link> : "已核实对象 " + ref.id)
+              (ref.href ? <Link to={ref.href}>查看已授权项目资料（非原文页码）</Link> : "已核实对象 " + ref.id)
               : ref.status === "error" ? "读取失败" : ref.status === "unavailable" ? "当前不可用" :
                 ref.status === "loading" ? "正在验证" : "映射尚未核实"}
           </li>)}</ul>
@@ -250,11 +256,11 @@ export function ResearchDossierPage({ projectId, issueId, authGeneration = 1 }: 
     </Panel>
 
     <Panel id="dossier-references" title="来源与对象引用">
-      <p className="research-muted">仅显示已有授权与真实对象依据。清单指纹不是源文件字节校验和；缺少页码或定位时不生成链接。</p>
+      <p className="research-muted">项目资料链接不等于原文页码、图版或段落定位。清单指纹不是源文件字节校验和，不能证明具体原文内容。</p>
       {view.references.length === 0 ? <p className="research-muted">尚无可展开的已核实对象引用。</p> : <ul className="dossier-references">
         {view.references.map((reference, index) => <li key={reference.origin + ":" + reference.recordId + ":" + reference.targetId + ":" + index}>
           <span>{reference.origin} · {reference.targetType}</span>
-          {reference.href ? <Link to={reference.href}>{reference.materialTitle || "已核实材料"}</Link> : <span>对象引用已核实，暂无可用定位</span>}
+          {reference.href ? <Link to={reference.href}>查看项目资料：{reference.materialTitle || "材料名称未提供"}</Link> : <span>没有可安全显示的项目材料入口</span>}
           <span className="dossier-fingerprint">{reference.manifestSha256}</span>
         </li>)}
       </ul>}
