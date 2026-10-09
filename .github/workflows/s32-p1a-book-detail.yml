@@ -12,7 +12,7 @@ on:
       - ".github/workflows/s32-p1a-book-detail.yml"
       - "scripts/s32-p1a-browser-acceptance.spec.ts"
       - "scripts/s32-p1a-real-binding.spec.ts"
-      - "scripts/s32-p1a-real-binding-test-api.ts"
+      - "apps/api/test-support/s32-p1a-real-binding-test-api.ts"
       - "scripts/s32-m3a-gate4-browser-check.ts"
       - "package.json"
 
@@ -104,7 +104,7 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Fail-closed direct invocation of test-only API
         run: |
-          if env -u S32_P1A_REAL_BINDING_TEST_ONLY -u S32_BROWSER_SUITE pnpm exec tsx             scripts/s32-p1a-real-binding-test-api.ts > /tmp/p1a-blocked.stdout 2> /tmp/p1a-blocked.stderr; then
+          if env -u S32_P1A_REAL_BINDING_TEST_ONLY -u S32_BROWSER_SUITE pnpm exec tsx             apps/api/test-support/s32-p1a-real-binding-test-api.ts > /tmp/p1a-blocked.stdout 2> /tmp/p1a-blocked.stderr; then
             echo "ERROR: test-only API accepted unsafe direct invocation"
             exit 1
           fi
