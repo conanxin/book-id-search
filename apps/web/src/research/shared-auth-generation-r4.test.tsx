@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import {
   __resetWebAuthStoreForTests, __setWebAuthSnapshotForTests,
 } from "../auth/session";
-import { getProjectOverview, getResearchIssue, listProjects } from "./api";
+import { getProjectOverview, getResearchIssue, listProjects, ProjectApiError } from "./api";
 import type { Project, ProjectOverview, ResearchIssueDetailResponse } from "./api";
 
 // Real ProjectWorkspace and ResearchIssueDetail render here; only unrelated
@@ -130,6 +130,38 @@ describe("R4 shared Research auth-generation private-state lifetime", () => {
     rotateOwner();
     expect(screen.queryByText("Private detail for Owner A issue-only title")).toBeNull();
     expect(await screen.findByRole("heading", { name: "Owner B issue-only title" })).toBeTruthy();
+    expect(getResearchIssue).toHaveBeenCalledTimes(2);
+  });
+
+  it("invalidates a pending old-owner project list read even if the backend finishes late", async () => {
+    let resolveOld: ((value: { projects: Project[] }) => void) | null = null;
+    let oldSignal: AbortSignal | undefined;
+    vi.mocked(listProjects)
+      .mockImplementationOnce(signal => {
+        oldSignal = signal;
+        return new Promise(resolve => { resolveOld = resolve; });
+      })
+      .mockResolvedValueOnce({ projects: [project("Owner B fresh project")] });
+    await mount("/research/projects");
+    await waitFor(() => expect(oldSignal).toBeDefined());
+
+    rotateOwner();
+    expect(oldSignal?.aborted).toBe(true);
+    expect(await screen.findByText("Owner B fresh project")).toBeTruthy();
+    await act(async () => { resolveOld?.({ projects: [project("Owner A delayed private project")] }); });
+    expect(screen.queryByText("Owner A delayed private project")).toBeNull();
+  });
+
+  it("does not preserve previous Owner's Issue detail when new Owner is denied", async () => {
+    vi.mocked(getResearchIssue)
+      .mockResolvedValueOnce(issueDetail("Owner A denied-later Issue"))
+      .mockRejectedValueOnce(new ProjectApiError(404, "not available"));
+    await mount("/research/projects/" + P + "/issues/" + I);
+    expect(await screen.findByText("Private detail for Owner A denied-later Issue")).toBeTruthy();
+
+    rotateOwner();
+    expect(screen.queryByText("Private detail for Owner A denied-later Issue")).toBeNull();
+    expect(await screen.findByRole("alert")).toHaveTextContent("研究问题不存在，或不属于当前项目");
     expect(getResearchIssue).toHaveBeenCalledTimes(2);
   });
 });
