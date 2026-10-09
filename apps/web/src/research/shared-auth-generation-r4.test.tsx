@@ -134,7 +134,7 @@ describe("R4 shared Research auth-generation private-state lifetime", () => {
   });
 
   it("invalidates a pending old-owner project list read even if the backend finishes late", async () => {
-    let resolveOld: ((value: { projects: Project[] }) => void) | null = null;
+    let resolveOld!: (value: { projects: Project[] }) => void;
     let oldSignal: AbortSignal | undefined;
     vi.mocked(listProjects)
       .mockImplementationOnce(signal => {
@@ -148,7 +148,7 @@ describe("R4 shared Research auth-generation private-state lifetime", () => {
     rotateOwner();
     expect(oldSignal?.aborted).toBe(true);
     expect(await screen.findByText("Owner B fresh project")).toBeTruthy();
-    await act(async () => { resolveOld?.({ projects: [project("Owner A delayed private project")] }); });
+    await act(async () => { resolveOld({ projects: [project("Owner A delayed private project")] }); });
     expect(screen.queryByText("Owner A delayed private project")).toBeNull();
   });
 
@@ -161,7 +161,7 @@ describe("R4 shared Research auth-generation private-state lifetime", () => {
 
     rotateOwner();
     expect(screen.queryByText("Private detail for Owner A denied-later Issue")).toBeNull();
-    expect(await screen.findByRole("alert")).toHaveTextContent("研究问题不存在，或不属于当前项目");
+    expect((await screen.findByRole("alert")).textContent).toContain("研究问题不存在，或不属于当前项目");
     expect(getResearchIssue).toHaveBeenCalledTimes(2);
   });
 });
