@@ -1,0 +1,134 @@
+name: S32 R5 composed-source integration rehearsal
+
+on:
+  push:
+    branches:
+      - research/s32-r5-combined-review
+
+permissions:
+  contents: read
+
+jobs:
+  combined-source:
+    name: Combined Auth Research WeRead S32 and builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TZ: Asia/Shanghai
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Activate locked pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+      - name: Install frozen workspace
+        run: pnpm install --frozen-lockfile
+      - name: API dist prerequisite
+        run: pnpm --filter @book-id-search/api build
+      - name: Combined source and domain regression
+        run: |
+          pnpm exec vitest run \
+            apps/web/src/auth \
+            apps/web/src/research \
+            apps/web/src/weread \
+            apps/web/src/p1a-book-detail-route.test.tsx \
+            apps/api/src/auth \
+            apps/api/src/s32
+      - name: Static schema and test discovery
+        run: |
+          pnpm exec vitest run \
+            scripts/s32-schema-contract.test.ts \
+            scripts/s32-m3a-gate5-test-discovery.test.ts
+      - name: Canonical Claim focused reliability 12 strict iterations
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 12); do
+            echo "R5_CLAIMS_ITERATION=$i"
+            pnpm exec vitest run apps/web/src/research/CandidateClaims.test.tsx --maxWorkers=1
+          done
+          echo "R5_CLAIMS_STRESS_12=PASS"
+      - name: Web build
+        run: pnpm --filter @book-id-search/web build
+      - name: Check content difference
+        run: git diff --check HEAD^ HEAD
+
+  browser-dossier:
+    name: Disposable PG16 Chromium Gate3 Gate4 P1A
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TZ: Asia/Shanghai
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Activate locked pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+      - name: Install frozen workspace
+        run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Disposable Gate3 PostgreSQL16 and Chromium
+        run: pnpm exec tsx scripts/s32-m3a-gate3-browser-check.ts
+      - name: Disposable Dossier P1B citation Chromium and PostgreSQL16
+        run: pnpm exec tsx scripts/s32-m3a-gate4-browser-check.ts
+      - name: Disposable Book Detail P1A UI Chromium and PostgreSQL16
+        env:
+          S32_BROWSER_SUITE: P1A
+        run: pnpm exec tsx scripts/s32-m3a-gate4-browser-check.ts
+      - name: Retain browser run evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r5-composed-browser
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  real-binding-pg16:
+    name: Synthetic Owner real HTTP PostgreSQL16 write acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      TZ: Asia/Shanghai
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Activate locked pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+      - name: Install frozen workspace
+        run: pnpm install --frozen-lockfile
+      - name: Test-only API refuses direct invocation
+        run: |
+          if env -u S32_P1A_REAL_BINDING_TEST_ONLY -u S32_BROWSER_SUITE pnpm exec tsx apps/api/test-support/s32-p1a-real-binding-test-api.ts > /tmp/r5-blocked.stdout 2> /tmp/r5-blocked.stderr; then
+            echo "ERROR: synthetic API accepted unsafe direct invocation"
+            exit 1
+          fi
+          grep -q "STATUS=BLOCKED reason=P1A_SYNTHETIC_DISPOSABLE_ONLY" /tmp/r5-blocked.stderr
+          rm -f /tmp/r5-blocked.stdout /tmp/r5-blocked.stderr
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Actual synthetic HTTP catalog binding and PG16 constraints
+        env:
+          S32_BROWSER_SUITE: P1A_REAL
+        run: pnpm exec tsx scripts/s32-m3a-gate4-browser-check.ts
+      - name: Retain isolated write acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r5-synthetic-binding
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
