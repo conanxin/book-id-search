@@ -733,3 +733,52 @@ describe("Dossier acceptance and cross-projection reconciliation", () => {
     expect(view.evidenceBases.coverage).toMatchObject({ status: "notRequested", loadedCount: 0, nextCursor: null, exhausted: false });
   });
 });
+
+describe("R4 Run 404 invalidates stale evidence availability", () => {
+  it("no longer calls a previously loaded Run's evidence currently available after its detail 404", () => {
+    const opaqueCursor = "opaque-next-page_+/=";
+    let state = read(ready(), { kind: "runs", cursor: null }, {
+      runs: [run()], nextCursor: opaqueCursor,
+    });
+    state = read(state, { kind: "run", runId: U }, runDetail());
+    const pending = startDossierRead(state, { kind: "run", runId: U });
+    expect(pending.ticket).not.toBeNull();
+    state = failDossierRead(pending.state, pending.ticket!, 404);
+
+    const view = dossierView(state);
+    expect(view.runDetails).toEqual([]);
+    expect(view.runs.rows[0].evidenceManifest.available).toBe(false);
+    expect(view.runs.coverage.nextCursor).toBe(opaqueCursor);
+    expect(view.runs.rows[0].runId).toBe(U);
+  });
+
+  it("cannot resurrect old positive evidence availability from a list GET started before a Run detail 404", () => {
+    let state = read(ready(), { kind: "runs", cursor: null }, {
+      runs: [run()], nextCursor: null,
+    });
+    const olderList = startDossierRead(state, { kind: "runs", cursor: null });
+    const detail = startDossierRead(olderList.state, { kind: "run", runId: U });
+    expect(olderList.ticket).not.toBeNull();
+    expect(detail.ticket).not.toBeNull();
+    state = failDossierRead(detail.state, detail.ticket!, 404);
+    state = receiveDossierRead(state, olderList.ticket!, {
+      runs: [run()], nextCursor: null,
+    }, T);
+    expect(dossierView(state).runs.rows[0].evidenceManifest.available).toBe(false);
+    expect(dossierView(state).runDetails).toEqual([]);
+  });
+
+  it("does not interpret a Run detail 503 as proof of revoked evidence", () => {
+    let state = read(ready(), { kind: "runs", cursor: null }, {
+      runs: [run()], nextCursor: null,
+    });
+    const pending = startDossierRead(state, { kind: "run", runId: U });
+    state = failDossierRead(pending.state, pending.ticket!, 503);
+    const view = dossierView(state);
+    expect(view.runs.rows[0].evidenceManifest.available).toBe(true);
+    expect(view.runDetails).toEqual([]);
+    expect(view.reads.find(row => row.kind === "run")).toMatchObject({
+      error: { status: 503 },
+    });
+  });
+});
