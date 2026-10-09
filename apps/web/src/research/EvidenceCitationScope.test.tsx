@@ -21,7 +21,8 @@ describe("P1-B v0.1 frozen evidence citation precision", () => {
     const info = screen.getByRole("note");
     expect(info.textContent).toContain("仅记录证据对象");
     expect(info.textContent).toContain("页码、图版、段落与原文摘录均未记录");
-    expect(info.textContent).not.toContain("已核验原文");
+    expect(info.textContent).toContain("不代表已核验原文");
+    expect(info.textContent).not.toContain("已核验原文页码：");
     expect(info.querySelector("a")).toBeNull();
   });
 
