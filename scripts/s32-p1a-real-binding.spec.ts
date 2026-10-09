@@ -20,6 +20,11 @@ const A = "p1a-synthetic-book";
 const B = "p1a-synthetic-other";
 const TITLE_A = "P1A Synthetic Primary";
 const TITLE_B = "P1A Synthetic Secondary";
+const RACE_SAME = "p1a-synthetic-concurrent";
+const RACE_CROSS = "p1a-synthetic-cross-race";
+const TITLE_RACE_SAME = "P1A Concurrent Same Project";
+const TITLE_RACE_CROSS = "P1A Concurrent Cross Project";
+const ALL_SYNTHETIC_IDS = [A, B, RACE_SAME, RACE_CROSS];
 
 function psql(sql: string): string {
   return execFileSync("docker", [
@@ -30,7 +35,7 @@ function psql(sql: string): string {
 }
 
 function bindingCount(bookId: string, projectId = P): number {
-  const allowed = [A, B];
+  const allowed = ALL_SYNTHETIC_IDS;
   if (!allowed.includes(bookId) || ![P, ARCHIVED, FOREIGN].includes(projectId)) throw Error("invalid fixture");
   return Number(psql(
     "SELECT count(*) FROM core.project_bindings WHERE target_type='EDITION' " +
@@ -38,7 +43,7 @@ function bindingCount(bookId: string, projectId = P): number {
   ));
 }
 function identityCount(bookId: string): number {
-  if (![A, B].includes(bookId)) throw Error("invalid fixture");
+  if (!ALL_SYNTHETIC_IDS.includes(bookId)) throw Error("invalid fixture");
   return Number(psql("SELECT count(*) FROM core.external_identities WHERE provider='BOOK_ID_SEARCH' " +
     "AND namespace='CATALOG_DOCUMENT' AND external_id='" + bookId + "' AND binding_state<>'RETIRED'"));
 }
@@ -253,6 +258,66 @@ test.describe.serial("P1A real owner session + synthetic catalog → actual PG16
       "(SELECT count(*) FROM core.project_bindings)::text");
     expect(after).toBe(before);
     console.log("P1A_REAL_MISSING_CATALOG_ZERO_WRITE=PASS");
+    await ctx.close();
+  });
+
+  test("R08 — two parallel first-add POSTs into one Project create exactly one canonical Edition and Binding", async ({ browser }) => {
+    expect(bindingCount(RACE_SAME)).toBe(0);
+    expect(identityCount(RACE_SAME)).toBe(0);
+    const ctx = await context(browser, true);
+    const page = await ctx.newPage();
+    await detail(page, A, TITLE_A); // same-origin real Owner session, no catalog/book mocks
+    const [first, second] = await Promise.all([
+      postBinding(page, P, RACE_SAME),
+      postBinding(page, P, RACE_SAME),
+    ]);
+    expect([first.status, second.status].sort()).toEqual([200, 201]);
+    expect([first.body.promotionStatus, second.body.promotionStatus].sort()).toEqual(["created", "existing"]);
+    expect([first.body.bindingStatus, second.body.bindingStatus].sort()).toEqual(["created", "existing"]);
+    expect(first.body.item.bindingId).toBe(second.body.item.bindingId);
+    expect(first.body.item.editionId).toBe(second.body.item.editionId);
+    expect(first.body.item.workId).toBe(second.body.item.workId);
+    expect(first.body.item.sourceId).toBe(second.body.item.sourceId);
+    expect(first.body.item.catalogBookId).toBe(RACE_SAME);
+    expect(first.body.item.title).toBe(TITLE_RACE_SAME);
+    expect(bindingCount(RACE_SAME)).toBe(1);
+    expect(identityCount(RACE_SAME)).toBe(1);
+    expect(Number(psql("SELECT count(*) FROM core.works WHERE title='" + TITLE_RACE_SAME + "'"))).toBe(1);
+    expect(Number(psql("SELECT count(*) FROM core.editions e JOIN core.works w ON w.id=e.work_id WHERE w.title='" + TITLE_RACE_SAME + "'"))).toBe(1);
+    expect(Number(psql("SELECT count(*) FROM core.sources s JOIN core.editions e ON e.id=s.edition_id JOIN core.works w ON w.id=e.work_id WHERE w.title='" + TITLE_RACE_SAME + "'"))).toBe(1);
+    console.log("P1A_REAL_PARALLEL_SAME_PROJECT_IDEMPOTENT=PASS");
+    await ctx.close();
+  });
+
+  test("R09 — concurrent first-add into two ACTIVE Projects preserves one Edition and independent bindings", async ({ browser }) => {
+    expect(bindingCount(RACE_CROSS, P)).toBe(0);
+    expect(bindingCount(RACE_CROSS, FOREIGN)).toBe(0);
+    expect(identityCount(RACE_CROSS)).toBe(0);
+    const ctx = await context(browser, true);
+    const page = await ctx.newPage();
+    await detail(page, B, TITLE_B);
+    const [main, foreign] = await Promise.all([
+      postBinding(page, P, RACE_CROSS),
+      postBinding(page, FOREIGN, RACE_CROSS),
+    ]);
+    expect(main.status).toBe(201);
+    expect(foreign.status).toBe(201);
+    expect([main.body.promotionStatus, foreign.body.promotionStatus].sort()).toEqual(["created", "existing"]);
+    expect(main.body.bindingStatus).toBe("created");
+    expect(foreign.body.bindingStatus).toBe("created");
+    expect(main.body.item.bindingId).not.toBe(foreign.body.item.bindingId);
+    expect(main.body.item.editionId).toBe(foreign.body.item.editionId);
+    expect(main.body.item.workId).toBe(foreign.body.item.workId);
+    expect(main.body.item.sourceId).toBe(foreign.body.item.sourceId);
+    expect(main.body.item.title).toBe(TITLE_RACE_CROSS);
+    expect(foreign.body.item.title).toBe(TITLE_RACE_CROSS);
+    expect(bindingCount(RACE_CROSS, P)).toBe(1);
+    expect(bindingCount(RACE_CROSS, FOREIGN)).toBe(1);
+    expect(identityCount(RACE_CROSS)).toBe(1);
+    expect(Number(psql("SELECT count(*) FROM core.works WHERE title='" + TITLE_RACE_CROSS + "'"))).toBe(1);
+    expect(Number(psql("SELECT count(*) FROM core.editions e JOIN core.works w ON w.id=e.work_id WHERE w.title='" + TITLE_RACE_CROSS + "'"))).toBe(1);
+    expect(Number(psql("SELECT count(DISTINCT target_id) FROM core.project_bindings WHERE target_type='EDITION' AND metadata->>'catalogBookId'='" + RACE_CROSS + "'"))).toBe(1);
+    console.log("P1A_REAL_PARALLEL_CROSS_PROJECT_SHARED_EDITION=PASS");
     await ctx.close();
   });
 
