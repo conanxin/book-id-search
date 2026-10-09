@@ -4,6 +4,7 @@ import {
   ProjectApiError,
   type IssueResolutionDetailResponse,
 } from "./api";
+import { EvidenceCitationScope } from "./EvidenceCitationScope";
 
 type Props = {
   projectId: string;
@@ -85,6 +86,7 @@ export function IssueResolutionDetail({
         : <>
             <p>{state.detail.evidenceManifest.items.length} 条冻结证据</p>
             <code className="assessment-hash">{state.detail.evidenceManifest.manifestSha256}</code>
+            <EvidenceCitationScope items={state.detail.evidenceManifest.items} />
             <ol className="assessment-detail-items">
               {state.detail.evidenceManifest.items.map(item => <li key={item.ordinal}>
                 <strong>{item.role} · {item.targetType}</strong>
