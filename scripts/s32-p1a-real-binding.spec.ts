@@ -24,7 +24,9 @@ const RACE_SAME = "p1a-synthetic-concurrent";
 const RACE_CROSS = "p1a-synthetic-cross-race";
 const TITLE_RACE_SAME = "P1A Concurrent Same Project";
 const TITLE_RACE_CROSS = "P1A Concurrent Cross Project";
-const ALL_SYNTHETIC_IDS = [A, B, RACE_SAME, RACE_CROSS];
+const COLLISION = "p1a-synthetic-conflict";
+const TITLE_COLLISION = "P1A Synthetic Identity Collision";
+const ALL_SYNTHETIC_IDS = [A, B, RACE_SAME, RACE_CROSS, COLLISION];
 
 function psql(sql: string): string {
   return execFileSync("docker", [
@@ -318,6 +320,32 @@ test.describe.serial("P1A real owner session + synthetic catalog → actual PG16
     expect(Number(psql("SELECT count(*) FROM core.editions e JOIN core.works w ON w.id=e.work_id WHERE w.title='" + TITLE_RACE_CROSS + "'"))).toBe(1);
     expect(Number(psql("SELECT count(DISTINCT target_id) FROM core.project_bindings WHERE target_type='EDITION' AND metadata->>'catalogBookId'='" + RACE_CROSS + "'"))).toBe(1);
     console.log("P1A_REAL_PARALLEL_CROSS_PROJECT_SHARED_EDITION=PASS");
+    await ctx.close();
+  });
+
+  test("R10 — conflicting SSID in a different catalog document rolls back all attempted canonical writes", async ({ browser }) => {
+    expect(identityCount(A)).toBe(1); // book A is already authoritative
+    expect(bindingCount(COLLISION)).toBe(0);
+    expect(identityCount(COLLISION)).toBe(0);
+    const snapshot = "SELECT (SELECT count(*) FROM core.works)::text || ':' || " +
+      "(SELECT count(*) FROM core.editions)::text || ':' || " +
+      "(SELECT count(*) FROM core.sources)::text || ':' || " +
+      "(SELECT count(*) FROM core.external_identities)::text || ':' || " +
+      "(SELECT count(*) FROM core.project_bindings)::text";
+    const before = psql(snapshot);
+    const ctx = await context(browser, true);
+    const page = await ctx.newPage();
+    await detail(page, A, TITLE_A);
+    const denied = await postBinding(page, P, COLLISION);
+    expect(denied.status).toBe(409);
+    expect(denied.body.error?.message).toContain("身份冲突");
+    const after = psql(snapshot);
+    expect(after).toBe(before);
+    expect(bindingCount(COLLISION)).toBe(0);
+    expect(identityCount(COLLISION)).toBe(0);
+    expect(Number(psql("SELECT count(*) FROM core.works WHERE title='" + TITLE_COLLISION + "'"))).toBe(0);
+    expect(bindingCount(A)).toBe(1);
+    console.log("P1A_REAL_SECONDARY_IDENTITY_CONFLICT_ROLLBACK=PASS");
     await ctx.close();
   });
 
