@@ -1,0 +1,48 @@
+name: S32 P0 off-host backup policy — synthetic-only
+
+on:
+  push:
+    branches:
+      - docs/s32-p0-offhost-backup-policy
+  pull_request:
+    paths:
+      - docs/operations/S32_OFFHOST_BACKUP_POLICY.md
+      - scripts/test-s32-offhost-backup-synthetic.sh
+      - .github/workflows/s32-offhost-backup-synthetic.yml
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-restore:
+    name: Disposable PG16 + age authenticated-restore proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Validate shell source and policy status
+        run: |
+          bash -n scripts/test-s32-offhost-backup-synthetic.sh
+          grep -q 'DESIGN_PENDING_DESTINATION' docs/operations/S32_OFFHOST_BACKUP_POLICY.md
+          grep -q 'BACKUP_OFF_HOST=NO' docs/operations/S32_OFFHOST_BACKUP_POLICY.md
+          grep -q 'PRODUCTION_DATA_USED=NO' scripts/test-s32-offhost-backup-synthetic.sh
+          git diff --check HEAD^ HEAD
+      - name: Reject accidental non-CI/production invocation
+        run: |
+          if env -u GITHUB_ACTIONS -u S32_BACKUP_SYNTHETIC_ONLY \
+            bash scripts/test-s32-offhost-backup-synthetic.sh > blocked.out 2>&1; then
+            echo "FAIL: synthetic-only preflight accepted an unsafe environment"
+            exit 1
+          fi
+          grep -q 'STATUS=BLOCKED reason=SYNTHETIC_CI_ONLY' blocked.out
+          rm -f blocked.out
+      - name: Install age from Ubuntu package repository
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends age
+      - name: Synthetic-only encrypted dump, tamper rejection and fresh restore
+        env:
+          S32_BACKUP_SYNTHETIC_ONLY: "YES"
+        run: bash scripts/test-s32-offhost-backup-synthetic.sh
