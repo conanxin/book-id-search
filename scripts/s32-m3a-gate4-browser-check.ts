@@ -116,12 +116,19 @@ async function main(): Promise<void> {
   }
 
   // ---- 3. Real API (development wiring, loopback).
-  apiProc = spawn("pnpm", ["--filter", "@book-id-search/api", "dev"], {
+  const p1aRealBinding = process.env.S32_BROWSER_SUITE === "P1A_REAL";
+  // Explicit test mode: replace ONLY the disposable API process with the
+  // test-only real S32 service backed by our ephemeral PG16 and static catalog.
+  // Normal Gate4/P1A runners continue to use the unchanged production API.
+  apiProc = spawn("pnpm", p1aRealBinding
+    ? ["exec", "tsx", "scripts/s32-p1a-real-binding-test-api.ts"]
+    : ["--filter", "@book-id-search/api", "dev"], {
     cwd: root,
     env: {
       ...process.env,
       S32_FEATURES_ENABLED: "true",
       S32_DATABASE_URL: dbUrl,
+      ...(p1aRealBinding ? { S32_P1A_REAL_BINDING_TEST_ONLY: "YES" } : {}),
       S32_PRIVATE_API_TOKEN: `gate3-${randomBytes(12).toString("hex")}`,
       GOOGLE_AUTH_ENABLED: "true",
       GOOGLE_CLIENT_ID: "gate3-synthetic-client-id.apps.googleusercontent.com",
@@ -174,7 +181,9 @@ async function main(): Promise<void> {
   // Owner cookie, real Web/API and teardown. Default Gate4 acceptance unchanged.
   const spec = resolve(root, process.env.S32_BROWSER_SUITE === "P1A"
     ? "scripts/s32-p1a-browser-acceptance.spec.ts"
-    : "scripts/s32-m3a-gate4-browser-acceptance.spec.ts");
+    : process.env.S32_BROWSER_SUITE === "P1A_REAL"
+      ? "scripts/s32-p1a-real-binding.spec.ts"
+      : "scripts/s32-m3a-gate4-browser-acceptance.spec.ts");
   const run = spawnSync(
     resolve(root, "node_modules/.bin/playwright"),
     ["test", spec, "--browser=chromium", "--workers=1", "--reporter=line"],
