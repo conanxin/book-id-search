@@ -135,7 +135,7 @@ export default function ProjectsPage({ dossier = false }: { dossier?: boolean })
       </section>
       {session.status === "authenticated" && projectId && issueId ? (dossier
         ? <ResearchDossierPage key={"dossier:" + projectId + ":" + issueId + ":" + authGeneration} projectId={projectId} issueId={issueId} authGeneration={authGeneration} />
-        : <ResearchIssueDetail key={`${projectId}:${issueId}`} projectId={projectId} issueId={issueId} />) : session.status === "authenticated" ? <ProjectWorkspace key={`${projectId ?? "list"}`} projectId={projectId} /> : null}
+        : <ResearchIssueDetail key={`${projectId}:${issueId}:${authGeneration}`} projectId={projectId} issueId={issueId} />) : session.status === "authenticated" ? <ProjectWorkspace key={`${projectId ?? "list"}:${authGeneration}`} projectId={projectId} /> : null}
     </>}
   </main>;
 }
