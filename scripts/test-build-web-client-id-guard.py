@@ -116,7 +116,9 @@ class GoogleWebClientIdReleaseGuard(unittest.TestCase):
                 for sensitive in ("never-log-session-secret", "never-log-private-token",
                                   "never-log-db", "never-log-owner"):
                     self.assertNotIn(sensitive, result.stdout + result.stderr)
-                if candidate:
+                # Whitespace by itself is ordinary formatting in the generic error;
+                # do not mistake it for an echoed credential.
+                if candidate and candidate.strip():
                     self.assertNotIn(candidate, result.stdout + result.stderr)
         # NUL itself cannot be supplied in POSIX environment variables.
         with self.assertRaises(ValueError):
