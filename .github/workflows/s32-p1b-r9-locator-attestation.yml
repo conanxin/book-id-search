@@ -1,0 +1,47 @@
+name: S32 R9 locator byte witness and human reports
+
+on:
+  push:
+    branches: [feat/s32-p1b-r3-locator-attestation]
+  pull_request:
+    paths:
+      - apps/web/src/research/locator-v2-attestation.ts
+      - apps/web/src/research/locator-v2-attestation.test.ts
+      - docs/S32_R9_LOCATOR_ATTESTATION.md
+      - .github/workflows/s32-p1b-r9-locator-attestation.yml
+
+permissions:
+  contents: read
+
+jobs:
+  attestation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TZ: Asia/Shanghai
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install locked workspace
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+          pnpm install --frozen-lockfile
+      - name: R8 and R9 focused contracts using real SHA-256
+        run: |
+          pnpm exec vitest run apps/web/src/research/locator-v2-draft.test.ts apps/web/src/research/locator-v2-attestation.test.ts
+      - name: Research regression
+        run: pnpm exec vitest run apps/web/src/research
+      - name: Frozen schema and Web/API builds
+        run: |
+          pnpm exec vitest run scripts/s32-schema-contract.test.ts
+          pnpm --filter @book-id-search/web build
+          pnpm --filter @book-id-search/api build
+      - name: Check immutable v1 scope against frozen R8 parent
+        run: |
+          git diff --exit-code 8bbd072b7dfaaf21415e7e59e151f8cba7653536 HEAD -- db apps/api/src apps/web/src/research/api.ts apps/web/src/research/locator-v2-draft.ts apps/web/src/App.tsx
+          git diff --check 8bbd072b7dfaaf21415e7e59e151f8cba7653536 HEAD
