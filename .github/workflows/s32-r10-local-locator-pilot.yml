@@ -4,13 +4,16 @@ on:
   push:
     branches:
       - feat/s32-r10-local-locator-pilot
+      - fix/s32-r11-locator-file-boundaries
   pull_request:
     paths:
       - apps/web/src/research/LocatorLocalPilot*
       - apps/web/src/research/locator-pilot*
       - apps/web/locator-pilot.html
       - scripts/s32-r10-locator-pilot-browser-acceptance.ts
+      - scripts/s32-r11-locator-pilot-browser-acceptance.ts
       - docs/S32_R10_LOCAL_LOCATOR_PILOT.md
+      - docs/S32_R11_LOCAL_PILOT_VALIDATION.md
       - .github/workflows/s32-r10-local-locator-pilot.yml
 
 permissions:
@@ -67,11 +70,15 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
       - name: Real local-file pilot acceptance, without backend requests
         run: pnpm exec tsx scripts/s32-r10-locator-pilot-browser-acceptance.ts
+      - name: R11 size boundaries and plate report regression
+        run: node --import tsx scripts/s32-r11-locator-pilot-browser-acceptance.ts
       - name: Upload local-only synthetic screenshot
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: r10-local-locator-browser
-          path: test-results/s32-r10-local-locator-pilot.png
+          path: |
+            test-results/s32-r10-local-locator-pilot.png
+            test-results/s32-r11/
           if-no-files-found: ignore
           retention-days: 7

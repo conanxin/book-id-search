@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { webcrypto } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { LocatorLocalPilot } from "./LocatorLocalPilot";
 
@@ -15,6 +15,27 @@ function localFile(name = "sample.pdf", contents = "abc", type = "application/pd
   return file;
 }
 const ABC_SHA = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+const LIMIT_BYTES = 20 * 1024 * 1024;
+
+// Actual synthetic buffers exercise the boundary without impersonating a source PDF.
+function sizedLocalFile(byteLength: number): File {
+  const bytes = new Uint8Array(byteLength);
+  const file = new File([bytes], "synthetic-size-boundary.pdf", { type: "application/pdf" });
+  Object.defineProperty(file, "arrayBuffer", {
+    value: vi.fn(() => Promise.resolve(bytes.buffer.slice(0))),
+  });
+  return file;
+}
+
+function stubLocalPreview() {
+  const createObjectURL = vi.fn((_blob: Blob) => "blob:local-preview");
+  const revokeObjectURL = vi.fn((_url: string) => {});
+  vi.stubGlobal("URL", class extends URL {
+    static createObjectURL = createObjectURL;
+    static revokeObjectURL = revokeObjectURL;
+  });
+  return { createObjectURL, revokeObjectURL };
+}
 
 async function selectAndPrepare(user: ReturnType<typeof userEvent.setup>, file = localFile()) {
   await user.upload(screen.getByLabelText("本地文件（PDF 或图片）"), file);
@@ -165,5 +186,115 @@ describe("R10 isolated local-file review user journey", () => {
     await waitFor(() => expect(screen.queryByText("正在读取本地文件")).toBeNull());
     expect(screen.queryByText(ABC_SHA)).toBeNull();
     expect(screen.queryByText("文件摘要已计算，等待人工核对")).toBeNull();
+  });
+});
+
+describe("R11 selection boundaries and plate reports", () => {
+  it("previews exactly 20 MiB and calls arrayBuffer for hashing only after the explicit start", async () => {
+    const user = userEvent.setup();
+    const preview = stubLocalPreview();
+    const file = sizedLocalFile(LIMIT_BYTES);
+    render(<LocatorLocalPilot />);
+    await user.upload(screen.getByLabelText("本地文件（PDF 或图片）"), file);
+    expect(file.size).toBe(20_971_520);
+    expect(preview.createObjectURL).toHaveBeenCalledExactlyOnceWith(file);
+    expect(screen.getByTitle("本地 PDF 文件预览")).toBeTruthy();
+    expect(file.arrayBuffer).not.toHaveBeenCalled();
+    await user.click(screen.getByLabelText("我理解这是未认证来源的本地演示，不会保存文件"));
+    await user.click(screen.getByRole("button", { name: "开始本地核对" }));
+    await screen.findByText("文件摘要已计算，等待人工核对");
+    expect(file.arrayBuffer).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it.each([
+    [LIMIT_BYTES + 1, "文件超过 20 MiB"],
+    [0, "请选择非空 PDF、PNG、JPG 或 WEBP 文件"],
+  ])("rejects %i bytes at selection before creating a preview or reading", async (size, message) => {
+    const user = userEvent.setup();
+    const preview = stubLocalPreview();
+    const file = sizedLocalFile(size);
+    render(<LocatorLocalPilot />);
+    await user.upload(screen.getByLabelText("本地文件（PDF 或图片）"), file);
+    expect(preview.createObjectURL).not.toHaveBeenCalled();
+    expect(file.arrayBuffer).not.toHaveBeenCalled();
+    expect(screen.queryByTitle("本地 PDF 文件预览")).toBeNull();
+    expect(screen.getByRole("alert").textContent).toContain(message);
+    expect((screen.getByLabelText("本地文件（PDF 或图片）") as HTMLInputElement).files?.length).toBe(0);
+    await user.click(screen.getByLabelText("我理解这是未认证来源的本地演示，不会保存文件"));
+    expect((screen.getByRole("button", { name: "开始本地核对" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(file.arrayBuffer).not.toHaveBeenCalled();
+  });
+
+  it("removes the prior report and revokes its preview when the replacement is oversized", async () => {
+    const user = userEvent.setup();
+    const preview = stubLocalPreview();
+    render(<LocatorLocalPilot />);
+    await selectAndPrepare(user);
+    await user.click(screen.getByLabelText("我已亲自查看本地文件相应页面"));
+    await user.click(screen.getByRole("button", { name: "记录匹配" }));
+    const rejected = sizedLocalFile(LIMIT_BYTES + 1);
+    await user.upload(screen.getByLabelText("本地文件（PDF 或图片）"), rejected);
+    expect(preview.revokeObjectURL).toHaveBeenCalledExactlyOnceWith("blob:local-preview");
+    expect(preview.createObjectURL).toHaveBeenCalledOnce();
+    expect(rejected.arrayBuffer).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("定位报告")).toBeNull();
+    expect(screen.queryByLabelText("本地文件预览")).toBeNull();
+    expect(screen.queryByText(ABC_SHA)).toBeNull();
+    expect(screen.queryByText(/报告匹配/)).toBeNull();
+    await user.upload(screen.getByLabelText("本地文件（PDF 或图片）"), localFile("new.pdf"));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByTitle("本地 PDF 文件预览")).toBeTruthy();
+  });
+
+  it("cannot restore a pending old read after an empty replacement is rejected", async () => {
+    const user = userEvent.setup();
+    const preview = stubLocalPreview();
+    let resolve!: (bytes: ArrayBuffer) => void;
+    const old = localFile();
+    Object.defineProperty(old, "arrayBuffer", {
+      value: () => new Promise<ArrayBuffer>(r => { resolve = r; }),
+    });
+    render(<LocatorLocalPilot />);
+    await user.upload(screen.getByLabelText("本地文件（PDF 或图片）"), old);
+    await user.click(screen.getByLabelText("我理解这是未认证来源的本地演示，不会保存文件"));
+    await user.click(screen.getByRole("button", { name: "开始本地核对" }));
+    expect(screen.getByText("正在读取本地文件")).toBeTruthy();
+    await user.upload(screen.getByLabelText("本地文件（PDF 或图片）"), sizedLocalFile(0));
+    await act(async () => { resolve(new TextEncoder().encode("abc").buffer); });
+    expect(screen.queryByText(ABC_SHA)).toBeNull();
+    expect(screen.queryByLabelText("定位报告")).toBeNull();
+    expect(screen.queryByLabelText("本地文件预览")).toBeNull();
+    expect(preview.createObjectURL).toHaveBeenCalledOnce();
+    expect(screen.getByRole("alert").textContent).toContain("请选择非空");
+  });
+
+  it.each(["MATCHED", "NOT_MATCHED"] as const)("keeps the PLATE meaning through a %s report and withdrawal", async decision => {
+    const user = userEvent.setup();
+    render(<LocatorLocalPilot />);
+    await user.upload(screen.getByLabelText("本地文件（PDF 或图片）"), localFile("plate.png", "abc", "image/png"));
+    await user.selectOptions(screen.getByLabelText("定位类型"), "PLATE");
+    await user.clear(screen.getByLabelText("书上印刷页码或图版号"));
+    await user.type(screen.getByLabelText("书上印刷页码或图版号"), "Plate XIX");
+    await user.click(screen.getByLabelText("我理解这是未认证来源的本地演示，不会保存文件"));
+    await user.click(screen.getByRole("button", { name: "开始本地核对" }));
+    await screen.findByText("文件摘要已计算，等待人工核对");
+    expect(screen.getByRole("heading", { name: "2 · 对照图版号和扫描页序" })).toBeTruthy();
+    await user.clear(screen.getByLabelText("扫描文件页序（从 1 开始）"));
+    await user.type(screen.getByLabelText("扫描文件页序（从 1 开始）"), "137");
+    if (decision === "NOT_MATCHED") {
+      await user.clear(screen.getByLabelText("实际看到的页码或图版号"));
+      await user.type(screen.getByLabelText("实际看到的页码或图版号"), "Plate XVIII");
+    }
+    await user.click(screen.getByLabelText("我已亲自查看本地文件相应页面"));
+    await user.click(screen.getByRole("button", { name: decision === "MATCHED" ? "记录匹配" : "记录不匹配" }));
+    expect(screen.getByText("图版号：Plate XIX")).toBeTruthy();
+    expect(screen.getByText("扫描页序：137")).toBeTruthy();
+    expect(screen.queryByText(/书上页码：/)).toBeNull();
+    if (decision === "NOT_MATCHED") expect(screen.getByText("观察到的标签：Plate XVIII")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "撤销报告" }));
+    expect(screen.getByText("图版号：Plate XIX")).toBeTruthy();
+    expect(screen.getByText(/撤销记录/)).toBeTruthy();
+    expect(screen.getByText(/原文核实状态：未独立核实/)).toBeTruthy();
   });
 });
