@@ -4,6 +4,7 @@ import subprocess
 import time
 import unittest
 import uuid
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SQL = ROOT / "deploy/s32-production-roles.sql"
@@ -44,10 +45,13 @@ class RealPostgresRoleTests(unittest.TestCase):
             "-e", "POSTGRES_DB=book_id_search_s32",
             IMAGE,
         ], check=True, stdout=subprocess.DEVNULL)
+        cls.addClassCleanup(cls.cleanup_container)
         deadline = time.time() + 30
         while time.time() < deadline:
             p = subprocess.run([
                 "docker", "exec", cls.name, "pg_isready",
+                # The image's temporary initialization server is socket-only.
+                "-h", "127.0.0.1",
                 "-U", "s32_admin", "-d", "book_id_search_s32",
             ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             if p.returncode == 0:
@@ -58,7 +62,7 @@ class RealPostgresRoleTests(unittest.TestCase):
         cls.psql_admin("CREATE SCHEMA core; CREATE SCHEMA ops; CREATE SCHEMA derived; CREATE TABLE core.runtime_probe(id integer);")
 
     @classmethod
-    def tearDownClass(cls):
+    def cleanup_container(cls):
         subprocess.run(["docker", "rm", "-f", cls.name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     @classmethod
@@ -114,6 +118,63 @@ class RealPostgresRoleTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         exists = self.psql_admin("SELECT count(*) FROM pg_roles WHERE rolname='s32_fail'").stdout.strip()
         self.assertEqual(exists, "0")
+
+
+class FixtureStartupTests(unittest.TestCase):
+    def run_fixture(self, command):
+        class Fixture(RealPostgresRoleTests):
+            def test_ready(self):
+                pass
+
+        result = unittest.TestResult()
+        with mock.patch.object(subprocess, "run", side_effect=command), \
+                mock.patch.object(time, "sleep"):
+            unittest.TestSuite([Fixture("test_ready")]).run(result)
+        return result
+
+    def test_socket_only_init_server_does_not_release_setup(self):
+        final_server = False
+        probes = []
+        removed = []
+
+        def command(args, **kwargs):
+            nonlocal final_server
+            if "pg_isready" in args:
+                probes.append(args)
+                tcp = "-h" in args and args[args.index("-h") + 1] == "127.0.0.1"
+                if not final_server:
+                    # The image's temporary init server accepts socket probes,
+                    # then stops. A TCP probe must wait for the final server.
+                    if tcp:
+                        final_server = True
+                        return subprocess.CompletedProcess(args, 1)
+                    return subprocess.CompletedProcess(args, 0)
+            if "psql" in args and not final_server:
+                raise subprocess.CalledProcessError(2, args, stderr="init server stopped")
+            if args[:3] == ["docker", "rm", "-f"]:
+                removed.append(args[-1])
+            return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+        result = self.run_fixture(command)
+        self.assertEqual(result.errors, [])
+        self.assertEqual(result.testsRun, 1)
+        self.assertEqual(len(probes), 2)
+        self.assertEqual(len(removed), 1)
+
+    def test_setup_failure_still_removes_its_container(self):
+        removed = []
+
+        def command(args, **kwargs):
+            if "psql" in args:
+                raise subprocess.CalledProcessError(2, args, stderr="setup connection failed")
+            if args[:3] == ["docker", "rm", "-f"]:
+                removed.append(args[-1])
+            return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+        result = self.run_fixture(command)
+        self.assertEqual(len(result.errors), 1)
+        self.assertEqual(result.testsRun, 0)
+        self.assertEqual(len(removed), 1)
 
 
 if __name__ == "__main__":
