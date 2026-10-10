@@ -18,6 +18,12 @@ const MAX_BYTES = 20 * 1024 * 1024;
 const HASH_PATTERN = /^[0-9a-f]{64}$/;
 const VALID_LOCAL_FILE = /\.(pdf|png|jpe?g|webp)$/i;
 
+function localFileError(file: File): string {
+  if (file.size > MAX_BYTES) return "文件超过 20 MiB，请选择更小的 PDF 或图片";
+  if (!file.size || !VALID_LOCAL_FILE.test(file.name)) return "请选择非空 PDF、PNG、JPG 或 WEBP 文件";
+  return "";
+}
+
 type Phase = "empty" | "reading" | "review" | "reported" | "revoked";
 const EVENT_LABELS = {
   BYTES_MATCHED: "字节核对",
@@ -100,8 +106,16 @@ export function LocatorLocalPilot() {
   }, []);
 
   function selectFile(event: ChangeEvent<HTMLInputElement>) {
+    const selected = event.currentTarget.files?.[0] ?? null;
     clearSession();
-    setFile(event.target.files?.[0] ?? null);
+    const error = selected ? localFileError(selected) : "";
+    // Only accepted files reach the preview effect. Invalid replacements still
+    // dispose the previous session and trigger its object-URL cleanup.
+    setFile(error ? null : selected);
+    if (error) {
+      event.currentTarget.value = "";
+      setMessage(error);
+    }
   }
 
   function reset() {
@@ -122,14 +136,10 @@ export function LocatorLocalPilot() {
     // for the operation now in progress. The next session requires a new tick.
     setPhase("reading");
     const ticket = epoch.current;
-    if (file.size > MAX_BYTES) {
+    const fileError = localFileError(file);
+    if (fileError) {
       setPhase("empty");
-      setMessage("文件超过 20 MiB，请选择更小的 PDF 或图片");
-      return;
-    }
-    if (!file.size || !VALID_LOCAL_FILE.test(file.name)) {
-      setPhase("empty");
-      setMessage("请选择非空 PDF、PNG、JPG 或 WEBP 文件");
+      setMessage(fileError);
       return;
     }
     const draftShape = {
@@ -311,7 +321,7 @@ export function LocatorLocalPilot() {
 
       {view && phase !== "empty" && phase !== "reading" ? (
         <section className="locator-pilot__card" aria-label="定位报告">
-          <h2>2 · 对照印刷页码和扫描页序</h2>
+          <h2>2 · 对照{kind === "PLATE" ? "图版号" : "印刷页码"}和扫描页序</h2>
           <p>文件 SHA-256</p>
           <code className="locator-pilot__hash">{digest}</code>
           <p className="locator-pilot__meta">文件摘要由所选文件计算，不能独立证明版本和来源。</p>
@@ -340,7 +350,7 @@ export function LocatorLocalPilot() {
           ) : null}
           {(phase === "reported" || phase === "revoked") ? (
             <>
-              <p>书上页码：{label}</p>
+              <p>{kind === "PLATE" ? "图版号" : "书上页码"}：{label}</p>
               {view.events[1]?.observedLabel !== label ? <p>观察到的标签：{view.events[1]?.observedLabel}</p> : null}
               <p>扫描页序：{view.events[1]?.assetPageNumber}</p>
               {phase === "reported" ?

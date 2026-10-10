@@ -1,5 +1,14 @@
 # BOOK-ID-SEARCH status
 
+## 2026-10-10 — R11 local Locator boundary fixes
+
+- task_id: `S32_R11_REAL_SOURCE_LOCAL_PILOT_VALIDATION`; branch `fix/s32-r11-locator-file-boundaries`, based on R10 PR #69 at `ef01d0dd9549a7b0c3888f33abbd89bad2dd13ec`.
+- Invalid/empty local files are rejected before preview; PLATE reports use the correct label. UI 16/16 + Schema 29/29 and Web/API builds PASS. Broader Research + Schema: **824 PASS / 1 known CandidateClaims FAIL**; PR #64 is not in this branch. Full root suite not rerun.
+- Synthetic browser and real PDF byte/report flows PASS in the session environment. Hermes reported WSL transfer timeouts at 20 MiB; both runner uploads now allow 120 seconds. Target WSL rerun and real PDF page-content visual inspection remain pending; synthetic PDF plugin loading is only structural evidence.
+- Current main is `42cf1b7b4a10a6edfa53d688012728dded0b3049` (Gate3). Latest formal production receipt is 2026-10-09; public health/stats rechecked 2026-10-10, **5,115,734** books. The user's later Hermes SSH receipt confirms the archived runtime tags/start times and health 200; disk checkout `20e1b8d` is recorded separately. No merge or deployment this turn.
+- Full evidence, limitations, source mapping and Hermes handoff: [R11 validation](S32_R11_LOCAL_PILOT_VALIDATION.md). Exact tested commit and remote CI are recorded in the R11 PR and Notion.
+- Earlier sections below are historical receipts, not the current deployment or development stage.
+
 ## 2026-09-30 — PR #52 WeRead logout production closeout
 
 - task_id: `S32_M3A_PR52_PRODUCTION_CLOSEOUT_R1`.
