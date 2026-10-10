@@ -48,3 +48,30 @@ jobs:
             apps/web/src/research/locator-v2-draft.ts apps/web/src/research/locator-v2-attestation.ts
           test ! -e apps/web/dist/locator-pilot.html
           git diff --check f7f169ebbcd2aa350b8c523675fff7be3fd2e5ac HEAD
+
+  real-browser:
+    name: Local PDF/scan review in disposable Chromium
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install frozen workspace
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+          pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Real local-file pilot acceptance, without backend requests
+        run: pnpm exec tsx scripts/s32-r10-locator-pilot-browser-acceptance.ts
+      - name: Upload local-only synthetic screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r10-local-locator-browser
+          path: test-results/s32-r10-local-locator-pilot.png
+          if-no-files-found: ignore
+          retention-days: 7
