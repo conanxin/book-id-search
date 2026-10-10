@@ -1,0 +1,71 @@
+:root {
+  color-scheme: light;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft Yahei", sans-serif;
+  color: #19334a;
+  background: #f6f7fa;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+.locator-pilot { max-width: 1020px; margin: 0 auto; padding: 38px 24px 90px; }
+.locator-pilot__header { border-bottom: 1px solid #dae1e9; padding-bottom: 25px; }
+.locator-pilot__eyebrow {
+  color: #546e86; font-weight: 700; font-size: 0.76rem; letter-spacing: 0.12em; margin-bottom: 12px;
+}
+.locator-pilot h1 { font-size: clamp(1.5rem, 3vw, 2.3rem); letter-spacing: -0.025em; margin: 0 0 12px; }
+.locator-pilot h2 { font-size: 1.16rem; margin: 0 0 22px; }
+.locator-pilot h3 { font-size: 1rem; margin: 24px 0 10px; }
+.locator-pilot p { line-height: 1.65; margin: 10px 0; }
+.locator-pilot__notice {
+  border-left: 3px solid #ab6d35; padding: 10px 14px; background: #fff9ed;
+  color: #79471f; border-radius: 2px 7px 7px 2px;
+}
+.locator-pilot__card {
+  background: #fff; border: 1px solid #dce3eb; border-radius: 14px;
+  padding: 25px 28px; margin-top: 20px; box-shadow: 0 4px 16px rgba(21, 45, 67, 0.035);
+}
+.locator-pilot label { display: grid; gap: 8px; margin: 12px 0; font-weight: 650; font-size: 0.91rem; }
+.locator-pilot input:not([type="checkbox"]), .locator-pilot select {
+  width: 100%; border: 1px solid #b5c2d1; border-radius: 8px; padding: 11px 12px;
+  background: #fff; color: #19334a; font: inherit; font-weight: 400;
+}
+.locator-pilot input:focus-visible, .locator-pilot button:focus-visible, .locator-pilot select:focus-visible {
+  outline: 3px solid #7bb4e5; outline-offset: 2px;
+}
+.locator-pilot input:disabled, .locator-pilot select:disabled { background: #f2f5f7; color: #718194; }
+.locator-pilot .locator-pilot__check {
+  display: flex; align-items: flex-start; gap: 10px; line-height: 1.45; font-weight: 500;
+}
+.locator-pilot__check input { margin: 2px 0; width: 18px; height: 18px; flex: 0 0 auto; }
+.locator-pilot__fields { display: grid; grid-template-columns: 1fr 1.5fr; gap: 16px; }
+.locator-pilot__actions { display: flex; gap: 12px; flex-wrap: wrap; margin: 22px 0 12px; }
+.locator-pilot button {
+  padding: 11px 16px; border: 1px solid #134a75; border-radius: 8px;
+  background: #174f7c; color: #fff; font: inherit; font-weight: 650; cursor: pointer;
+}
+.locator-pilot button:hover:not(:disabled) { background: #0d3a5d; }
+.locator-pilot button:disabled { background: #c4ced7; border-color: #c4ced7; cursor: not-allowed; }
+.locator-pilot button.locator-pilot__secondary {
+  background: #fff; color: #174f7c; border-color: #9eb5c9;
+}
+.locator-pilot button.locator-pilot__secondary:hover:not(:disabled) { background: #eff5fa; }
+.locator-pilot__meta { color: #60748a; font-size: 0.86rem; }
+.locator-pilot__hash {
+  display: block; overflow-wrap: anywhere; font-size: 0.82rem; padding: 11px 12px;
+  background: #f1f4f7; border-radius: 8px; color: #304c65;
+}
+.locator-pilot__preview {
+  display: block; width: 100%; max-height: 650px; height: min(65vh, 640px);
+  border: 1px solid #dce3eb; border-radius: 7px; object-fit: contain; background: #f8fafc;
+}
+.locator-pilot__error {
+  border: 1px solid #dfb7b3; color: #8f2f2a; background: #fff2f1;
+  padding: 11px 13px; border-radius: 8px;
+}
+.locator-pilot ol { margin: 10px 0; padding-left: 23px; }
+.locator-pilot li { margin-bottom: 9px; line-height: 1.4; overflow-wrap: anywhere; }
+@media (max-width: 680px) {
+  .locator-pilot { padding: 18px 13px 60px; }
+  .locator-pilot__card { padding: 20px 15px; }
+  .locator-pilot__fields { grid-template-columns: 1fr; gap: 0; }
+  .locator-pilot__preview { height: 410px; }
+}

@@ -1,0 +1,77 @@
+name: S32 R10 local-only locator review pilot
+
+on:
+  push:
+    branches:
+      - feat/s32-r10-local-locator-pilot
+  pull_request:
+    paths:
+      - apps/web/src/research/LocatorLocalPilot*
+      - apps/web/src/research/locator-pilot*
+      - apps/web/locator-pilot.html
+      - scripts/s32-r10-locator-pilot-browser-acceptance.ts
+      - docs/S32_R10_LOCAL_LOCATOR_PILOT.md
+      - .github/workflows/s32-r10-local-locator-pilot.yml
+
+permissions:
+  contents: read
+
+jobs:
+  local-review-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install frozen workspace
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+          pnpm install --frozen-lockfile
+      - name: R10 isolated panel behavior tests
+        run: pnpm exec vitest run apps/web/src/research/LocatorLocalPilot.test.tsx
+      - name: R8-R10 contract suite and Research regression
+        run: pnpm exec vitest run apps/web/src/research
+      - name: Frozen schema and Web/API builds
+        run: |
+          pnpm exec vitest run scripts/s32-schema-contract.test.ts
+          pnpm --filter @book-id-search/web build
+          pnpm --filter @book-id-search/api build
+      - name: No production app, API or database changes
+        run: |
+          git diff --exit-code f7f169ebbcd2aa350b8c523675fff7be3fd2e5ac HEAD -- \
+            db apps/api/src apps/web/src/App.tsx apps/web/src/main.tsx apps/web/src/research/api.ts \
+            apps/web/src/research/locator-v2-draft.ts apps/web/src/research/locator-v2-attestation.ts
+          test ! -e apps/web/dist/locator-pilot.html
+          git diff --check f7f169ebbcd2aa350b8c523675fff7be3fd2e5ac HEAD
+
+  real-browser:
+    name: Local PDF/scan review in disposable Chromium
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install frozen workspace
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+          pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Real local-file pilot acceptance, without backend requests
+        run: pnpm exec tsx scripts/s32-r10-locator-pilot-browser-acceptance.ts
+      - name: Upload local-only synthetic screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r10-local-locator-browser
+          path: test-results/s32-r10-local-locator-pilot.png
+          if-no-files-found: ignore
+          retention-days: 7
