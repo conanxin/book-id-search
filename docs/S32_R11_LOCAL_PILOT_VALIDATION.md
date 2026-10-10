@@ -6,6 +6,21 @@
 - Branch：`fix/s32-r11-locator-file-boundaries`；精确 `tested_commit`、PR URL 和远端 CI 结果记在本分支 PR 与 Notion R11 回执中。
 - 范围：独立的 `/locator-pilot.html` 开发页面；仍不进入正常生产构建入口。
 
+## 2026-10-10 本机接续回执与上传等待修复
+
+用户于 20:04（Asia/Shanghai）转交 Hermes 实测回执。以下本机与 SSH 结果来源于该回执，和本会话直接执行的检查分列。
+
+- **用户本机：** `/home/conanxin/codex-projects/book-id-search-s32-r11` 位于 `e12c84a4e57b93cfff9bc7dcf7c2bd8bd94d6a66`，当时与远端一致且工作区干净；pnpm 10.33.0 frozen install 通过，主 clone 未改动。这是超时修复前的受测版本。
+- **PDF 获取：** Hermes 本轮从官方直链、API、handle 与备用渠道获取精确样本遇到 403。Internet Archive 的 14,181,003 字节文件没有替代原样本。本会话此前下载的 **10,699,315 字节** PDF 仍在，重新核对完整 SHA 与下方一致，已作为本轮附件提供，不需要再次寻找下载渠道。
+- **插件结构证据：** Hermes 在完整有头 Chromium 中打开 3 页、844 字节的合成 PDF（仅提供 SHA 前缀 `8685999c`）。blob iframe 内 PDF embed 已加载，区域非纯白；像素统计不能证明页面文字正确显示。合成文件的文字级视觉、真实 Mason PDF 内嵌视觉与真人确认仍未完成。
+- **WSL 自动化结果：** 两次运行的四项核心报告/图片流程通过，均在 `exact_20mib` 上传步骤超时；上传探针为 26,014 / 26,455 ms。当前证据支持放宽上传等待，不能把目标 WSL 环境的边界验收记为通过。
+- **最小修复：** R11 runner 的两个 `setInputFiles` 调用共用显式 `120_000` ms 超时，覆盖合法文件/恰好 20 MiB 和 20 MiB+1/空文件上传。产品 20 MiB 上限、摘要校验、15 秒摘要完成等待与拒绝行为断言不变。本会话的真实 PDF、独立 PNG、20 MiB 与拒绝边界回放及 runner 独立类型检查通过；**修复后的目标 WSL 复跑仍待 Hermes 执行**。
+- **腾讯云 SSH 回执：** `ubuntu@VM-0-4-ubuntu`；磁盘源码 checkout `20e1b8d`、工作区干净；运行 API 为 `s32-42cf1b7`，StartedAt `2026-10-08T14:35:10Z`，Web 为 `glogin` 版本，StartedAt `2026-10-08T20:30:09Z`；health HTTP 200。运行标签及启动时间与已归档 Gate3 一致，磁盘 checkout 与运行服务身份分别记录。回执未列完整镜像摘要，不扩展为完整 image ID 的逐字复核。
+
+`HERMES_TESTED_COMMIT=e12c84a4e57b93cfff9bc7dcf7c2bd8bd94d6a66`；超时修复的新 HEAD、CI 与同步链接见 PR #70 最新回执。`HUMAN_ATTESTATION=NONE`；本轮没有合并或部署。
+
+最短接续：从本轮附件取得精确 PDF，在现有 R11 worktree 拉取 PR 最新 HEAD，执行一次真实文件 runner 回放，再用完整浏览器核对印刷 208 / PLATE 1 / 印刷 209 实际可读并保存截图。同步这两项剩余结果即可，无需重做已完成的安装与腾讯云核对。
+
 ## 本轮改动
 
 选择文件时先验证体积、非空及既有扩展名规则，合法文件才进入创建 blob 预览的 effect。超过 20 MiB 或空文件会清除 input、旧预览与会话，不能开始摘要读取；旧异步读取不能复活已清除的报告。开始核对时复用同一验证函数。
@@ -73,7 +88,7 @@ Research 唯一失败是 `CandidateClaims.test.tsx` 的 `create success refreshe
 
 2026-10-10 17:34–17:37（Asia/Shanghai）公网复查：主页和 Research SPA 入口 HTTP 200，health 正常，stats 为 **5,115,734** 条，ISBN `9787538455250` 检索返回 1 项，未登录 session 正常返回未认证；HTML 仍引用上述资源入口。公网结果不等于重新核实了容器镜像或 Owner 登录。10 月 9 日用户截图已验收 Google 登录、私有阅读、项目/问题及正常空 ResearchRun 列表；因没有 Run，生产 Run 详情当时不适用。
 
-本轮 Native clone 位于会话工作区，不能冒充用户 WSL 的实时目录。用户设备远程通道离线，当前环境没有可调用的本机 Hermes，`ssh tencent` 别名也不在当前环境。因此没有取得新的 SSH 镜像身份证据，没有合并或部署。本轮未更改 API、Schema、冻结 SQL、R8/R9 契约或生产入口。
+首次 Native 开发的 clone 位于会话工作区；当时用户设备通道离线，当前环境没有可调用的本机 Hermes 或 `ssh tencent` 别名。用户随后转交的 Hermes 回执已补充本机 worktree 与腾讯云运行标签/启动时间证据，见上方接续记录；不能将两个环境的执行身份混写。本轮没有合并或部署，未更改 API、Schema、冻结 SQL、R8/R9 契约或生产入口。
 
 ## Hermes 在用户本机的接续任务
 

@@ -12,6 +12,8 @@ const ROOT = process.cwd();
 const TARGET = "http://127.0.0.1:5173/locator-pilot.html";
 const OUTPUT = resolve(ROOT, "test-results/s32-r11");
 const LIMIT = 20 * 1024 * 1024;
+// Large buffers can take over the default action timeout to cross WSL/CDP.
+const FILE_UPLOAD_TIMEOUT_MS = 120_000;
 const MASON_SHA = "70dd12a76e637abb0030c797b0bf03e2210bf07ebf6ca92c9ad5d36388505036";
 const sourcePath = process.env.S32_R11_SOURCE_PDF;
 const plateImagePath = process.env.S32_R11_PLATE_IMAGE;
@@ -57,7 +59,7 @@ async function startServer() {
 
 async function prepare(page: Page, file: { name: string; mimeType: string; buffer: Buffer }, kind: string, label: string) {
   await page.getByRole("button", { name: "清空并重新开始" }).click();
-  await page.getByLabel("本地文件（PDF 或图片）").setInputFiles(file);
+  await page.getByLabel("本地文件（PDF 或图片）").setInputFiles(file, { timeout: FILE_UPLOAD_TIMEOUT_MS });
   await page.getByLabel("定位类型").selectOption(kind);
   await page.getByLabel("书上印刷页码或图版号").fill(label);
   await page.getByLabel("我理解这是未认证来源的本地演示，不会保存文件").check();
@@ -150,7 +152,10 @@ async function main() {
     File.prototype.arrayBuffer = function () { spy.arrayBuffers++; return read.call(this); };
   });
   for (const size of [LIMIT + 1, 0]) {
-    await page.getByLabel("本地文件（PDF 或图片）").setInputFiles({ name: "synthetic-rejected.png", mimeType: "image/png", buffer: Buffer.alloc(size) });
+    await page.getByLabel("本地文件（PDF 或图片）").setInputFiles(
+      { name: "synthetic-rejected.png", mimeType: "image/png", buffer: Buffer.alloc(size) },
+      { timeout: FILE_UPLOAD_TIMEOUT_MS },
+    );
     await expect(page.getByRole("alert")).toContainText(size ? "文件超过 20 MiB" : "请选择非空");
     await expect(page.getByLabel("本地文件预览")).toHaveCount(0);
     await expect(page.getByLabel("定位报告")).toHaveCount(0);
