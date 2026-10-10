@@ -1,0 +1,50 @@
+name: S32 R10 full repository test observation — preserve real exit
+
+on:
+  push:
+    branches:
+      - feat/s32-r10-local-locator-pilot
+
+permissions:
+  contents: read
+
+jobs:
+  root-observation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install frozen workspace and API dist prerequisite
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+          pnpm install --frozen-lockfile
+          pnpm --filter @book-id-search/api build
+      - name: Run full pnpm test and preserve failure status
+        shell: bash
+        run: |
+          set +e
+          pnpm test > r10-root-suite.log 2>&1
+          rc=$?
+          echo "R10_ROOT_SHA=$(git rev-parse HEAD)"
+          echo "R10_ROOT_SUITE_EXIT=$rc"
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          body = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', Path('r10-root-suite.log').read_text(errors='replace'))
+          for line in body.splitlines():
+              if re.search(r'(^\s*FAIL\s|Test Files|^\s*Tests\s|^\s*Errors\s|Unhandled Error|Uncaught Exception|^Error:)', line):
+                  print(line)
+          PY
+          exit "$rc"
+      - name: Retain complete root-test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r10-root-suite-observation
+          path: r10-root-suite.log
+          retention-days: 7
+          if-no-files-found: warn
