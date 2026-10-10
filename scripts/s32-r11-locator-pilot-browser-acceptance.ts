@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { basename, dirname, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { stripVTControlCharacters } from "node:util";
 import { chromium, expect, type Browser, type Page } from "@playwright/test";
 
 // This runner simulates UI reports. Its checkbox clicks are NOT human attestation.
@@ -37,7 +38,7 @@ async function startServer() {
   server.on("error", error => { spawnError = error; });
   server.stdout?.on("data", chunk => {
     logs = (logs + String(chunk)).slice(-4000);
-    ready ||= logs.includes("Local:");
+    ready ||= stripVTControlCharacters(logs).includes("Local:");
   });
   server.stderr?.on("data", chunk => { logs = (logs + String(chunk)).slice(-4000); });
   for (let i = 0; i < 80; i++) {

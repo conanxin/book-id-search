@@ -38,6 +38,8 @@ Research 唯一失败是 `CandidateClaims.test.tsx` 的 `create success refreshe
 
 本地使用项目固定的 pnpm 10.33.0。环境禁止 Unix socket，因此测试入口使用 `node --import tsx`，浏览器使用 Playwright 默认 headless shell；这解释了本轮内嵌 PDF 视觉验收的剩余限制。依赖安装未修改 lockfile 或构建脚本许可。测试日志和图片位于忽略目录 `logs/s32-r11/` 与 `test-results/s32-r11/`，不纳入源码。
 
+首次远端 [R11 push CI](https://github.com/conanxin/book-id-search/actions/runs/38042930191) 的契约/构建作业通过，浏览器作业失败：Vite 已正常启动，但彩色输出在 `Local` 与冒号之间包含 ANSI 控制字符，runner 的纯文本匹配误报 `R11_VITE_START_TIMEOUT`。修复在匹配前使用 Node 标准库去除控制字符；仍必须来自本次子进程 stdout，不能仅凭端口有响应就判为成功。CI 明确设置 `FORCE_COLOR=1` 覆盖此差异；首次失败继续保留，后续精确 HEAD 的 CI 结果记入 PR。
+
 ## 真实资料与已观察的页序
 
 资料为 Otis Tufton Mason（1900），*Aboriginal American harpoons: A study in ethnic distribution and invention*。

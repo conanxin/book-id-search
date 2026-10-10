@@ -71,6 +71,8 @@ jobs:
       - name: Real local-file pilot acceptance, without backend requests
         run: pnpm exec tsx scripts/s32-r10-locator-pilot-browser-acceptance.ts
       - name: R11 size boundaries and plate report regression
+        env:
+          FORCE_COLOR: "1"
         run: node --import tsx scripts/s32-r11-locator-pilot-browser-acceptance.ts
       - name: Upload local-only synthetic screenshot
         if: always()
