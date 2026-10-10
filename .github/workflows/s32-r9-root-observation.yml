@@ -1,0 +1,51 @@
+name: S32 R9 whole-repository observation (real exit)
+
+on:
+  push:
+    branches: [feat/s32-p1b-r3-locator-attestation]
+
+permissions:
+  contents: read
+
+jobs:
+  root-suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TZ: Asia/Shanghai
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install locked workspace and API dist prerequisite
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+          pnpm install --frozen-lockfile
+          pnpm --filter @book-id-search/api build
+      - name: Run the unmodified root test command; preserve failure status
+        shell: bash
+        run: |
+          set +e
+          pnpm test > r9-root-suite.log 2>&1
+          rc=$?
+          echo "ROOT_SUITE_SHA=$(git rev-parse HEAD)"
+          echo "ROOT_SUITE_EXIT=$rc"
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          text = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', Path('r9-root-suite.log').read_text(errors='replace'))
+          for line in text.splitlines():
+              if re.search(r'(^\s*FAIL\s|Test Files|^\s*Tests\s|^\s*Errors\s|Unhandled Error|Uncaught Exception|^Error:)', line):
+                  print(line)
+          PY
+          exit "$rc"
+      - name: Retain complete root log, including failure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r9-root-suite-observation
+          path: r9-root-suite.log
+          if-no-files-found: warn
+          retention-days: 7
