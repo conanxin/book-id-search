@@ -4,6 +4,7 @@ import {
   ProjectApiError,
   type AssessmentDetailResponse,
 } from "./api";
+import { EvidenceCitationScope } from "./EvidenceCitationScope";
 
 type Props = {
   projectId: string;
@@ -84,6 +85,7 @@ export function AssessmentDetail({
       <h5>冻结证据</h5>
       <p>SHA-256</p>
       <code className="assessment-hash">{state.detail.evidenceManifest.manifestSha256}</code>
+      <EvidenceCitationScope items={state.detail.evidenceManifest.items} />
       <ol className="assessment-detail-items">
         {state.detail.evidenceManifest.items.map(item => (
           <li key={item.ordinal}>

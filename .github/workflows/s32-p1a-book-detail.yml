@@ -1,0 +1,132 @@
+name: S32 P1-A Book Detail research entry
+
+on:
+  push:
+    branches:
+      - feat/s32-p1a-book-detail-research-entry
+  pull_request:
+    paths:
+      - "apps/web/src/App.tsx"
+      - "apps/web/src/research/**"
+      - "apps/web/src/styles.css"
+      - ".github/workflows/s32-p1a-book-detail.yml"
+      - "scripts/s32-p1a-browser-acceptance.spec.ts"
+      - "scripts/s32-p1a-real-binding.spec.ts"
+      - "apps/api/test-support/s32-p1a-real-binding-test-api.ts"
+      - "scripts/s32-m3a-gate4-browser-check.ts"
+      - "package.json"
+
+permissions:
+  contents: read
+
+jobs:
+  p1a:
+    name: P1-A source/Owner-scope and Web regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+      - name: Install workspace
+        run: pnpm install --frozen-lockfile
+      - name: Targeted P1-A Book Detail/Owner-scope tests
+        run: |
+          pnpm exec vitest run \
+            apps/web/src/research/p1a-auth-scope.test.tsx \
+            apps/web/src/research/BookDetailResearchActions.test.tsx \
+            apps/web/src/p1a-book-detail-route.test.tsx
+      - name: Research and session regression
+        run: |
+          pnpm exec vitest run apps/web/src/research apps/web/src/weread/SearchDetailWereadSession.test.tsx apps/web/src/p1a-book-detail-route.test.tsx
+      - name: S32 API and Playwright discovery contracts
+        run: |
+          pnpm exec vitest run apps/api/src/s32
+          pnpm exec vitest run scripts/s32-m3a-gate5-test-discovery.test.ts
+      - name: Web production build
+        run: pnpm --filter @book-id-search/web build
+      - name: API production build
+        run: pnpm --filter @book-id-search/api build
+      - name: No whitespace defects
+        run: git diff --check HEAD^ HEAD
+
+  browser-pg16:
+    name: Disposable PG16 + Chromium P1-A product journey
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+      - name: Install workspace
+        run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Real browser and disposable PG16 P1-A flow
+        env:
+          S32_BROWSER_SUITE: P1A
+        run: pnpm exec tsx scripts/s32-m3a-gate4-browser-check.ts
+      - name: Upstream Gate4 Dossier PG16/Chromium regression
+        run: pnpm exec tsx scripts/s32-m3a-gate4-browser-check.ts
+      - name: Upload P1-A browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p1a-browser-acceptance
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  real-binding-pg16:
+    name: Real Owner + S32 HTTP → disposable PG16 write acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+      - name: Install workspace
+        run: pnpm install --frozen-lockfile
+      - name: Fail-closed direct invocation of test-only API
+        run: |
+          if env -u S32_P1A_REAL_BINDING_TEST_ONLY -u S32_BROWSER_SUITE pnpm exec tsx apps/api/test-support/s32-p1a-real-binding-test-api.ts > /tmp/p1a-blocked.stdout 2> /tmp/p1a-blocked.stderr; then
+            echo "ERROR: test-only API accepted unsafe direct invocation"
+            exit 1
+          fi
+          grep -q "STATUS=BLOCKED reason=P1A_SYNTHETIC_DISPOSABLE_ONLY" /tmp/p1a-blocked.stderr
+          rm -f /tmp/p1a-blocked.stdout /tmp/p1a-blocked.stderr
+      - name: Install isolated Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Actual HTTP add and fresh PG16 database assertions
+        env:
+          S32_BROWSER_SUITE: P1A_REAL
+        run: pnpm exec tsx scripts/s32-m3a-gate4-browser-check.ts
+      - name: Upload isolated browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p1a-real-binding-evidence
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7

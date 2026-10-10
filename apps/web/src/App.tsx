@@ -1,4 +1,6 @@
 import { AddToProject } from "./research/AddToProject";
+import { BookDetailResearchActions } from "./research/BookDetailResearchActions";
+import { getWebAuthAuthGeneration } from "./auth/session";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Route, Routes, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
@@ -1147,6 +1149,8 @@ function DetailPage() {
   const [related, setRelated] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [relatedError, setRelatedError] = useState(false);
+  const [relatedRetry, setRelatedRetry] = useState(0);
   const [wereadStatus, setWereadStatus] = useState<WereadStatus | null>(null);
   const [wereadLoading, setWereadLoading] = useState(false);
   const session = useWebAuthSession();
@@ -1156,23 +1160,30 @@ function DetailPage() {
     let cancelled = false;
     setLoading(true);
     setError("");
-    Promise.all([getBook(id), getRelatedBooks(id)])
-      .then(([bookResult, relatedResult]) => {
-        if (cancelled) return;
-        setBook(bookResult.item);
-        setRelated(relatedResult.items);
+    setBook(null);
+    // A related-book request must never block the authoritative current book.
+    void getBook(id)
+      .then((bookResult) => {
+        if (!cancelled) setBook(bookResult.item);
       })
       .catch((err: unknown) => {
-        if (cancelled) return;
-        setError(err instanceof Error ? err.message : "读取详情失败");
+        if (!cancelled) setError(err instanceof Error ? err.message : "读取详情失败");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setRelated([]);
+    setRelatedError(false);
+    void getRelatedBooks(id)
+      .then((result) => { if (!cancelled) setRelated(result.items); })
+      .catch(() => { if (!cancelled) setRelatedError(true); });
+    return () => { cancelled = true; };
+  }, [id, relatedRetry]);
 
   // Load WeRead status for the detail page book when the session is
   // authenticated (Task 9). Unauthenticated/logout drops the badge.
@@ -1222,7 +1233,7 @@ function DetailPage() {
 
       {error ? <div className="state state--error" role="alert">{error}</div> : null}
 
-      {book ? (
+      {book && book.id === id && !loading ? (
         <article className="detail">
           <header>
             <div className="detail__title-row">
@@ -1240,6 +1251,12 @@ function DetailPage() {
           {book.parseStatus === "failed" ? (
             <div className="parse-hint parse-hint--failed">本条解析异常，请谨慎引用。</div>
           ) : null}
+
+          {researchEnabled ? <BookDetailResearchActions
+            key={book.id + ":" + getWebAuthAuthGeneration()}
+            bookId={book.id}
+            bookTitle={book.title || "未命名图书"}
+          /> : null}
 
           <div className="detail-grid">
             <div className="detail-grid__field">
@@ -1279,7 +1296,10 @@ function DetailPage() {
 
           <section>
             <h2>相关图书</h2>
-            {related.length ? (
+            {relatedError ? <p role="status" className="research-muted">
+              相关图书暂时无法加载，不影响当前书目信息。
+              <button type="button" className="toolbar-button" onClick={() => setRelatedRetry(value => value + 1)}>重试相关图书</button>
+            </p> : related.length ? (
               <div className="related-list">
                 {related.map((item) => (
                   <BookCard key={item.id} book={item} query="" />
@@ -1307,6 +1327,7 @@ export default function App() {
         <Route path="/weread" element={<WereadCenter />} />
         <Route path="/books/:id" element={<DetailPage />} />
         <Route path="/research/projects" element={<ProjectsPage />} />
+        <Route path="/research/projects/:projectId/issues/:issueId/dossier" element={<ProjectsPage dossier />} />
         <Route path="/research/projects/:projectId/issues/:issueId" element={<ProjectsPage />} />
         <Route path="/research/projects/:projectId" element={<ProjectsPage />} />
       </Routes>

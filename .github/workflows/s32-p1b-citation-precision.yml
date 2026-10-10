@@ -1,0 +1,76 @@
+name: S32 P1-B Citation Precision (read-only v0.1)
+
+on:
+  push:
+    branches:
+      - feat/s32-p1b-citation-precision-v01
+  pull_request:
+    paths:
+      - "apps/web/src/research/**"
+      - "scripts/s32-m3a-gate4-browser-acceptance.spec.ts"
+      - ".github/workflows/s32-p1b-citation-precision.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  citation:
+    name: P1-B v1 evidence read-only contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+      - name: Install workspace
+        run: pnpm install --frozen-lockfile
+      - name: P1-B evidence precision focused tests
+        run: |
+          pnpm exec vitest run             apps/web/src/research/EvidenceCitationScope.test.tsx             apps/web/src/research/AssessmentDetail.test.tsx             apps/web/src/research/IssueResolutionDetail.test.tsx             apps/web/src/research/dossier-page.test.tsx
+      - name: Full Research regressions
+        run: pnpm exec vitest run apps/web/src/research
+      - name: S32 API regressions
+        run: pnpm exec vitest run apps/api/src/s32
+      - name: Web and API builds
+        run: |
+          pnpm --filter @book-id-search/web build
+          pnpm --filter @book-id-search/api build
+      - name: Diff check
+        run: git diff --check HEAD^ HEAD
+
+  browser-pg16:
+    name: PG16 and real Chromium Dossier with citation scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+      - name: Install workspace
+        run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Disposable PG16 and real browser source-precision validation
+        run: pnpm exec tsx scripts/s32-m3a-gate4-browser-check.ts
+      - name: Upload Dossier evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p1b-citation-precision-browser
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
