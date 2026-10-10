@@ -1,8 +1,8 @@
 # S32 R10 — Local-file Locator pilot (isolated development page)
 
-**Task:** `S32_R10_LOCAL_LOCATOR_PILOT`  
-**Date:** 2026-10-10  
-**Parent:** [R9 Draft PR #68](https://github.com/conanxin/book-id-search/pull/68) at `f7f169ebbcd2aa350b8c523675fff7be3fd2e5ac`.  
+**Task:** `S32_R10_LOCAL_LOCATOR_PILOT`
+**Date:** 2026-10-10
+**Parent:** [R9 Draft PR #68](https://github.com/conanxin/book-id-search/pull/68) at `f7f169ebbcd2aa350b8c523675fff7be3fd2e5ac`.
 **Delivery:** a browser-only, developer-served test page for local PDF/image review. **No public production route, no permanent citation, no database/API change.**
 
 ## What to run locally
