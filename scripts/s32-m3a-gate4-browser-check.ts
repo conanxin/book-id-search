@@ -116,12 +116,19 @@ async function main(): Promise<void> {
   }
 
   // ---- 3. Real API (development wiring, loopback).
-  apiProc = spawn("pnpm", ["--filter", "@book-id-search/api", "dev"], {
+  const p1aRealBinding = process.env.S32_BROWSER_SUITE === "P1A_REAL";
+  // Explicit test mode: replace ONLY the disposable API process with the
+  // test-only real S32 service backed by our ephemeral PG16 and static catalog.
+  // Normal Gate4/P1A runners continue to use the unchanged production API.
+  apiProc = spawn("pnpm", p1aRealBinding
+    ? ["exec", "tsx", "apps/api/test-support/s32-p1a-real-binding-test-api.ts"]
+    : ["--filter", "@book-id-search/api", "dev"], {
     cwd: root,
     env: {
       ...process.env,
       S32_FEATURES_ENABLED: "true",
       S32_DATABASE_URL: dbUrl,
+      ...(p1aRealBinding ? { S32_P1A_REAL_BINDING_TEST_ONLY: "YES" } : {}),
       S32_PRIVATE_API_TOKEN: `gate3-${randomBytes(12).toString("hex")}`,
       GOOGLE_AUTH_ENABLED: "true",
       GOOGLE_CLIENT_ID: "gate3-synthetic-client-id.apps.googleusercontent.com",
@@ -144,7 +151,14 @@ async function main(): Promise<void> {
   // ---- 4. Real Vite web.
   webProc = spawn("pnpm", ["--filter", "@book-id-search/web", "dev"], {
     cwd: root,
-    env: { ...process.env, VITE_S32_ENABLED: "true" },
+    env: {
+      ...process.env,
+      VITE_S32_ENABLED: "true",
+      // The normal public API default points to localhost:3001 (different
+      // origin). Full real-write mode uses the actual Vite same-origin /api
+      // proxy so synthetic book GET and authenticated POST use one origin.
+      ...(p1aRealBinding ? { VITE_API_BASE_URL: "/api" } : {}),
+    },
     stdio: ["ignore", "pipe", "pipe"],
     detached: true,
   });
@@ -170,7 +184,13 @@ async function main(): Promise<void> {
   log("Synthetic owner session issued (real issueWebSession, ephemeral secret)");
 
   // ---- 6. Run the real-browser Playwright suite.
-  const spec = resolve(root, "scripts/s32-m3a-gate4-browser-acceptance.spec.ts");
+  // A fixed, opt-in synthetic P1-A suite reuses the proven disposable PG16,
+  // Owner cookie, real Web/API and teardown. Default Gate4 acceptance unchanged.
+  const spec = resolve(root, process.env.S32_BROWSER_SUITE === "P1A"
+    ? "scripts/s32-p1a-browser-acceptance.spec.ts"
+    : process.env.S32_BROWSER_SUITE === "P1A_REAL"
+      ? "scripts/s32-p1a-real-binding.spec.ts"
+      : "scripts/s32-m3a-gate4-browser-acceptance.spec.ts");
   const run = spawnSync(
     resolve(root, "node_modules/.bin/playwright"),
     ["test", spec, "--browser=chromium", "--workers=1", "--reporter=line"],

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useWebAuthSession } from "../auth/useWebAuthSession";
+import { getWebAuthAuthGeneration } from "../auth/session";
 import { getResearchMemberships, ProjectApiError, type ResearchMembership } from "./api";
 
 export type MembershipLoadState = "unauthenticated" | "loading" | "ready" | "auth-error" | "unavailable";
@@ -9,11 +10,16 @@ export function useSearchMemberships(bookIds: string[]) {
   const session = useWebAuthSession();
   const requestKey = JSON.stringify(Array.from(new Set(bookIds.filter(Boolean))));
   const uniqueBookIds = useMemo<string[]>(() => JSON.parse(requestKey), [requestKey]);
+  const authGeneration = getWebAuthAuthGeneration();
+  const scopeKey = JSON.stringify([authGeneration, requestKey]);
+  const [visibleScope, setVisibleScope] = useState(scopeKey);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [state, setState] = useState<MembershipLoadState>(session.status === "authenticated" ? "loading" : "unauthenticated");
   const [memberships, setMemberships] = useState<Record<string, ResearchMembership[]>>({});
 
   useEffect(() => {
+    // Hide private data before the new request can be settled.
+    setVisibleScope(scopeKey);
     setMemberships({});
     if (session.status !== "authenticated") {
       setState("unauthenticated");
@@ -39,10 +45,17 @@ export function useSearchMemberships(bookIds: string[]) {
         setState(error instanceof ProjectApiError && (error.status === 401 || error.status === 403) ? "auth-error" : "unavailable");
       });
     return () => request.abort();
-  }, [requestKey, refreshVersion, session.status]);
+  }, [requestKey, refreshVersion, session.status, scopeKey]);
 
   const refresh = useCallback(() => setRefreshVersion(version => version + 1), []);
-  return { state, memberships, refresh };
+  // React commits before useEffect runs. Mask old private data synchronously
+  // during a same-status Owner session rotation or a different book request.
+  const visible = session.status === "authenticated" && visibleScope === scopeKey;
+  return {
+    state: session.status !== "authenticated" ? "unauthenticated" : visible ? state : "loading",
+    memberships: visible ? memberships : {},
+    refresh,
+  };
 }
 
 export function ResearchMembershipChips({
