@@ -36,7 +36,7 @@ jobs:
           from pathlib import Path
           body = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', Path('r10-root-suite.log').read_text(errors='replace'))
           for line in body.splitlines():
-              if re.search(r'(^\s*FAIL\s|Test Files|^\s*Tests\s|^\s*Errors\s|Unhandled Error|Uncaught Exception|^Error:)', line):
+              if re.search(r'(^\s*FAIL\s|Test Files|^\s*Tests\s|^\s*Errors\s|Unhandled Error|Uncaught Exception|^Error:|LocatorLocalPilot|\d+ failed|AssertionError|\bTimeout\b|^\s*[❯×]\s)', line):
                   print(line)
           PY
           exit "$rc"
