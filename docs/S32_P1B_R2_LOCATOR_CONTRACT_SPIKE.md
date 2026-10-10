@@ -1,7 +1,7 @@
 # S32 P1-B R2 — Locator v2 Draft Contract Spike (NO WRITE)
 
-Task: `S32_P1B_R2_LOCATOR_CONTRACT_SPIKE`  
-Date: 2026-10-10  
+Task: `S32_P1B_R2_LOCATOR_CONTRACT_SPIKE`
+Date: 2026-10-10
 Scope: **STRICT LOCAL MODEL + TESTS**; authorization, source witness attestation and API/storage release still **PENDING DESIGN/APPROVAL**.
 
 ## Motivation and existing constraints
