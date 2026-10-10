@@ -1,5 +1,14 @@
 # BOOK-ID-SEARCH status
 
+## 2026-10-10 — S32 mainline source integration candidate
+
+- `task_id=S32_MAINLINE_INTEGRATION_CANDIDATE_R1`; branch `integration/s32-mainline-candidate`, based on `main@42cf1b7b4a10a6edfa53d688012728dded0b3049`.
+- Six local merges combine #58 Dossier, #66 Owner/Run404 fixes, #61 Book Detail Research entry, #62 citation scope, #64 canonical-refresh tests and #59 Web Google client ID release guard. Exact source heads and publication identity are recorded in the candidate PR.
+- The first five merges reproduce R6 product tree `79997ca5b811d2110b6fef334b1bc133c632ca4a` exactly. Reuse [R6 CI 37947716249](https://github.com/conanxin/book-id-search/actions/runs/37947716249): 3/3 jobs, including 4,758 PASS / 92 SKIP and disposable PG16/browser coverage; these are prior results, not a new whole-suite run.
+- Relative to that tree, #59 changes only its build script, guard tests and workflow. Native source `ab0b10421ee181a657d053d199aef0a8166626d4` / tree `618691e4e80805f1b93aaa80b0d4bd38d4bc443e` passed Bash syntax, six existing build contracts, three guard tests and diff checks. This status entry is the only subsequent documentation change.
+- This is a source candidate for review. It is not merged into main or deployed, and no production image was built. The existing release builder still requires a source commit contained in `origin/main`.
+- R8–R11 Locator experiments remain in their own PR chain. [R11 #70 final Hermes receipt](https://github.com/conanxin/book-id-search/pull/70#issuecomment-6098705161): target WSL real-source and size-boundary replay PASS at `256ace1`; inline structure and same-byte Poppler page mapping PASS; desktop inline pixels await human confirmation.
+
 ## 2026-09-30 — PR #52 WeRead logout production closeout
 
 - task_id: `S32_M3A_PR52_PRODUCTION_CLOSEOUT_R1`.
