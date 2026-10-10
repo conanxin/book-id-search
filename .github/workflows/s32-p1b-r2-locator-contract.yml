@@ -1,0 +1,52 @@
+name: S32 P1-B R2 Locator contract-only prototype
+
+on:
+  push:
+    branches:
+      - feat/s32-p1b-r2-locator-contract-spike
+  pull_request:
+    paths:
+      - apps/web/src/research/locator-v2-draft.ts
+      - apps/web/src/research/locator-v2-draft.test.ts
+      - docs/S32_P1B_R2_LOCATOR_CONTRACT_SPIKE.md
+      - .github/workflows/s32-p1b-r2-locator-contract.yml
+
+permissions:
+  contents: read
+
+jobs:
+  locator-contract:
+    name: Locator v2 safety contract and Research regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      TZ: Asia/Shanghai
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Enable locked pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+      - name: Install workspace
+        run: pnpm install --frozen-lockfile
+      - name: Strict R2 draft and witness contract
+        run: pnpm exec vitest run apps/web/src/research/locator-v2-draft.test.ts
+      - name: Research-scoped v1 backwards-compatibility
+        run: pnpm exec vitest run apps/web/src/research
+      - name: Frozen schema contract
+        run: pnpm exec vitest run scripts/s32-schema-contract.test.ts
+      - name: Web and API TypeScript builds
+        run: |
+          pnpm --filter @book-id-search/web build
+          pnpm --filter @book-id-search/api build
+      - name: Prove no canonical API or schema mutation
+        run: |
+          git fetch --no-tags origin feat/s32-p1b-citation-precision-v01
+          git diff --exit-code origin/feat/s32-p1b-citation-precision-v01...HEAD -- \
+            db/migrations apps/api/src apps/web/src/research/api.ts
+          git diff --check origin/feat/s32-p1b-citation-precision-v01...HEAD
