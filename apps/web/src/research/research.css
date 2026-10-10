@@ -636,3 +636,39 @@
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Gate 4: Research Dossier is a private, strictly read-only research surface. */
+.dossier-page { display: grid; gap: 20px; min-width: 0; }
+.dossier-header { overflow-wrap: anywhere; }
+.dossier-header h1 { margin: 10px 0; font-size: clamp(23px, 4vw, 34px); }
+.dossier-question { margin: 16px 0; font-size: 16px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.dossier-index { display: flex; flex-wrap: wrap; gap: 8px; }
+.dossier-index a { padding: 8px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); color: var(--color-primary-strong); }
+.dossier-index a:focus-visible, .dossier-page :is(button,a):focus-visible { outline: 3px solid #b3ccff; outline-offset: 3px; }
+.dossier-entry { display: inline-flex; margin: 14px 0 24px; text-decoration: none; }
+.dossier-entry:hover { color: #fff; }
+.dossier-section { min-width: 0; }
+.dossier-section > h2 { margin: 0 0 18px; font-size: 20px; }
+.dossier-section :is(p, li, h3, h4) { overflow-wrap: anywhere; }
+.dossier-section :is(p,li) { line-height: 1.65; }
+.dossier-stream-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; color: var(--color-text-muted); font-size: 13px; margin: 14px 0; }
+.dossier-stream-foot button { font-size: 14px; }
+.dossier-cards { display: grid; gap: 12px; }
+.dossier-item { border-top: 1px solid var(--color-border); padding: 14px 0; min-width: 0; }
+.dossier-item h3 { margin: 0; font-size: 16px; }
+.dossier-item .research-text-button { display: inline-flex; margin: 4px 16px 4px 0; }
+.dossier-inline, .dossier-detail { background: var(--color-bg); border-radius: var(--radius-sm); border: 1px solid var(--color-border); padding: 14px; margin-top: 12px; overflow-wrap: anywhere; min-width: 0; }
+.dossier-inline > h3, .dossier-detail > h3 { margin-top: 0; }
+.dossier-current-tag { font-size: 12px; font-weight: 700; padding: 2px 7px; margin-left: 6px; border-radius: 5px; background: #e8f0ff; color: #214f99; }
+.dossier-fingerprint { display: block; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; word-break: break-word; color: var(--color-text-muted); }
+.dossier-timelines { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 24px; }
+.dossier-timelines h3 { margin-top: 0; font-size: 16px; }
+.dossier-references { padding-left: 20px; }
+.dossier-references li { margin-bottom: 18px; display: grid; gap: 4px; }
+@media (max-width: 640px) {
+  .dossier-page { gap: 14px; }
+  .dossier-page .research-panel { padding: 16px; }
+  .dossier-index a { font-size: 13px; padding: 8px 10px; }
+  .dossier-timelines { grid-template-columns: minmax(0,1fr); gap: 12px; }
+}

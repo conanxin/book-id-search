@@ -1,0 +1,112 @@
+name: S32 M3-A Gate 5 cross-slice qualification
+
+on:
+  push:
+    branches:
+      - feat/s32-m3a-gate4-dossier
+
+jobs:
+  cross-stage-regression:
+    name: Auth + Research + WeRead + S32 regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TZ: Asia/Shanghai
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Enable locked pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+      - name: Frozen dependency installation
+        run: pnpm install --frozen-lockfile
+      - name: Compile API dist for the production-ESM regression test
+        run: pnpm --filter @book-id-search/api build
+      - name: Cross-stage unit and component tests
+        run: pnpm exec vitest run apps/web/src/auth apps/web/src/research apps/web/src/weread apps/api/src/auth apps/api/src/s32
+      - name: Frozen S32 schema static test
+        run: pnpm exec vitest run scripts/s32-schema-contract.test.ts
+      - name: Immutable M0 + 002 migrations
+        run: |
+          git diff --exit-code origin/main HEAD -- \
+            db/migrations/001_s32_core_schema.sql \
+            db/migrations/002_s32_m2e_issue_resolution.sql \
+            db/tests/001_s32_schema_assertions.sql \
+            db/tests/002_s32_negative_invariants.sql
+          git diff --check origin/main...HEAD
+      - name: API TypeScript build
+        run: pnpm --filter @book-id-search/api build
+      - name: Web TypeScript and Vite build
+        run: pnpm --filter @book-id-search/web build
+
+  prior-gate-real-browser:
+    name: Gate 3 real PG16/Chromium nonproduction regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Enable locked pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+      - name: Frozen dependency installation
+        run: pnpm install --frozen-lockfile
+      - name: Install Chromium test runner
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Prior Gate 3 whole-slice disposable PG/browser acceptance
+        run: pnpm exec tsx scripts/s32-m3a-gate3-browser-check.ts
+
+  root-suite-diagnostic:
+    name: Full root-suite DIAGNOSTIC (known baseline failures not hidden)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Enable locked pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+      - name: Frozen dependency installation
+        run: pnpm install --frozen-lockfile
+      - name: Prepare API dist before full-suite classification
+        run: pnpm --filter @book-id-search/api build
+      - name: Run exact root suite; preserve real exit and complete logs
+        id: root_suite
+        shell: bash
+        run: |
+          set +e
+          TZ=Asia/Shanghai pnpm test > gate5-root-suite.log 2>&1
+          rc=$?
+          echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
+          echo "ROOT_SUITE_EXIT=$rc"
+          grep -E 'Test Files|Tests |Errors |Uncaught|Unhandled|Failed Tests|Failed Suites' gate5-root-suite.log | tail -35 || true
+          {
+            echo "### Full root suite — diagnostic, not an assertion of green"
+            echo ""
+            echo "Exact pnpm test exit: $rc"
+            echo ""
+            echo "Known pre-existing WeRead/cwd and tsx IPC issues must remain visibly classified; this job is non-gating and never means the root suite passed when exit is nonzero."
+            echo ""
+            echo "-----"
+            grep -E 'Test Files|Tests |Errors |Uncaught|Unhandled|Failed Tests|Failed Suites' gate5-root-suite.log | tail -35 || true
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+      - name: Preserve root-suite test log for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate5-root-suite-diagnostic
+          path: gate5-root-suite.log
+          if-no-files-found: warn
+          retention-days: 7

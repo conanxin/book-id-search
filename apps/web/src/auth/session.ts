@@ -42,8 +42,18 @@ const initialSnapshot: WebAuthSnapshot = {
 
 let snapshot: WebAuthSnapshot = initialSnapshot;
 const listeners = new Set<() => void>();
+// Opaque, monotonic local epoch. Never expose the CSRF credential as a React key,
+// URL, model field, DOM attribute or persistent value.
+let authGeneration = 0;
+
+export function getWebAuthAuthGeneration(): number {
+  return authGeneration;
+}
 
 function setSnapshot(next: WebAuthSnapshot): void {
+  const oldAuth = snapshot.status === "authenticated" ? snapshot.csrfToken : null;
+  const newAuth = next.status === "authenticated" ? next.csrfToken : null;
+  if (oldAuth !== newAuth || (newAuth !== null && snapshot.user?.email !== next.user?.email)) authGeneration += 1;
   snapshot = next;
   for (const listener of listeners) listener();
 }
@@ -68,6 +78,7 @@ export function __setWebAuthSnapshotForTests(next: WebAuthSnapshot): void {
 
 export function __resetWebAuthStoreForTests(): void {
   snapshot = initialSnapshot;
+  authGeneration = 0;
   inFlightSessionLoad = null;
 }
 
