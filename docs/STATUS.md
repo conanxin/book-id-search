@@ -3,7 +3,7 @@
 ## Current — 2026-10-11 — Book web research candidate
 
 - `task_id=BOOK_AI_WEB_RESEARCH_V1`; branch `feat/book-web-research`, based on deployed PR #73 merge `9ef09095bf34b6b2eedd6363c7163b26d8996699`.
-- Adds a separate read-only web research scope: actual MiniMax search records and URL/excerpt sources, followed by a cited answer. Public book identity and explicit question only; no personal-content writes or database migration.
+- Adds a separate read-only web research scope: actual MiniMax search records, AI selection of up to four source IDs, and original URL/excerpt cards. Public book identity and explicit question only; no personal-content writes or database migration. Free factual synthesis is deferred after two live content reviews found unsupported inferences.
 - Implementation is in review; live-account results, exact-commit CI and browser evidence belong in the new PR. This candidate has not been merged or deployed.
 - Existing production remains Web `9ef09095…` / API `ccccead…`; PR #72 migrations003/004 already applied. The dated development notes below describe their stage at the time, not current deployment.
 - Contract: [Book web research v1](development/BOOK_AI_WEB_RESEARCH_V1.md).
