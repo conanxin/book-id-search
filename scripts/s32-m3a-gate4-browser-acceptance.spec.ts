@@ -49,6 +49,16 @@ async function activeDossier(page: Page) {
   await expect(page.locator("#dossier-current")).toContainText("Gate2 working conclusion", { timeout: 20_000 });
   await expect(page.locator("#dossier-runs .dossier-item")).toHaveCount(20, { timeout: 20_000 });
 }
+async function googleRequired(page: Page, returnUrl: string) {
+  // The shared route gate now owns anonymous/private entry, before ProjectsPage mounts.
+  const title = "登录后，继续整理这本书与阅读资料";
+  const gate = page.getByRole("region", { name: title, exact: true });
+  await expect(gate.getByRole("heading", { name: title, level: 1, exact: true })).toBeVisible({ timeout: 20_000 });
+  const login = gate.getByRole("link", { name: "使用 Google 登录", exact: true });
+  await expect(login).toBeVisible();
+  const url = new URL(returnUrl);
+  await expect(login).toHaveAttribute("href", "/account?returnTo=" + encodeURIComponent(url.pathname + url.search));
+}
 test.describe.configure({ mode: "serial" });
 
 test("A — owner session and anonymous private isolation", async ({ browser }) => {
@@ -63,7 +73,8 @@ test("A — owner session and anonymous private isolation", async ({ browser }) 
   const anon = await browser.newContext();
   const page2 = await anon.newPage();
   await page2.goto(dossierUrl(P1, I1));
-  await expect(page2.locator(".research-access")).toContainText("使用 Google 账号登录", { timeout: 20_000 });
+  await googleRequired(page2, dossierUrl(P1, I1));
+  await expect(page2.getByRole("heading", { name: "Gate2 Open Issue" })).toHaveCount(0);
   await expect(page2.getByText("Gate2 working conclusion")).toHaveCount(0);
   const response = await page2.request.get(WEB + "/api/private/s32/projects/" + P1 + "/issues/" + I1);
   expect(response.status()).toBe(401);
@@ -254,9 +265,14 @@ test("K — signing out clears the Dossier subtree, never exposing private Issue
   const page = await ctx.newPage();
   const domainWrites = collectWrites(page);
   await activeDossier(page);
-  await page.getByRole("button", { name: "退出登录" }).click();
+  const logout = page.waitForResponse(response => new URL(response.url()).pathname === "/api/auth/logout"
+    && response.request().method() === "POST");
+  await page.getByRole("region", { name: "研究项目访问", exact: true })
+    .getByRole("button", { name: "退出登录", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Gate2 Open Issue" })).toHaveCount(0, { timeout: 20_000 });
   await expect(page.getByText("Gate2 working conclusion")).toHaveCount(0);
+  expect((await logout).status()).toBe(204);
+  await googleRequired(page, dossierUrl(P1, I1));
   const response = await ctx.request.get(WEB + "/api/private/s32/projects/" + P1 + "/issues/" + I1);
   expect(response.status()).toBe(401);
   expect(domainWrites).toEqual([]);

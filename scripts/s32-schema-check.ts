@@ -23,9 +23,10 @@ const ASSERTIONS = [
   resolve(ROOT, "db/tests/003_s32_m2e_schema_assertions.sql"),
   resolve(ROOT, "db/tests/004_s32_m2e_negative_invariants.sql"),
 ];
-const M0_ASSERTIONS = ASSERTIONS.slice(0, 2);
-// The M0 structural assertion describes its exact 26-table schema. The other
-// suites check existing invariants and remain valid after additive tables.
+// Only the first file is a read-only structural check of the exact M0 schema.
+// The negative suites insert fixed fixture IDs, so run them once per database,
+// after the complete migration chain (and after upgrade data snapshots).
+const M0_ASSERTIONS = ASSERTIONS.slice(0, 1);
 const CURRENT_INVARIANT_ASSERTIONS = ASSERTIONS.slice(1);
 const UPGRADE_FIXTURES = [
   resolve(ROOT, "scripts/fixtures/s32-m2d-browser.sql"),
@@ -175,27 +176,25 @@ function assertions(dbName: string, files: readonly string[] = CURRENT_INVARIANT
 
 interface MigrationStageChecks {
   apply(sql: string): void;
-  assertM0(): void;
-  assertCurrent(): void;
+  assertFiles(files: readonly string[]): void;
 }
 
-/** Check the frozen schema while it exists, then check each additive stage. */
+/** Check M0 structure first; execute fixture-bearing suites once at the end. */
 export function applySchemaMigrationStages(migrations: readonly string[], checks: MigrationStageChecks): void {
   if (migrations.length < 2) throw new Error("REQUIRED_MIGRATION_PREFIX_MISSING");
   checks.apply(migrations[0]!);
-  checks.assertM0();
+  checks.assertFiles(M0_ASSERTIONS);
   for (const sql of migrations.slice(1)) {
     checks.apply(sql);
-    checks.assertCurrent();
   }
+  checks.assertFiles(CURRENT_INVARIANT_ASSERTIONS);
 }
 
 function installOn(dbName: string, migrations: string[]) {
   createDatabase(dbName);
   applySchemaMigrationStages(migrations, {
     apply: sql => apply(dbName, sql),
-    assertM0: () => assertions(dbName, M0_ASSERTIONS),
-    assertCurrent: () => assertions(dbName),
+    assertFiles: files => assertions(dbName, files),
   });
   console.log(`[harness] ${dbName} install+assertions OK`);
 }
@@ -254,7 +253,6 @@ function upgradeOn(dbName: string, migrations: string[], invalid: boolean) {
   // migrations, so an invalid legacy row never reaches an additive migration.
   let result = psqlFile(dbName, migrations[1]!);
   if (result.status === 0 && !invalid) {
-    assertions(dbName);
     for (const sql of migrations.slice(2)) {
       const next = psqlFile(dbName, sql);
       result = {
@@ -263,7 +261,6 @@ function upgradeOn(dbName: string, migrations: string[], invalid: boolean) {
         stderr: `${result.stderr}\n${next.stderr}`,
       };
       if (next.status !== 0) break;
-      assertions(dbName);
     }
   }
   writeFileSync(join(evidenceDir, `${dbName}-migration.json`), JSON.stringify(result), { mode: 0o600 });
@@ -278,6 +275,8 @@ function upgradeOn(dbName: string, migrations: string[], invalid: boolean) {
     console.log("INVALID_LEGACY_PREFLIGHT_FAIL_CLOSED_PG16=PASS");
   } else {
     if (result.status !== 0) throw new Error(`VALID_UPGRADE_FAILED: ${result.stderr}`);
+    // These files insert test data. Keep them after the before/after comparison
+    // so the upgrade evidence measures migrations, not fixture execution.
     assertions(dbName);
     console.log("VALID_001_TO_002_UPGRADE_PG16=PASS");
   }

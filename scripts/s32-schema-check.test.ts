@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, writeFileSync, rmSync, mkdirSync, existsSync, readFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import {
   checkInputs,
@@ -83,7 +83,7 @@ describe("S32 harness: checkInputs() pre-flight", () => {
 });
 
 describe("S32 additive migrations preserve frozen checks and existing data", () => {
-  it("checks the exact M0 table set before an additive migration and checks constraints again afterwards", () => {
+  it("checks the exact M0 table set first and the current constraints after the complete chain", () => {
     let tableCount = 0;
     let resolutionConstraint = false;
     const checkedTableCounts: number[] = [];
@@ -93,27 +93,58 @@ describe("S32 additive migrations preserve frozen checks and existing data", () 
         if (sql === "m2e") resolutionConstraint = true;
         if (sql === "library") tableCount += 3;
       },
-      assertM0() {
-        // Models the frozen SQL's exact table count. Running this after the
-        // additive migration would fail despite a valid current schema.
-        expect(tableCount).toBe(26);
-        expect(resolutionConstraint).toBe(false);
-      },
-      assertCurrent() {
-        expect(resolutionConstraint).toBe(true);
-        checkedTableCounts.push(tableCount);
+      assertFiles(files) {
+        if (files.some(file => basename(file) === "001_s32_schema_assertions.sql")) {
+          // The frozen exact-table assertion must see the actual M0 schema.
+          expect(tableCount).toBe(26);
+          expect(resolutionConstraint).toBe(false);
+        } else {
+          expect(resolutionConstraint).toBe(true);
+          checkedTableCounts.push(tableCount);
+        }
       },
     });
     expect(tableCount).toBe(29);
-    expect(checkedTableCounts).toEqual([26, 29]);
+    expect(checkedTableCounts).toEqual([29]);
+  });
+
+  it.each([2, 3, 4])("runs each real assertion/fixture file once per database with %i migrations", length => {
+    const migrations = ["m0", "m2e", "library", "later"].slice(0, length);
+    const counts = new Map<string, number>();
+    const applied: string[] = [];
+    applySchemaMigrationStages(migrations, {
+      apply(sql) { applied.push(sql); },
+      assertFiles(files) {
+        for (const file of files) {
+          const name = basename(file);
+          expect(readFileSync(file, "utf8").trim()).not.toBe("");
+          counts.set(name, (counts.get(name) ?? 0) + 1);
+          if (name === "001_s32_schema_assertions.sql") {
+            expect(applied).toEqual(["m0"]);
+          } else {
+            expect(applied).toEqual(migrations);
+          }
+          // The old negative SQL commits fixed sources/notes fixture IDs.
+          // A second execution on this database would raise a duplicate key.
+          if (name === "002_s32_negative_invariants.sql" && counts.get(name)! > 1) {
+            throw new Error("duplicate key value violates unique constraint sources_pkey");
+          }
+        }
+      },
+    });
+    expect(Object.fromEntries(counts)).toEqual({
+      "001_s32_schema_assertions.sql": 1,
+      "002_s32_negative_invariants.sql": 1,
+      "003_s32_m2e_schema_assertions.sql": 1,
+      "004_s32_m2e_negative_invariants.sql": 1,
+    });
   });
 
   it("does not apply later migrations when the frozen structural check fails", () => {
     const applied: string[] = [];
     expect(() => applySchemaMigrationStages(["m0", "m2e", "library"], {
       apply: sql => { applied.push(sql); },
-      assertM0() { throw new Error("M0_FOREIGN_KEY_MISSING"); },
-      assertCurrent() {},
+      assertFiles() { throw new Error("M0_FOREIGN_KEY_MISSING"); },
     })).toThrow("M0_FOREIGN_KEY_MISSING");
     expect(applied).toEqual(["m0"]);
   });
@@ -125,9 +156,10 @@ describe("S32 additive migrations preserve frozen checks and existing data", () 
         if (sql === "m2e") constraintPresent = true;
         if (sql === "broken-addition") constraintPresent = false;
       },
-      assertM0() {},
-      assertCurrent() {
-        if (!constraintPresent) throw new Error("EXISTING_CONSTRAINT_MISSING");
+      assertFiles(files) {
+        if (files.some(file => basename(file) === "003_s32_m2e_schema_assertions.sql") && !constraintPresent) {
+          throw new Error("EXISTING_CONSTRAINT_MISSING");
+        }
       },
     })).toThrow("EXISTING_CONSTRAINT_MISSING");
   });

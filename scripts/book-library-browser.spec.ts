@@ -104,11 +104,24 @@ test("signed owner session saves introduction, notes and resource through the UI
   await page.getByRole("navigation", { name: "主导航" }).getByRole("link", { name: "我的书籍", exact: true }).click();
   await expect(page.getByRole("heading", { name: "我的书籍", exact: true })).toBeVisible();
   await page.getByLabel("在我的书籍中查找", { exact: true }).fill(runId);
+  const filteredCollection = page.waitForResponse(response => {
+    const url = new URL(response.url());
+    return response.request().method() === "GET"
+      && /^\/api\/private\/s32\/library\/?$/.test(url.pathname)
+      && url.searchParams.get("q") === runId;
+  });
   await page.getByRole("button", { name: "查找", exact: true }).click();
-  await expect(page.getByRole("link", { name: TITLE_A, exact: true })).toBeVisible();
-  await expect(page.getByText("2 篇笔记", { exact: true })).toBeVisible();
-  await expect(page.getByText("1 个电子版本", { exact: true })).toBeVisible();
-  await page.getByRole("link", { name: TITLE_A, exact: true }).click();
+  const filteredResponse = await filteredCollection;
+  expect(filteredResponse.ok()).toBe(true);
+  expect(await filteredResponse.json()).toMatchObject({ total: 1, items: [{ bookId: A }] });
+  await expect(page.getByRole("status").filter({ hasText: /^当前筛选\s*·\s*1 本书$/ })).toBeVisible();
+  // The preceding PG contracts also create saved books. Scope counts to the
+  // exact fixture card instead of matching equal counts in the whole shelf.
+  const savedBookCard = page.getByRole("article").filter({ has: page.getByRole("heading", { name: TITLE_A, exact: true }) });
+  await expect(savedBookCard).toHaveCount(1);
+  await expect(savedBookCard.getByText("2 篇笔记", { exact: true })).toBeVisible();
+  await expect(savedBookCard.getByText("1 个电子版本", { exact: true })).toBeVisible();
+  await savedBookCard.getByRole("link", { name: TITLE_A, exact: true }).click();
   await expect(page.getByText(INTRODUCTION, { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "编辑介绍", exact: true }).click();
@@ -122,7 +135,7 @@ test("signed owner session saves introduction, notes and resource through the UI
     WHERE bn.catalog_book_id = $1 AND r.title = '第一篇阅读笔记'`, [A])).rows[0].note_id, "保存笔记");
   await firstNote.getByRole("button", { name: "查看历史版本（2）", exact: true }).click();
   await firstNote.getByRole("button", { name: "第 1 版", exact: true }).click();
-  await expect(firstNote.getByRole("region", { name: "历史版本 1" }).getByText("第一篇笔记的私人正文", { exact: true })).toBeVisible();
+  await expect(firstNote.getByRole("region", { name: "历史版本 1", exact: true }).getByText("第一篇笔记的私人正文", { exact: true })).toBeVisible();
 
   await resource.getByRole("button", { name: "编辑链接", exact: true }).click();
   await page.getByLabel("资源名称", { exact: true }).fill("修订扫描本");
@@ -131,7 +144,8 @@ test("signed owner session saves introduction, notes and resource through the UI
   await expect(page.getByRole("article", { name: "电子版本：修订扫描本", exact: true })).toBeVisible();
   const secondNote = page.getByRole("article", { name: "笔记：第二篇阅读笔记", exact: true });
   await secondNote.getByRole("button", { name: "删除笔记", exact: true }).click();
-  await page.getByRole("button", { name: "确认删除笔记", exact: true }).click();
+  await secondNote.getByRole("group", { name: "删除 第二篇阅读笔记", exact: true })
+    .getByRole("button", { name: "确认删除笔记", exact: true }).click();
   await expect(secondNote).toHaveCount(0);
   await page.getByRole("article", { name: "电子版本：修订扫描本", exact: true }).getByRole("button", { name: "移除链接", exact: true }).click();
   await save(page, "DELETE", `/resources/${resourceId}`, "确认移除链接");
@@ -145,7 +159,8 @@ test("signed owner session saves introduction, notes and resource through the UI
   expect((await db.query("SELECT count(*)::int AS n FROM core.source_assets WHERE id = $1", [resourceId])).rows[0].n).toBe(1);
 
   await page.goto("/account");
-  await page.getByRole("button", { name: "退出登录", exact: true }).click();
+  await page.getByRole("region", { name: "Google 账号", exact: true })
+    .getByRole("button", { name: "退出登录", exact: true }).click();
   await expect(page.getByTestId("google-login-authenticated")).toHaveCount(0);
   await page.goto(`/books/${A}`);
   await expect(page.getByRole("heading", { name: LOGIN_TITLE })).toBeVisible();
