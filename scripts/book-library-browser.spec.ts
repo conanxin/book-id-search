@@ -6,10 +6,11 @@
 import { createRequire } from "node:module";
 import { expect, test, type Page } from "@playwright/test";
 import { issueWebSession } from "../apps/api/src/auth/web-session.js";
+import { getBookBrowserCatalogIds } from "./book-browser-fixtures.js";
 
 const WEB = "http://127.0.0.1:5173";
 const runId = process.env.BOOK_LIBRARY_BROWSER_RUN_ID!;
-const A = `library-browser-${runId}-a`, B = `library-browser-${runId}-b`;
+const { A, B } = getBookBrowserCatalogIds(runId);
 const TITLE_A = `古道阅读验证甲 ${runId}`, TITLE_B = `古道阅读验证乙 ${runId}`;
 const LOGIN_TITLE = "登录后，继续整理这本书与阅读资料";
 const INTRODUCTION = "这是一段持久保存的私人书籍介绍：古道的地理线索与历史沿革。";

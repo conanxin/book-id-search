@@ -225,7 +225,8 @@ export interface WereadNotesQuery {
    * S27F: optional public catalog id filter. When provided, only notes
    * matched to that catalogId are returned. Must be a non-empty string
    * matching the public catalogId format. Never logged or echoed in
-   * error messages; only the trimmed value (if non-empty) is sent.
+   * error messages. An explicitly invalid value rejects before any request;
+   * omit the property entirely to query the whole notes library.
    */
   catalogId?: string;
 }
@@ -267,8 +268,40 @@ export interface WereadNotesResponse {
   error?: string;
 }
 
-export function fetchWereadNotes(query: WereadNotesQuery = {}): Promise<WereadNotesResponse> {
+export interface WereadNotesRequestOptions {
+  signal?: AbortSignal;
+}
+
+export type WereadBookNotesQuery = Omit<WereadNotesQuery, "catalogId" | "matchedOnly">;
+
+const WEREAD_NOTES_LOAD_ERROR = "微信读书记录暂时无法读取，请稍后重试。";
+
+/** Matches the notes API's trimmed public catalog id contract. */
+export function isValidWereadCatalogId(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  const trimmed = value.trim();
+  return trimmed.length <= 128 && /^[0-9]+_[0-9]{12}$/.test(trimmed);
+}
+
+function requireWereadCatalogId(value: unknown): string {
+  if (!isValidWereadCatalogId(value)) {
+    throw new WereadPrivateError(400, "书目编号格式不正确。");
+  }
+  return (value as string).trim();
+}
+
+function checkWereadNotesAbort(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new DOMException("请求已取消。", "AbortError");
+}
+
+export async function fetchWereadNotes(
+  query: WereadNotesQuery = {},
+  options: WereadNotesRequestOptions = {}
+): Promise<WereadNotesResponse> {
   const params = new URLSearchParams();
+  // Never turn an invalid per-book query into an unrestricted library query.
+  // This deliberately distinguishes omission from { catalogId: undefined }.
+  if ("catalogId" in query) params.set("catalogId", requireWereadCatalogId(query.catalogId));
   if (query.type) params.set("type", query.type);
   if (query.days) params.set("days", query.days);
   if (typeof query.matchedOnly === "boolean") params.set("matchedOnly", String(query.matchedOnly));
@@ -283,15 +316,48 @@ export function fetchWereadNotes(query: WereadNotesQuery = {}): Promise<WereadNo
     const trimmed = query.q.trim();
     if (trimmed.length > 0) params.set("q", trimmed);
   }
-  // S27F: catalogId — trimmed, only sent when it matches the public
-  // catalogId format. Never logged; never echoed in error messages.
-  if (typeof query.catalogId === "string") {
-    const trimmed = query.catalogId.trim();
-    if (/^[0-9]+_[0-9]{12}$/.test(trimmed)) params.set("catalogId", trimmed);
-  }
   const qs = params.toString();
   const path = qs ? `/private/weread/notes?${qs}` : "/private/weread/notes";
-  return privateRequestJson<WereadNotesResponse>(path);
+  checkWereadNotesAbort(options.signal);
+  try {
+    const response = await privateRequestJson<WereadNotesResponse>(path, { signal: options.signal });
+    // JSON body consumption can itself be interrupted after headers arrive.
+    checkWereadNotesAbort(options.signal);
+    return response;
+  } catch (error) {
+    checkWereadNotesAbort(options.signal);
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new DOMException("请求已取消。", "AbortError");
+    }
+    if (error instanceof WereadPrivateError && (error.status === 401 || error.status === 403)) throw error;
+    // Do not display server response bodies or network URLs containing a
+    // private search query. Other private endpoints keep their own contract.
+    throw new WereadPrivateError(error instanceof WereadPrivateError ? error.status : 502, WEREAD_NOTES_LOAD_ERROR);
+  }
+}
+
+/** One page of confirmed notes for exactly one public catalog book. */
+export async function fetchWereadBookNotes(
+  catalogId: string,
+  query: WereadBookNotesQuery = {},
+  options: WereadNotesRequestOptions = {}
+): Promise<WereadNotesResponse> {
+  const currentCatalogId = requireWereadCatalogId(catalogId);
+  const response = await fetchWereadNotes({
+    ...query,
+    days: query.days ?? "all",
+    catalogId: currentCatalogId,
+    matchedOnly: true,
+  }, options);
+  checkWereadNotesAbort(options.signal);
+  if (!response || response.ok !== true || !Array.isArray(response.items)
+    || !response.pageInfo || !response.summary) {
+    throw new WereadPrivateError(502, WEREAD_NOTES_LOAD_ERROR);
+  }
+  if (response.items.some(item => !item || item.matched !== true || item.catalogId !== currentCatalogId)) {
+    throw new WereadPrivateError(502, "微信读书记录与当前书目不一致，请重试。");
+  }
+  return response;
 }
 
 /* -----------------------------------------------------------------------
@@ -462,12 +528,6 @@ export function getWereadBookPagination(): { maxItems: number; pageSize: number 
   };
 }
 
-export interface FetchAllWereadBookNotesOptions {
-  maxItems?: number;
-  pageSize?: number;
-  signal?: AbortSignal;
-}
-
 export interface FetchAllWereadBookNotesResult {
   items: WereadPrivateNoteItem[];
   total: number;
@@ -487,17 +547,14 @@ export interface FetchAllWereadBookNotesResult {
  *  - identical notes (same text/comment) are NOT deduplicated — the server
  *    already redacts private IDs, and legitimate duplicate highlights are
  *    common.
- *  - the `signal` aborts between page fetches too.
+ *  - the `signal` aborts the active request and stops further page fetches.
  *  - nothing is logged and the returned array is a fresh defensive copy.
  */
 export async function fetchAllWereadBookNotes(
   catalogId: string,
   options: FetchAllWereadBookNotesOptions = {}
 ): Promise<FetchAllWereadBookNotesResult> {
-  const trimmedCatalogId = typeof catalogId === "string" ? catalogId.trim() : "";
-  if (!/^[0-9]+_[0-9]{12}$/.test(trimmedCatalogId)) {
-    throw new Error("catalogId 格式不正确。");
-  }
+  const trimmedCatalogId = requireWereadCatalogId(catalogId);
   const rawPageSize = typeof options.pageSize === "number" ? options.pageSize : WEREAD_BOOK_PAGINATION.DEFAULT_PAGE_SIZE;
   const pageSize = Math.min(WEREAD_BOOK_PAGINATION.MAX_PAGE_SIZE, Math.max(1, Math.floor(rawPageSize)));
   const rawMax = typeof options.maxItems === "number" ? options.maxItems : WEREAD_BOOK_PAGINATION.DEFAULT_MAX_ITEMS;
@@ -508,22 +565,17 @@ export async function fetchAllWereadBookNotes(
   let truncated = false;
   let lastOffset = -1;
   for (let page = 0; page < WEREAD_BOOK_PAGINATION.MAX_PAGES; page++) {
-    if (options.signal?.aborted) {
-      throw new DOMException("Aborted", "AbortError");
-    }
+    checkWereadNotesAbort(options.signal);
     const offset = page * pageSize;
     if (offset === lastOffset) break;
     lastOffset = offset;
-    const resp = await fetchWereadNotes({
+    const resp = await fetchWereadBookNotes(trimmedCatalogId, {
       type: "all",
       days: "all",
-      matchedOnly: true,
       sort: "newest",
-      catalogId: trimmedCatalogId,
       limit: pageSize,
       offset,
-    });
-    if (!resp || resp.ok !== true) throw new Error("私有 API 返回异常");
+    }, { signal: options.signal });
     if (page === 0) total = typeof resp.pageInfo.total === "number" ? resp.pageInfo.total : 0;
     const batch = Array.isArray(resp.items) ? resp.items : [];
     for (const item of batch) {

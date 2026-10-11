@@ -1,5 +1,14 @@
 # BOOK-ID-SEARCH status
 
+## 2026-10-11 — Book-centered WeRead records
+
+- `task_id=BOOK_CENTERED_WEREAD_NOTES_V1`; continues Draft [#72](https://github.com/conanxin/book-id-search/pull/72) on the tested library-v1 baseline `ff90666`.
+- Book details now show confirmed imported WeRead highlights, thoughts and reviews with type filters and pagination. The book links to a scoped WeRead center, whose matched records return to the same book page.
+- Invalid explicit catalog scopes fail before requests; every book page/export request keeps its scope and rejects mixed-book responses. Book, filter and session changes cancel pending reads and discard old records/temporary AI state.
+- Existing search submission and filtered pagination now use the active query. Reuses imported snapshots, confirmed bindings, Google session and shared UI; no new migration or automatic library writes.
+- Contracts and validation scope: [Book WeRead notes v1](development/BOOK_WEREAD_NOTES_V1.md). Exact-head test/CI evidence is maintained in PR #72. Next: persistent manual matching corrections, then saved AI content grounded in the actual book/notes.
+- Development and PR work only; merging and Tencent deployment remain separate actions.
+
 ## 2026-10-11 — Book-centered library v1
 
 - `task_id=BOOK_CENTERED_LIBRARY_V1_IMPLEMENTATION`; branch `feat/book-centered-library`, based on candidate `fe22a6d` from Draft #71.

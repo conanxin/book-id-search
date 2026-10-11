@@ -1,0 +1,60 @@
+.weread-book-scope {
+  margin: 0 0 1.25rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg-card);
+  color: var(--color-text);
+}
+
+.weread-book-scope h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+  color: var(--color-primary);
+}
+
+.weread-book-scope p {
+  margin: 0.35rem 0;
+  line-height: 1.65;
+}
+
+.weread-book-scope__id {
+  overflow-wrap: anywhere;
+}
+
+.weread-book-scope__hint {
+  font-size: 0.88rem;
+  color: var(--color-text-muted);
+}
+
+.weread-book-scope__actions,
+.weread-note-book-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 1rem;
+  margin-top: 0.75rem;
+}
+
+.weread-book-scope__actions a,
+.weread-note-book-actions a {
+  color: var(--color-primary);
+  font-size: 0.9rem;
+  text-underline-offset: 3px;
+}
+
+.weread-book-scope__actions button {
+  padding: 0.5rem 0.75rem;
+  color: var(--color-text);
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: normal;
+}
+
+.weread-book-scope__actions :is(a, button):focus-visible,
+.weread-note-book-actions a:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+}

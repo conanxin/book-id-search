@@ -66,6 +66,9 @@ jobs:
           apps/web/src/components/SiteFooter.test.ts
           apps/web/src/p1a-book-detail-route.test.tsx
           apps/web/src/weread/SearchDetailWereadSession.test.tsx
+          apps/web/src/wereadBookNotes.test.ts
+          apps/web/src/weread/WereadCenterBookScope.test.tsx
+          scripts/book-browser-fixtures.test.ts
           scripts/s32-migration-chain.test.ts
           scripts/s32-schema-check.test.ts
           scripts/s32-schema-contract.test.ts
@@ -76,6 +79,8 @@ jobs:
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
       - name: Real browser content journey and Google-session boundary
+        env:
+          BOOK_LIBRARY_BROWSER_SCOPE: all
         run: pnpm exec playwright test --config playwright.book-library.config.ts
       - name: Save browser evidence
         if: always()

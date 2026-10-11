@@ -34,6 +34,7 @@ import SiteFooter from "./components/SiteFooter";
 import { AppShell, AccountPage } from "./components/AppShell";
 import { RequireGoogle } from "./components/RequireGoogle";
 import { BookWorkspace } from "./library/BookWorkspace";
+import { BookWereadNotes } from "./library/BookWereadNotes";
 import { LibraryPage } from "./library/LibraryPage";
 import { ResearchMembershipChips, useSearchMemberships, type MembershipLoadState } from "./research/SearchMemberships";
 import type { ResearchMembership } from "./research/api";
@@ -1278,9 +1279,11 @@ function DetailPage() {
             <a href="#library-introduction-heading">书籍介绍</a>
             <a href="#library-notes-heading">我的笔记</a>
             <a href="#library-resources-heading">电子版本</a>
+            <a href="#book-weread-notes-heading">微信读书记录</a>
             <a href="#related-books">相关图书</a>
           </nav>
           <BookWorkspace key={book.id} bookId={book.id} />
+          <BookWereadNotes bookId={book.id} />
 
           <BookInsightSection bookId={book.id} />
 

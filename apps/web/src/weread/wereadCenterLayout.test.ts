@@ -102,14 +102,16 @@ describe("NotesLibrary layout (S27D-UI-POLISH)", () => {
     expect(notesLibrarySrc).toContain('e.key === "Enter"');
   });
 
-  it("load-more keeps q and filters (currentQuery is sent verbatim, session client)", () => {
+  it("uses the cancellable all-books and book-scoped clients", () => {
     expect(notesLibrarySrc).toContain("currentQuery");
-    expect(notesLibrarySrc).toContain("fetchWereadNotes({ ...currentQuery, offset })");
+    expect(notesLibrarySrc).toContain("fetchWereadNotes({ ...query, offset }, { signal: controller.signal })");
+    expect(notesLibrarySrc).toContain("fetchWereadBookNotes(catalogId, { ...bookQuery, offset }, { signal: controller.signal })");
   });
 
-  it("notes state is reset via the query-key effect (Task 9: unmount-on-logout carries the privacy contract)", () => {
+  it("clears the loaded batch on filter changes and isolates sessions", () => {
     expect(notesLibrarySrc).toContain("useEffect");
-    expect(notesLibrarySrc).toContain("Reset state when the session changes");
+    expect(notesLibrarySrc).toContain("function clearResults()");
+    expect(notesLibrarySrc).toContain("getWebAuthAuthGeneration");
     expect(notesLibrarySrc).toContain("setItems([])");
   });
 

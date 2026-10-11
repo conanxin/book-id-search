@@ -6,6 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 const mocks = vi.hoisted(() => ({
   fetchWereadStatusesForBooks: vi.fn(),
   fetchWereadStatus: vi.fn(),
+  fetchWereadBookNotes: vi.fn(),
   clearWereadStatusCache: vi.fn(),
   purgeLegacyWereadTokenStorage: vi.fn(),
   ensureAuthSessionLoaded: vi.fn(async () => {}),
@@ -29,6 +30,7 @@ vi.mock("../wereadPrivate", async (importOriginal) => {
     ...actual,
     fetchWereadStatusesForBooks: mocks.fetchWereadStatusesForBooks,
     fetchWereadStatus: mocks.fetchWereadStatus,
+    fetchWereadBookNotes: mocks.fetchWereadBookNotes,
     clearWereadStatusCache: mocks.clearWereadStatusCache,
     purgeLegacyWereadTokenStorage: mocks.purgeLegacyWereadTokenStorage,
   };
@@ -79,6 +81,10 @@ const searchResponse = { total: 1, page: 1, limit: 10, items: [book] };
 beforeEach(() => {
   mocks.fetchWereadStatusesForBooks.mockReset().mockResolvedValue({});
   mocks.fetchWereadStatus.mockReset().mockResolvedValue({ ok: true, matched: true, catalogId: book.id });
+  mocks.fetchWereadBookNotes.mockReset().mockResolvedValue({
+    ok: true, items: [], pageInfo: { offset: 0, limit: 20, total: 0, hasMore: false },
+    summary: { totalAfterFilter: 0, highlights: 0, thoughts: 0, reviews: 0, unknown: 0, matchedCount: 0, unmatchedCount: 0 },
+  });
   mocks.clearWereadStatusCache.mockClear();
   mocks.purgeLegacyWereadTokenStorage.mockClear();
   mocks.getStats.mockReset().mockResolvedValue({ numberOfDocuments: 1, indexName: "i", isIndexing: false });
@@ -145,6 +151,11 @@ describe("DetailPage WeRead session proof (Task 9 §十一)", () => {
     await waitFor(() => expect(mocks.fetchWereadStatus).toHaveBeenCalledTimes(1));
     expect(mocks.fetchWereadStatus.mock.calls[0].length).toBe(1);
     expect(mocks.fetchWereadStatus.mock.calls[0][0]).toBe(book.id);
+    await waitFor(() => expect(mocks.fetchWereadBookNotes).toHaveBeenCalledTimes(1));
+    expect(mocks.fetchWereadBookNotes).toHaveBeenCalledWith(book.id,
+      expect.objectContaining({ offset: 0, limit: 20, days: "all", type: "all" }),
+      { signal: expect.any(AbortSignal) });
+    expect(screen.getByRole("region", { name: "微信读书记录" })).toBeTruthy();
   });
 
   it("28 unauthenticated → Google prompt without detail or private status requests", async () => {
@@ -154,6 +165,7 @@ describe("DetailPage WeRead session proof (Task 9 §十一)", () => {
     expect(mocks.getBook).not.toHaveBeenCalled();
     expect(mocks.getRelatedBooks).not.toHaveBeenCalled();
     expect(mocks.fetchWereadStatus).not.toHaveBeenCalled();
+    expect(mocks.fetchWereadBookNotes).not.toHaveBeenCalled();
     expect(mocks.clearWereadStatusCache).toHaveBeenCalled();
   });
 });
