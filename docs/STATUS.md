@@ -1,5 +1,14 @@
 # BOOK-ID-SEARCH status
 
+## 2026-10-11 — Prepare one real-book trial and the cumulative release
+
+- `task_id=BOOK_CENTERED_RELEASE_PREP_R1`; reviews Draft [#72](https://github.com/conanxin/book-id-search/pull/72) at `7d71e79` against `main` `42cf1b7`.
+- The source delta needs API + Web and the existing 003/004 SQL increments. Runtime migration state, actual application role and effective Compose image selection still require the configured machine.
+- Clarifies new-table grants for the actual existing role, `S32_API_IMAGE` / `BOOK_ID_SEARCH_WEB_IMAGE`, the final override and `sudo -n env`, and the existing builders' merged-source requirement.
+- Narrows the initial real-provider trial to one actual catalog book and one action, using the existing CLI and original configuration; adds the public catalog selection request and explicit source-consistency guidance.
+- Fresh inventory reports the registered desktop offline; this environment has no original model/database configuration or configured `tencent` alias. Public fetch tools did not obtain live health/catalog results. Real-book selection, provider trial and Tencent inspection remain pending.
+- Documentation preparation only. Product code and migrations are unchanged; no model call, merge, image publication or deployment. See [release preparation](operations/BOOK_CENTERED_RELEASE.md) and [real-provider trial](development/BOOK_AI_REAL_PROVIDER_READINESS.md).
+
 ## 2026-10-11 — Read saved introductions and notes
 
 - `task_id=BOOK_CENTERED_READING_RENDER_V1`; continues Draft [#72](https://github.com/conanxin/book-id-search/pull/72) from `20eb7da`.
