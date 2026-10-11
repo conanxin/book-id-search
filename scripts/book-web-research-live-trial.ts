@@ -1,4 +1,4 @@
-/** One public book, one actual web search and at most one cited synthesis. */
+/** One public book, one actual web search and at most one source-ID selection. */
 import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -33,8 +33,8 @@ async function main(argv: string[]) {
     head: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
     dirty: execFileSync("git", ["status", "--porcelain"], { encoding: "utf8" }).trim().length > 0,
   };
-  let catalogReads = 0, searchRequests = 0, generationRequests = 0;
-  let searchLatencyMs = 0, generationLatencyMs = 0;
+  let catalogReads = 0, searchRequests = 0, selectionRequests = 0;
+  let searchLatencyMs = 0, selectionLatencyMs = 0;
   let response: BookWebResearchResponse | null = null;
   let status = "FAILED", errorCode: string | null = null, exitCode = 1;
   let selectedBook: Record<string, unknown> | null = null;
@@ -64,10 +64,10 @@ async function main(argv: string[]) {
           finally { searchLatencyMs = Date.now() - start; }
         },
         provider: async (messages, options) => {
-          if (++generationRequests > 1) throw new Error("SYNTHESIS_REQUEST_LIMIT");
+          if (++selectionRequests > 1) throw new Error("SELECTION_REQUEST_LIMIT");
           const start = Date.now();
           try { return await chatCompletion(messages, { ...options, config }); }
-          finally { generationLatencyMs = Date.now() - start; }
+          finally { selectionLatencyMs = Date.now() - start; }
         },
       });
       response = await service.research(args.bookId, { question: args.question });
@@ -84,7 +84,7 @@ async function main(argv: string[]) {
     book_id: args.bookId, question: args.question, catalog: selectedBook,
     configuration: { model: config?.model ?? null, wire_api: config?.wireApi ?? null },
     source_reads: { public_catalog: catalogReads, personal_workspace: 0, weread: 0, ebook: 0 },
-    provider: { search_requests: searchRequests, synthesis_requests: generationRequests, search_latency_ms: searchLatencyMs, synthesis_latency_ms: generationLatencyMs },
+    provider: { search_requests: searchRequests, selection_requests: selectionRequests, search_latency_ms: searchLatencyMs, selection_latency_ms: selectionLatencyMs },
     scope: { database_connections: 0, content_writes: 0, production_configuration_writes: 0,
       webpage_fulltext: "NOT_FETCHED", google_http_auth: "CLI_DIRECT_SERVICE_NOT_EXERCISED",
       content_review: "PENDING", human_review: "PENDING" },
@@ -96,7 +96,7 @@ async function main(argv: string[]) {
   const receiptPath = path.join(directory, "receipt.json");
   await writeFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`, { mode: 0o600 });
   console.log(JSON.stringify({ status, receipt: receiptPath, search_requests: searchRequests,
-    synthesis_requests: generationRequests, sources: response?.sources.length ?? 0, error_code: errorCode }));
+    selection_requests: selectionRequests, sources: response?.sources.length ?? 0, mode: response?.mode ?? null, error_code: errorCode }));
   return exitCode;
 }
 

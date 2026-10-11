@@ -15,8 +15,8 @@ const config = readGoogleSessionAuthConfig({ NODE_ENV: "production", GOOGLE_AUTH
   GOOGLE_CLIENT_ID: "test.apps.googleusercontent.com", BOOK_ID_SEARCH_OWNER_GOOGLE_SUB: "test-owner",
   BOOK_ID_SEARCH_SESSION_SECRET: SECRET, BOOK_ID_SEARCH_PUBLIC_ORIGIN: ORIGIN });
 const A = "10000001_000000000001", path = `/api/ai/books/${A}/research`;
-const result: BookWebResearchResponse = { bookId: A, question: "研究背景是什么？", source: "insufficient_sources",
-  draft: { title: "资料不足", content: "本次搜索结果不足以支持回答。" }, sources: [], citedSourceIds: [],
+const result: BookWebResearchResponse = { bookId: A, question: "研究背景是什么？", mode: "source_excerpts", source: "insufficient_sources",
+  draft: { title: "查到的相关资料", content: "本次已执行联网搜索，但没有选出与问题充分相关的资料。下方如有搜索结果，可以打开原链接核对，或调整问题后再查。" }, sources: [], citedSourceIds: [],
   search: { performed: true, queries: ["运河田野调查"], calls: 1 }, generatedAt: "2026-10-11T12:00:00.000Z" };
 let service: BookWebResearchService;
 let server: Server | undefined;

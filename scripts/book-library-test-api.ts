@@ -143,8 +143,8 @@ async function deterministicBookAssistantChat(messages: ChatMessage[]): Promise<
   };
 }
 
-// Research retains production search trace parsing and cited-answer parsing.
-// Only outbound provider HTTP and the final synthesis response are fixtures.
+// Research retains production search trace parsing and source-ID selection.
+// Only outbound provider HTTP and the final ID-only response are fixtures.
 const webResearch = createBookWebResearchService({
   getCatalogDocument, isEnabled: () => true,
   search: (messages, options) => searchMiniMaxWeb(messages, {
@@ -161,8 +161,8 @@ const webResearch = createBookWebResearchService({
         { type: "text", text: "这段生成文字不是来源，也没有真的读过全文。" },
         { type: "server_tool_use", id: "synthetic-search-1", name: "web_search", input: { query } },
         { type: "web_search_tool_result", tool_use_id: "synthetic-search-1", content: [
-          { type: "web_search_result", title: `${title} · 公开馆藏条目`, url: "https://example.org/catalog/research-book", content: `${title}：这是一条合成的外部馆藏检索片段，列出作者、出版信息和版本说明。`, page_age: "2026-10-01" },
-          { type: "web_search_result", title: "古道研究方法 · 公开文献线索", url: "https://example.org/research/ancient-routes", content: "合成研究片段：将文献记载、旧地图和现场遗迹相互核对。片段没有提供全书内容。", page_age: null },
+          { type: "web_search_result", title: `${title} · 公开馆藏条目`, url: "https://example.org/catalog/research-book", content: `${title}：合成馆藏节选记载：1935年初版。这条模拟资料只用于验证来源文字不被改写。`, page_age: "2026-10-01" },
+          { type: "web_search_result", title: "古道研究方法 · 公开文献线索", url: "https://example.org/research/ancient-routes", content: "合成书评节选记载：最早于1937年出版。本条与馆藏节选的年份不同，片段没有说明初版与再版的关系。", page_age: null },
         ] },
       ] });
     },
@@ -170,8 +170,7 @@ const webResearch = createBookWebResearchService({
   provider: async messages => {
     const input = JSON.parse(messages.find(message => message.role === "user")!.content);
     return { ok: true, model: "synthetic-web-research-no-network", content: JSON.stringify({
-      title: "本书资料与后续研究线索",
-      paragraphs: input.sources.map((source: { id: string; excerpt: string }) => ({ text: source.excerpt, sourceIds: [source.id] })),
+      sourceIds: input.sources.slice(0, 4).map((source: { id: string }) => source.id),
       insufficientEvidence: false,
     }) };
   },
@@ -282,7 +281,7 @@ app.get("/api/private/weread/notes", async (req: TestRequest, res: TestResponse)
 app.get("/api/health", (_req: TestRequest, res: TestResponse) => res.json({ ok: true, syntheticCatalog: true,
   persistence: wereadOnly ? "NOT_EXERCISED" : "postgresql", wereadBindingsPersistence: wereadOnly ? "NOT_EXERCISED" : "postgresql", runtimeRole,
   bookAssistant: { sources: "production_collector", provider: "deterministic_injected", externalMiniMax: "NOT_EXERCISED" },
-  bookWebResearch: { search: "production_adapter_injected_http", synthesis: "deterministic_injected", externalMiniMax: "NOT_EXERCISED" } }));
+  bookWebResearch: { search: "production_adapter_injected_http", selection: "deterministic_ids_only", excerptText: "production_snapshots_unchanged", externalMiniMax: "NOT_EXERCISED" } }));
 
 app.listen(3001, "127.0.0.1", () => {
   console.log(`BOOK_LIBRARY_TEST_API_READY=YES CATALOG=SYNTHETIC_TWO_PAIRS WEREAD=SYNTHETIC_SNAPSHOTS_REAL_QUERY BOOK_AI=DETERMINISTIC_PROVIDER_REAL_COLLECTOR PERSISTENCE=${wereadOnly ? "NOT_EXERCISED" : "POSTGRESQL"} ROLE=${runtimeRole} OAUTH=NOT_EXERCISED`);

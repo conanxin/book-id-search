@@ -66,14 +66,17 @@ test("web research exposes actual search trace and external excerpts while prese
     expect(response.ok()).toBe(true);
     expect(response.request().postDataJSON()).toEqual({ question });
     const value = await response.json() as BookWebResearchResponse;
-    expect(value).toMatchObject({ bookId: A, question, source: "web_research", search: { performed: true, calls: 1 } });
+    expect(value).toMatchObject({ bookId: A, question, mode: "source_excerpts", source: "web_research", search: { performed: true, calls: 1 } });
     expect(value.search.queries).toEqual([`${TITLE} ${question}`]);
     expect(value.sources).toHaveLength(2);
     for (const forbidden of [INTRO, NOTE, pendingIntro, pendingNote, "这段生成文字不是来源"]) expect(JSON.stringify(value)).not.toContain(forbidden);
-    await expect(pane.getByRole("region", { name: "联网研究结果", exact: true })).toBeVisible();
+    const resultRegion = pane.getByRole("region", { name: "联网研究结果", exact: true });
+    await expect(resultRegion).toBeVisible();
     for (const source of value.sources) {
       expect(value.citedSourceIds).toContain(source.id);
       expect(value.draft.content).toContain(`[${source.id}]`);
+      const excerpt = resultRegion.locator(`[data-web-excerpt-source-id="${source.id}"] blockquote`);
+      expect(await excerpt.textContent()).toBe(source.excerpt);
       await pane.getByRole("button", { name: `查看网页依据 ${source.id}`, exact: true }).click();
       const row = pane.locator(`[data-web-source-id="${source.id}"]`);
       await expect(row).toBeVisible();
@@ -93,6 +96,9 @@ test("web research exposes actual search trace and external excerpts while prese
     expect(copied).toContain(source.url);
     expect(copied).toContain(source.excerpt);
   }
+  expect(copied).toContain("1935年初版");
+  expect(copied).toContain("最早于1937年出版");
+  expect(copied).not.toContain("1937年再版");
   await expect(introEditor).toHaveValue(pendingIntro);
   await expect(noteEditor).toHaveValue(pendingNote);
   expect(await persisted()).toEqual(before);
@@ -115,7 +121,8 @@ test("web research exposes actual search trace and external excerpts while prese
   expect(await persisted()).toEqual(before);
   expect(writes).toEqual([]); expect(pageErrors).toEqual([]); expect(sourcePageReads).toEqual([]);
   await testInfo.attach("web-research-evidence.json", { contentType: "application/json", body: JSON.stringify({
-    task_id: "BOOK_AI_WEB_RESEARCH_V1", provider: "INJECTED_HTTP_AND_SYNTHESIS_NO_LIVE_MODEL",
+    task_id: "BOOK_AI_WEB_RESEARCH_V1", provider: "INJECTED_HTTP_AND_ID_SELECTION_NO_LIVE_MODEL",
+    output_mode: "source_excerpts", excerpt_text: "EXACT_SERVER_SNAPSHOTS", version_conflict: "PRESERVED_WITHOUT_INVENTED_EDITION_SEQUENCE",
     search_trace: "REAL_PRODUCTION_ADAPTER_PARSED_SYNTHETIC_TOOL_RESULTS", auth: "SIGNED_SYNTHETIC_OWNER_AND_REAL_CSRF",
     library_writes: writes.length, persistence: "REAL_POSTGRESQL_UNCHANGED", unsaved_editors: "PRESERVED",
     desktop_width: 1440, mobile_width: 390, page_errors: pageErrors, source_pages_fetched: sourcePageReads.length,
