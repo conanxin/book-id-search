@@ -10,7 +10,6 @@ import {
 } from "./api";
 import { useLibraryScope } from "./useLibraryScope";
 import { useBookContentAnchor } from "./useBookContentAnchor";
-import { BookAiAssistant } from "./BookAiAssistant";
 import { BookProse } from "./BookProse";
 import "./library.css";
 
@@ -113,7 +112,6 @@ function BookWorkspaceContent({ bookId, generation }: { bookId: string; generati
     <ErrorMessage message={error} />
     {anchorMessage && <p className="library-anchor-message" role="status">{anchorMessage} <Link className="library-text-link" to="/library">返回我的书籍</Link></p>}
     <p className="library-status" role="status" aria-live="polite">{message}</p>
-    <BookAiAssistant bookId={bookId} busy={busy} operate={operate} reload={reload} />
     <IntroductionPanel {...props} />
     <NotesPanel {...props} generation={generation} />
     <ResourcesPanel {...props} />

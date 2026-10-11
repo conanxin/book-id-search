@@ -34,6 +34,7 @@ import SiteFooter from "./components/SiteFooter";
 import { AppShell, AccountPage } from "./components/AppShell";
 import { RequireGoogle } from "./components/RequireGoogle";
 import { BookWorkspace } from "./library/BookWorkspace";
+import { BookAiAssistant } from "./library/BookAiAssistant";
 import { BookWereadNotes } from "./library/BookWereadNotes";
 import { BookRelatedBooks } from "./library/BookRelatedBooks";
 import { LibraryPage } from "./library/LibraryPage";
@@ -1215,7 +1216,7 @@ function DetailPage() {
   };
 
   return (
-    <main className="page">
+    <main className="page book-detail-page">
       <button className="back-button" type="button" onClick={back} aria-label="返回上一页">
         <ArrowLeft size={18} />
         返回上一页
@@ -1231,6 +1232,7 @@ function DetailPage() {
       {error ? <div className="state state--error" role="alert">{error}</div> : null}
 
       {book && book.id === id && !loading ? (
+        <div className="book-detail-layout">
         <article className="detail">
           <header>
             <div className="detail__title-row">
@@ -1269,7 +1271,6 @@ function DetailPage() {
           </div>
 
           <nav className="book-section-nav" aria-label="本书内容">
-            <a href="#book-ai-heading">本书 AI 助手</a>
             <a href="#library-introduction-heading">书籍介绍</a>
             <a href="#library-notes-heading">我的笔记</a>
             <a href="#library-resources-heading">电子版本</a>
@@ -1306,6 +1307,8 @@ function DetailPage() {
             />
           </details> : null}
         </article>
+        <BookAiAssistant key={book.id} bookId={book.id} />
+        </div>
       ) : null}
     </main>
   );
