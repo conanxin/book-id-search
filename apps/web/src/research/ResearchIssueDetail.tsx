@@ -44,6 +44,7 @@ export function ResearchIssueDetail({ projectId, issueId }: { projectId: string;
     <h1>{response.issue.title}</h1>
     <p className="research-issue-question">{response.issue.question}</p>
     <dl className="research-dates"><div><dt>创建时间</dt><dd>{new Date(response.issue.createdAt).toLocaleString("zh-CN")}</dd></div><div><dt>更新时间</dt><dd>{new Date(response.issue.updatedAt).toLocaleString("zh-CN")}</dd></div></dl>
+    <Link className="research-primary dossier-entry" to={"/research/projects/" + encodeURIComponent(response.project.id) + "/issues/" + encodeURIComponent(response.issue.id) + "/dossier"}>查看研究档案（只读）</Link>
     <IssueResolutionCurrent projectId={response.project.id} issueId={response.issue.id} refreshVersion={resolutionVersion} />
     <CandidateClaims project={response.project} issue={response.issue} />
     <IssueResolutionComposer

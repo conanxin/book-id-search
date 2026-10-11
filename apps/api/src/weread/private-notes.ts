@@ -154,6 +154,14 @@ export function loadPrivateNotesData(dataDir: string): PrivateNotesData {
     ? (rawConfirmed as WereadPrivateConfirmedMatch[])
     : [];
 
+  return createPrivateNotesData(notes, confirmedArr);
+}
+
+/** Pure join used by both the imported-only loader and effective bindings. */
+export function createPrivateNotesData(
+  notes: WereadPrivateNoteRaw[],
+  confirmedArr: WereadPrivateConfirmedMatch[],
+): PrivateNotesData {
   const wereadBookIdToCatalogId = new Map<string, string>();
   for (const m of confirmedArr) {
     if (

@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Copy, Download, Filter, Library, Loader2, AlertCircle, Check, RefreshCw, Search, X } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Copy, Download, Filter, Library, AlertCircle, Check, RefreshCw, Search, X } from "lucide-react";
+import { useWebAuthSession } from "../auth/useWebAuthSession";
+import { getWebAuthAuthGeneration, getWebAuthSnapshot } from "../auth/session";
 import NotesAiSummary from "./NotesAiSummary";
 import BookNotesExportButton from "./BookNotesExportButton";
 import {
   fetchWereadNotes,
+  fetchWereadBookNotes,
+  isValidWereadCatalogId,
   type WereadAiSummaryResult,
   type WereadNoteTypeFilter,
   type WereadNotesDaysFilter,
@@ -19,16 +24,17 @@ import {
   formatDaysLabel,
   formatNoteDate,
   formatNoteTypeLabel,
-  formatNotesSearchInfo,
   formatNotesSummary,
   formatSortLabel,
   getFilterLabel,
   getNoteDisplayParts,
   highlightNoteTextParts,
   normalizeNoteSearchQuery,
-  notesQueryKey,
   truncateNotePreview,
+  wereadNotesScopeKey,
+  type WereadNotesScope,
 } from "./wereadNotesModel";
+import "./wereadBookScope.css";
 import {
   EMPTY_SESSION_THEME_OVERLAY,
   buildSessionThemeOverlay,
@@ -44,6 +50,7 @@ const LIMIT_OPTIONS = [20, 50];
 type LoadState = "idle" | "loading" | "ready" | "error";
 
 interface NotesLibraryProps {
+  scope?: WereadNotesScope;
   /**
    * S27H-2: notify the parent whenever the session-theme overlay derived
    * from the currently loaded notes + the most recent AI summary
@@ -58,7 +65,31 @@ interface NotesLibraryProps {
   onSessionOverlayChange?: (overlay: WereadSessionThemeOverlay) => void;
 }
 
-export default function NotesLibrary({ onSessionOverlayChange }: NotesLibraryProps) {
+export default function NotesLibrary({ scope = { kind: "all" }, onSessionOverlayChange }: NotesLibraryProps) {
+  const session = useWebAuthSession();
+  if (session.status !== "authenticated") {
+    return <p className="weread-notes-empty" role="status">登录后可查看微信读书笔记。</p>;
+  }
+  if (scope.kind === "invalid" || (scope.kind === "book" && !isValidWereadCatalogId(scope.catalogId))) {
+    return <p className="weread-private-error" role="alert">书目筛选无效。请重新打开书籍，或明确清除本书筛选后查看全部笔记。</p>;
+  }
+  const catalogId = scope.kind === "book" ? scope.catalogId.trim() : undefined;
+  const generation = getWebAuthAuthGeneration();
+  return (
+    <ScopedNotesLibrary
+      key={`${generation}:${wereadNotesScopeKey(scope)}`}
+      catalogId={catalogId}
+      authGeneration={generation}
+      onSessionOverlayChange={onSessionOverlayChange}
+    />
+  );
+}
+
+function ScopedNotesLibrary({ catalogId, authGeneration, onSessionOverlayChange }: {
+  catalogId?: string;
+  authGeneration: number;
+  onSessionOverlayChange?: NotesLibraryProps["onSessionOverlayChange"];
+}) {
   const [filterType, setFilterType] = useState<WereadNoteTypeFilter>("all");
   const [filterDays, setFilterDays] = useState<WereadNotesDaysFilter>("all");
   const [filterMatched, setFilterMatched] = useState<boolean>(false);
@@ -80,6 +111,10 @@ export default function NotesLibrary({ onSessionOverlayChange }: NotesLibraryPro
 
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
   const requestIdRef = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
+  const copyTimerRef = useRef<number | null>(null);
+  const [loadedQuery, setLoadedQuery] = useState<WereadNotesQuery | null>(null);
 
   // S27H-2: session-theme overlay state. The latest AI summary result
   // (themes + reading directions) plus the currently loaded items
@@ -125,53 +160,101 @@ export default function NotesLibrary({ onSessionOverlayChange }: NotesLibraryPro
   );
 
   const currentQuery: WereadNotesQuery = useMemo(
-    () => ({ type: filterType, days: filterDays, matchedOnly: filterMatched, sort: filterSort, limit: filterLimit, offset: 0, q: noteQuery.length > 0 ? noteQuery : undefined }),
-    [filterType, filterDays, filterMatched, filterSort, filterLimit, noteQuery]
+    () => ({
+      type: filterType, days: filterDays, matchedOnly: catalogId ? true : filterMatched,
+      sort: filterSort, limit: filterLimit, offset: 0,
+      q: noteQuery.length > 0 ? noteQuery : undefined,
+      ...(catalogId ? { catalogId } : {}),
+    }),
+    [filterType, filterDays, filterMatched, filterSort, filterLimit, noteQuery, catalogId]
   );
 
-  const queryKey = notesQueryKey(currentQuery);
-
   useEffect(() => {
-    // Reset state when the session changes (also clears q + items per privacy contract).
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      requestIdRef.current += 1;
+      abortRef.current?.abort();
+      if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
+    };
+  }, []);
+
+  // This subtree is keyed by book and auth generation. Direct book navigation
+  // loads its first page; an unrestricted library still requires a manual click.
+  // The preceding lifecycle effect aborts the first attempt during StrictMode
+  // replay before this effect starts its replacement request.
+  useEffect(() => {
+    if (catalogId) void load(true);
+  }, [catalogId, authGeneration]);
+
+  function isCurrentSession() {
+    return mountedRef.current && getWebAuthSnapshot().status === "authenticated"
+      && getWebAuthAuthGeneration() === authGeneration;
+  }
+
+  // A new scope/session remounts this component. A filter/search change clears
+  // the current batch too, so pagination and export can never reuse older rows.
+  function clearResults() {
+    requestIdRef.current += 1;
+    abortRef.current?.abort();
+    abortRef.current = null;
     setItems([]);
     setPageInfo(null);
     setSummary(null);
     setSearchInfo(null);
+    setLoadedQuery(null);
+    setAiSummary(null);
+    setCopyState("idle");
     setState("idle");
     setError(null);
-    setNoteQuery("");
-    setNoteQueryInput("");
-  }, []);
+  }
 
-  async function load(reset: boolean) {
+  function changeFilters(change: () => void) {
+    clearResults();
+    change();
+  }
+
+  async function load(reset: boolean, query: WereadNotesQuery = currentQuery) {
+    if (!isCurrentSession()) return;
+    if (reset) clearResults();
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     const myId = ++requestIdRef.current;
+    setAiSummary(null);
     setState("loading");
     setError(null);
     try {
       const offset = reset ? 0 : (pageInfo?.offset ?? 0) + (pageInfo?.limit ?? 0);
-      const resp = await fetchWereadNotes({ ...currentQuery, offset });
-      if (myId !== requestIdRef.current) return;
+      const { catalogId: _catalogId, matchedOnly: _matchedOnly, ...bookQuery } = query;
+      const resp = catalogId
+        ? await fetchWereadBookNotes(catalogId, { ...bookQuery, offset }, { signal: controller.signal })
+        : await fetchWereadNotes({ ...query, offset }, { signal: controller.signal });
+      if (controller.signal.aborted || myId !== requestIdRef.current || !isCurrentSession()) return;
       if (!resp.ok) {
         setState("error");
-        setError("私有 API 返回异常");
+        setError("笔记暂时无法加载，请稍后重试。");
         return;
       }
       setItems((prev) => (reset ? resp.items : [...prev, ...resp.items]));
+      setLoadedQuery({ ...query, offset: 0 });
       setPageInfo(resp.pageInfo);
       setSummary(resp.summary);
       setSearchInfo(resp.searchInfo ?? null);
       setState("ready");
     } catch (err) {
-      if (myId !== requestIdRef.current) return;
+      if (controller.signal.aborted || myId !== requestIdRef.current || !isCurrentSession()) return;
       setState("error");
       const msg = err instanceof Error ? err.message : "加载失败";
       if (/401|403|unauthorized|认证失败|登录已失效|登录安全校验/i.test(msg)) {
-        setError("Token 无效或已过期");
+        setError("登录已失效，请重新登录。");
       } else if (/disabled|not enabled|未启用/i.test(msg)) {
-        setError("私有 API 未启用");
+        setError("微信读书数据暂不可用。");
       } else {
-        setError(msg);
+        setError("笔记暂时无法加载，请稍后重试。");
       }
+    } finally {
+      if (abortRef.current === controller) abortRef.current = null;
     }
   }
 
@@ -184,6 +267,7 @@ export default function NotesLibrary({ onSessionOverlayChange }: NotesLibraryPro
   }
 
   function handleClearFilters() {
+    clearResults();
     setFilterType("all");
     setFilterDays("all");
     setFilterMatched(false);
@@ -196,17 +280,13 @@ export default function NotesLibrary({ onSessionOverlayChange }: NotesLibraryPro
   function handleSearch() {
     const normalized = normalizeNoteSearchQuery(noteQueryInput);
     setNoteQuery(normalized);
-    // items reset happens inside load() because we pass offset=0 when reset=true
-    setPageInfo(null);
-    void load(true);
+    void load(true, { ...currentQuery, q: normalized || undefined });
   }
 
   function handleClearSearch() {
     setNoteQueryInput("");
     setNoteQuery("");
-    setSearchInfo(null);
-    setPageInfo(null);
-    void load(true);
+    void load(true, { ...currentQuery, q: undefined });
   }
 
   function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -228,20 +308,31 @@ export default function NotesLibrary({ onSessionOverlayChange }: NotesLibraryPro
     const payload = lines.join("\n\n");
     try {
       await navigator.clipboard?.writeText(payload);
+      if (!isCurrentSession()) return;
       setCopyState("copied");
-      window.setTimeout(() => setCopyState("idle"), 1200);
+      if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = window.setTimeout(() => setCopyState("idle"), 1200);
     } catch {
+      if (!isCurrentSession()) return;
       setError("复制失败：浏览器未授权剪贴板访问");
     }
   }
 
   function handleExport() {
-    if (items.length === 0) return;
-    const md = buildMarkdownExport(items, {
-      query: currentQuery,
-      privacyNotice: "本文件由当前浏览器的安全登录会话导出，不包含微信读书内部 ID。",
-    });
-    const filename = buildMarkdownExportFilename(currentQuery);
+    if (items.length === 0 || !loadedQuery || state === "loading" || !isCurrentSession()) return;
+    let md: string;
+    let filename: string;
+    try {
+      md = buildMarkdownExport(items, {
+        query: loadedQuery,
+        privacyNotice: "本文件由当前浏览器的安全登录会话导出，不包含微信读书内部 ID。",
+      });
+      filename = buildMarkdownExportFilename(loadedQuery);
+    } catch {
+      setError("当前笔记无法导出，请重新加载后重试。");
+      setState("error");
+      return;
+    }
     const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -257,7 +348,7 @@ export default function NotesLibrary({ onSessionOverlayChange }: NotesLibraryPro
   const isEmptyIdle = state === "idle" && items.length === 0;
 
   return (
-    <div className="weread-notes-section" data-query-key={queryKey}>
+    <div className="weread-notes-section">
       <div className="weread-note-privacy-warning">
         <AlertCircle size={14} aria-hidden="true" />
         <span>
@@ -317,7 +408,7 @@ export default function NotesLibrary({ onSessionOverlayChange }: NotesLibraryPro
           </label>
           <select
             value={filterType}
-            onChange={(e) => setFilterType(e.target.value as WereadNoteTypeFilter)}
+            onChange={(e) => changeFilters(() => setFilterType(e.target.value as WereadNoteTypeFilter))}
             aria-label="笔记类型"
           >
             {TYPE_OPTIONS.map((opt) => (
@@ -331,7 +422,7 @@ export default function NotesLibrary({ onSessionOverlayChange }: NotesLibraryPro
           <label className="weread-notes-filter__label">时间</label>
           <select
             value={filterDays}
-            onChange={(e) => setFilterDays(e.target.value as WereadNotesDaysFilter)}
+            onChange={(e) => changeFilters(() => setFilterDays(e.target.value as WereadNotesDaysFilter))}
             aria-label="时间范围"
           >
             {DAYS_OPTIONS.map((opt) => (
@@ -344,8 +435,9 @@ export default function NotesLibrary({ onSessionOverlayChange }: NotesLibraryPro
         <div className="weread-notes-filter__group">
           <label className="weread-notes-filter__label">匹配</label>
           <select
-            value={filterMatched ? "matched" : "all"}
-            onChange={(e) => setFilterMatched(e.target.value === "matched")}
+            value={catalogId || filterMatched ? "matched" : "all"}
+            onChange={(e) => changeFilters(() => setFilterMatched(e.target.value === "matched"))}
+            disabled={Boolean(catalogId)}
             aria-label="匹配筛选"
           >
             <option value="all">全部</option>
@@ -356,7 +448,7 @@ export default function NotesLibrary({ onSessionOverlayChange }: NotesLibraryPro
           <label className="weread-notes-filter__label">排序</label>
           <select
             value={filterSort}
-            onChange={(e) => setFilterSort(e.target.value as WereadNotesSort)}
+            onChange={(e) => changeFilters(() => setFilterSort(e.target.value as WereadNotesSort))}
             aria-label="排序"
           >
             {SORT_OPTIONS.map((opt) => (
@@ -370,7 +462,7 @@ export default function NotesLibrary({ onSessionOverlayChange }: NotesLibraryPro
           <label className="weread-notes-filter__label">每页</label>
           <select
             value={String(filterLimit)}
-            onChange={(e) => setFilterLimit(Number(e.target.value))}
+            onChange={(e) => changeFilters(() => setFilterLimit(Number(e.target.value)))}
             aria-label="每页数量"
           >
             {LIMIT_OPTIONS.map((opt) => (
@@ -399,7 +491,7 @@ export default function NotesLibrary({ onSessionOverlayChange }: NotesLibraryPro
           type="button"
           onClick={handleExport}
           className="weread-notes-actions-row__export"
-          disabled={items.length === 0}
+          disabled={items.length === 0 || state === "loading"}
           title="导出当前结果 Markdown"
         >
           <Download size={14} aria-hidden="true" />
@@ -409,14 +501,14 @@ export default function NotesLibrary({ onSessionOverlayChange }: NotesLibraryPro
           type="button"
           onClick={handleClearFilters}
           className="weread-notes-actions-row__secondary"
-          title="重置筛选器（不影响搜索词）"
+          title="重置其他筛选（不影响本书范围和搜索词）"
         >
-          清空筛选
+          {catalogId ? "重置其他筛选" : "清空筛选"}
         </button>
       </div>
 
       {state === "error" && error ? (
-        <div className="weread-private-error">
+        <div className="weread-private-error" role="alert">
           <AlertCircle size={14} /> {error}
         </div>
       ) : null}
@@ -438,7 +530,7 @@ export default function NotesLibrary({ onSessionOverlayChange }: NotesLibraryPro
           <span>划线 {summaryView.highlights}</span>
           <span>想法 {summaryView.thoughts}</span>
           <span>书评 {summaryView.reviews}</span>
-          <span>未匹配 {summaryView.unknown}</span>
+          <span>未分类 {summaryView.unknown}</span>
           <span className="weread-notes-summary__matched">已匹配 {summaryView.matched}</span>
           <span>未匹配 {summaryView.unmatched}</span>
         </div>
@@ -448,20 +540,23 @@ export default function NotesLibrary({ onSessionOverlayChange }: NotesLibraryPro
         <div className="weread-notes-empty">当前筛选下没有可显示的笔记。</div>
       ) : null}
 
-      {state === "ready" && items.length > 0 ? (
+      {items.length > 0 ? (
         <ul className="weread-note-list">
           {items.map((item, idx) => {
             const parts = getNoteDisplayParts(item);
             const bodyForTitle = parts.bodyText || parts.commentText || "";
             const showBody = !parts.isEmpty && parts.bodyText.length > 0;
+            const matchedCatalogId = item.matched && isValidWereadCatalogId(item.catalogId)
+              ? item.catalogId!.trim()
+              : null;
             return (
               <li key={`${item.createdAt ?? "n"}-${idx}`} className="weread-note-card">
                 <div className="weread-note-meta">
                   <span className={`weread-note-chip weread-note-chip--${item.type}`}>{formatNoteTypeLabel(item.type)}</span>
                   <span className="weread-note-date">{formatNoteDate(item.createdAt ?? item.updatedAt)}</span>
-                  {item.matched && item.catalogId ? (
+                  {matchedCatalogId ? (
                     <span className="weread-note-chip weread-note-chip--matched" title="已匹配到 book-id-search 公开目录">
-                      已匹配书目 · {item.catalogId}
+                      已匹配书目
                     </span>
                   ) : (
                     <span className="weread-note-chip weread-note-chip--unmatched">未匹配书目</span>
@@ -522,11 +617,14 @@ export default function NotesLibrary({ onSessionOverlayChange }: NotesLibraryPro
                   </div>
                 ) : null}
                 {/* S27F: per-book Markdown export — only on matched cards. */}
-                {item.matched && item.catalogId ? (
-                  <BookNotesExportButton
-                    catalogId={item.catalogId}
-                    label="导出本书全部笔记"
-                  />
+                {matchedCatalogId ? (
+                  <div className="weread-note-book-actions">
+                    <Link to={`/books/${encodeURIComponent(matchedCatalogId)}`}>查看书籍详情</Link>
+                    <BookNotesExportButton
+                      catalogId={matchedCatalogId}
+                      label="导出本书全部笔记"
+                    />
+                  </div>
                 ) : null}
               </li>
             );
@@ -546,7 +644,7 @@ export default function NotesLibrary({ onSessionOverlayChange }: NotesLibraryPro
           The panel only renders when at least one note has been loaded.
           NotesAiSummary itself owns the privacy notice, the manual trigger,
           the abort/clear behaviour, and the responsive layout. */}
-      {items.length > 0 ? (
+      {state === "ready" && items.length > 0 ? (
         <NotesAiSummary items={items} onSummaryChange={handleSummaryChange} />
       ) : null}
     </div>

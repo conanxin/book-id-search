@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { BookOpen, Lock, Loader2, AlertCircle, RefreshCw, Shield, EyeOff, BarChart3, Library, Map, CalendarClock, Calendar, Archive } from "lucide-react";
 import {
   clearWereadStatusCache,
@@ -10,6 +11,7 @@ import {
   type WereadTrends,
 } from "../wereadPrivate";
 import { useWebAuthSession } from "../auth/useWebAuthSession";
+import { getWebAuthAuthGeneration } from "../auth/session";
 import { GoogleLoginPanel } from "../auth/GoogleLoginPanel";
 import {
   formatTrendWindow,
@@ -19,6 +21,8 @@ import {
   type WereadTrendView,
 } from "./wereadCenterModel";
 import NotesLibrary from "./NotesLibrary";
+import { parseWereadNotesScope, wereadNotesScopeKey } from "./wereadNotesModel";
+import "./wereadBookScope.css";
 import ReadingMapDashboard from "./ReadingMapDashboard";
 import ReviewCalendarDashboard from "./ReviewCalendarDashboard";
 import AnnualReviewDashboard from "./AnnualReviewDashboard";
@@ -141,6 +145,13 @@ const KPI_LABELS = {
 export default function WereadCenter() {
   const session = useWebAuthSession();
   const authenticated = session.status === "authenticated";
+  return <WereadCenterSession key={`${getWebAuthAuthGeneration()}:${authenticated}`} authenticated={authenticated} />;
+}
+
+function WereadCenterSession({ authenticated }: { authenticated: boolean }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const notesScope = parseWereadNotesScope(searchParams);
+  const notesScopeKey = wereadNotesScopeKey(notesScope);
   const [summary, setSummary] = useState<WereadSummary | null>(null);
   const [trends, setTrends] = useState<WereadTrends | null>(null);
   const [trendsStatus, setTrendsStatus] = useState<"idle" | "loading" | "error" | "ok">("idle");
@@ -161,15 +172,31 @@ export default function WereadCenter() {
   // whenever its AI summary state or loaded items change; ReadingMap
   // reads the same overlay to draw the focus ring without ever
   // receiving note text, comment, overview, key points, or private IDs.
-  const [sessionThemeOverlay, setSessionThemeOverlay] = useState<WereadSessionThemeOverlay>(
-    EMPTY_SESSION_THEME_OVERLAY
-  );
-  const lastSessionOverlayKeyRef = useRef<string>(sessionThemeOverlayKey(EMPTY_SESSION_THEME_OVERLAY));
+  const [overlayState, setOverlayState] = useState<{ scopeKey: string; overlay: WereadSessionThemeOverlay }>({
+    scopeKey: notesScopeKey, overlay: EMPTY_SESSION_THEME_OVERLAY,
+  });
+  // A new book scope sees an empty overlay during its very first render; it
+  // never briefly reuses themes from the previous book while effects run.
+  const sessionThemeOverlay = overlayState.scopeKey === notesScopeKey
+    ? overlayState.overlay
+    : EMPTY_SESSION_THEME_OVERLAY;
   const handleSessionOverlayChange = useCallback((overlay: WereadSessionThemeOverlay) => {
-    const key = sessionThemeOverlayKey(overlay);
-    if (key === lastSessionOverlayKeyRef.current) return;
-    lastSessionOverlayKeyRef.current = key;
-    setSessionThemeOverlay(overlay);
+    setOverlayState((previous) => previous.scopeKey === notesScopeKey
+      && sessionThemeOverlayKey(previous.overlay) === sessionThemeOverlayKey(overlay)
+      ? previous
+      : { scopeKey: notesScopeKey, overlay });
+  }, [notesScopeKey]);
+  const summaryRequestRef = useRef(0);
+  const trendsRequestRef = useRef(0);
+
+  useEffect(() => {
+    setActiveTab("notes");
+    setOverlayState({ scopeKey: notesScopeKey, overlay: EMPTY_SESSION_THEME_OVERLAY });
+  }, [notesScopeKey]);
+
+  useEffect(() => () => {
+    summaryRequestRef.current += 1;
+    trendsRequestRef.current += 1;
   }, []);
 
   // Task 9: session-driven lifecycle. One-time purge of the legacy
@@ -196,8 +223,7 @@ export default function WereadCenter() {
       setAnnualActivated(false);
       setArchiveActivated(false);
       setRequestedAnnualReviewYear(null);
-      lastSessionOverlayKeyRef.current = sessionThemeOverlayKey(EMPTY_SESSION_THEME_OVERLAY);
-      setSessionThemeOverlay(EMPTY_SESSION_THEME_OVERLAY);
+      setOverlayState({ scopeKey: notesScopeKey, overlay: EMPTY_SESSION_THEME_OVERLAY });
     }
   }, [authenticated]);
 
@@ -213,10 +239,13 @@ export default function WereadCenter() {
   }, [requestedAnnualReviewYear, activeTab, annualActivated]);
 
   async function loadSummary() {
+    const requestId = ++summaryRequestRef.current;
+    trendsRequestRef.current += 1;
     setStatus("loading");
     setError(null);
     try {
       const s = await fetchWereadSummary();
+      if (requestId !== summaryRequestRef.current) return;
       if (s.ok) {
         setSummary(s);
         setStatus("idle");
@@ -229,6 +258,7 @@ export default function WereadCenter() {
         setError("私有 API 返回异常");
       }
     } catch (err) {
+      if (requestId !== summaryRequestRef.current) return;
       setStatus("error");
       const msg = err instanceof Error ? err.message : "连接失败";
       if (/401|403|unauthorized|认证失败|登录已失效|登录安全校验/i.test(msg)) {
@@ -244,10 +274,12 @@ export default function WereadCenter() {
   }
 
   async function loadTrends() {
+    const requestId = ++trendsRequestRef.current;
     setTrendsStatus("loading");
     setTrendsError(null);
     try {
       const resp = await fetchWereadTrends();
+      if (requestId !== trendsRequestRef.current) return;
       if (resp.ok && resp.trends) {
         setTrends(resp.trends);
         setTrendsStatus("ok");
@@ -256,6 +288,7 @@ export default function WereadCenter() {
         setTrendsError(resp.error ?? "趋势数据不可用");
       }
     } catch {
+      if (requestId !== trendsRequestRef.current) return;
       setTrendsStatus("error");
       setTrendsError("趋势数据暂不可用");
     }
@@ -289,6 +322,12 @@ export default function WereadCenter() {
     if (authenticated) loadSummary();
   }
 
+  function handleClearBookScope() {
+    const next = new URLSearchParams(searchParams);
+    next.delete("catalogId");
+    setSearchParams(next);
+  }
+
   const view = summary ? formatWereadCenterSummary(summary) : null;
 
   return (
@@ -299,7 +338,29 @@ export default function WereadCenter() {
         <p className="weread-center-hero__subtitle">
           这是你的私有阅读数据入口。使用 Google 账号登录后显示微信读书统计，浏览器通过本站安全登录会话访问私人数据。
         </p>
+        {authenticated && <div className="library-actions"><Link className="library-button" to="/weread/bindings">管理书籍关联</Link></div>}
       </header>
+
+      {notesScope.kind !== "all" ? (
+        <section className="weread-book-scope" aria-labelledby="weread-book-scope-title">
+          <h2 id="weread-book-scope-title">{notesScope.kind === "book" ? "本书笔记" : "书目筛选无效"}</h2>
+          {notesScope.kind === "book" ? (
+            <>
+              <p>当前书目：<span className="weread-book-scope__id">{notesScope.catalogId}</span></p>
+              <p>笔记搜索、筛选、分页和当前结果导出仅限这本书已确认关联的微信读书记录。</p>
+            </>
+          ) : (
+            <p role="alert">无法识别链接中的书目筛选，尚未加载任何笔记。请重新打开书籍，或清除本书筛选。</p>
+          )}
+          <p className="weread-book-scope__hint">总览、阅读趋势与阅读地图仍显示全部阅读数据；本书范围仅作用于笔记。</p>
+          <div className="weread-book-scope__actions">
+            {notesScope.kind === "book" ? (
+              <Link to={`/books/${encodeURIComponent(notesScope.catalogId)}`}>返回书籍详情</Link>
+            ) : null}
+            <button type="button" onClick={handleClearBookScope}>清除本书筛选，查看全部笔记</button>
+          </div>
+        </section>
+      ) : null}
 
       {!authenticated ? (
         <section className="weread-center-panel" data-testid="weread-login-panel">
@@ -433,7 +494,7 @@ export default function WereadCenter() {
               <h2 className="weread-center-card__title">
                 <Library size={16} aria-hidden="true" /> 私有笔记库
               </h2>
-              <NotesLibrary onSessionOverlayChange={handleSessionOverlayChange} />
+              <NotesLibrary scope={notesScope} onSessionOverlayChange={handleSessionOverlayChange} />
             </section>
 
             <aside className="weread-side-rail" data-testid="weread-side-rail">

@@ -1,5 +1,96 @@
 # BOOK-ID-SEARCH status
 
+## 2026-10-11 — Prepare one real-book trial and the cumulative release
+
+- `task_id=BOOK_CENTERED_RELEASE_PREP_R1`; reviews Draft [#72](https://github.com/conanxin/book-id-search/pull/72) at `7d71e79` against `main` `42cf1b7`.
+- The source delta needs API + Web and the existing 003/004 SQL increments. Runtime migration state, actual application role and effective Compose image selection still require the configured machine.
+- Clarifies new-table grants for the actual existing role, `S32_API_IMAGE` / `BOOK_ID_SEARCH_WEB_IMAGE`, the final override and `sudo -n env`, and the existing builders' merged-source requirement.
+- Narrows the initial real-provider trial to one actual catalog book and one action, using the existing CLI and original configuration; adds the public catalog selection request and explicit source-consistency guidance.
+- Fresh inventory reports the registered desktop offline; this environment has no original model/database configuration or configured `tencent` alias. Public fetch tools did not obtain live health/catalog results. Real-book selection, provider trial and Tencent inspection remain pending.
+- Documentation preparation only. Product code and migrations are unchanged; no model call, merge, image publication or deployment. See [release preparation](operations/BOOK_CENTERED_RELEASE.md) and [real-provider trial](development/BOOK_AI_REAL_PROVIDER_READINESS.md).
+
+## 2026-10-11 — Read saved introductions and notes
+
+- `task_id=BOOK_CENTERED_READING_RENDER_V1`; continues Draft [#72](https://github.com/conanxin/book-id-search/pull/72) from `20eb7da`.
+- Adds one shared Markdown reader for saved introductions, current/historical notes and AI read-only views, with readable headings, lists, quotes, tables and source links.
+- Optional editor previews render the current input; saving still submits the original text through existing version/conflict handling. Source links retain book/note fragments and the current Google-session boundaries.
+- Uses fixed `react-markdown` and `remark-gfm` versions; no API, migration or model-call changes. Imported WeRead excerpts and search-match snippets retain their plain-text scope.
+- Contract: [Reading presentation v1](development/BOOK_READING_RENDER_V1.md). Current-commit test, browser and visual evidence is maintained in PR #72.
+- The registered desktop remains offline and the real-provider trial pending. Development candidate only; no merge, image publication or Tencent deployment.
+
+## 2026-10-11 — Find saved books by their notes
+
+- `task_id=BOOK_CENTERED_LIBRARY_CONTENT_SEARCH_V1`; continues Draft [#72](https://github.com/conanxin/book-id-search/pull/72) from `be861ce`.
+- Extends My Books keyword search to current active personal-note titles and bodies, preserving literal search, existing filters, book-level counts and recent-update pagination.
+- Adds a bounded matching excerpt and a direct introduction/note link to the shared book card; old response shapes remain supported. Archived notes and superseded revisions do not supply current matches.
+- Book content resolves its fragment after asynchronous loading; Google return links retain the fragment so refresh/login can return to the intended note.
+- Contract: [Library content search v1](development/BOOK_LIBRARY_CONTENT_SEARCH_V1.md). Exact-head PostgreSQL, browser and visual evidence is maintained in PR #72.
+- No new dependency, migration, search service or AI call. Registered desktop remains offline; real-provider trial is pending. No merge, image publication or Tencent deployment.
+
+## 2026-10-11 — Explainable related books
+
+- `task_id=BOOK_CENTERED_RELATED_DISCOVERY_V1`; continues Draft [#72](https://github.com/conanxin/book-id-search/pull/72) from `c9a39cb`.
+- Replaces cumulative early-stop discovery with independent bounded ISBN/title/author/publisher candidate reads and a stable unified order. Title candidates are considered before publisher-only suggestions; the current book and duplicate IDs are removed.
+- Related cards explain the actual catalog-field relationship separately from search match badges. The section distinguishes loading, empty, partial and failed results and keeps retry and book/session boundaries.
+- Reuses the shared book UI and Google-protected route; no AI requests, private-note access, content writes, dependency or migration changes.
+- Contract: [Related books v1](development/BOOK_RELATED_DISCOVERY_V1.md). Exact-head tests and browser evidence are maintained in PR #72. The registered local desktop is offline; real-provider trial and Tencent release remain pending on the configured environment.
+- Development candidate only; no merge, image publication or Tencent deployment.
+
+## 2026-10-11 — Real-provider compatibility and live trial entry
+
+- `task_id=BOOK_CENTERED_AI_REAL_PROVIDER_READINESS_R1`; continues Draft [#72](https://github.com/conanxin/book-id-search/pull/72) from `9645283`.
+- Corrects MiniMax Responses to `max_output_tokens`, extracts completed reply text without reasoning blocks, joins text blocks, and refuses incomplete/failed Responses results. Existing model/configuration choices remain.
+- The book assistant now tells the model actual source coverage and excerpt truncation. A read-only `book-ai:trial` CLI uses configured catalog, saved library and effective WeRead sources, at most one model call, and a local review receipt.
+- Current execution environment has no real model/database configuration or WSL/Hermes/Tencent connection. Missing-configuration execution is separate from real-provider and answer-quality validation; the latter remain pending on the configured machine.
+- Contract and handoff: [AI actual-provider readiness](development/BOOK_AI_REAL_PROVIDER_READINESS.md); cumulative release: [incremental release notes](operations/BOOK_CENTERED_RELEASE.md). Exact-head CI evidence remains in PR #72.
+- No dependency/schema changes, merge or Tencent deployment in this phase.
+
+## 2026-10-11 — Book AI assistant
+
+- `task_id=BOOK_CENTERED_AI_ASSISTANT_V1`; continues Draft [#72](https://github.com/conanxin/book-id-search/pull/72) from `63ccc1d`.
+- The book workspace offers introduction drafts, saved-note summaries and source-based questions. It reads the current catalog, introduction, independent notes and effectively associated WeRead records; source counts, excerpts and truncation remain visible.
+- Drafts include editable source snapshots before saving. Generation makes no library writes; explicit save reuses introduction version checks and independent note revisions. Book/session/mode changes discard late responses.
+- Reuses Google Owner/CSRF, the existing MiniMax client and PostgreSQL pool. No new dependency or migration; ebook URLs remain external links, not AI-readable full text.
+- Contract: [Book AI assistant v1](development/BOOK_AI_ASSISTANT_V1.md). Exact-head tests, deterministic-provider browser/PG evidence and visual checks are recorded in PR #72; real model connectivity and answer quality are not inferred from fixtures.
+- Development candidate only; merge and Tencent deployment remain separate actions.
+
+## 2026-10-11 — Persistent WeRead book associations
+
+- `task_id=BOOK_CENTERED_WEREAD_MANUAL_BINDING_V1`; continues Draft [#72](https://github.com/conanxin/book-id-search/pull/72) from tested baseline `42c0d94`.
+- Adds `/weread/bindings`: source-book search/filter/pagination, catalog comparison, explicit confirm/change/unlink/restore, and a fresh single-source read after version conflicts. Entry links connect the WeRead center and book pages.
+- Migration004 stores manual choices independently of imported files. Manual links and explicit unlinks take precedence; restore inherits current imports and preserves the revision sequence. Multiple WeRead sources can contribute to one catalog book.
+- Effective bindings feed notes, status and reading summaries consistently. The web client uses the current Google session/CSRF; stale responses cannot repopulate cleared status caches.
+- Implementation and validation contract: [WeRead associations v1](development/BOOK_WEREAD_BINDINGS_V1.md). Current-head test and CI receipts are maintained in PR #72. Next: saved AI drafts, summaries and source-grounded answers using the actual book content.
+- Development candidate only; merge and Tencent deployment are separate actions. Existing003 and new004 must accompany the full candidate when it is released.
+
+## 2026-10-11 — Book-centered WeRead records
+
+- `task_id=BOOK_CENTERED_WEREAD_NOTES_V1`; continues Draft [#72](https://github.com/conanxin/book-id-search/pull/72) on the tested library-v1 baseline `ff90666`.
+- Book details now show confirmed imported WeRead highlights, thoughts and reviews with type filters and pagination. The book links to a scoped WeRead center, whose matched records return to the same book page.
+- Invalid explicit catalog scopes fail before requests; every book page/export request keeps its scope and rejects mixed-book responses. Book, filter and session changes cancel pending reads and discard old records/temporary AI state.
+- Existing search submission and filtered pagination now use the active query. Reuses imported snapshots, confirmed bindings, Google session and shared UI; no new migration or automatic library writes.
+- Contracts and validation scope: [Book WeRead notes v1](development/BOOK_WEREAD_NOTES_V1.md). Exact-head test/CI evidence is maintained in PR #72. Next: persistent manual matching corrections, then saved AI content grounded in the actual book/notes.
+- Development and PR work only; merging and Tencent deployment remain separate actions.
+
+## 2026-10-11 — Book-centered library v1
+
+- `task_id=BOOK_CENTERED_LIBRARY_V1_IMPLEMENTATION`; branch `feat/book-centered-library`, based on candidate `fe22a6d` from Draft #71.
+- Implemented Google-protected book introduction, multiple independent notes with immutable revisions, ebook external-link registration, and `/library` search/filter/pagination. Saving personal content requires no Project and automatically saves the book.
+- Shared navigation is Search / My Books / WeRead; original research routes remain under More. Server enforcement now covers full book details, all AI and all private routes with Google session + CSRF for writes; catalog search remains anonymous.
+- Added migration003 and existing-role grants; frozen001/002 unchanged. Migration runners now apply frozen schema assertions at the appropriate migration stage.
+- Targeted API/Web tests, builds and synthetic desktop/mobile visual checks pass locally. Native PostgreSQL cannot start with this environment's uid0-only mapping; actual PG16/Chromium results are recorded in the new PR's Book library workflow, not inferred from mocks.
+- Scope and API contract: [Book library v1](development/BOOK_LIBRARY_V1.md). Follow-up: WeRead content on the same book page, then saved AI drafts/answers grounded in actual notes. No merge or Tencent deployment in this development task.
+
+## 2026-10-10 — S32 mainline source integration candidate
+
+- `task_id=S32_MAINLINE_INTEGRATION_CANDIDATE_R1`; branch `integration/s32-mainline-candidate`, based on `main@42cf1b7b4a10a6edfa53d688012728dded0b3049`.
+- Six local merges combine #58 Dossier, #66 Owner/Run404 fixes, #61 Book Detail Research entry, #62 citation scope, #64 canonical-refresh tests and #59 Web Google client ID release guard. Exact source heads and publication identity are recorded in the candidate PR.
+- The first five merges reproduce R6 product tree `79997ca5b811d2110b6fef334b1bc133c632ca4a` exactly. Reuse [R6 CI 37947716249](https://github.com/conanxin/book-id-search/actions/runs/37947716249): 3/3 jobs, including 4,758 PASS / 92 SKIP and disposable PG16/browser coverage; these are prior results, not a new whole-suite run.
+- Relative to that tree, #59 changes only its build script, guard tests and workflow. Native source `ab0b10421ee181a657d053d199aef0a8166626d4` / tree `618691e4e80805f1b93aaa80b0d4bd38d4bc443e` passed Bash syntax, six existing build contracts, three guard tests and diff checks. This status entry is the only subsequent documentation change.
+- This is a source candidate for review. It is not merged into main or deployed, and no production image was built. The existing release builder still requires a source commit contained in `origin/main`.
+- R8–R11 Locator experiments remain in their own PR chain. [R11 #70 final Hermes receipt](https://github.com/conanxin/book-id-search/pull/70#issuecomment-6098705161): target WSL real-source and size-boundary replay PASS at `256ace1`; inline structure and same-byte Poppler page mapping PASS; desktop inline pixels await human confirmation.
+- [Candidate PR #71](https://github.com/conanxin/book-id-search/pull/71) first head `12d060fa` passed six workflows; [rollout CI 38061308357](https://github.com/conanxin/book-id-search/actions/runs/38061308357) failed when the role-test fixture's first schema connection exited 2. The fixture allowed the socket-only initialization server to satisfy readiness; add an explicit TCP probe and class cleanup on failed setup. Two deterministic startup/cleanup regressions fail against the old fixture and pass with this test-only correction. The initial CI log lacks psql stderr, so it does not uniquely establish the cause of that observed connection failure. Current-head real-PG evidence is recorded in the PR.
+
 ## 2026-09-30 — PR #52 WeRead logout production closeout
 
 - task_id: `S32_M3A_PR52_PRODUCTION_CLOSEOUT_R1`.

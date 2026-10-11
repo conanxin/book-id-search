@@ -45,6 +45,34 @@ describe("IssueResolutionDetail", () => {
     expect(screen.getByText(/当前结论/)).toBeTruthy();
   });
 
+  it("labels a retrieved frozen Manifest as object-level, not a page citation", async () => {
+    vi.mocked(getIssueResolution).mockResolvedValue({
+      issue: { id: I, lifecycleState: "OPEN", currentResolutionId: R, updatedAt: "2026-09-20T01:00:00.000Z" },
+      resolution: {
+        id: R, issueId: I, resolutionType: "PREFERRED_CLAIM",
+        preferredClaimId: "44444444-4444-4444-8444-444444444444",
+        rationale: "研究者对碑文的判断", createdAt: "2026-09-20T00:00:00.000Z", isCurrent: true,
+      },
+      evidenceBasisAvailable: true,
+      evidenceManifest: {
+        id: "55555555-5555-4555-8555-555555555555",
+        schemaVersion: 1, purpose: "CLAIM_ASSESSMENT",
+        manifestSha256: "b".repeat(64),
+        createdAt: "2026-09-20T00:00:00.000Z",
+        items: [{
+          ordinal: 1, role: "SUPPORTING", targetType: "SOURCE",
+          targetId: "66666666-6666-4666-8666-666666666666",
+          locatorType: null, locator: null, excerpt: null, note: "待核对碑文页码",
+        }],
+      },
+    });
+    render(<IssueResolutionDetail projectId={P} issueId={I} resolutionId={R} onClose={() => {}} />);
+    expect(await screen.findByText("1 条冻结证据")).toBeTruthy();
+    expect(screen.getByRole("note").textContent).toContain("仅记录证据对象");
+    expect(screen.getByRole("note").textContent).toContain("页码、图版、段落与原文摘录均未记录");
+    expect(screen.queryByRole("link", { name: /页码|原文/ })).toBeNull();
+  });
+
   it("does not expose server detail on a missing Resolution", async () => {
     vi.mocked(getIssueResolution).mockRejectedValueOnce(new ProjectApiError(404, "SECRET"));
     render(<IssueResolutionDetail projectId={P} issueId={I} resolutionId={R} onClose={() => {}} />);

@@ -57,6 +57,11 @@ export type WereadOverlayData = {
   dataAvailable: boolean;
   books: Map<string, WereadBook>;
   notesByBook: Map<string, WereadNote[]>;
+  /** Snapshot order is retained for stable note pagination. */
+  notes?: WereadNote[];
+  /** Complete source relationships; several sources may share one catalog. */
+  confirmedMatches?: ConfirmedMatch[];
+  /** Representative lookup retained for older pure consumers. */
   confirmedByCatalogId: Map<string, ConfirmedMatch>;
   generatedAt?: string;
 };
@@ -105,10 +110,12 @@ const cache: {
   data: WereadOverlayData | null;
   loadedAt: number;
   ttlMs: number;
+  sourceKey: string;
 } = {
   data: null,
   loadedAt: 0,
   ttlMs: 60_000,
+  sourceKey: "",
 };
 
 function loadJsonFile<T>(filePath: string): T | null {
@@ -122,56 +129,78 @@ function loadJsonFile<T>(filePath: string): T | null {
 
 export function loadWereadOverlay(dataDir: string): WereadOverlayData {
   const now = Date.now();
-  if (cache.data && cache.loadedAt + cache.ttlMs > now) {
-    return cache.data;
-  }
-
   const booksPath = path.join(dataDir, "snapshots", "latest", "weread-books.snapshot.json");
   const notesPath = path.join(dataDir, "snapshots", "latest", "weread-notes.snapshot.json");
   const confirmedPath = path.join(dataDir, "derived", "latest", "weread-matches.confirmed.json");
+  // Imports replace these snapshots. A TTL alone would hide a new import,
+  // and a cache without the directory could cross-contaminate readers.
+  const sourceKey = JSON.stringify([path.resolve(dataDir), ...[booksPath, notesPath, confirmedPath].map(file => {
+    try {
+      const stat = fs.statSync(file);
+      return [stat.dev, stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs];
+    } catch { return null; }
+  })]);
+  if (cache.data && cache.sourceKey === sourceKey && cache.loadedAt + cache.ttlMs > now) return cache.data;
 
-  const books: WereadBook[] = loadJsonFile<WereadBook[]>(booksPath) ?? [];
-  const notes: WereadNote[] = loadJsonFile<WereadNote[]>(notesPath) ?? [];
-  const confirmed: ConfirmedMatch[] = loadJsonFile<ConfirmedMatch[]>(confirmedPath) ?? [];
+  const rawBooks = loadJsonFile<unknown>(booksPath);
+  const rawNotes = loadJsonFile<unknown>(notesPath);
+  const rawConfirmed = loadJsonFile<unknown>(confirmedPath);
+  const books: WereadBook[] = Array.isArray(rawBooks) ? rawBooks : [];
+  const notes: WereadNote[] = Array.isArray(rawNotes) ? rawNotes : [];
+  const confirmed: ConfirmedMatch[] = Array.isArray(rawConfirmed) ? rawConfirmed : [];
+  const validSource = (id: unknown): id is string => typeof id === "string" && id.trim().length > 0 && id.length <= 500;
 
   const booksMap = new Map<string, WereadBook>();
   for (const book of books) {
-    if (book?.wereadBookId) booksMap.set(book.wereadBookId, book);
+    if (validSource(book?.wereadBookId)) booksMap.set(book.wereadBookId, book);
   }
 
   const notesMap = new Map<string, WereadNote[]>();
   for (const note of notes) {
-    if (!note?.wereadBookId) continue;
+    if (!validSource(note?.wereadBookId)) continue;
     const arr = notesMap.get(note.wereadBookId) ?? [];
     arr.push(note);
     notesMap.set(note.wereadBookId, arr);
   }
 
-  const confirmedByCatalogId = new Map<string, ConfirmedMatch>();
+  const confirmedBySource = new Map<string, ConfirmedMatch>();
   for (const match of confirmed) {
-    if (match?.catalogId) confirmedByCatalogId.set(match.catalogId, match);
+    if (validSource(match?.wereadBookId) && typeof match.catalogId === "string"
+      && match.catalogId.length <= 128 && /^[0-9]+_[0-9]{12}$/.test(match.catalogId)) {
+      confirmedBySource.set(match.wereadBookId, match);
+    }
   }
+  const confirmedMatches = Array.from(confirmedBySource.values());
+  const confirmedByCatalogId = new Map(confirmedMatches.map(match => [match.catalogId, match]));
 
   const data: WereadOverlayData = {
     dataAvailable: books.length > 0 || notes.length > 0 || confirmed.length > 0,
     books: booksMap,
     notesByBook: notesMap,
+    notes,
+    confirmedMatches,
     confirmedByCatalogId,
     generatedAt: new Date().toISOString(),
   };
 
   cache.data = data;
   cache.loadedAt = now;
+  cache.sourceKey = sourceKey;
   return data;
 }
 
 export function clearWereadOverlayCache(): void {
   cache.data = null;
   cache.loadedAt = 0;
+  cache.sourceKey = "";
 }
 
 export function setWereadOverlayCacheTtl(ttlMs: number): void {
   cache.ttlMs = ttlMs;
+}
+
+export function getWereadConfirmedMatches(data: WereadOverlayData): ConfirmedMatch[] {
+  return data.confirmedMatches ?? Array.from(data.confirmedByCatalogId.values());
 }
 
 function countNotesByType(notes: WereadNote[] | undefined): { noteCount: number; highlightCount: number } {
@@ -219,7 +248,7 @@ export function getWereadSummary(data: WereadOverlayData): WereadSummary {
   let confirmedWithNotesCount = 0;
   let confirmedWithHighlightsCount = 0;
   let totalConfirmedNoteRecords = 0;
-  for (const match of data.confirmedByCatalogId.values()) {
+  for (const match of getWereadConfirmedMatches(data)) {
     const bookNotes = data.notesByBook.get(match.wereadBookId) ?? [];
     const summary = buildNotesCountSummary(bookNotes);
     if (summary.total > 0) confirmedWithNotesCount += 1;
@@ -232,7 +261,7 @@ export function getWereadSummary(data: WereadOverlayData): WereadSummary {
     dataAvailable: data.dataAvailable,
     booksCount: data.books.size,
     notesCount: Array.from(data.notesByBook.values()).reduce((acc, arr) => acc + arr.length, 0),
-    confirmedMatchesCount: data.confirmedByCatalogId.size,
+    confirmedMatchesCount: getWereadConfirmedMatches(data).length,
     confirmedWithNotesCount,
     confirmedWithHighlightsCount,
     totalConfirmedNoteRecords,
@@ -274,7 +303,7 @@ export function getWereadStatusByCatalogId(data: WereadOverlayData, catalogId: s
 
 function getConfirmedMatchesByCatalogId(data: WereadOverlayData, catalogId: string): ConfirmedMatch[] {
   const matches: ConfirmedMatch[] = [];
-  for (const match of data.confirmedByCatalogId.values()) {
+  for (const match of getWereadConfirmedMatches(data)) {
     if (match.catalogId === catalogId) matches.push(match);
   }
   return matches;

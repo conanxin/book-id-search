@@ -6,14 +6,32 @@
  * shape returned by /api/private/weread/notes (no wereadBookId /
  * noteId / highlightId / chapterTitle / title / author).
  */
-import type {
-  WereadNotesQuery,
-  WereadPrivateNoteItem,
-  WereadNotesLibrarySummary,
-  WereadNotesDaysFilter,
-  WereadNotesSort,
-  WereadNoteTypeFilter,
+import {
+  isValidWereadCatalogId,
+  type WereadNotesQuery,
+  type WereadPrivateNoteItem,
+  type WereadNotesLibrarySummary,
+  type WereadNotesDaysFilter,
+  type WereadNotesSort,
+  type WereadNoteTypeFilter,
 } from "../wereadPrivate";
+
+export type WereadNotesScope =
+  | { kind: "all" }
+  | { kind: "book"; catalogId: string }
+  | { kind: "invalid" };
+
+/** An explicitly empty, malformed or ambiguous book filter never means all books. */
+export function parseWereadNotesScope(params: URLSearchParams): WereadNotesScope {
+  const values = params.getAll("catalogId");
+  if (values.length === 0) return { kind: "all" };
+  if (values.length !== 1 || !isValidWereadCatalogId(values[0])) return { kind: "invalid" };
+  return { kind: "book", catalogId: values[0].trim() };
+}
+
+export function wereadNotesScopeKey(scope: WereadNotesScope): string {
+  return scope.kind === "book" ? `book:${scope.catalogId}` : scope.kind;
+}
 
 // ---------- labels ----------
 
@@ -147,7 +165,10 @@ export function buildMarkdownExport(
   options: BuildMarkdownExportOptions
 ): string {
   const generatedAt = options.generatedAt ?? new Date();
-  const dateStamp = `${generatedAt.getUTCFullYear()}${String(generatedAt.getUTCMonth() + 1).padStart(2, "0")}${String(generatedAt.getUTCDate()).padStart(2, "0")}`;
+  const catalogId = exportCatalogId(options.query);
+  if (catalogId && items.some((item) => !item.matched || item.catalogId?.trim() !== catalogId)) {
+    throw new Error("笔记与当前书目不一致，请重新加载后导出。");
+  }
 
   const lines: string[] = [];
   lines.push("# 微信读书私有笔记导出");
@@ -156,6 +177,11 @@ export function buildMarkdownExport(
     `> 生成时间: ${generatedAt.toISOString()}  筛选: ${formatDaysLabel(options.query.days ?? "all")} / ${getFilterLabel(options.query.type ?? "all")} / ${formatSortLabel(options.query.sort ?? "newest")}`
   );
   lines.push("");
+  if (catalogId) {
+    lines.push(`> 书目范围: 本书 (${catalogId})`);
+    lines.push(`> 书籍页面: /books/${catalogId}`);
+    lines.push("");
+  }
   if (options.privacyNotice) {
     lines.push(`> ${options.privacyNotice}`);
     lines.push("");
@@ -166,7 +192,9 @@ export function buildMarkdownExport(
   for (const item of items) {
     const type = formatNoteTypeLabel(item.type);
     const date = formatNoteDate(item.createdAt ?? item.updatedAt);
-    const matchedChip = item.matched && item.catalogId ? `已匹配书目 (${item.catalogId})` : "未匹配书目";
+    const matchedChip = item.matched && isValidWereadCatalogId(item.catalogId)
+      ? `已匹配书目 (${item.catalogId!.trim()})`
+      : "未匹配书目";
     lines.push(`## ${type} · ${date} · ${matchedChip}`);
     lines.push("");
     lines.push(scrubNoteText(item.text));
@@ -185,13 +213,20 @@ export function buildMarkdownExportFilename(query: WereadNotesQuery, generatedAt
   const yyyy = stamp.getUTCFullYear();
   const mm = String(stamp.getUTCMonth() + 1).padStart(2, "0");
   const dd = String(stamp.getUTCDate()).padStart(2, "0");
-  return `weread-notes-export-${yyyy}${mm}${dd}.md`;
+  const catalogId = exportCatalogId(query);
+  return `weread-notes${catalogId ? `-${catalogId}` : ""}-export-${yyyy}${mm}${dd}.md`;
+}
+
+function exportCatalogId(query: WereadNotesQuery): string | null {
+  if (!Object.prototype.hasOwnProperty.call(query, "catalogId")) return null;
+  if (!isValidWereadCatalogId(query.catalogId)) throw new Error("书目筛选无效，请重新选择书籍。");
+  return query.catalogId!.trim();
 }
 
 // ---------- query string helper (for react effect deps) ----------
 
 export function notesQueryKey(query: WereadNotesQuery): string {
-  return [
+  return JSON.stringify([
     query.type ?? "all",
     query.days ?? "all",
     query.matchedOnly ? "matched" : "allbooks",
@@ -199,7 +234,9 @@ export function notesQueryKey(query: WereadNotesQuery): string {
     String(query.limit ?? 50),
     String(query.offset ?? 0),
     query.sort ?? "newest",
-  ].join("|");
+    normalizeNoteSearchQuery(query.q),
+    Object.prototype.hasOwnProperty.call(query, "catalogId") ? query.catalogId ?? null : "allbooks",
+  ]);
 }
 
 // ---------- S27D: full-text search helpers ----------

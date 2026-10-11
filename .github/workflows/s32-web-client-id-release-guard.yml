@@ -1,0 +1,33 @@
+name: S32 Web release Google Client ID fail-closed
+
+on:
+  push:
+    branches:
+      - fix/s32-web-client-id-release-guard
+  pull_request:
+    paths:
+      - scripts/build-web-release-candidate.sh
+      - scripts/test-build-web-client-id-guard.py
+      - scripts/test-build-web-release-candidate.py
+      - .github/workflows/s32-web-client-id-release-guard.yml
+
+jobs:
+  guarded-web-build:
+    name: Hermetic release-build preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Validate script Bash syntax
+        run: bash -n scripts/build-web-release-candidate.sh
+      - name: Original release-build contract tests
+        run: python3 scripts/test-build-web-release-candidate.py
+      - name: Production-only Google client ID guard RED/GREEN tests
+        run: python3 scripts/test-build-web-client-id-guard.py
+      - name: Source diff whitespace check
+        run: git diff --check HEAD^ HEAD

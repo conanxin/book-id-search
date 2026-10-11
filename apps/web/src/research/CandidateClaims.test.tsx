@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
-import {cleanup,render,screen,waitFor} from '@testing-library/react';
+import {act,cleanup,render,screen,waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {CandidateClaims} from './CandidateClaims';
 import {
@@ -167,13 +167,15 @@ it('create success refreshes canonical order from server GET instead of local ap
   await screen.findByText('old archived');
   await userEvent.type(screen.getByRole('textbox',{name:'可能答案正文'}),'new active');
   await userEvent.click(screen.getByRole('button',{name:'添加可能答案'}));
-  const list=await screen.findByText('new active');
-  expect(list).toBeTruthy();
-  expect(screen.getByText('old archived')).toBeTruthy();
-  expect(vi.mocked(listCandidateClaims)).toHaveBeenCalledTimes(2);
-  const cards=Array.from(document.querySelectorAll('.research-claim-list article'));
-  const texts=cards.map(a=>a.querySelector('p')?.textContent);
-  expect(texts).toEqual(['new active','old archived']);
+  // A textarea's draft text is not proof that the authoritative GET ran.
+  // Wait until the second GET has been issued AND its canonical order is
+  // rendered. Otherwise this call-count assertion races a pending effect.
+  await waitFor(() => {
+    expect(vi.mocked(listCandidateClaims)).toHaveBeenCalledTimes(2);
+    const cards=Array.from(document.querySelectorAll('.research-claim-list article'));
+    const texts=cards.map(a=>a.querySelector('p')?.textContent);
+    expect(texts).toEqual(['new active','old archived']);
+  });
 });
 it('replayed create keeps server canonical order for existing claims',async()=>{
   const activeA={...claim,id:'77777777-7777-4777-8777-777777777777',statement:'active A',createdAt:'2026-01-01T00:00:00Z'};
@@ -184,11 +186,39 @@ it('replayed create keeps server canonical order for existing claims',async()=>{
   await screen.findByText('active A');
   await userEvent.type(screen.getByRole('textbox',{name:'可能答案正文'}),'active A');
   await userEvent.click(screen.getByRole('button',{name:'添加可能答案'}));
-  await screen.findByText('active B');
-  expect(vi.mocked(listCandidateClaims)).toHaveBeenCalledTimes(2);
-  const cards=Array.from(document.querySelectorAll('.research-claim-list article'));
-  const texts=cards.map(a=>a.querySelector('p')?.textContent);
-  expect(texts).toEqual(['active A','active B']);
+  // 'active B' existed before submit and cannot be used as a completion
+  // signal. Assert only after the authoritative refresh actually completes.
+  await waitFor(() => {
+    expect(vi.mocked(listCandidateClaims)).toHaveBeenCalledTimes(2);
+    const cards=Array.from(document.querySelectorAll('.research-claim-list article'));
+    const texts=cards.map(a=>a.querySelector('p')?.textContent);
+    expect(texts).toEqual(['active A','active B']);
+  });
+});
+
+
+it('waits for delayed authoritative refresh and never invents a local claim',async()=>{
+  const oldClaim={...claim,id:'77777777-7777-4777-8777-777777777777',statement:'old canonical',createdAt:'2026-01-01T00:00:00Z'};
+  const newClaim={...claim,id:'88888888-8888-4888-8888-888888888888',statement:'new canonical',createdAt:'2026-02-01T00:00:00Z'};
+  let resolveRefresh!:(result:{claims:typeof oldClaim[]})=>void;
+  vi.mocked(listCandidateClaims)
+    .mockResolvedValueOnce({claims:[oldClaim]})
+    .mockImplementationOnce(()=>new Promise(resolve=>{resolveRefresh=resolve;}));
+  vi.mocked(createCandidateClaim).mockResolvedValueOnce({claim:newClaim});
+  show();
+  await screen.findByText('old canonical');
+  await userEvent.type(screen.getByRole('textbox',{name:'可能答案正文'}),'new canonical');
+  await userEvent.click(screen.getByRole('button',{name:'添加可能答案'}));
+  await waitFor(()=>expect(vi.mocked(listCandidateClaims)).toHaveBeenCalledTimes(2));
+  // Pending refreshed GET has no fake locally appended canonical result.
+  const before=Array.from(document.querySelectorAll('.research-claim-list article'))
+    .map(a=>a.querySelector('p')?.textContent);
+  expect(before).not.toContain('new canonical');
+  await act(async()=>{resolveRefresh({claims:[newClaim,oldClaim]});});
+  await waitFor(()=>{
+    const cards=Array.from(document.querySelectorAll('.research-claim-list article'));
+    expect(cards.map(a=>a.querySelector('p')?.textContent)).toEqual(['new canonical','old canonical']);
+  });
 });
 
 

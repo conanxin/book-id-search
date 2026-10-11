@@ -92,48 +92,44 @@ export function isAiEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return resolveMiniMaxConfig(env) !== null;
 }
 
-/**
- * Extract text from MiniMax /v1/responses response (Token Plan wire).
- * Returns empty string if unrecognized structure.
- */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function joinTextBlocks(content: unknown, type: "output_text" | "text"): string {
+  if (!Array.isArray(content)) return "";
+  return content.flatMap(part => isRecord(part) && part.type === type && typeof part.text === "string"
+    ? [part.text] : []).join("");
+}
+
+/** Extract a completed reply, never reasoning or partial response text. */
 function extractResponsesContent(data: unknown): string {
-  const d = data as Record<string, unknown> | null;
-  if (!d || typeof d !== "object") return "";
+  if (!isRecord(data)) return "";
+  // A token-limited response can contain reasoning but no completed answer.
+  if (data.status !== undefined && data.status !== "completed") return "";
 
-  // Try output_text (direct)
-  if (typeof d.output_text === "string") return d.output_text;
-
-  // Try output[].content[].text
-  if (Array.isArray(d.output)) {
-    for (const item of d.output) {
-      if (item?.content && Array.isArray(item.content)) {
-        for (const c of item.content) {
-          if (c?.type === "output_text" && typeof c?.text === "string") return c.text;
-          if (typeof c?.text === "string") return c.text;
-        }
-      }
-    }
+  if (Object.hasOwn(data, "output")) {
+    if (!Array.isArray(data.output)) return "";
+    const messages = data.output.filter(item => isRecord(item)
+      && item.type === "message" && item.role === "assistant");
+    const message = messages.at(-1);
+    if (!message || (message.status !== undefined && message.status !== "completed")) return "";
+    // Only the final assistant message is a reply. reasoning_text and other
+    // output items may also have a text field, but must never become an answer.
+    return joinTextBlocks(message.content, "output_text");
   }
 
-  // Last resort: try to extract any string field
-  return "";
+  // Preserve compatibility with convenience-only responses. If structured
+  // output is present, it must contain a completed assistant message instead.
+  return typeof data.output_text === "string" ? data.output_text : "";
 }
 
 /**
  * Extract text from Anthropic Messages API response.
  */
 function extractAnthropicContent(data: unknown): string {
-  const d = data as Record<string, unknown> | null;
-  if (!d || typeof d !== "object") return "";
-
-  if (Array.isArray(d.content)) {
-    for (const c of d.content) {
-      if (c?.type === "text" && typeof c?.text === "string") return c.text;
-      if (typeof c?.text === "string") return c.text;
-    }
-  }
-
-  return "";
+  if (!isRecord(data)) return "";
+  return joinTextBlocks(data.content, "text");
 }
 
 /**
@@ -221,7 +217,7 @@ export async function chatCompletion(
           model: config.model,
           input: messages,
           temperature,
-          max_tokens: maxTokens,
+          max_output_tokens: maxTokens,
           stream: false,
         });
         authHeader = { Authorization: `Bearer ${config.apiKey}` };

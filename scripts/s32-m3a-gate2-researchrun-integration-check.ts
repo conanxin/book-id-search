@@ -1,4 +1,4 @@
-import { readS32MigrationChain } from "./s32-migration-chain.js";
+import { S32_MIGRATION_PATHS, readS32MigrationChain } from "./s32-migration-chain.js";
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -67,9 +67,13 @@ try {
   console.log("GATE2_PG16_TCP_SQL_READY=YES");
 
   const migrations = readS32MigrationChain(root);
-  if (migrations.length !== 2) throw new Error("Expected frozen 001 -> 002 migration chain");
+  const expectedPrefix = ["db/migrations/001_s32_core_schema.sql", "db/migrations/002_s32_m2e_issue_resolution.sql"];
+  if (expectedPrefix.some((path, index) => S32_MIGRATION_PATHS[index] !== path)) {
+    throw new Error("Expected frozen 001 -> 002 migration prefix");
+  }
   psql("s32_m3a_gate2_test", migrations.join("\n"));
   console.log("GATE2_SCHEMA_001_002=PASS");
+  console.log(`GATE2_CURRENT_MIGRATION_COUNT=${migrations.length}`);
   const fixture = readFileSync(resolve(root, "scripts/fixtures/s32-m3a-gate2-researchrun.sql"), "utf8");
   psql("s32_m3a_gate2_test", fixture);
   console.log("GATE2_FIXTURE=PASS");

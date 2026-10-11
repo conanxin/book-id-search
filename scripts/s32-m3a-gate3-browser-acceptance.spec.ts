@@ -553,7 +553,9 @@ test("K1 history pagination exact cursor, append, dedupe, page-failure retry", a
   expect(stillFirstPage).toBe(20); // existing rows preserved
   await page.unrouteAll();
   await history.getByRole("button", { name: "重试加载更早研究轮次" }).click();
-  await expect(history.locator(".research-run-card").first()).toBeVisible({ timeout: 15_000 });
+  // The first card is already visible before the append; await the actual
+  // asynchronous page merge rather than sampling the stale first-page count.
+  await expect.poll(async () => history.locator(".research-run-card").count(), { timeout: 15_000 }).toBeGreaterThan(20);
   const loaded = await history.locator(".research-run-card").count();
   expect(loaded).toBeGreaterThan(20);
   // Dedupe: no run id repeated.

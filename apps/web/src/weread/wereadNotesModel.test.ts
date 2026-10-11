@@ -15,6 +15,7 @@ import {
   highlightNoteTextParts,
   normalizeNoteSearchQuery,
   notesQueryKey,
+  parseWereadNotesScope,
   truncateNotePreview,
   WEREAD_NOTE_SEARCH_MAX_LENGTH,
 } from "./wereadNotesModel";
@@ -131,6 +132,24 @@ describe("wereadNotesModel", () => {
     const k2 = notesQueryKey({ ...baseQuery, type: "highlight" });
     expect(k1).not.toBe(k2);
     expect(notesQueryKey(baseQuery)).toBe(k1);
+    expect(notesQueryKey({ ...baseQuery, q: "current search" })).not.toBe(k1);
+    expect(notesQueryKey({ ...baseQuery, catalogId: sampleItem.catalogId! })).not.toBe(k1);
+  });
+
+  it("only treats an absent book parameter as all books", () => {
+    expect(parseWereadNotesScope(new URLSearchParams("view=notes"))).toEqual({ kind: "all" });
+    expect(parseWereadNotesScope(new URLSearchParams({ catalogId: `  ${sampleItem.catalogId}  ` }))).toEqual({ kind: "book", catalogId: sampleItem.catalogId });
+    for (const params of ["catalogId=", "catalogId=bad", `catalogId=${sampleItem.catalogId}&catalogId=${sampleItem.catalogId}`]) {
+      expect(parseWereadNotesScope(new URLSearchParams(params))).toEqual({ kind: "invalid" });
+    }
+  });
+
+  it("refuses a scoped Markdown export containing another book or unconfirmed records", () => {
+    const query = { ...baseQuery, catalogId: sampleItem.catalogId! };
+    expect(() => buildMarkdownExport([{ ...sampleItem, catalogId: "13000000_000000000002" }], { query })).toThrow(/不一致/);
+    expect(() => buildMarkdownExport([{ ...sampleItem, matched: false }], { query })).toThrow(/不一致/);
+    expect(() => buildMarkdownExport([sampleItem], { query: { ...query, catalogId: "" } })).toThrow(/筛选无效/);
+    expect(() => buildMarkdownExportFilename({ ...query, catalogId: undefined })).toThrow(/筛选无效/);
   });
 });
 

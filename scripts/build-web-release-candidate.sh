@@ -3,6 +3,18 @@
 # Build-once / deploy-same-image. This script does NOT deploy.
 set -euo pipefail
 
+# Release-only Web OAuth client ID preflight. Production VITE_S32_ENABLED=true
+# requires a configured Google Web Application OAuth client ID. The canonical
+# Google Identity Services example has a numeric project prefix, a lowercase
+# alphanumeric client token, and the exact .apps.googleusercontent.com host.
+# Length ranges permit known legitimate variants; this checks syntax, not
+# whether the ID is actually registered/authorized in Google Cloud.
+# Fail before checkout, Docker, image tagging or writing build artifacts.
+if [[ ! "${VITE_GOOGLE_CLIENT_ID-}" =~ ^[0-9]{6,20}-[a-z0-9]{8,128}[.]apps[.]googleusercontent[.]com$ ]]; then
+  printf '%s\n' '[build-web-release-candidate] STATUS=BLOCKED reason=INVALID_WEB_CLIENT_ID' >&2
+  exit 2
+fi
+
 APP_DIR="${BOOK_ID_SEARCH_REPO_ROOT:-/opt/book-id-search}"
 cd "$APP_DIR"
 
@@ -41,7 +53,7 @@ git archive "$FULL_SHA" | DOCKER_BUILDKIT=1 $DOCKER_SUDO docker build --no-cache
   -f apps/web/Dockerfile \
   --build-arg "SOURCE_COMMIT=$FULL_SHA" \
   --build-arg "VITE_S32_ENABLED=true" \
-  --build-arg "VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID:-}" \
+  --build-arg "VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID" \
   -t "$TAG" \
   - >"${OUT_DIR}/docker-build.log" 2>&1
 

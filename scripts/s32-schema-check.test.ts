@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, writeFileSync, rmSync, mkdirSync, existsSync, readFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import {
   checkInputs,
@@ -14,6 +14,8 @@ import {
   _resetContainerForTest,
   cleanup,
   postCleanupDecision,
+  applySchemaMigrationStages,
+  assertExistingRowsUnchanged,
 } from "./s32-schema-check";
 
 function makeTmpWithFiles(files: Record<string, string>): string {
@@ -77,6 +79,145 @@ describe("S32 harness: checkInputs() pre-flight", () => {
     expect(() => checkInputs(join(dir, "mig.sql"), [join(dir, "001.sql"), join(dir, "002.sql")]))
       .toThrow(/REQUIRED_FILE_EMPTY/);
     rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("S32 additive migrations preserve frozen checks and existing data", () => {
+  it("checks the exact M0 table set first and the current constraints after the complete chain", () => {
+    let tableCount = 0;
+    let resolutionConstraint = false;
+    const checkedTableCounts: number[] = [];
+    applySchemaMigrationStages(["m0", "m2e", "library"], {
+      apply(sql) {
+        if (sql === "m0") tableCount = 26;
+        if (sql === "m2e") resolutionConstraint = true;
+        if (sql === "library") tableCount += 3;
+      },
+      assertFiles(files) {
+        if (files.some(file => basename(file) === "001_s32_schema_assertions.sql")) {
+          // The frozen exact-table assertion must see the actual M0 schema.
+          expect(tableCount).toBe(26);
+          expect(resolutionConstraint).toBe(false);
+        } else {
+          expect(resolutionConstraint).toBe(true);
+          checkedTableCounts.push(tableCount);
+        }
+      },
+    });
+    expect(tableCount).toBe(29);
+    expect(checkedTableCounts).toEqual([29]);
+  });
+
+  it.each([2, 3, 4])("runs each real assertion/fixture file once per database with %i migrations", length => {
+    const migrations = ["m0", "m2e", "library", "later"].slice(0, length);
+    const counts = new Map<string, number>();
+    const applied: string[] = [];
+    applySchemaMigrationStages(migrations, {
+      apply(sql) { applied.push(sql); },
+      assertFiles(files) {
+        for (const file of files) {
+          const name = basename(file);
+          expect(readFileSync(file, "utf8").trim()).not.toBe("");
+          counts.set(name, (counts.get(name) ?? 0) + 1);
+          if (name === "001_s32_schema_assertions.sql") {
+            expect(applied).toEqual(["m0"]);
+          } else {
+            expect(applied).toEqual(migrations);
+          }
+          // The old negative SQL commits fixed sources/notes fixture IDs.
+          // A second execution on this database would raise a duplicate key.
+          if (name === "002_s32_negative_invariants.sql" && counts.get(name)! > 1) {
+            throw new Error("duplicate key value violates unique constraint sources_pkey");
+          }
+        }
+      },
+    });
+    expect(Object.fromEntries(counts)).toEqual({
+      "001_s32_schema_assertions.sql": 1,
+      "002_s32_negative_invariants.sql": 1,
+      "003_s32_m2e_schema_assertions.sql": 1,
+      "004_s32_m2e_negative_invariants.sql": 1,
+    });
+  });
+
+  it("does not apply later migrations when the frozen structural check fails", () => {
+    const applied: string[] = [];
+    expect(() => applySchemaMigrationStages(["m0", "m2e", "library"], {
+      apply: sql => { applied.push(sql); },
+      assertFiles() { throw new Error("M0_FOREIGN_KEY_MISSING"); },
+    })).toThrow("M0_FOREIGN_KEY_MISSING");
+    expect(applied).toEqual(["m0"]);
+  });
+
+  it("rejects an additive migration that breaks an existing constraint", () => {
+    let constraintPresent = false;
+    expect(() => applySchemaMigrationStages(["m0", "m2e", "broken-addition"], {
+      apply(sql) {
+        if (sql === "m2e") constraintPresent = true;
+        if (sql === "broken-addition") constraintPresent = false;
+      },
+      assertFiles(files) {
+        if (files.some(file => basename(file) === "003_s32_m2e_schema_assertions.sql") && !constraintPresent) {
+          throw new Error("EXISTING_CONSTRAINT_MISSING");
+        }
+      },
+    })).toThrow("EXISTING_CONSTRAINT_MISSING");
+  });
+
+  const original = {
+    "core.projects": [{ id: "project-1", title: "Existing research" }],
+    "core.note_revisions": [{ id: "revision-1", content: "Existing note", created_at: "2026-09-01T00:00:00Z" }],
+    "ops.idempotency_keys": [{ id: "receipt-1", status: "COMPLETED" }],
+  };
+  const before = JSON.stringify(original);
+
+  it("allows and reports added tables without weakening old row equality", () => {
+    const after = JSON.stringify({
+      ...original,
+      "core.library_books": [],
+      "core.library_book_notes": [],
+      "core.library_book_resources": [],
+    });
+    expect(assertExistingRowsUnchanged(before, after)).toEqual([
+      "core.library_book_notes", "core.library_book_resources", "core.library_books",
+    ]);
+  });
+
+  it("compares every original table even when new tables were added", () => {
+    const after = JSON.stringify({
+      ...original,
+      "core.note_revisions": [{ ...original["core.note_revisions"][0], content: "changed" }],
+      "core.library_books": [],
+    });
+    expect(() => assertExistingRowsUnchanged(before, after))
+      .toThrow("UPGRADE_EXISTING_ROWS_CHANGED: core.note_revisions");
+  });
+
+  it("rejects missing original tables including previously empty tables", () => {
+    const old = JSON.stringify({ ...original, "core.notes": [] });
+    expect(() => assertExistingRowsUnchanged(old, before))
+      .toThrow("UPGRADE_EXISTING_TABLE_MISSING: core.notes");
+  });
+
+  it("rejects extra rows in an existing table", () => {
+    const after = JSON.stringify({
+      ...original,
+      "core.projects": [...original["core.projects"], { id: "project-2", title: "Unexpected" }],
+    });
+    expect(() => assertExistingRowsUnchanged(before, after))
+      .toThrow("UPGRADE_EXISTING_ROWS_CHANGED: core.projects");
+  });
+
+  it("accepts unchanged rows independently of snapshot table-key order", () => {
+    const after = JSON.stringify(Object.fromEntries(Object.entries(original).reverse()));
+    expect(assertExistingRowsUnchanged(before, after)).toEqual([]);
+  });
+
+  it("rejects invalid table identities or malformed row sets even for an added table", () => {
+    for (const addition of [{ "public.unrelated": [] }, { "core.library_books;drop": [] }, { "core.library_books": {} }]) {
+      expect(() => assertExistingRowsUnchanged(before, JSON.stringify({ ...original, ...addition })))
+        .toThrow("UPGRADE_TABLE_SET_INVALID");
+    }
   });
 });
 
@@ -220,13 +361,12 @@ describe("S32 harness: import-only isolation (subprocess)", () => {
     const env = Object.assign({}, process.env, {
       PATH: mockBin + ":" + (process.env.PATH || ""),
     });
-    const tsx = resolve(process.cwd(), "node_modules/.bin/tsx");
-
     let stdout = "";
     let stderr = "";
     let exitCode = 0;
     try {
-      stdout = execFileSync(tsx, [importScript], {
+      // Exercise the real tsx loader without the CLI's unrelated IPC listener.
+      stdout = execFileSync(process.execPath, ["--import", "tsx", importScript], {
         encoding: "utf8",
         env: env,
         cwd: process.cwd(),

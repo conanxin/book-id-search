@@ -72,6 +72,7 @@ describe("WereadCenter Google session integration (Task 9 §十)", () => {
     mount();
     expect(await screen.findByTestId("google-login-panel")).toBeTruthy();
     expect(screen.queryByTestId("weread-kpi-grid")).toBeNull();
+    expect(screen.queryByRole("link", { name: "管理书籍关联" })).toBeNull();
   });
 
   it("16 old private-token input/copy absent (logged-out)", async () => {
@@ -104,6 +105,7 @@ describe("WereadCenter Google session integration (Task 9 §十)", () => {
     mount();
     expect(await screen.findByTestId("weread-kpi-grid")).toBeTruthy();
     expect(mocks.fetchWereadSummary).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("link", { name: "管理书籍关联" }).getAttribute("href")).toBe("/weread/bindings");
   });
 
   it("18 authenticated summary called with no token argument", async () => {

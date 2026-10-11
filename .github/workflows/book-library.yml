@@ -1,0 +1,107 @@
+name: Book library PostgreSQL and browser
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: book-library-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  library:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: library_schema_owner
+          POSTGRES_PASSWORD: library-admin-test-only
+          POSTGRES_DB: s32_library_test
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U library_schema_owner -d s32_library_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      S32_LIBRARY_TEST_DATABASE_URL: postgresql://s32_app:library-app-test-only@127.0.0.1:5432/s32_library_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install frozen workspace dependencies
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+          pnpm install --frozen-lockfile
+      - name: Apply schema and verify new-table grants to the existing runtime role
+        env:
+          PGPASSWORD: library-admin-test-only
+        run: |
+          set -euo pipefail
+          psql -X -h 127.0.0.1 -U library_schema_owner -d s32_library_test -v ON_ERROR_STOP=1 -f db/migrations/001_s32_core_schema.sql
+          psql -X -h 127.0.0.1 -U library_schema_owner -d s32_library_test -v ON_ERROR_STOP=1 -f db/migrations/002_s32_m2e_issue_resolution.sql
+          psql -X -h 127.0.0.1 -U library_schema_owner -d s32_library_test -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE s32_app LOGIN PASSWORD 'library-app-test-only' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
+          GRANT CONNECT ON DATABASE s32_library_test TO s32_app;
+          GRANT USAGE ON SCHEMA core, ops, derived TO s32_app;
+          GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA core, ops TO s32_app;
+          SQL
+          psql -X -h 127.0.0.1 -U library_schema_owner -d s32_library_test -v ON_ERROR_STOP=1 -f db/migrations/003_book_library.sql
+          psql -X -h 127.0.0.1 -U library_schema_owner -d s32_library_test -v ON_ERROR_STOP=1 -f db/migrations/004_weread_binding_overrides.sql
+      - name: Real PostgreSQL application-role contracts
+        run: >-
+          pnpm exec vitest run
+          apps/api/src/auth/google-owner-request.test.ts
+          apps/api/src/ai/book-assistant.test.ts
+          apps/api/src/ai/book-assistant-routes.test.ts
+          apps/api/src/ai/minimax.test.ts
+          apps/api/src/search/related-books.test.ts
+          apps/api/src/s32/domain/book-library.test.ts
+          apps/api/src/s32/application/book-library.test.ts
+          apps/api/src/s32/routes/book-library-routes.test.ts
+          apps/api/src/s32/postgres/book-library-store.integration.test.ts
+          apps/api/src/weread/manual-bindings.test.ts
+          apps/api/src/weread/manual-binding-routes.test.ts
+          apps/api/src/weread/manual-bindings.integration.test.ts
+          apps/api/src/weread/private-overlay.test.ts
+          apps/web/src/library
+          apps/web/src/api-session.test.ts
+          apps/web/src/components/SiteFooter.test.ts
+          apps/web/src/p1a-book-detail-route.test.tsx
+          apps/web/src/weread/SearchDetailWereadSession.test.tsx
+          apps/web/src/wereadBookNotes.test.ts
+          apps/web/src/wereadBindings.test.ts
+          apps/web/src/wereadPrivate.test.ts
+          apps/web/src/wereadPrivateSession.test.ts
+          apps/web/src/weread/WereadBindingsPage.test.tsx
+          apps/web/src/weread/WereadCenterBookScope.test.tsx
+          scripts/book-browser-fixtures.test.ts
+          scripts/book-ai-live-trial.test.ts
+          scripts/s32-migration-chain.test.ts
+          scripts/s32-schema-check.test.ts
+          scripts/s32-schema-contract.test.ts
+      - name: Build API and web
+        run: |
+          pnpm --filter @book-id-search/api build
+          pnpm --filter @book-id-search/web build
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Real browser content journey and Google-session boundary
+        env:
+          BOOK_LIBRARY_BROWSER_SCOPE: all
+        run: pnpm exec playwright test --config playwright.book-library.config.ts
+      - name: Save browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: book-library-browser-evidence
+          path: |
+            test-results/book-library
+            test-results/book-library-report
+          if-no-files-found: ignore

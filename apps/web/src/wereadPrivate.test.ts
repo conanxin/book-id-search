@@ -624,21 +624,9 @@ describe("wereadPrivate S27F catalogId + per-book pagination", () => {
     expect(call[0]).toContain("catalogId=13000000_000000000001");
   });
 
-  it("fetchWereadNotes does NOT forward a malformed catalogId", async () => {
-    fetchMock.mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          ok: true,
-          items: [],
-          pageInfo: { limit: 50, offset: 0, total: 0, hasMore: false },
-          summary: { totalAfterFilter: 0, highlights: 0, thoughts: 0, reviews: 0, unknown: 0, matchedCount: 0, unmatchedCount: 0 },
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } }
-      )
-    );
-    await fetchWereadNotes({ catalogId: "garbage" });
-    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(call[0]).not.toContain("catalogId=");
+  it("fetchWereadNotes rejects a malformed catalogId without fetching the whole library", async () => {
+    await expect(fetchWereadNotes({ catalogId: "garbage" })).rejects.toMatchObject({ status: 400 });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("fetchWereadNotes trims whitespace before sending catalogId", async () => {

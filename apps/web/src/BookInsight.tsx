@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   Sparkles,
   AlertCircle,
@@ -36,7 +36,6 @@ import {
  */
 export default function BookInsightSection({ bookId }: { bookId: string }) {
   const navigate = useNavigate();
-  const [, setSearchParams] = useSearchParams();
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [data, setData] = useState<BookInsightResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -86,7 +85,7 @@ export default function BookInsightSection({ bookId }: { bookId: string }) {
   }
 
   function switchToNormalSearch(q: string) {
-    setSearchParams({ q });
+    navigate(`/?${new URLSearchParams({ q })}`);
   }
 
   return (

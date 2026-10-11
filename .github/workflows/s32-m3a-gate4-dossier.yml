@@ -1,0 +1,72 @@
+name: S32 M3-A Gate 4 Dossier verification
+
+on:
+  push:
+    branches:
+      - feat/s32-m3a-gate4-dossier
+
+jobs:
+  dossier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+      - name: Install workspace
+        run: pnpm install --frozen-lockfile
+      - name: Dossier focused tests
+        run: |
+          pnpm exec vitest run \
+            apps/web/src/research/dossier-model.test.ts \
+            apps/web/src/research/dossier-reader.test.ts \
+            apps/web/src/research/dossier-reader.reentrancy.test.ts \
+            apps/web/src/research/dossier-reader.integration.test.ts \
+            apps/web/src/research/dossier-page.test.tsx
+      - name: Full Research scoped regression
+        run: pnpm exec vitest run apps/web/src/research
+      - name: S32 API scoped regression
+        run: pnpm exec vitest run apps/api/src/s32
+      - name: API build
+        run: pnpm --filter @book-id-search/api build
+      - name: Web build
+        run: pnpm --filter @book-id-search/web build
+      - name: Diff check
+        run: git diff --check HEAD^ HEAD
+
+  browser-pg16:
+    name: Disposable PG16 + real Chromium Dossier
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+      - name: Install workspace
+        run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Real PostgreSQL16 and real-browser Dossier acceptance
+        run: pnpm exec tsx scripts/s32-m3a-gate4-browser-check.ts
+      - name: Upload browser acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate4-dossier-browser
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7

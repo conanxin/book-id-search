@@ -1,0 +1,15 @@
+.book-related-panel { scroll-margin-top: 24px; }
+.book-related-panel .library-section-heading h2 { margin: 4px 0 0; }
+.book-related-panel .library-section-heading > .library-meta { flex-shrink: 0; margin: 0; }
+.book-related-list { display: grid; gap: 16px; margin-top: 22px; }
+.book-related-list .book-card { border-radius: 10px; padding: 20px; }
+.book-related-list .book-card:hover { border-color: var(--color-primary); }
+.book-related-list .book-card__main h2 { margin: 0; font-size: 1.05rem; line-height: 1.55; }
+.book-related-reasons { display: flex; flex-wrap: wrap; gap: 7px; list-style: none; padding: 0; margin: 12px 0 0; }
+.book-related-reason { padding: 4px 9px; border-radius: 6px; background: var(--color-bg-soft); color: var(--color-primary-strong); font-size: 12px; line-height: 1.5; }
+.book-related-loading { display: flex; align-items: center; gap: 8px; margin-top: 20px; }
+.book-related-partial { margin: 18px 0 0; padding: 12px 14px; border: 1px solid var(--color-warn-border); border-radius: 8px; background: var(--color-warn-bg); color: var(--color-warn-text); font-size: 0.875rem; line-height: 1.75; }
+.book-related-panel .library-error { margin-top: 18px; }
+@media (max-width: 680px) {
+  .book-related-list .book-card { padding: 16px; }
+}

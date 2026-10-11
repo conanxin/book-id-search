@@ -8,6 +8,7 @@ import {
   getWereadStatusByCatalogId,
   getWereadStatusesByCatalogIds,
   getWereadSummary,
+  getWereadConfirmedMatches,
   loadWereadOverlay,
   setWereadOverlayCacheTtl,
 } from "./private-overlay.js";
@@ -199,6 +200,38 @@ describe("private-overlay", () => {
     const d1 = loadWereadOverlay(tmpDir);
     const d2 = loadWereadOverlay(tmpDir);
     expect(d1).toBe(d2);
+  });
+
+  it("invalidates cached data immediately when an import file is replaced", () => {
+    writeFixture("derived/latest/weread-matches.confirmed.json", [{ wereadBookId: "a", catalogId: "1_000000000001" }]);
+    setWereadOverlayCacheTtl(60_000);
+    const initial = loadWereadOverlay(tmpDir);
+    const replacement = path.join(tmpDir, "new-import.json");
+    fs.writeFileSync(replacement, JSON.stringify([{ wereadBookId: "a", catalogId: "2_000000000002" }]));
+    fs.renameSync(replacement, path.join(tmpDir, "derived/latest/weread-matches.confirmed.json"));
+    const updated = loadWereadOverlay(tmpDir);
+    expect(updated).not.toBe(initial);
+    expect(getWereadConfirmedMatches(updated)[0].catalogId).toBe("2_000000000002");
+  });
+
+  it("does not reuse cached private data for a different snapshot directory", () => {
+    writeFixture("snapshots/latest/weread-books.snapshot.json", [{ wereadBookId: "private-a" }]);
+    setWereadOverlayCacheTtl(60_000);
+    expect(loadWereadOverlay(tmpDir).books.size).toBe(1);
+    expect(loadWereadOverlay(path.join(tmpDir, "other-source")).books.size).toBe(0);
+    expect(loadWereadOverlay(tmpDir).books.size).toBe(1);
+  });
+
+  it("aggregates several source books for the same catalog without losing or double counting a source", () => {
+    const id = "1_000000000001";
+    writeFixture("snapshots/latest/weread-notes.snapshot.json", [{ wereadBookId: "a", type: "highlight" }, { wereadBookId: "b", type: "thought" }]);
+    writeFixture("derived/latest/weread-matches.confirmed.json", [
+      { wereadBookId: "a", catalogId: id }, { wereadBookId: "b", catalogId: id }, { wereadBookId: "a", catalogId: id },
+    ]);
+    const data = loadWereadOverlay(tmpDir);
+    expect(getWereadConfirmedMatches(data)).toHaveLength(2);
+    expect(getWereadSummary(data)).toMatchObject({ confirmedMatchesCount: 2, totalConfirmedNoteRecords: 2 });
+    expect(getWereadStatusByCatalogId(data, id).weread).toMatchObject({ matchedRecordsCount: 2, notesSummary: { total: 2 } });
   });
 });
 
