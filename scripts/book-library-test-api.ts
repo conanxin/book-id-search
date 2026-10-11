@@ -5,6 +5,8 @@
  * synthetic, confirmed books; manual bindings use the production router,
  * effective-data service and PostgreSQL store. Book AI uses the production
  * collector, prompt/parser and router with one deterministic provider injection.
+ * Related books use the production collector with a synthetic field-search
+ * adapter; this exercises relation evidence, not Meilisearch relevance.
  * External catalog/MiniMax/WeRead and Google OAuth services are not exercised.
  */
 import { createRequire } from "node:module";
@@ -26,6 +28,7 @@ import { createPostgresBookLibraryStore } from "../apps/api/src/s32/postgres/boo
 import { createBookAssistantService } from "../apps/api/src/ai/book-assistant.js";
 import { createBookAssistantRouter } from "../apps/api/src/ai/book-assistant-routes.js";
 import type { ChatMessage, ChatCompletionResponse } from "../apps/api/src/ai/minimax.js";
+import { collectRelatedBooks } from "../apps/api/src/search/related-books.js";
 
 // Express/pg are owned by the API workspace, not new root dependencies.
 const apiRequire = createRequire(new URL("../apps/api/package.json", import.meta.url));
@@ -175,10 +178,24 @@ app.get("/api/books/:id", (req: TestRequest, res: TestResponse) => {
   if (!found) return void res.status(404).json({ error: { message: "Synthetic book not found" } });
   res.json({ item: found });
 });
-app.get("/api/books/:id/related", (req: TestRequest, res: TestResponse) => {
-  const group = isAiBook(String(req.params.id)) ? aiBooks : libraryBooks;
-  const items = book(String(req.params.id)) ? group.filter(item => item.id !== req.params.id) : [];
-  res.json({ total: items.length, items });
+app.get("/api/books/:id/related", async (req: TestRequest, res: TestResponse) => {
+  const id = String(req.params.id);
+  const source = book(id);
+  if (!source) return void res.status(404).json({ error: { message: "Synthetic book not found" } });
+  const group = isAiBook(id) ? aiBooks : libraryBooks;
+  // Keep the original isolated catalog groups. This field-only in-memory
+  // adapter replaces Meili transport while collection/ranking/reasons are real.
+  const normalize = (value: string) => value.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
+  try {
+    const result = await collectRelatedBooks(source, async (query, options) => ({
+      hits: group.filter(item => options.attributesToSearchOn.some(field =>
+        normalize(String(item[field] ?? "")).includes(normalize(query))))
+        .slice(0, options.limit),
+    }));
+    res.json(result);
+  } catch {
+    res.status(503).json({ error: { message: "Synthetic related catalog unavailable" } });
+  }
 });
 app.get("/api/ai/status", (_req: TestRequest, res: TestResponse) => res.json({ enabled: false }));
 app.post("/api/ai/book-insight", (_req: TestRequest, res: TestResponse) => res.status(503).json({ error: { message: "AI disabled in this deterministic browser fixture." } }));

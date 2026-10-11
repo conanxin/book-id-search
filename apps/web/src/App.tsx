@@ -19,7 +19,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { getBook, getRelatedBooks, getStats, searchBooks, type Book, type MatchInfo, type SearchResponse, type StatsResponse } from "./api";
+import { getBook, getStats, searchBooks, type Book, type BookRelation, type MatchInfo, type SearchResponse, type StatsResponse } from "./api";
 import { EDITION_COMPARE_MAX, EditionComparePanel, toggleEditionCompareSelection } from "./EditionCompare";
 import { detailMatchInfo, isExactMatch, matchBadgeLabel, matchBadgeVariant, parseStatusNarrative, explainParseWarnings } from "./match-ui";
 import AiSearchPanel from "./AiSearchPanel";
@@ -35,6 +35,7 @@ import { AppShell, AccountPage } from "./components/AppShell";
 import { RequireGoogle } from "./components/RequireGoogle";
 import { BookWorkspace } from "./library/BookWorkspace";
 import { BookWereadNotes } from "./library/BookWereadNotes";
+import { BookRelatedBooks } from "./library/BookRelatedBooks";
 import { LibraryPage } from "./library/LibraryPage";
 import { ResearchMembershipChips, useSearchMemberships, type MembershipLoadState } from "./research/SearchMemberships";
 import type { ResearchMembership } from "./research/api";
@@ -471,6 +472,7 @@ function BookCard({
   memberships = [],
   membershipState = "unauthenticated",
   onMembershipRefresh,
+  relations,
 }: {
   book: Book;
   query: string;
@@ -480,6 +482,7 @@ function BookCard({
   memberships?: ResearchMembership[];
   membershipState?: MembershipLoadState;
   onMembershipRefresh?: () => void;
+  relations?: BookRelation[];
 }) {
   const exact = isExactMatch(book.match);
   return (
@@ -499,6 +502,9 @@ function BookCard({
             <MatchBadge match={book.match} />
             <WereadBadge status={weread} compact />
           </div>
+          {!!relations?.length && <ul className="book-related-reasons" aria-label="与本书的关联线索">
+            {relations.slice(0, 2).map(relation => <li className="book-related-reason" key={relation.kind}>{relation.label}</li>)}
+          </ul>}
         </div>
         <div className="book-grid">
           <Field label="出版社" value={book.publisher} highlight query={query} />
@@ -1150,11 +1156,8 @@ function DetailPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const [book, setBook] = useState<Book | null>(null);
-  const [related, setRelated] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [relatedError, setRelatedError] = useState(false);
-  const [relatedRetry, setRelatedRetry] = useState(0);
   const [wereadStatus, setWereadStatus] = useState<WereadStatus | null>(null);
   const [wereadLoading, setWereadLoading] = useState(false);
   const session = useWebAuthSession();
@@ -1178,16 +1181,6 @@ function DetailPage() {
       });
     return () => { cancelled = true; };
   }, [id]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setRelated([]);
-    setRelatedError(false);
-    void getRelatedBooks(id)
-      .then((result) => { if (!cancelled) setRelated(result.items); })
-      .catch(() => { if (!cancelled) setRelatedError(true); });
-    return () => { cancelled = true; };
-  }, [id, relatedRetry]);
 
   // Load WeRead status for the detail page book when the session is
   // authenticated (Task 9). Unauthenticated/logout drops the badge.
@@ -1302,21 +1295,7 @@ function DetailPage() {
             )}
           </details>
 
-          <section id="related-books">
-            <h2>相关图书</h2>
-            {relatedError ? <p role="status" className="research-muted">
-              相关图书暂时无法加载，不影响当前书目信息。
-              <button type="button" className="toolbar-button" onClick={() => setRelatedRetry(value => value + 1)}>重试相关图书</button>
-            </p> : related.length ? (
-              <div className="related-list">
-                {related.map((item) => (
-                  <BookCard key={item.id} book={item} query="" />
-                ))}
-              </div>
-            ) : (
-              <div className="state">暂无相关图书。</div>
-            )}
-          </section>
+          <BookRelatedBooks bookId={book.id} renderBook={item => <BookCard book={item} query="" relations={item.relations} />} />
 
           {researchEnabled ? <details className="book-secondary" data-testid="book-research-tools">
             <summary>专题研究与原有资料</summary>

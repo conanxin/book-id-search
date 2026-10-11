@@ -77,6 +77,33 @@ export interface SearchResponse {
   items: Book[];
 }
 
+export type BookRelationKind =
+  | "same_isbn"
+  | "same_title"
+  | "title_query"
+  | "same_author"
+  | "author_query"
+  | "same_publisher"
+  | "publisher_query";
+
+export interface BookRelation {
+  kind: BookRelationKind;
+  label: string;
+}
+
+export interface RelatedBook extends Book {
+  // Older API responses have no relation metadata; never infer it in the UI.
+  relations?: BookRelation[];
+}
+
+export interface RelatedBooksResponse {
+  total: number;
+  items: RelatedBook[];
+  sourceBookId?: string;
+  partial?: boolean;
+  unavailableFields?: Array<"isbn" | "title" | "author" | "publisher">;
+}
+
 export interface ImportReportSummary {
   imported?: number;
   totalLines?: number;
@@ -127,8 +154,8 @@ export function getBook(id: string) {
   return requestJson<{ item: Book }>(`/books/${encodeURIComponent(id)}`);
 }
 
-export function getRelatedBooks(id: string) {
-  return requestJson<{ total: number; items: Book[] }>(`/books/${encodeURIComponent(id)}/related`);
+export function getRelatedBooks(id: string, options?: { signal?: AbortSignal }) {
+  return requestJson<RelatedBooksResponse>(`/books/${encodeURIComponent(id)}/related`, options);
 }
 
 export function getStats() {

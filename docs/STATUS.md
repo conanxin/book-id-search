@@ -1,5 +1,14 @@
 # BOOK-ID-SEARCH status
 
+## 2026-10-11 — Explainable related books
+
+- `task_id=BOOK_CENTERED_RELATED_DISCOVERY_V1`; continues Draft [#72](https://github.com/conanxin/book-id-search/pull/72) from `c9a39cb`.
+- Replaces cumulative early-stop discovery with independent bounded ISBN/title/author/publisher candidate reads and a stable unified order. Title candidates are considered before publisher-only suggestions; the current book and duplicate IDs are removed.
+- Related cards explain the actual catalog-field relationship separately from search match badges. The section distinguishes loading, empty, partial and failed results and keeps retry and book/session boundaries.
+- Reuses the shared book UI and Google-protected route; no AI requests, private-note access, content writes, dependency or migration changes.
+- Contract: [Related books v1](development/BOOK_RELATED_DISCOVERY_V1.md). Exact-head tests and browser evidence are maintained in PR #72. The registered local desktop is offline; real-provider trial and Tencent release remain pending on the configured environment.
+- Development candidate only; no merge, image publication or Tencent deployment.
+
 ## 2026-10-11 — Real-provider compatibility and live trial entry
 
 - `task_id=BOOK_CENTERED_AI_REAL_PROVIDER_READINESS_R1`; continues Draft [#72](https://github.com/conanxin/book-id-search/pull/72) from `9645283`.

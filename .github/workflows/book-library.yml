@@ -61,6 +61,7 @@ jobs:
           apps/api/src/ai/book-assistant.test.ts
           apps/api/src/ai/book-assistant-routes.test.ts
           apps/api/src/ai/minimax.test.ts
+          apps/api/src/search/related-books.test.ts
           apps/api/src/s32/domain/book-library.test.ts
           apps/api/src/s32/application/book-library.test.ts
           apps/api/src/s32/routes/book-library-routes.test.ts

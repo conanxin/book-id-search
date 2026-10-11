@@ -1,7 +1,8 @@
 /**
  * Real Chromium → Vite → production auth/library router → real PostgreSQL.
- * Only the catalog has two synthetic records. The session is signed with the
- * real session implementation; actual Google OAuth is intentionally untested.
+ * Catalog records are synthetic. Related-book collection uses the production
+ * implementation with an in-memory search adapter. The session is signed with
+ * the real session implementation; actual Google OAuth and Meili are untested.
  */
 import { createRequire } from "node:module";
 import { expect, test, type Page } from "@playwright/test";
@@ -51,7 +52,9 @@ test("signed owner session saves introduction, notes and resource through the UI
   const pageErrors: string[] = [];
   page.on("pageerror", error => pageErrors.push(error.message));
   await testInfo.attach("verification-scope.json", {
-    body: JSON.stringify({ catalog: "two synthetic books", persistence: "real PostgreSQL", role: "s32_app", authentication: "real signed session + CSRF", actualGoogleOAuth: "NOT_EXERCISED" }, null, 2),
+    body: JSON.stringify({ catalog: "two synthetic books", relatedBooks: "production collector + synthetic field-search adapter",
+      actualMeilisearch: "NOT_EXERCISED", persistence: "real PostgreSQL", role: "s32_app",
+      authentication: "real signed session + CSRF", actualGoogleOAuth: "NOT_EXERCISED" }, null, 2),
     contentType: "application/json",
   });
   await page.goto(`/books/${A}`);
@@ -61,10 +64,40 @@ test("signed owner session saves introduction, notes and resource through the UI
     secret: "book-library-synthetic-session-secret-for-local-ci-only",
   });
   await context.addCookies([{ name: "book_id_search_session_dev", value: token, url: WEB, httpOnly: true, sameSite: "Lax" }]);
+  const initialRelated = page.waitForResponse(response => new URL(response.url()).pathname === `/api/books/${A}/related`);
   await page.reload();
   await expect(page).toHaveURL(`/books/${A}`);
   await expect(page.getByRole("heading", { name: TITLE_A, exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: `查看 ${TITLE_B} 详情`, exact: true })).toBeVisible();
+  expect(await (await initialRelated).json()).toMatchObject({
+    sourceBookId: A, total: 1, partial: false, unavailableFields: [],
+    items: [{ id: B, relations: expect.arrayContaining([{ kind: "same_isbn", label: "ISBN 相同" }]) }],
+  });
+  const related = page.locator("#related-books");
+  const relatedBookB = related.getByRole("link", { name: `查看 ${TITLE_B} 详情`, exact: true });
+  await expect(relatedBookB).toBeVisible();
+  await expect(related.getByText("ISBN 相同", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  await related.screenshot({ path: testInfo.outputPath("book-related-desktop.png") });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(relatedBookB).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  await related.screenshot({ path: testInfo.outputPath("book-related-mobile.png") });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+
+  const nextRelated = page.waitForResponse(response => new URL(response.url()).pathname === `/api/books/${B}/related`);
+  await relatedBookB.click();
+  await expect(page).toHaveURL(`/books/${B}`);
+  await expect(page.getByRole("heading", { name: TITLE_B, exact: true })).toBeVisible();
+  expect(await (await nextRelated).json()).toMatchObject({ sourceBookId: B, items: [{ id: A }] });
+  await expect(related.getByRole("link", { name: `查看 ${TITLE_A} 详情`, exact: true })).toBeVisible();
+  await expect(related.getByRole("link", { name: `查看 ${TITLE_B} 详情`, exact: true })).toHaveCount(0);
+  const returningRelated = page.waitForResponse(response => new URL(response.url()).pathname === `/api/books/${A}/related`);
+  await page.goBack();
+  await expect(page).toHaveURL(`/books/${A}`);
+  expect(await (await returningRelated).json()).toMatchObject({ sourceBookId: A, items: [{ id: B }] });
+  await expect(page.getByRole("heading", { name: TITLE_A, exact: true })).toBeVisible();
+  await expect(relatedBookB).toBeVisible();
+  await expect(related.getByRole("link", { name: `查看 ${TITLE_A} 详情`, exact: true })).toHaveCount(0);
   const denied = await page.request.put(`/api/private/s32/library/books/${B}`, {
     headers: { Origin: WEB, "X-CSRF-Token": "invalid-test-csrf" }, data: { introduction: "must not save", baseVersion: 0 },
   });

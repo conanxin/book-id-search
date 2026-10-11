@@ -78,6 +78,7 @@ import { createBookLibraryBodyParser } from "./s32/routes/book-library-routes.js
 import { createPostgresBookLibraryStore } from "./s32/postgres/book-library-store.js";
 import { createBookAssistantService } from "./ai/book-assistant.js";
 import { createBookAssistantRouter } from "./ai/book-assistant-routes.js";
+import { collectRelatedBooks, RelatedBooksUnavailableError, relatedSourceReadError } from "./search/related-books.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(currentDir, "../../../");
@@ -723,24 +724,6 @@ app.get("/api/books/:id", async (req, res) => {
   }
 });
 
-async function addRelated(
-  target: BookDocument[],
-  seen: Set<string>,
-  source: BookDocument,
-  query: string,
-  attributesToSearchOn: string[],
-  maxItems: number
-) {
-  if (!query || target.length >= maxItems) return;
-  const result = await index.search(query, { limit: maxItems * 4, attributesToSearchOn });
-  for (const hit of result.hits) {
-    if (hit.id === source.id || seen.has(hit.id)) continue;
-    target.push(hit);
-    seen.add(hit.id);
-    if (target.length >= maxItems) return;
-  }
-}
-
 app.get("/api/private/weread/summary", async (_req: Request, res: Response) => {
   const auth = authorizeWereadRouteRequest(_req, wereadRequestAuthorizer);
   if (!auth.ok) {
@@ -1310,27 +1293,17 @@ app.post(
 );
 
 app.get("/api/books/:id/related", async (req, res) => {
+  let book: BookDocument;
   try {
-    const book = await index.getDocument(req.params.id);
-    const related: BookDocument[] = [];
-    const seen = new Set<string>();
-
-    if (book.isbn) {
-      const isbnHits = await exactSearch(book.isbn, 20);
-      for (const hit of isbnHits) {
-        if (hit.id === book.id || seen.has(hit.id)) continue;
-        related.push(hit);
-        seen.add(hit.id);
-      }
-    }
-
-    await addRelated(related, seen, book, book.author, ["author"], 10);
-    await addRelated(related, seen, book, book.publisher, ["publisher"], 10);
-    await addRelated(related, seen, book, book.title.slice(0, 18), ["title"], 10);
-
-    res.json({ total: related.length, items: related.slice(0, 10) });
+    book = await index.getDocument(req.params.id);
   } catch (error) {
-    sendError(res, 404, "获取相关图书失败。", error);
+    const { status, message } = relatedSourceReadError(error);
+    return sendError(res, status, message);
+  }
+  try {
+    res.json(await collectRelatedBooks(book, (query, options) => index.search(query, options)));
+  } catch (error) {
+    sendError(res, error instanceof RelatedBooksUnavailableError ? 503 : 500, "相关图书检索暂不可用，请稍后重试。");
   }
 });
 
