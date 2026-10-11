@@ -1,5 +1,13 @@
 # BOOK-ID-SEARCH status
 
+## 2026-10-11 — Keep book AI separate from personal content
+
+- `task_id=BOOK_AI_READONLY_SIDEBAR`; branch `fix/book-ai-readonly-sidebar`, based on PR [#72](https://github.com/conanxin/book-id-search/pull/72) merge `ccccead6079b124dc9e49801151dbe220f1d4c5f`. The user's release receipt confirms that baseline API/Web and migrations003/004 are deployed.
+- Moves the book AI assistant beside the main article, with a floating panel on narrow screens. Reference introduction, note summary and source-grounded answers offer read-only rendering, source inspection, copy and clear.
+- Removes AI introduction/note save actions and all writer/reload callbacks. Existing saved content and unfinished manual editors stay independent; late generation/clipboard completion cannot steal manual-editor focus or revive a prior result.
+- Targeted component tests and the existing two Chromium/PG journeys cover zero library writes, unchanged persisted records and manual drafts, ordinary manual saves, actual clipboard content, book/session cancellation and responsive layout. Current-head results belong in this fix's PR.
+- Contract: [Book AI assistant](development/BOOK_AI_ASSISTANT_V1.md). This is a Web-only development candidate; no new migration, model call, merge or Tencent deployment in this task. Refresh old open pages after the separately authorized Web update.
+
 ## 2026-10-11 — Prepare one real-book trial and the cumulative release
 
 - `task_id=BOOK_CENTERED_RELEASE_PREP_R1`; reviews Draft [#72](https://github.com/conanxin/book-id-search/pull/72) at `7d71e79` against `main` `42cf1b7`.

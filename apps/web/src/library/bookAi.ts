@@ -73,7 +73,7 @@ function count(value: unknown): value is number {
 }
 function text(value: unknown, max: number): value is string {
   if (typeof value !== "string" || !value.trim() || value.length > max || value.includes("\0")) return false;
-  // The editable result must remain representable by the existing PG save API.
+  // Reject malformed Unicode before rendering or copying the result.
   for (let i = 0; i < value.length; i++) {
     const code = value.charCodeAt(i);
     if (code >= 0xd800 && code <= 0xdbff) {
@@ -150,7 +150,7 @@ function requireCurrent(generation: number, signal?: AbortSignal): void {
   }
 }
 
-/** Generates a transient draft. Saving is an explicit, separate library action. */
+/** Generates a transient result without writing to the book's personal content. */
 export async function generateBookAi(bookId: string, value: BookAiInput, signal?: AbortSignal): Promise<BookAiResponse> {
   if (!bookIdValid(bookId)) throw new BookAiError(400, ERRORS[400]);
   const body = input(value), session = getWebAuthSnapshot(), generation = getWebAuthAuthGeneration();
@@ -187,16 +187,16 @@ function oneLine(value: string): string {
   return value.replace(/\s+/g, " ").replace(/[\\`*_\[\]<>]/g, "\\$&");
 }
 
-/** All provenance is inserted before editing, so the saved body is fully visible. */
+/** Copyable text includes the cited source snapshots and generation time. */
 export function bookAiDraftContent(result: BookAiResponse): string {
   const request: BookAiInput = result.action === "question" ? { action: result.action, question: result.question ?? "" } : { action: result.action };
   if (!bookIdValid(result.bookId) || !validResponse(result, result.bookId, request)) throw new BookAiError(502, ERRORS[502]);
-  if (result.source !== "ai") throw new BookAiError(400, "请先补充本书资料，再生成可保存的草稿。");
+  if (result.source !== "ai") throw new BookAiError(400, "请先补充本书资料，再生成参考结果。");
   const cited = new Set(result.citedSourceIds);
   const references = result.sources.filter(source => cited.has(source.id)).map(source =>
     `[${source.id}] ${oneLine(source.label)}\n[查看来源](${source.href})\n\n${source.excerpt.split(/\r?\n/).map(line => `> ${line}`).join("\n")}`,
   ).join("\n\n");
   const draft = `${result.question ? `问题：${result.question}\n\n` : ""}${result.draft.content}\n\n---\n\n### 参考资料（生成时摘录）\n\n生成时间：${result.generatedAt}\n\n${references}`;
-  if (draft.length > 50000) throw new BookAiError(413, "草稿与引用摘录超过保存长度，请减少本次资料后重试。");
+  if (draft.length > 50000) throw new BookAiError(413, "结果与引用摘录过长，请减少本次资料后重试。");
   return draft;
 }

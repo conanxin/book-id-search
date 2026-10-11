@@ -1,7 +1,7 @@
 /**
  * Real Chromium → signed owner session + CSRF → production book AI collector,
- * parser and router. Only the model provider is deterministic. Explicit saves
- * use the existing production library router and real PostgreSQL as s32_app.
+ * parser and router. Only the model provider is deterministic. AI stays in a
+ * read-only sidebar; only the separate manual editors may write to PostgreSQL.
  * The second journey delays actual local responses to exercise stale delivery.
  */
 import { createHash } from "node:crypto";
@@ -30,7 +30,8 @@ const apiRequire = createRequire(new URL("../apps/api/package.json", import.meta
 const { Pool } = apiRequire("pg");
 const endpoint = (id: string) => `/api/ai/books/${id}/assistant`;
 const workspaceEndpoint = (id: string) => `/api/private/s32/library/books/${id}`;
-const assistant = (page: Page) => page.getByRole("region", { name: "本书 AI 助手", exact: true });
+const assistant = (page: Page) => page.getByRole("complementary", { name: "本书 AI 助手", exact: true });
+const aiResult = (page: Page) => assistant(page).getByRole("region", { name: "AI 参考结果", exact: true });
 const generationResponse = (id: string) => (response: BrowserResponse) =>
   new URL(response.url()).pathname === endpoint(id) && response.request().method() === "POST";
 
@@ -68,14 +69,16 @@ async function seedBook(page: Page, id: string, introduction: string, title: str
 async function evidence(testInfo: TestInfo, network: string) {
   await testInfo.attach("book-ai-verification-scope.json", {
     body: JSON.stringify({
-      task: "BOOK_CENTERED_AI_ASSISTANT_V1",
+      task: "BOOK_AI_READONLY_SIDEBAR",
       catalog: "isolated synthetic AI book pair; independent of the previous eight journeys",
       sources: "production collector reads real PG workspaces and effective WeRead data from synthetic imported snapshots",
       provider: "deterministic chatCompletion injection; production prompt and response parsing retained",
       externalMiniMax: "NOT_EXERCISED", externalWeRead: "NOT_CONTACTED", actualGoogleOAuth: "NOT_EXERCISED",
       authentication: "real signed Google owner session, CSRF and production mounted signOut",
-      persistence: "explicit production library writes; independent new Pool/store reads after generation and save",
-      savedReading: "rendered provenance after reload; actual saved note-source link returns to focused note",
+      persistence: "zero library writes from repeated AI generation, source inspection, copy and clear; independent new Pool/store reads",
+      manualEditing: "unsaved introduction and note editors survive AI use; only their own save buttons persist changes",
+      sourceReading: "actual sidebar citation link returns to the existing focused note; copied result includes source excerpts",
+      layout: "desktop sidebar is beside the article; mobile opens and closes without horizontal overflow",
       network,
     }, null, 2), contentType: "application/json",
   });
@@ -83,8 +86,8 @@ async function evidence(testInfo: TestInfo, network: string) {
 
 async function generate(page: Page, id: string, action: "introduction" | "notes_summary" | "question", question?: string) {
   const pane = assistant(page);
-  const mode = { introduction: "介绍草稿", notes_summary: "笔记摘要", question: "资料问答" }[action];
-  const button = { introduction: "生成介绍草稿", notes_summary: "生成笔记摘要", question: "根据资料回答" }[action];
+  const mode = { introduction: "参考介绍", notes_summary: "笔记摘要", question: "资料问答" }[action];
+  const button = { introduction: "生成参考介绍", notes_summary: "生成笔记摘要", question: "根据资料回答" }[action];
   await pane.getByRole("button", { name: mode, exact: true }).click();
   if (action === "question") await pane.getByRole("textbox", { name: "想问这本书的问题", exact: true }).fill(question!);
   const responsePromise = page.waitForResponse(generationResponse(id));
@@ -94,22 +97,33 @@ async function generate(page: Page, id: string, action: "introduction" | "notes_
   expect(response.request().postDataJSON()).toEqual({ action, ...(action === "question" ? { question } : {}) });
   const value = await response.json() as BookAssistantResponse;
   expect(value).toMatchObject({ bookId: id, action, question: action === "question" ? question : null, source: "ai" });
-  await expect(pane.getByRole("textbox", { name: "AI 草稿正文", exact: true })).toBeVisible();
+  await expect(aiResult(page)).toBeVisible();
+  await expect(aiResult(page)).toContainText(value.draft.content);
+  await expect(aiResult(page).locator("textarea, input, [contenteditable=true]")).toHaveCount(0);
+  await expect(pane.getByRole("textbox", { name: "AI 草稿正文", exact: true })).toHaveCount(0);
+  await expect(pane.getByRole("textbox", { name: "AI 笔记标题", exact: true })).toHaveCount(0);
+  await expect(pane.getByRole("button", { name: /保存为书籍介绍|保存为新笔记/ })).toHaveCount(0);
   return value;
 }
 
-async function saveFromAssistant(page: Page, id: string, kind: "introduction" | "note") {
-  const method = kind === "introduction" ? "PUT" : "POST";
-  const path = workspaceEndpoint(id) + (kind === "note" ? "/notes" : "");
-  const responsePromise = page.waitForResponse(response => new URL(response.url()).pathname === path && response.request().method() === method);
-  await assistant(page).getByRole("button", { name: kind === "introduction" ? "保存为书籍介绍" : "保存为新笔记", exact: true }).click();
-  const response = await responsePromise;
-  expect(response.ok()).toBe(true);
-  await expect(assistant(page).getByText(kind === "introduction" ? "AI 草稿已保存为书籍介绍。" : "AI 草稿已保存为新笔记。", { exact: true })).toBeVisible();
-  return response;
+async function copyResult(page: Page, value: BookAssistantResponse) {
+  await page.evaluate(() => navigator.clipboard.writeText("BOOK_AI_COPY_NOT_STARTED"));
+  await assistant(page).getByRole("button", { name: "复制结果与来源", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain(`生成时间：${value.generatedAt}`);
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied).toContain(value.draft.content);
+  expect(copied).toContain("### 参考资料（生成时摘录）");
+  expect(copied).toContain(`生成时间：${value.generatedAt}`);
+  if (value.question) expect(copied).toContain(`问题：${value.question}`);
+  for (const id of value.citedSourceIds) {
+    const source = value.sources.find(item => item.id === id)!;
+    expect(copied).toContain(`[${id}]`);
+    expect(copied).toContain(source.href);
+    expect(copied).toContain(source.excerpt.split(/\r?\n/).map(line => `> ${line}`).join("\n"));
+  }
 }
 
-test("book AI reads actual saved sources and effective WeRead links, then explicitly saves edited drafts to real PostgreSQL", async ({ page, context }, testInfo) => {
+test("book AI sidebar reads saved sources and copies references without changing saved content or open manual editors", async ({ page, context }, testInfo) => {
   await evidence(testInfo, "REAL_LOCAL_API; no response mocking; only deterministic model injection");
   const errors: string[] = [];
   const electronicRequests: string[] = [];
@@ -120,6 +134,7 @@ test("book AI reads actual saved sources and effective WeRead links, then explic
     bookAssistant: { sources: "production_collector", provider: "deterministic_injected", externalMiniMax: "NOT_EXERCISED" },
   });
   await ownerSession(context);
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: WEB });
   expect(await persistedWorkspace(A)).toBeNull();
   expect(await persistedWorkspace(B)).toBeNull();
   const seeded = await seedBook(page, A, INTRO_A, NOTE_A_TITLE, NOTE_A);
@@ -140,10 +155,49 @@ test("book AI reads actual saved sources and effective WeRead links, then explic
   const beforeOther = await persistedWorkspace(B);
   const writes: string[] = [];
   page.on("request", request => {
-    if (new URL(request.url()).pathname.startsWith("/api/private/s32/library/") && ["PUT", "POST", "DELETE"].includes(request.method())) writes.push(request.method());
+    const path = new URL(request.url()).pathname;
+    if (path.startsWith("/api/private/s32/library/") && ["PUT", "POST", "PATCH", "DELETE"].includes(request.method())) writes.push(`${request.method()} ${path}`);
   });
   await page.goto(`/books/${A}`);
   await expect(page.getByRole("heading", { name: TITLE_A, exact: true })).toBeVisible();
+  const introduction = page.getByRole("region", { name: "我的补充介绍", exact: true });
+  const sourceNote = page.getByRole("article", { name: `笔记：${NOTE_A_TITLE}`, exact: true });
+  await expect(introduction).toContainText(INTRO_A);
+  await expect(sourceNote).toContainText(NOTE_A);
+
+  // The sidebar is a sibling of the reading article, not another content editor.
+  const article = page.locator(".book-detail-layout > article.detail");
+  await expect(article).toBeVisible();
+  await expect(assistant(page)).toBeVisible();
+  expect(await assistant(page).evaluate(element => element.parentElement?.classList.contains("book-detail-layout"))).toBe(true);
+  const articleBox = (await article.boundingBox())!;
+  const sidebarBox = (await assistant(page).boundingBox())!;
+  expect(sidebarBox.x).toBeGreaterThanOrEqual(articleBox.x + articleBox.width);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+
+  const introductionAddition = "尚未保存的人工介绍：先标记山口，再核对旧图。";
+  const noteAddition = "尚未保存的人工笔记：下次补拍驿站遗址。";
+  const manualIntroduction = `${INTRO_A}\n\n${introductionAddition}`;
+  const manualNoteTitle = `${NOTE_A_TITLE} · 人工编辑`;
+  const manualNoteContent = `${NOTE_A}\n\n${noteAddition}`;
+  await introduction.getByRole("button", { name: "编辑介绍", exact: true }).click();
+  const introductionEditor = introduction.getByRole("textbox", { name: "书籍介绍", exact: true });
+  await introductionEditor.fill(manualIntroduction);
+  await sourceNote.getByRole("button", { name: "编辑笔记", exact: true }).click();
+  const noteEditor = page.getByRole("form", { name: "编辑笔记", exact: true });
+  await noteEditor.getByRole("textbox", { name: "笔记标题", exact: true }).fill(manualNoteTitle);
+  await noteEditor.getByRole("textbox", { name: "笔记正文", exact: true }).fill(manualNoteContent);
+
+  async function expectPersonalContentUntouched() {
+    expect(writes).toEqual([]);
+    expect(await persistedWorkspace(A)).toEqual(before);
+    expect(await persistedWorkspace(B)).toEqual(beforeOther);
+    await expect(introductionEditor).toHaveValue(manualIntroduction);
+    await expect(noteEditor.getByRole("textbox", { name: "笔记标题", exact: true })).toHaveValue(manualNoteTitle);
+    await expect(noteEditor.getByRole("textbox", { name: "笔记正文", exact: true })).toHaveValue(manualNoteContent);
+    await expect(sourceNote).toContainText(NOTE_A);
+  }
+
   const generated = await generate(page, A, "introduction");
   expect(generated.context).toMatchObject({ workspaceVersion: 1, introductionIncluded: true, notesAvailable: 1, notesIncluded: 1, wereadAvailable: 30, wereadEnabled: true });
   expect(generated.context.wereadIncluded).toBeGreaterThan(0);
@@ -151,7 +205,7 @@ test("book AI reads actual saved sources and effective WeRead links, then explic
   expect(generated.sources.find(source => source.kind === "introduction")?.excerpt).toBe(INTRO_A);
   expect(generated.sources.find(source => source.kind === "note")).toMatchObject({ excerpt: NOTE_A, revisionId: seeded.notes[0].currentRevisionId });
   expect(generated.sources.find(source => source.kind === "catalog")?.excerpt).toContain(TITLE_A);
-  for (const forbidden of [INTRO_B, NOTE_B, TITLE_B, RESOURCE_URL, RESOURCE_NOTE, "synthetic-weread-", "synthetic-private-note-"]) {
+  for (const forbidden of [INTRO_B, NOTE_B, TITLE_B, RESOURCE_URL, RESOURCE_NOTE, introductionAddition, manualNoteTitle, noteAddition, "synthetic-weread-", "synthetic-private-note-"]) {
     expect(JSON.stringify(generated)).not.toContain(forbidden);
   }
   expect(generated.citedSourceIds.length).toBeGreaterThan(0);
@@ -166,82 +220,87 @@ test("book AI reads actual saved sources and effective WeRead links, then explic
     await expect(row.getByRole("link").first()).toHaveAttribute("href", source.href);
     await expect(row).toContainText(source.excerpt);
   }
-  const draft = assistant(page).getByRole("textbox", { name: "AI 草稿正文", exact: true });
-  const originalText = await draft.inputValue();
-  expect(originalText).toContain(generated.draft.content);
-  for (const id of generated.citedSourceIds) {
-    const source = generated.sources.find(item => item.id === id)!;
-    expect(originalText).toContain(source.excerpt.split(/\r?\n/).map(line => `> ${line}`).join("\n"));
-    expect(originalText).toContain(source.href);
-  }
-  expect(writes).toEqual([]);
-  expect(await persistedWorkspace(A)).toEqual(before);
-  expect(await persistedWorkspace(B)).toEqual(beforeOther);
-  await assistant(page).screenshot({ path: testInfo.outputPath("book-ai-cited-draft-desktop.png") });
+  await copyResult(page, generated);
+  await expectPersonalContentUntouched();
+  await page.screenshot({ path: testInfo.outputPath("book-ai-readonly-sidebar-desktop.png"), fullPage: true });
+
   await page.setViewportSize({ width: 390, height: 844 });
+  await expect(assistant(page)).toBeHidden();
+  const openAssistant = page.getByRole("button", { name: "打开 AI 助手", exact: true });
+  await expect(openAssistant).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
-  await assistant(page).screenshot({ path: testInfo.outputPath("book-ai-cited-draft-mobile.png") });
+  await openAssistant.click();
+  await expect(assistant(page)).toBeVisible();
+  await expect(aiResult(page)).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("book-ai-readonly-sidebar-mobile-open.png") });
+  await copyResult(page, generated);
+  await page.getByRole("button", { name: "关闭 AI 助手", exact: true }).click();
+  await expect(assistant(page)).toBeHidden();
+  await expect(openAssistant).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("book-ai-readonly-sidebar-mobile-closed.png") });
   await page.setViewportSize({ width: 1440, height: 1000 });
+  await expect(assistant(page)).toBeVisible();
+  await expectPersonalContentUntouched();
 
-  const editedIntroduction = `${originalText}\n\n人工补充：现场核对山口旧路的位置，再补入介绍。`;
-  await draft.fill(editedIntroduction);
-  const savedIntro = await saveFromAssistant(page, A, "introduction");
-  expect(savedIntro.request().postDataJSON()).toEqual({ introduction: editedIntroduction, baseVersion: 1 });
-  expect(await persistedWorkspace(A)).toMatchObject({ introduction: editedIntroduction, version: 2 });
-  await page.reload();
-  const savedIntroduction = page.getByRole("region", { name: "我的补充介绍", exact: true });
-  await expect(savedIntroduction.getByRole("heading", { name: "参考资料（生成时摘录）", exact: true })).toBeVisible();
-  await expect(savedIntroduction).toContainText("人工补充：现场核对山口旧路的位置，再补入介绍。");
-  await expect(savedIntroduction.locator("blockquote").filter({ hasText: NOTE_A })).toBeVisible();
-  const introSources = generated.sources.filter(source => generated.citedSourceIds.includes(source.id));
-  const introLinks = savedIntroduction.getByRole("link", { name: "查看来源", exact: true });
-  await expect(introLinks).toHaveCount(introSources.length);
-  for (const [index, source] of introSources.entries()) {
-    await expect(introLinks.nth(index)).toHaveAttribute("href", source.href);
-  }
-  await expect(assistant(page).getByRole("textbox", { name: "AI 草稿正文", exact: true })).toHaveCount(0);
-
-  const beforeSummary = await persistedWorkspace(A);
-  writes.length = 0;
+  // Regeneration keeps reading the original saved introduction, never the last
+  // AI answer or either open manual draft.
+  const regenerated = await generate(page, A, "introduction");
+  expect(regenerated.sources.find(source => source.kind === "introduction")?.excerpt).toBe(INTRO_A);
+  expect(regenerated.context.workspaceVersion).toBe(1);
+  await expectPersonalContentUntouched();
   const summary = await generate(page, A, "notes_summary");
-  expect(summary.context).toMatchObject({ workspaceVersion: 2, notesAvailable: 1, notesIncluded: 1, wereadAvailable: 30 });
-  expect(await persistedWorkspace(A)).toEqual(beforeSummary);
-  expect(writes).toEqual([]);
-  const summaryText = assistant(page).getByRole("textbox", { name: "AI 草稿正文", exact: true });
-  const editedSummary = `${await summaryText.inputValue()}\n\n人工核对：下次按山口、旧驿站、聚落三个主题补记。`;
-  const savedTitle = "AI 阅读摘要 · 人工核对";
-  await assistant(page).getByRole("textbox", { name: "AI 笔记标题", exact: true }).fill(savedTitle);
-  await summaryText.fill(editedSummary);
-  const savedNote = await saveFromAssistant(page, A, "note");
-  expect(savedNote.request().postDataJSON()).toEqual({ title: savedTitle, content: editedSummary });
-  const persisted = await persistedWorkspace(A);
-  expect(persisted?.introduction).toBe(editedIntroduction);
-  expect(persisted?.notes).toHaveLength(2);
-  expect(persisted?.notes.find(note => note.title === savedTitle)?.content).toBe(editedSummary);
-  expect(persisted?.notes.find(note => note.title === NOTE_A_TITLE)?.content).toBe(NOTE_A);
-  expect(await persistedWorkspace(B)).toEqual(beforeOther);
-  await page.reload();
-  const savedSummary = page.getByRole("article", { name: `笔记：${savedTitle}`, exact: true });
-  await expect(savedSummary.getByRole("heading", { name: "参考资料（生成时摘录）", exact: true }).first()).toBeVisible();
-  await expect(savedSummary).toContainText("人工核对：下次按山口、旧驿站、聚落三个主题补记。");
-  const savedLinks = await savedSummary.getByRole("link", { name: "查看来源", exact: true })
-    .evaluateAll(links => links.map(link => link.getAttribute("href")));
-  for (const source of summary.sources.filter(source => summary.citedSourceIds.includes(source.id))) {
-    expect(savedLinks).toContain(source.href);
-  }
-  await savedSummary.screenshot({ path: testInfo.outputPath("book-ai-saved-note-reading.png") });
-  // Follow a source link from persisted Markdown, after a real page reload.
-  // The note identity comes from the actual seed response and collector result.
+  expect(summary.context).toMatchObject({ workspaceVersion: 1, notesAvailable: 1, notesIncluded: 1, wereadAvailable: 30 });
+  expect(summary.sources.find(source => source.kind === "note")?.excerpt).toBe(NOTE_A);
+  await copyResult(page, summary);
+
+  // Follow the actual source link without changing or submitting either editor.
   const personalSource = summary.sources.find(source => source.kind === "note")!;
   const sourcePath = `/books/${A}#book-note-${seeded.notes[0].noteId}`;
   expect(personalSource.href).toBe(sourcePath);
   expect(summary.citedSourceIds).toContain(personalSource.id);
-  await savedSummary.locator(`a[href="${sourcePath}"]`).filter({ hasText: /^查看来源$/ }).last().click();
-  const sourceNote = page.getByRole("article", { name: `笔记：${NOTE_A_TITLE}`, exact: true });
+  await assistant(page).getByRole("button", { name: `查看依据 ${personalSource.id}`, exact: true }).click();
+  await assistant(page).locator(`[data-ai-source-id="${personalSource.id}"]`).getByRole("link").first().click();
   await expect(page).toHaveURL(sourcePath);
   await expect(sourceNote).toBeFocused();
   await expect(sourceNote).toBeInViewport();
   await sourceNote.screenshot({ path: testInfo.outputPath("book-ai-note-source-target.png") });
+  await expectPersonalContentUntouched();
+  await assistant(page).getByRole("button", { name: "清除结果", exact: true }).click();
+  await expect(aiResult(page)).toHaveCount(0);
+  await expectPersonalContentUntouched();
+
+  // Only the independent human editors can commit the text entered above.
+  const introSave = page.waitForResponse(response => new URL(response.url()).pathname === workspaceEndpoint(A) && response.request().method() === "PUT");
+  await introduction.getByRole("button", { name: "保存介绍", exact: true }).click();
+  const savedIntro = await introSave;
+  expect(savedIntro.ok()).toBe(true);
+  expect(savedIntro.request().postDataJSON()).toEqual({ introduction: manualIntroduction, baseVersion: 1 });
+  await expect(introduction.getByText("书籍介绍已保存。", { exact: true })).toBeVisible();
+  expect(await persistedWorkspace(A)).toMatchObject({ introduction: manualIntroduction, version: 2, notes: before!.notes });
+  await expect(noteEditor.getByRole("textbox", { name: "笔记正文", exact: true })).toHaveValue(manualNoteContent);
+
+  const notePath = `${workspaceEndpoint(A)}/notes/${seeded.notes[0].noteId}`;
+  const noteSave = page.waitForResponse(response => new URL(response.url()).pathname === notePath && response.request().method() === "PUT");
+  await noteEditor.getByRole("button", { name: "保存笔记", exact: true }).click();
+  const savedNote = await noteSave;
+  expect(savedNote.ok()).toBe(true);
+  expect(savedNote.request().postDataJSON()).toEqual({
+    title: manualNoteTitle, content: manualNoteContent, baseRevisionId: seeded.notes[0].currentRevisionId,
+  });
+  const persisted = await persistedWorkspace(A);
+  expect(persisted?.introduction).toBe(manualIntroduction);
+  expect(persisted?.notes).toHaveLength(1);
+  expect(persisted?.notes[0]).toMatchObject({ noteId: seeded.notes[0].noteId, title: manualNoteTitle, content: manualNoteContent, revisionNo: 2 });
+  expect(persisted?.resources).toEqual(before?.resources);
+  expect(await persistedWorkspace(B)).toEqual(beforeOther);
+  expect(writes).toEqual([`PUT ${workspaceEndpoint(A)}`, `PUT ${notePath}`]);
+  await page.reload();
+  await expect(introduction).toContainText(manualIntroduction);
+  await expect(page.getByRole("article", { name: `笔记：${manualNoteTitle}`, exact: true })).toContainText(manualNoteContent);
+  await expect(aiResult(page)).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath("book-ai-manual-content-after-reload.png"), fullPage: true });
   expect(electronicRequests).toEqual([]);
   expect(errors).toEqual([]);
 });
@@ -278,10 +337,15 @@ async function releaseHeld(page: Page) {
   });
 }
 
-test("book AI rejects unauthenticated or forged inputs and delayed drafts cannot cross book navigation or sign-out", async ({ page, context }, testInfo) => {
-  await evidence(testInfo, "SYNTHETIC_DELIVERY_DELAY; real local generation response held across SPA navigation and signOut; abort deliberately ignored");
+test("book AI rejects forged inputs and delayed results cannot survive cancellation, book navigation or sign-out", async ({ page, context }, testInfo) => {
+  await evidence(testInfo, "SYNTHETIC_DELIVERY_DELAY; real local generation response held across cancel, SPA navigation and signOut; abort deliberately ignored");
   const errors: string[] = [];
+  const writes: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
+  page.on("request", request => {
+    const path = new URL(request.url()).pathname;
+    if (path.startsWith("/api/private/s32/library/") && ["PUT", "POST", "PATCH", "DELETE"].includes(request.method())) writes.push(`${request.method()} ${path}`);
+  });
   const beforeA = await persistedWorkspace(A), beforeB = await persistedWorkspace(B);
   expect((await page.request.post(endpoint(A), { data: { action: "introduction" } })).status()).toBe(401);
   await page.goto(`/books/${A}`);
@@ -297,6 +361,14 @@ test("book AI rejects unauthenticated or forged inputs and delayed drafts cannot
   await holdAssistantDelivery(page);
   await page.goto(`/books/${A}`);
   await assistant(page).getByRole("button", { name: "资料问答", exact: true }).click();
+  await assistant(page).getByRole("textbox", { name: "想问这本书的问题", exact: true }).fill("取消后不应显示这次参考结果。");
+  await assistant(page).getByRole("button", { name: "根据资料回答", exact: true }).click();
+  await waitForHeld(page);
+  await assistant(page).getByRole("button", { name: "取消生成", exact: true }).click();
+  await releaseHeld(page);
+  await expect(aiResult(page)).toHaveCount(0);
+  await expect(assistant(page).getByRole("button", { name: "根据资料回答", exact: true })).toBeEnabled();
+
   await assistant(page).getByRole("textbox", { name: "想问这本书的问题", exact: true }).fill("甲书下一次田野应该核对什么？");
   await assistant(page).getByRole("button", { name: "根据资料回答", exact: true }).click();
   await waitForHeld(page);
@@ -304,7 +376,7 @@ test("book AI rejects unauthenticated or forged inputs and delayed drafts cannot
   await expect(page.getByRole("heading", { name: TITLE_B, exact: true })).toBeVisible();
   await expect(assistant(page)).toBeVisible();
   await releaseHeld(page);
-  await expect(assistant(page).getByRole("textbox", { name: "AI 草稿正文", exact: true })).toHaveCount(0);
+  await expect(aiResult(page)).toHaveCount(0);
   await expect(assistant(page)).not.toContainText(INTRO_A);
   await expect(assistant(page)).not.toContainText(NOTE_A);
   const other = await generate(page, B, "question", "这本书现有资料提到了哪些线索？");
@@ -335,5 +407,6 @@ test("book AI rejects unauthenticated or forged inputs and delayed drafts cannot
   expect((await page.request.post(endpoint(A), { data: { action: "introduction" } })).status()).toBe(401);
   expect(await persistedWorkspace(A)).toEqual(beforeA);
   expect(await persistedWorkspace(B)).toEqual(beforeB);
+  expect(writes).toEqual([]);
   expect(errors).toEqual([]);
 });

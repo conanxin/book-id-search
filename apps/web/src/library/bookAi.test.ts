@@ -106,7 +106,7 @@ describe("book AI client", () => {
     expect((await generateBookAi(A, { action: "notes_summary" })).context).toMatchObject({ notesAvailable: 20, notesIncluded: 1, truncated: true, wereadEnabled: false });
   });
 
-  it("returns insufficient context without converting it into a savable AI draft", async () => {
+  it("returns insufficient context without converting it into a copyable AI result", async () => {
     const value = result(); value.source = "insufficient_context";
     value.sources = value.sources.slice(0, 1); value.citedSourceIds = [];
     value.draft.content = "尚无可整理的本书笔记，请先补充资料。";
@@ -119,7 +119,7 @@ describe("book AI client", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the actual cited source snapshot inside the visible editable body before saving", () => {
+  it("includes the actual cited source snapshot in copyable text without making requests", () => {
     const value = result("question");
     const content = bookAiDraftContent(value);
     expect(content).toContain("问题：哪些线索需要核对？");
