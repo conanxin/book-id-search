@@ -223,8 +223,9 @@ describe("WeRead book scope and navigation", () => {
 
   it("clears loaded rows, search input, temporary AI and the reading-map overlay when the book changes", async () => {
     const user = userEvent.setup();
+    const nextBook = deferred<WereadNotesResponse>();
     mocks.fetchWereadBookNotes.mockResolvedValueOnce(response([note(BOOK_A, "书 A 的已确认划线")]))
-      .mockResolvedValueOnce(response([note(BOOK_B, "书 B 的记录")]));
+      .mockReturnValueOnce(nextBook.promise);
     mount();
     await screen.findByText("书 A 的已确认划线");
     await user.click(screen.getByRole("button", { name: "生成合成主题" }));
@@ -236,7 +237,14 @@ describe("WeRead book scope and navigation", () => {
     expect(screen.queryByText("仅前书的临时 AI 内容")).toBeNull();
     expect((screen.getByRole("searchbox", { name: "搜索笔记" }) as HTMLInputElement).value).toBe("");
     expect(screen.getByTestId("map-overlay").textContent).not.toContain("前书临时主题");
-    expect(JSON.parse(screen.getByTestId("map-overlay").textContent ?? "{}")).toMatchObject({ enabled: false, catalogIds: [BOOK_B], themes: [] });
+    // Catalog IDs come from loaded notes, not the route. Clear A immediately,
+    // then populate B only after its independently controlled request finishes.
+    expect(screen.queryByText("书 B 的记录")).toBeNull();
+    expect(mocks.fetchWereadBookNotes).toHaveBeenLastCalledWith(BOOK_B, expect.objectContaining({ offset: 0, q: undefined }), { signal: expect.any(AbortSignal) });
+    expect(JSON.parse(screen.getByTestId("map-overlay").textContent ?? "{}")).toEqual({ enabled: false, catalogIds: [], themes: [], notesUsed: 0 });
+    await act(async () => { nextBook.resolve(response([note(BOOK_B, "书 B 的记录")])); });
+    await screen.findByText("书 B 的记录");
+    expect(JSON.parse(screen.getByTestId("map-overlay").textContent ?? "{}")).toEqual({ enabled: false, catalogIds: [BOOK_B], themes: [], notesUsed: 1 });
   });
 
   it("retains the book scope in a downloaded Markdown file and its filename", async () => {
