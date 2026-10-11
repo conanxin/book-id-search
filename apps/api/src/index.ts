@@ -2,6 +2,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import express, { type Request, type Response } from "express";
 import { MeiliSearch } from "meilisearch";
+import { Pool } from "pg";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,11 +28,13 @@ import {
   getWereadStatusByCatalogId,
   getWereadStatusesByCatalogIds,
   getWereadSummary,
-  loadWereadOverlay,
+  getWereadConfirmedMatches,
 } from "./weread/private-overlay.js";
+import { createWereadBindingsService, WereadBindingError } from "./weread/manual-bindings.js";
+import { createPostgresWereadBindingStore } from "./weread/manual-bindings-store.js";
+import { createWereadBindingsRouter } from "./weread/manual-binding-routes.js";
 import { summarizePrivateNotes } from "./weread/private-ai-summary.js";
 import {
-  loadPrivateNotesData,
   queryPrivateNotes,
   type WereadNotesTypeFilter,
   type WereadNotesDaysFilter,
@@ -143,10 +146,24 @@ const s32Config = readS32Config(process.env);
 const s32RequestAuthorizer = createS32RequestAuthorizer(s32Config, googleAuthConfig);
 const wereadRequestAuthorizer = createWereadRequestAuthorizer(googleAuthConfig);
 const googleOwnerAuthorizer = createGoogleOwnerRequestAuthorizer(googleAuthConfig);
+// The imported snapshots stay read-only. Manual overrides share the existing
+// PostgreSQL deployment, independently of the older research feature flag.
+const wereadBindingPool = s32Config.databaseUrl
+  ? new Pool({ connectionString: s32Config.databaseUrl, connectionTimeoutMillis: 3000, query_timeout: 5000 }) : null;
+wereadBindingPool?.on("error", () => console.warn("[weread] idle database connection unavailable"));
+const wereadBindings = createWereadBindingsService({
+  dataDir: getWereadOverlayDataDir(),
+  store: wereadBindingPool ? createPostgresWereadBindingStore(wereadBindingPool) : null,
+  getCatalogDocument: id => index.getDocument(id),
+});
 app.use("/api/auth", createAuthRouter({ config: googleAuthConfig }));
 // Basic /api/search remains public. Full book pages, every AI action and all
 // personal routes use the same Google session; legacy tokens do not enter.
 app.use(["/api/books", "/api/ai", "/api/private"], createGoogleOwnerMiddleware(googleAuthConfig));
+app.use("/api/private/weread/bindings", createWereadBindingsRouter({
+  service: wereadBindings, requestAuthorizer: googleOwnerAuthorizer,
+  enabled: process.env.WEREAD_OVERLAY_ENABLED === "true",
+}));
 app.use("/api/private/s32/library", createBookLibraryBodyParser(s32Config, googleOwnerAuthorizer));
 app.use("/api/private/s32/projects/:projectId/items/:bindingId/note", createProjectItemNoteBodyParser(s32Config, s32RequestAuthorizer));
 app.use("/api/private/s32/projects", createIssueResolutionBodyParser(s32Config, s32RequestAuthorizer));
@@ -715,7 +732,7 @@ app.get("/api/private/weread/summary", async (_req: Request, res: Response) => {
     return res.status(auth.status).json({ ok: false, error: auth.message });
   }
   try {
-    const data = loadWereadOverlay(getWereadOverlayDataDir());
+    const data = await wereadBindings.loadOverlay();
     const summary = getWereadSummary(data);
     res.json({
       ok: true,
@@ -728,7 +745,7 @@ app.get("/api/private/weread/summary", async (_req: Request, res: Response) => {
       totalConfirmedNoteRecords: summary.totalConfirmedNoteRecords,
     });
   } catch (error) {
-    return sendError(res, 500, "读取 WeRead 摘要失败。", error);
+    return sendError(res, error instanceof WereadBindingError ? error.status : 500, "读取 WeRead 摘要失败。");
   }
 });
 
@@ -738,13 +755,13 @@ app.get("/api/private/weread/trends", async (_req: Request, res: Response) => {
     return res.status(auth.status).json({ ok: false, error: auth.message });
   }
   try {
-    const data = loadWereadOverlay(getWereadOverlayDataDir());
+    const data = await wereadBindings.loadOverlay();
     const allNotes = Array.from(data.notesByBook.values()).flat();
-    const confirmed = Array.from(data.confirmedByCatalogId.values());
+    const confirmed = getWereadConfirmedMatches(data);
     const trends = buildNotesTrend(allNotes, confirmed);
     res.json({ ok: true, trends });
   } catch (error) {
-    return sendError(res, 500, "读取 WeRead 趋势失败。", error);
+    return sendError(res, error instanceof WereadBindingError ? error.status : 500, "读取 WeRead 趋势失败。");
   }
 });
 
@@ -758,11 +775,11 @@ app.get("/api/private/weread/status", async (req: Request, res: Response) => {
     return sendError(res, 400, "catalogId 格式不正确。");
   }
   try {
-    const data = loadWereadOverlay(getWereadOverlayDataDir());
+    const data = await wereadBindings.loadOverlay();
     const status = getWereadStatusByCatalogId(data, catalogId);
     res.json(status);
   } catch (error) {
-    return sendError(res, 500, "读取 WeRead 状态失败。", error);
+    return sendError(res, error instanceof WereadBindingError ? error.status : 500, "读取 WeRead 状态失败。");
   }
 });
 
@@ -787,11 +804,11 @@ app.post("/api/private/weread/status/batch", async (req: Request, res: Response)
     catalogIds.push(item);
   }
   try {
-    const data = loadWereadOverlay(getWereadOverlayDataDir());
+    const data = await wereadBindings.loadOverlay();
     const results = getWereadStatusesByCatalogIds(data, catalogIds);
     res.json({ ok: true, results });
   } catch (error) {
-    return sendError(res, 500, "批量读取 WeRead 状态失败。", error);
+    return sendError(res, error instanceof WereadBindingError ? error.status : 500, "批量读取 WeRead 状态失败。");
   }
 });
 
@@ -880,7 +897,7 @@ app.get("/api/private/weread/notes", async (req: Request, res: Response) => {
   }
 
   try {
-    const data = loadPrivateNotesData(getWereadOverlayDataDir());
+    const data = await wereadBindings.loadNotes();
     const result = queryPrivateNotes(data, {
       type: rawType as WereadNotesTypeFilter,
       days: rawDays as WereadNotesDaysFilter,
@@ -894,7 +911,7 @@ app.get("/api/private/weread/notes", async (req: Request, res: Response) => {
     });
     res.json({ ok: true, ...result });
   } catch (error) {
-    return sendError(res, 500, "读取私有笔记失败。", error);
+    return sendError(res, error instanceof WereadBindingError ? error.status : 500, "读取私有笔记失败。");
   }
 });
 /**
@@ -904,7 +921,7 @@ app.get("/api/private/weread/notes", async (req: Request, res: Response) => {
  *
  * Strict privacy contract:
  *   - The handler only reads the local private snapshot through
- *     `loadWereadOverlay`; note text / comment / wereadBookId /
+ *     `wereadBindings.loadOverlay` (imported data + persisted overrides); note text / comment / wereadBookId /
  *     noteId / highlightId / chapterTitle / raw WeRead title / author
  *     never leave the helper layer.
  *   - Public metadata (title / author / publisher / year) is fetched
@@ -945,7 +962,7 @@ app.get(
     }
 
     try {
-      const overlay = loadWereadOverlay(getWereadOverlayDataDir());
+      const overlay = await wereadBindings.loadOverlay();
       const notes: Array<{
         wereadBookId: string;
         catalogId: string;
@@ -965,7 +982,7 @@ app.get(
         }
       }
       const confirmedMatches: Array<{ wereadBookId: string; catalogId: string }> = [];
-      for (const m of overlay.confirmedByCatalogId.values()) {
+      for (const m of getWereadConfirmedMatches(overlay)) {
         confirmedMatches.push({ wereadBookId: m.wereadBookId, catalogId: m.catalogId });
       }
       const fetchMetadata = {
@@ -1011,7 +1028,7 @@ app.get(
       }
       return res.json(result.response);
     } catch (err) {
-      return sendError(res, 500, "阅读地图生成失败，请稍后再试。", err);
+      return sendError(res, err instanceof WereadBindingError ? err.status : 500, "阅读地图生成失败，请稍后再试。");
     }
   }
 );
@@ -1023,7 +1040,7 @@ app.get(
  *
  * Strict privacy contract (mirrors S27H):
  *   - The handler only reads the local private snapshot through
- *     `loadWereadOverlay`; note text / comment / wereadBookId /
+ *     `wereadBindings.loadOverlay` (imported data + persisted overrides); note text / comment / wereadBookId /
  *     noteId / highlightId / chapterTitle / raw WeRead title /
  *     author never leave the helper layer.
  *   - Public metadata (title / author / publisher / year) is fetched
@@ -1078,7 +1095,7 @@ app.get(
     }
 
     try {
-      const overlay = loadWereadOverlay(getWereadOverlayDataDir());
+      const overlay = await wereadBindings.loadOverlay();
       const notes: Array<{
         wereadBookId: string;
         catalogId: string;
@@ -1098,7 +1115,7 @@ app.get(
         }
       }
       const confirmedMatches: Array<{ wereadBookId: string; catalogId: string }> = [];
-      for (const m of overlay.confirmedByCatalogId.values()) {
+      for (const m of getWereadConfirmedMatches(overlay)) {
         confirmedMatches.push({ wereadBookId: m.wereadBookId, catalogId: m.catalogId });
       }
       const fetchMetadata = {
@@ -1144,7 +1161,7 @@ app.get(
       }
       return res.json(result.response);
     } catch (err) {
-      return sendError(res, 500, "年度回顾生成失败，请稍后再试。", err);
+      return sendError(res, err instanceof WereadBindingError ? err.status : 500, "年度回顾生成失败，请稍后再试。");
     }
   }
 );

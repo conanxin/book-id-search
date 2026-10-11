@@ -6,6 +6,7 @@ export const S32_MIGRATION_PATHS = [
   "db/migrations/001_s32_core_schema.sql",
   "db/migrations/002_s32_m2e_issue_resolution.sql",
   "db/migrations/003_book_library.sql",
+  "db/migrations/004_weread_binding_overrides.sql",
 ] as const;
 
 // Read and validate the entire chain before the caller applies any migration.

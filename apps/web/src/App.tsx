@@ -29,6 +29,7 @@ import WereadBadge from "./WereadBadge";
 import { clearWereadStatusCache, fetchWereadStatusesForBooks, fetchWereadStatus, purgeLegacyWereadTokenStorage, type WereadStatus } from "./wereadPrivate";
 import { useWebAuthSession } from "./auth/useWebAuthSession";
 import WereadCenter from "./weread/WereadCenter";
+import WereadBindingsPage from "./weread/WereadBindingsPage";
 import ProjectsPage, { researchEnabled } from "./research/ProjectsPage";
 import SiteFooter from "./components/SiteFooter";
 import { AppShell, AccountPage } from "./components/AppShell";
@@ -1345,6 +1346,7 @@ export default function App() {
         <Route path="/account" element={<AccountPage />} />
         <Route path="/library" element={<RequireGoogle><LibraryPage /></RequireGoogle>} />
         <Route path="/weread" element={<RequireGoogle><WereadCenter /></RequireGoogle>} />
+        <Route path="/weread/bindings" element={<RequireGoogle><WereadBindingsPage /></RequireGoogle>} />
         <Route path="/books/:id" element={<RequireGoogle><DetailPage /></RequireGoogle>} />
         <Route path="/research/projects" element={<RequireGoogle><ProjectsPage /></RequireGoogle>} />
         <Route path="/research/projects/:projectId/issues/:issueId/dossier" element={<RequireGoogle><ProjectsPage dossier /></RequireGoogle>} />

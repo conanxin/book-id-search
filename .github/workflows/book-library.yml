@@ -53,6 +53,7 @@ jobs:
           GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA core, ops TO s32_app;
           SQL
           psql -X -h 127.0.0.1 -U library_schema_owner -d s32_library_test -v ON_ERROR_STOP=1 -f db/migrations/003_book_library.sql
+          psql -X -h 127.0.0.1 -U library_schema_owner -d s32_library_test -v ON_ERROR_STOP=1 -f db/migrations/004_weread_binding_overrides.sql
       - name: Real PostgreSQL application-role contracts
         run: >-
           pnpm exec vitest run
@@ -61,12 +62,20 @@ jobs:
           apps/api/src/s32/application/book-library.test.ts
           apps/api/src/s32/routes/book-library-routes.test.ts
           apps/api/src/s32/postgres/book-library-store.integration.test.ts
+          apps/api/src/weread/manual-bindings.test.ts
+          apps/api/src/weread/manual-binding-routes.test.ts
+          apps/api/src/weread/manual-bindings.integration.test.ts
+          apps/api/src/weread/private-overlay.test.ts
           apps/web/src/library
           apps/web/src/api-session.test.ts
           apps/web/src/components/SiteFooter.test.ts
           apps/web/src/p1a-book-detail-route.test.tsx
           apps/web/src/weread/SearchDetailWereadSession.test.tsx
           apps/web/src/wereadBookNotes.test.ts
+          apps/web/src/wereadBindings.test.ts
+          apps/web/src/wereadPrivate.test.ts
+          apps/web/src/wereadPrivateSession.test.ts
+          apps/web/src/weread/WereadBindingsPage.test.tsx
           apps/web/src/weread/WereadCenterBookScope.test.tsx
           scripts/book-browser-fixtures.test.ts
           scripts/s32-migration-chain.test.ts

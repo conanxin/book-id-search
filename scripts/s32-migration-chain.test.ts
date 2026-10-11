@@ -4,7 +4,12 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
 const root = resolve(__dirname, "..");
-const expected = ["db/migrations/001_s32_core_schema.sql", "db/migrations/002_s32_m2e_issue_resolution.sql", "db/migrations/003_book_library.sql"];
+const expected = [
+  "db/migrations/001_s32_core_schema.sql",
+  "db/migrations/002_s32_m2e_issue_resolution.sql",
+  "db/migrations/003_book_library.sql",
+  "db/migrations/004_weread_binding_overrides.sql",
+];
 const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 async function helper() {
@@ -19,8 +24,8 @@ describe("S32 current migration chain", () => {
     const dir = mkdtempSync(resolve(tmpdir(), "s32-chain-")); dirs.push(dir);
     mkdirSync(resolve(dir, "db/migrations"), { recursive: true });
     expected.forEach((p, i) => writeFileSync(resolve(dir, p), `SELECT ${i + 1};`));
-    writeFileSync(resolve(dir, "db/migrations/004_unknown.sql"), "MUST NOT EXECUTE");
-    expect(readS32MigrationChain(dir)).toEqual(["SELECT 1;", "SELECT 2;", "SELECT 3;"]);
+    writeFileSync(resolve(dir, "db/migrations/005_unknown.sql"), "MUST NOT EXECUTE");
+    expect(readS32MigrationChain(dir)).toEqual(["SELECT 1;", "SELECT 2;", "SELECT 3;", "SELECT 4;"]);
   });
   it.each(expected)("fails closed when configured migration %s is missing or empty", async (missing) => {
     const { readS32MigrationChain } = await helper();
@@ -39,5 +44,6 @@ describe("S32 current migration chain", () => {
     expect(source).not.toContain("db/migrations/001_s32_core_schema.sql");
     expect(source).not.toContain("db/migrations/002_s32_m2e_issue_resolution.sql");
     expect(source).not.toContain("db/migrations/003_book_library.sql");
+    expect(source).not.toContain("db/migrations/004_weread_binding_overrides.sql");
   });
 });

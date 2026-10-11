@@ -33,7 +33,10 @@ function BookWereadPanel({ bookId, generation }: { bookId: string; generation: n
   return <section className="library-panel book-weread-panel" aria-labelledby="book-weread-notes-heading">
     <div className="library-section-heading">
       <div><span className="library-eyebrow">接着上次的阅读</span><h2 id="book-weread-notes-heading">微信读书记录</h2></div>
-      <Link className="library-button library-button--quiet" to={`/weread?catalogId=${encodeURIComponent(bookId)}`}>在微信读书中心查看本书记录</Link>
+      <div className="library-actions">
+        <Link className="library-button library-button--quiet" to={`/weread?catalogId=${encodeURIComponent(bookId)}`}>在微信读书中心查看本书记录</Link>
+        <Link className="library-button library-button--quiet" to={`/weread/bindings?catalogId=${encodeURIComponent(bookId)}`}>管理本书关联</Link>
+      </div>
     </div>
     <p className="library-muted">这里汇集已导入并确认关联到本书的划线、想法和书评。</p>
     <div className="book-weread-toolbar">

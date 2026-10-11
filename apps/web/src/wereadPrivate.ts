@@ -597,12 +597,19 @@ export async function fetchAllWereadBookNotes(
 }
 
 const statusCache = new Map<string, Promise<WereadStatus>>();
+let statusCacheGeneration = 0;
 const CACHE_LIMIT = 200;
 const BATCH_MAX = 100;
 
 export async function fetchWereadStatusesForBooks(
   catalogIds: string[]
 ): Promise<Record<string, WereadStatus>> {
+  const generation = statusCacheGeneration;
+  const requireCurrentCache = () => {
+    if (generation !== statusCacheGeneration) {
+      throw new DOMException("WeRead associations changed", "AbortError");
+    }
+  };
   const uniqueIds = [...new Set(catalogIds)].slice(0, CACHE_LIMIT);
   if (uniqueIds.length === 0) return {};
 
@@ -613,7 +620,9 @@ export async function fetchWereadStatusesForBooks(
     const cached = statusCache.get(id);
     if (cached) {
       try {
-        out[id] = await cached;
+        const value = await cached;
+        requireCurrentCache();
+        out[id] = value;
       } catch {
         /* leave out on error */
       }
@@ -622,6 +631,7 @@ export async function fetchWereadStatusesForBooks(
     }
   }
 
+  requireCurrentCache();
   if (toFetch.length === 0) return out;
 
   // Try batch endpoint first for uncached ids (Task 9: cookie session + CSRF)
@@ -635,6 +645,7 @@ export async function fetchWereadStatusesForBooks(
         body: JSON.stringify({ catalogIds: batchIds }),
       }
     );
+    requireCurrentCache();
     {
       const results = data.results ?? {};
       for (const [id, value] of Object.entries(results)) {
@@ -648,16 +659,19 @@ export async function fetchWereadStatusesForBooks(
     if (err instanceof WereadPrivateError && (err.status === 401 || err.status === 403)) {
       throw err;
     }
+    requireCurrentCache();
     // continue to fallback on network/server errors
   }
 
   // Fallback: per-catalogId single status
   const concurrency = 4;
   for (let i = 0; i < toFetch.length; i += concurrency) {
+    requireCurrentCache();
     const batch = toFetch.slice(i, i + concurrency);
     await Promise.all(
       batch.map(async (id) => {
         const promise = fetchWereadStatus(id).catch((err: Error) => {
+          requireCurrentCache();
           statusCache.delete(id);
           return {
             ok: false,
@@ -670,7 +684,9 @@ export async function fetchWereadStatusesForBooks(
           statusCache.set(id, promise);
         }
         try {
-          out[id] = await promise;
+          const value = await promise;
+          requireCurrentCache();
+          out[id] = value;
         } catch {
           /* leave out */
         }
@@ -678,10 +694,12 @@ export async function fetchWereadStatusesForBooks(
     );
   }
 
+  requireCurrentCache();
   return out;
 }
 
 export function clearWereadStatusCache(): void {
+  statusCacheGeneration += 1;
   statusCache.clear();
 }
 

@@ -1,5 +1,14 @@
 # BOOK-ID-SEARCH status
 
+## 2026-10-11 — Persistent WeRead book associations
+
+- `task_id=BOOK_CENTERED_WEREAD_MANUAL_BINDING_V1`; continues Draft [#72](https://github.com/conanxin/book-id-search/pull/72) from tested baseline `42c0d94`.
+- Adds `/weread/bindings`: source-book search/filter/pagination, catalog comparison, explicit confirm/change/unlink/restore, and a fresh single-source read after version conflicts. Entry links connect the WeRead center and book pages.
+- Migration004 stores manual choices independently of imported files. Manual links and explicit unlinks take precedence; restore inherits current imports and preserves the revision sequence. Multiple WeRead sources can contribute to one catalog book.
+- Effective bindings feed notes, status and reading summaries consistently. The web client uses the current Google session/CSRF; stale responses cannot repopulate cleared status caches.
+- Implementation and validation contract: [WeRead associations v1](development/BOOK_WEREAD_BINDINGS_V1.md). Current-head test and CI receipts are maintained in PR #72. Next: saved AI drafts, summaries and source-grounded answers using the actual book content.
+- Development candidate only; merge and Tencent deployment are separate actions. Existing003 and new004 must accompany the full candidate when it is released.
+
 ## 2026-10-11 — Book-centered WeRead records
 
 - `task_id=BOOK_CENTERED_WEREAD_NOTES_V1`; continues Draft [#72](https://github.com/conanxin/book-id-search/pull/72) on the tested library-v1 baseline `ff90666`.

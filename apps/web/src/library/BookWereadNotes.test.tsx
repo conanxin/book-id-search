@@ -60,6 +60,7 @@ describe("book WeRead records", () => {
     expect(within(region).getAllByRole("article")).toHaveLength(20);
     expect(within(region).getAllByText("微信读书 · 已导入")).toHaveLength(20);
     expect(screen.getByRole("link", { name: "在微信读书中心查看本书记录" }).getAttribute("href")).toBe(`/weread?catalogId=${A}`);
+    expect(screen.getByRole("link", { name: "管理本书关联" }).getAttribute("href")).toBe(`/weread/bindings?catalogId=${A}`);
     expect(fetchWereadBookNotes).toHaveBeenLastCalledWith(A, { type: "all", days: "all", sort: "newest", limit: 20, offset: 0 }, { signal: expect.any(AbortSignal) });
     await click("加载更多");
     expect(fetchWereadBookNotes).toHaveBeenLastCalledWith(A, expect.objectContaining({ offset: 20, limit: 20, type: "all" }), { signal: expect.any(AbortSignal) });
@@ -96,6 +97,7 @@ describe("book WeRead records", () => {
     await act(async () => older.resolve(page([note("迟到的书甲正文")])));
     expect(screen.queryByText("迟到的书甲正文")).toBeNull();
     expect(screen.getByRole("link", { name: "在微信读书中心查看本书记录" }).getAttribute("href")).toBe(`/weread?catalogId=${B}`);
+    expect(screen.getByRole("link", { name: "管理本书关联" }).getAttribute("href")).toBe(`/weread/bindings?catalogId=${B}`);
   });
 
   it("discards a response from a previous authenticated session generation", async () => {

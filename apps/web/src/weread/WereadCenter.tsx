@@ -338,6 +338,7 @@ function WereadCenterSession({ authenticated }: { authenticated: boolean }) {
         <p className="weread-center-hero__subtitle">
           这是你的私有阅读数据入口。使用 Google 账号登录后显示微信读书统计，浏览器通过本站安全登录会话访问私人数据。
         </p>
+        {authenticated && <div className="library-actions"><Link className="library-button" to="/weread/bindings">管理书籍关联</Link></div>}
       </header>
 
       {notesScope.kind !== "all" ? (
