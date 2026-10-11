@@ -35,7 +35,7 @@ jobs:
       - name: Exact-head static and harness tests
         run: |
           git rev-parse HEAD
-          pnpm exec vitest run scripts/s32-migration-chain.test.ts scripts/s32-schema-contract.test.ts scripts/s32-schema-check.test.ts --testTimeout=35000
+          pnpm exec vitest run scripts/s32-migration-chain.test.ts scripts/s32-schema-contract.test.ts scripts/s32-schema-check.test.ts scripts/s32-m1b-integration-check.test.ts --testTimeout=35000
       - name: Disposable PG16 fresh, upgrade, invalid legacy and regression matrix
         run: |
           docker pull postgres:16-alpine

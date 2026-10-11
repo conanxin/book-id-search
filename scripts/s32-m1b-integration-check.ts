@@ -25,7 +25,8 @@ try {
     "-e", "POSTGRES_DB=s32_m1b_test", "postgres:16-alpine"]);
   let ready = false;
   for (let i = 0; i < 60; i++) {
-    try { docker(["exec", container, "pg_isready", "-U", "s32test", "-d", "s32_m1b_test"]); ready = true; break; }
+    // The image's temporary initialization server is socket-only; wait for the final TCP server.
+    try { docker(["exec", container, "pg_isready", "-h", "127.0.0.1", "-U", "s32test", "-d", "s32_m1b_test"]); ready = true; break; }
     catch { await new Promise((r) => setTimeout(r, 500)); }
   }
   if (!ready) throw new Error("Disposable PostgreSQL did not become ready");
