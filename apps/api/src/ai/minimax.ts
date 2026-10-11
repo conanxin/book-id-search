@@ -132,6 +132,31 @@ function extractAnthropicContent(data: unknown): string {
   return joinTextBlocks(data.content, "text");
 }
 
+/** Optional strict boundary: valid-looking text cannot override provider failure. */
+function hasCompletedResponse(data: unknown, wireApi: WireApi): boolean {
+  if (!isRecord(data) || data.type === "error" || data.error != null
+      || (data.status !== undefined && data.status !== "completed")) return false;
+  if (data.base_resp !== undefined && (!isRecord(data.base_resp)
+      || data.base_resp.status_code !== 0)) return false;
+  switch (wireApi) {
+    case "anthropic":
+      return data.type === "message" && data.role === "assistant" && data.stop_reason === "end_turn";
+    case "responses": {
+      if (data.status !== "completed") return false;
+      if (!Object.hasOwn(data, "output")) return typeof data.output_text === "string";
+      if (!Array.isArray(data.output)) return false;
+      const finalMessage = data.output.filter(item => isRecord(item)
+        && item.type === "message" && item.role === "assistant").at(-1);
+      return isRecord(finalMessage) && finalMessage.status === "completed";
+    }
+    case "openai_chat": {
+      const choice = Array.isArray(data.choices) ? data.choices[0] : null;
+      return isRecord(choice) && choice.finish_reason === "stop"
+        && isRecord(choice.message) && choice.message.role === "assistant";
+    }
+  }
+}
+
 /**
  * Run a chat completion through the configured wire API.
  * Returns either `{ ok: true, content }` or `{ ok: false, error, status }`.
@@ -147,6 +172,9 @@ export async function chatCompletion(
     maxTokens?: number;
     fetchImpl?: typeof fetch;
     timeoutMs?: number;
+    signal?: AbortSignal;
+    /** Require final wire status and reject explicit provider errors; opt-in for research. */
+    requireCompleted?: boolean;
   } = {}
 ): Promise<ChatCompletionResponse> {
   const config = options.config ?? resolveMiniMaxConfig();
@@ -155,8 +183,13 @@ export async function chatCompletion(
   }
   const f = options.fetchImpl ?? fetch;
   const timeoutMs = options.timeoutMs ?? REQUEST_TIMEOUT_MS;
+  if (options.signal?.aborted) {
+    return { ok: false, error: "MiniMax request cancelled", status: 499 };
+  }
 
   const ctl = new AbortController();
+  const onAbort = () => ctl.abort();
+  options.signal?.addEventListener("abort", onAbort, { once: true });
   const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
     let url: string;
@@ -251,6 +284,12 @@ export async function chatCompletion(
     }
 
     const data = (await res.json()) as unknown;
+    if (options.signal?.aborted) {
+      return { ok: false, error: "MiniMax request cancelled", status: 499 };
+    }
+    if (options.requireCompleted && !hasCompletedResponse(data, config.wireApi)) {
+      return { ok: false, error: "MiniMax returned an incomplete or failed response", status: 502 };
+    }
     const content = extractor(data);
     if (!content) {
       return {
@@ -265,6 +304,9 @@ export async function chatCompletion(
       model: config.model,
     };
   } catch (e) {
+    if (options.signal?.aborted) {
+      return { ok: false, error: "MiniMax request cancelled", status: 499 };
+    }
     const msg = (e as Error)?.message ?? String(e);
     if (msg.toLowerCase().includes("abort")) {
       return { ok: false, error: "MiniMax request timed out", status: 504 };
@@ -272,6 +314,7 @@ export async function chatCompletion(
     return { ok: false, error: `MiniMax request failed: ${redact(msg)}`, status: 502 };
   } finally {
     clearTimeout(timer);
+    options.signal?.removeEventListener("abort", onAbort);
   }
 }
 

@@ -8,6 +8,9 @@
 .book-ai-title h2 { margin: 0; font-size: 1.08rem; }
 .book-ai-boundary { margin: 12px 0 0; padding: 10px 12px; border-radius: 7px; background: var(--color-bg-soft); color: var(--color-primary-strong); font-size: 12px; line-height: 1.75; }
 .book-ai-modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 22px; }
+.book-ai-scopes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 22px; }
+.book-ai-scopes + .book-ai-modes { margin-top: 14px; }
+.book-ai-scopes .book-ai-mode strong { font-size: 14px; }
 .book-ai-mode { display: flex; min-width: 0; justify-content: center; padding: 10px 8px; border: 1px solid var(--color-border); border-radius: 7px; background: var(--color-bg-card); color: var(--color-text); font: inherit; text-align: center; cursor: pointer; }
 .book-ai-mode strong { font-size: 13px; line-height: 1.6; }
 .book-ai-mode:hover { border-color: var(--color-primary); }
@@ -39,6 +42,18 @@
 .book-ai-panel .library-empty { margin-top: 16px; }
 .book-ai-panel .library-actions { margin-top: 16px; }
 .book-ai-task > form > .library-actions { flex-direction: column; align-items: stretch; }
+.book-web-research form { margin-top: 16px; }
+.book-web-examples { display: flex; flex-wrap: wrap; gap: 8px 12px; margin-top: 8px; }
+.book-web-examples .library-text-button { font-size: 12px; }
+.book-web-queries ul { margin: 10px 0 0; padding-left: 18px; color: var(--color-text-muted); font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }
+.book-web-source-url { margin: 6px 0; color: var(--color-text-muted); font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
+.book-web-excerpt-label { margin: 12px 0 0; color: var(--color-text-muted); font-size: 11px; font-weight: 600; }
+.book-web-research .book-ai-source blockquote { margin-top: 4px; }
+.book-web-research .book-ai-source-heading a svg { display: inline; vertical-align: baseline; }
+.book-web-selection-notice { margin: 14px 0; color: var(--color-text-muted); font-size: 12px; line-height: 1.8; }
+.book-web-selected-source .book-web-excerpt { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; line-clamp: 5; overflow: hidden; }
+.book-web-selected-source .book-web-excerpt.is-expanded { display: block; -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }
+.book-web-excerpt-toggle { margin-top: 8px; font-size: 12px; }
 
 @media (max-width: 1050px) {
   .book-detail-layout { display: block; }

@@ -8,6 +8,7 @@ import {
 } from "./bookAi";
 import { useLibraryScope } from "./useLibraryScope";
 import { BookProse } from "./BookProse";
+import { BookWebResearch } from "./BookWebResearch";
 import "./library.css";
 import "./book-ai.css";
 
@@ -29,6 +30,7 @@ export function BookAiAssistant({ bookId }: BookAiAssistantProps) {
 }
 
 function BookAiPanel(props: BookAiAssistantProps & { generation: number }) {
+  const [scope, setScope] = useState<"book" | "web">("book");
   const [action, setAction] = useState<BookAiAction>("introduction");
   const [mobileOpen, setMobileOpen] = useState(false);
   const sidebarId = useId();
@@ -53,6 +55,11 @@ function BookAiPanel(props: BookAiAssistantProps & { generation: number }) {
       <div className="book-ai-title"><Sparkles size={19} aria-hidden="true" /><h2 ref={heading} tabIndex={-1}>本书 AI 助手</h2></div>
       <p className="library-muted">生成结果仅作阅读参考，可核对来源后复制使用。</p>
       <p className="book-ai-boundary">你的介绍和笔记由你编辑，AI 不会替你修改。</p>
+      <div className="book-ai-scopes" role="group" aria-label="AI 资料范围">
+        <button type="button" className="book-ai-mode" aria-pressed={scope === "book"} onClick={() => setScope("book")}><strong>本书资料</strong></button>
+        <button type="button" className="book-ai-mode" aria-pressed={scope === "web"} onClick={() => setScope("web")}><strong>联网研究</strong></button>
+      </div>
+      {scope === "book" ? <>
       <div className="book-ai-modes" role="group" aria-label="AI 整理方式">
         {MODES.map(item => <button key={item.action} type="button" className="book-ai-mode" aria-label={item.label}
           aria-pressed={action === item.action} onClick={() => setAction(item.action)}><strong>{item.label}</strong></button>)}
@@ -66,6 +73,7 @@ function BookAiPanel(props: BookAiAssistantProps & { generation: number }) {
         </div>
       </details>
       <BookAiTask key={action} {...props} action={action} />
+      </> : <BookWebResearch {...props} />}
     </aside>
   </>;
 }
