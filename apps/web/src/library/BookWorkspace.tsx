@@ -11,6 +11,7 @@ import {
 import { useLibraryScope } from "./useLibraryScope";
 import { useBookContentAnchor } from "./useBookContentAnchor";
 import { BookAiAssistant } from "./BookAiAssistant";
+import { BookProse } from "./BookProse";
 import "./library.css";
 
 type WorkspaceOperation = (request: (signal: AbortSignal) => Promise<BookWorkspaceData>) => Promise<BookWorkspaceData>;
@@ -121,6 +122,7 @@ function BookWorkspaceContent({ bookId, generation }: { bookId: string; generati
 
 function IntroductionPanel({ bookId, item, busy, operate, reload }: PanelProps) {
   const [editing, setEditing] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [baseVersion, setBaseVersion] = useState(0);
   const [conflict, setConflict] = useState(false);
@@ -132,6 +134,7 @@ function IntroductionPanel({ bookId, item, busy, operate, reload }: PanelProps) 
     setDraft(item.introduction);
     setBaseVersion(item.version);
     setEditing(true);
+    setPreviewOpen(false);
     setConflict(false);
     setLatest(null);
     setError(null);
@@ -175,15 +178,18 @@ function IntroductionPanel({ bookId, item, busy, operate, reload }: PanelProps) 
         <label className="library-field" htmlFor="library-introduction">书籍介绍
           <textarea id="library-introduction" rows={9} value={draft} maxLength={50000} onChange={event => setDraft(event.target.value)} placeholder="这本书讲了什么？有哪些值得留意的章节或版本信息？" />
         </label>
-        <p className="library-field-hint">支持分段或 Markdown 纯文本，最多 50,000 字符。</p>
-        {latest !== null && <details className="library-comparison" open><summary>刚读取的最新介绍</summary><div className="library-prose">{latest || "尚无介绍。"}</div></details>}
+        <p className="library-field-hint">支持 Markdown 标题、列表、引用和链接，最多 50,000 字符。</p>
+        <details className="library-comparison" open={previewOpen} onToggle={event => setPreviewOpen(event.currentTarget.open)}>
+          <summary>预览介绍</summary>{previewOpen && <BookProse content={draft} />}
+        </details>
+        {latest !== null && <details className="library-comparison" open><summary>刚读取的最新介绍</summary><BookProse content={latest || "尚无介绍。"} /></details>}
         <div className="library-actions">
           <button className="library-button library-button--primary" type="submit" disabled={conflict}>{busy ? "正在保存…" : latest !== null ? "将我的草稿保存为新版本" : "保存介绍"}</button>
           {conflict && <button className="library-button" type="button" onClick={() => void readLatest()}>读取最新介绍</button>}
           <button className="library-button library-button--quiet" type="button" onClick={() => { setEditing(false); setError(null); setMessage(""); }}>取消编辑</button>
         </div>
       </fieldset>
-    </form> : item.introduction ? <div className="library-prose">{item.introduction}</div>
+    </form> : item.introduction ? <BookProse content={item.introduction} />
       : <p className="library-empty">还没有补充介绍。把有用的信息留在这里，下次回来就能接着看。</p>}
     <ErrorMessage message={error} />
     <p className="library-status" role="status" aria-live="polite">{message}</p>
@@ -193,6 +199,7 @@ function IntroductionPanel({ bookId, item, busy, operate, reload }: PanelProps) 
 interface NoteDraft { noteId: string | null; title: string; content: string; baseRevisionId: string | null; }
 function NotesPanel({ bookId, item, busy, operate, reload, generation }: PanelProps & { generation: number }) {
   const [editor, setEditor] = useState<NoteDraft | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [conflict, setConflict] = useState(false);
   const [missing, setMissing] = useState(false);
   const [latest, setLatest] = useState<BookNote | null>(null);
@@ -203,6 +210,7 @@ function NotesPanel({ bookId, item, busy, operate, reload, generation }: PanelPr
   function begin(note?: BookNote) {
     setEditor(note ? { noteId: note.noteId, title: note.title, content: note.content, baseRevisionId: note.currentRevisionId }
       : { noteId: null, title: "", content: "", baseRevisionId: null });
+    setPreviewOpen(false);
     setConflict(false); setMissing(false); setLatest(null); setConfirmDelete(null); setError(null); setMessage("");
   }
   async function save(event: FormEvent) {
@@ -262,8 +270,11 @@ function NotesPanel({ bookId, item, busy, operate, reload, generation }: PanelPr
         <label className="library-field" htmlFor="library-note-content">笔记正文
           <textarea id="library-note-content" rows={10} value={editor.content} required maxLength={50000} onChange={event => setEditor({ ...editor, content: event.target.value })} placeholder="写下原文摘录、你的想法，以及下次想继续查的问题。" />
         </label>
-        <p className="library-field-hint">正文最多 50,000 字符；每次保存会保留一个历史版本。</p>
-        {latest && <details className="library-comparison" open><summary>刚读取的最新笔记：{latest.title}</summary><div className="library-prose">{latest.content}</div></details>}
+        <p className="library-field-hint">支持 Markdown 标题、列表、引用和链接，正文最多 50,000 字符；每次保存会保留一个历史版本。</p>
+        <details className="library-comparison" open={previewOpen} onToggle={event => setPreviewOpen(event.currentTarget.open)}>
+          <summary>预览笔记</summary>{previewOpen && <BookProse content={editor.content} />}
+        </details>
+        {latest && <details className="library-comparison" open><summary>刚读取的最新笔记：{latest.title}</summary><BookProse content={latest.content} /></details>}
         <div className="library-actions">
           <button className="library-button library-button--primary" type="submit" disabled={conflict || missing}>{busy ? "正在保存…" : latest ? "将我的草稿保存为新版本" : "保存笔记"}</button>
           {conflict && <button className="library-button" type="button" onClick={() => void readLatest()}>读取最新笔记</button>}
@@ -281,7 +292,7 @@ function NotesPanel({ bookId, item, busy, operate, reload, generation }: PanelPr
       {item.notes.map(note => <article className="library-note library-content-target" key={note.noteId} id={`book-note-${note.noteId}`} tabIndex={-1} aria-label={`笔记：${note.title}`}>
         <div className="library-note-heading"><h3>{note.title}</h3><span className="library-tag">手工笔记</span></div>
         <p className="library-meta"><time dateTime={note.updatedAt}>{libraryDate(note.updatedAt)}</time> · 第 {note.revisionNo} 版</p>
-        <div className="library-prose">{note.content}</div>
+        <BookProse content={note.content} />
         <div className="library-actions">
           <button className="library-button library-button--quiet" onClick={() => begin(note)} disabled={busy || !!editor}>编辑笔记</button>
           <button className="library-button library-button--quiet" onClick={() => setConfirmDelete(note.noteId)} disabled={busy || !!editor}>删除笔记</button>
@@ -342,7 +353,7 @@ function NoteHistory({ bookId, note, generation }: { bookId: string; note: BookN
       {error && selected && <button className="library-button" onClick={() => void select(selected)}>重试读取此版本</button>}
       {revision && <section className="library-history-revision" aria-label={`历史版本 ${revision.revisionNo}`}>
         <h4>{revision.title}</h4><p className="library-meta"><time dateTime={revision.createdAt}>{libraryDate(revision.createdAt)}</time></p>
-        <div className="library-prose">{revision.content}</div>
+        <BookProse content={revision.content} />
       </section>}
     </div>}
   </div>;

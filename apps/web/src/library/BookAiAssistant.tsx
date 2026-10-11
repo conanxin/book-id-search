@@ -11,6 +11,7 @@ import {
   type BookAiAction, type BookAiResponse,
 } from "./bookAi";
 import { useLibraryScope } from "./useLibraryScope";
+import { BookProse } from "./BookProse";
 import "./library.css";
 import "./book-ai.css";
 
@@ -62,6 +63,7 @@ function BookAiTask({ bookId, action, generation, busy, operate, reload }: BookA
   const [question, setQuestion] = useState("");
   const [response, setResponse] = useState<BookAiResponse | null>(null);
   const [draft, setDraft] = useState("");
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [baseVersion, setBaseVersion] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -87,7 +89,7 @@ function BookAiTask({ bookId, action, generation, busy, operate, reload }: BookA
   }, [sourcesOpen, activeSource]);
 
   function clearResult() {
-    setResponse(null); setDraft(""); setTitle(""); setSaved(false); setSaveError(null);
+    setResponse(null); setDraft(""); setPreviewOpen(false); setTitle(""); setSaved(false); setSaveError(null);
     setMessage(""); setConflict(false); setLatest(null); setSourcesOpen(false); setActiveSource(null);
   }
   function cancel() {
@@ -202,15 +204,18 @@ function BookAiTask({ bookId, action, generation, busy, operate, reload }: BookA
             <label className="library-field" htmlFor="book-ai-draft"><span id="book-ai-draft-label">AI 草稿正文</span>
               <textarea id="book-ai-draft" aria-labelledby="book-ai-draft-label" rows={12} value={draft} required maxLength={50000} onChange={event => setDraft(event.target.value)} />
             </label>
-            <p className="library-field-hint">下方按钮会保存编辑框中的文字。引用与摘录也在草稿内，可一起核对和编辑。</p>
-            {latest !== null && <details className="library-comparison" open><summary>刚读取的最新书籍介绍</summary><div className="library-prose">{latest || "尚无介绍。"}</div></details>}
+            <p className="library-field-hint">支持 Markdown 标题、列表、引用和链接。下方按钮会保存编辑框中的文字，引用与摘录可一起核对和编辑。</p>
+            <details className="library-comparison" open={previewOpen} onToggle={event => setPreviewOpen(event.currentTarget.open)}>
+              <summary>预览草稿</summary>{previewOpen && <BookProse content={draft} />}
+            </details>
+            {latest !== null && <details className="library-comparison" open><summary>刚读取的最新书籍介绍</summary><BookProse content={latest || "尚无介绍。"} /></details>}
             <div className="library-actions">
               <button type="submit" className="library-button library-button--primary" disabled={conflict}>{busy ? "正在保存…" : action === "introduction" ? "保存为书籍介绍" : "保存为新笔记"}</button>
               {conflict && <button type="button" className="library-button" onClick={() => void readLatest()}>读取最新书籍介绍</button>}
             </div>
           </fieldset>
         </form>
-        <details className="book-ai-original"><summary>查看 AI 原稿</summary><div className="library-prose">{response.draft.content}</div></details>
+        <details className="book-ai-original"><summary>查看 AI 原稿</summary><BookProse content={response.draft.content} /></details>
       </>}
       {saveError && <p className="library-error" role="alert">{saveError}</p>}
       <p className="library-status" role="status" aria-live="polite">{message}</p>

@@ -32,8 +32,17 @@ const workspace = (overrides: Partial<BookWorkspaceData> = {}): BookWorkspaceDat
 });
 const view = (bookId = "book-a") => <MemoryRouter><BookWorkspace bookId={bookId} /></MemoryRouter>;
 const input = (label: string) => screen.getByLabelText(label) as HTMLInputElement | HTMLTextAreaElement;
-const click = async (name: string) => { await act(async () => { fireEvent.click(screen.getByRole("button", { name, exact: true })); }); };
+const click = async (name: string) => { await act(async () => { fireEvent.click(screen.getByRole("button", { name })); }); };
 const change = (label: string, value: string) => fireEvent.change(input(label), { target: { value } });
+const openPreview = async (name: string) => {
+  const summary = screen.getByText(name, { selector: "summary" });
+  const details = summary.parentElement as HTMLDetailsElement;
+  expect(details.open).toBe(false);
+  expect(details.querySelector(".book-prose")).toBeNull();
+  await act(async () => { fireEvent.click(summary); });
+  await waitFor(() => expect(details.querySelector(".book-prose")).not.toBeNull());
+  return details;
+};
 
 beforeEach(() => {
   vi.clearAllMocks(); __resetWebAuthStoreForTests(); __setWebAuthSnapshotForTests(auth());
@@ -89,22 +98,81 @@ describe("book workspace", () => {
     expect(screen.getByRole("link", { name: "已在我的书籍中" }).getAttribute("href")).toBe("/library");
   });
 
+  it("reads saved introductions and notes as prose while keeping resource remarks literal", async () => {
+    const introduction = "# 阅读路线\n\n- **旅行**经验\n- 地理线索\n\n> 一句原书摘录\n\n[查看笔记](/books/book-a#book-note-note-a)";
+    const content = "## 我的观察\n\n先看*版本*，再核对地名。\n\n[原书页面](https://example.test/book.pdf#page=21)";
+    vi.mocked(getBookWorkspace).mockResolvedValue(workspace({ saved: true, introduction,
+      notes: [{ ...note(), content }], resources: [{ ...resource, notes: "**来源备注** [纸本](https://example.test/raw)" }],
+    }));
+    render(view());
+    const intro = await screen.findByRole("region", { name: "我的补充介绍" });
+    expect(within(intro).getByRole("heading", { name: "阅读路线" })).toBeTruthy();
+    expect(within(intro).getAllByRole("listitem")).toHaveLength(2);
+    expect(intro.querySelector("strong")?.textContent).toBe("旅行");
+    expect(intro.querySelector("blockquote")?.textContent).toContain("一句原书摘录");
+    expect(within(intro).getByRole("link", { name: "查看笔记" }).getAttribute("href")).toBe("/books/book-a#book-note-note-a");
+    expect(within(intro).getByRole("heading", { name: "我的补充介绍" }).id).toBe("library-introduction-heading");
+    const article = screen.getByRole("article", { name: "笔记：古道的阅读线索" });
+    expect(article.id).toBe("book-note-note-a");
+    expect(within(article).getByRole("heading", { name: "我的观察" })).toBeTruthy();
+    expect(article.querySelector("em")?.textContent).toBe("版本");
+    expect(within(article).getByRole("link", { name: "原书页面" }).getAttribute("href")).toBe(resource.url);
+    const version = screen.getByRole("article", { name: "电子版本：原版扫描本" });
+    expect(version.textContent).toContain("**来源备注** [纸本](https://example.test/raw)");
+    expect(within(version).queryByRole("link", { name: "纸本" })).toBeNull();
+    expect(saveBookWorkspace).not.toHaveBeenCalled(); expect(createBookNote).not.toHaveBeenCalled();
+  });
+
   it("retains a conflicted introduction and deliberately rebases it on the latest version", async () => {
-    vi.mocked(getBookWorkspace).mockResolvedValueOnce(workspace({ saved: true, introduction: "已有介绍", version: 2 }))
-      .mockResolvedValueOnce(workspace({ saved: true, introduction: "另一个页面的新介绍", version: 3 }));
+    const original = "# 已有介绍\n\n原来的一段文字。";
+    const draft = "## 我的未保存草稿\n\n- 保留 **重点**\n\n[原书](https://example.test/book.pdf)\n";
+    const latest = "# 另一个页面的新介绍\n\n> 新增的版本说明";
+    vi.mocked(getBookWorkspace).mockResolvedValueOnce(workspace({ saved: true, introduction: original, version: 2 }))
+      .mockResolvedValueOnce(workspace({ saved: true, introduction: latest, version: 3 }));
     vi.mocked(saveBookWorkspace).mockRejectedValueOnce(new LibraryApiError(409, "介绍已变化，草稿保留"))
-      .mockResolvedValueOnce(workspace({ saved: true, introduction: "我的未保存草稿", version: 4 }));
+      .mockResolvedValueOnce(workspace({ saved: true, introduction: draft, version: 4 }));
     render(view()); await screen.findByRole("button", { name: "编辑介绍" });
-    await click("编辑介绍"); change("书籍介绍", "我的未保存草稿"); await click("保存介绍");
+    await click("编辑介绍"); expect(input("书籍介绍").value).toBe(original);
+    change("书籍介绍", draft);
+    const preview = await openPreview("预览介绍");
+    expect(within(preview).getByRole("heading", { name: "我的未保存草稿" })).toBeTruthy();
+    expect(within(preview).getByRole("link", { name: "原书" }).getAttribute("href")).toBe("https://example.test/book.pdf");
+    expect(getBookWorkspace).toHaveBeenCalledTimes(1); expect(saveBookWorkspace).not.toHaveBeenCalled();
+    expect(input("书籍介绍").value).toBe(draft);
+    await click("保存介绍");
     await screen.findByRole("alert");
-    expect(input("书籍介绍").value).toBe("我的未保存草稿");
+    expect(input("书籍介绍").value).toBe(draft);
     expect((screen.getByRole("button", { name: "保存介绍" }) as HTMLButtonElement).disabled).toBe(true);
     await click("读取最新介绍");
-    expect(input("书籍介绍").value).toBe("我的未保存草稿");
-    expect(await screen.findByText("另一个页面的新介绍")).toBeTruthy();
+    expect(input("书籍介绍").value).toBe(draft);
+    const comparison = screen.getByText("刚读取的最新介绍", { selector: "summary" }).parentElement!;
+    expect(within(comparison).getByRole("heading", { name: "另一个页面的新介绍" })).toBeTruthy();
+    expect(comparison.querySelector("blockquote")?.textContent).toContain("新增的版本说明");
     await click("将我的草稿保存为新版本");
-    expect(saveBookWorkspace).toHaveBeenLastCalledWith("book-a", { introduction: "我的未保存草稿", baseVersion: 3 }, expect.any(AbortSignal));
+    expect(saveBookWorkspace).toHaveBeenLastCalledWith("book-a", { introduction: draft, baseVersion: 3 }, expect.any(AbortSignal));
     expect(await screen.findByText("书籍介绍已保存。")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "我的未保存草稿" })).toBeTruthy();
+  });
+
+  it("previews a new note without writing and saves its exact Markdown only on submit", async () => {
+    const content = "# 踏查记录\n\n1. 核对地名\n2. 回到原书\n\n> 待下次实地确认\n";
+    render(view()); await screen.findByRole("button", { name: "写一篇笔记" }); await click("写一篇笔记");
+    change("笔记标题", "现场笔记"); change("笔记正文", content);
+    const preview = await openPreview("预览笔记");
+    expect(within(preview).getByRole("heading", { name: "踏查记录" })).toBeTruthy();
+    expect(preview.querySelectorAll("ol > li")).toHaveLength(2);
+    expect(preview.querySelector("blockquote")?.textContent).toContain("待下次实地确认");
+    expect(input("笔记正文").value).toBe(content);
+    expect(getBookWorkspace).toHaveBeenCalledTimes(1); expect(createBookNote).not.toHaveBeenCalled();
+    expect(updateBookNote).not.toHaveBeenCalled(); expect(saveBookWorkspace).not.toHaveBeenCalled();
+    const edited = `${content}\n**仍待核对**`;
+    change("笔记正文", edited);
+    expect(preview.querySelector("strong")?.textContent).toBe("仍待核对");
+    vi.mocked(createBookNote).mockResolvedValueOnce(workspace({ saved: true, notes: [{ ...note(), title: "现场笔记", content: edited }] }));
+    await click("保存笔记");
+    expect(createBookNote).toHaveBeenCalledWith("book-a", { title: "现场笔记", content: edited }, expect.any(AbortSignal));
+    await click("编辑笔记");
+    expect((screen.getByText("预览笔记", { selector: "summary" }).parentElement as HTMLDetailsElement).open).toBe(false);
   });
 
   it("preserves a failed new note, then saves it without creating another workspace", async () => {
@@ -121,29 +189,41 @@ describe("book workspace", () => {
   });
 
   it("edits a note using its original revision and reads history separately", async () => {
-    vi.mocked(getBookWorkspace).mockResolvedValue(workspace({ saved: true, notes: [note()] }));
+    const original = "# 第一版观察\n\n[查看来源](https://example.test/source)";
+    const edited = "## 第二版观察\n\n- 新的地名线索\n\n> 保留原句\n";
+    vi.mocked(getBookWorkspace).mockResolvedValue(workspace({ saved: true, notes: [{ ...note(), content: original }] }));
+    vi.mocked(updateBookNote).mockResolvedValueOnce(workspace({ saved: true, notes: [{ ...note(2), content: edited }] }));
+    vi.mocked(getBookNoteRevision).mockResolvedValueOnce({ revisionId: "revision-1", revisionNo: 1, title: "早期标题", content: original, createdAt: time });
     render(view()); await screen.findByRole("button", { name: "编辑笔记" });
-    await click("编辑笔记"); change("笔记正文", "笔记正文 2"); await click("保存笔记");
-    expect(updateBookNote).toHaveBeenCalledWith("book-a", "note-a", { title: "古道的阅读线索", content: "笔记正文 2", baseRevisionId: "revision-1" }, expect.any(AbortSignal));
+    await click("编辑笔记"); expect(input("笔记正文").value).toBe(original);
+    change("笔记正文", edited); await click("保存笔记");
+    expect(updateBookNote).toHaveBeenCalledWith("book-a", "note-a", { title: "古道的阅读线索", content: edited, baseRevisionId: "revision-1" }, expect.any(AbortSignal));
     expect(getBookNoteRevision).not.toHaveBeenCalled();
     await click("查看历史版本（2）"); await click("第 1 版");
     const historical = await screen.findByRole("region", { name: "历史版本 1" });
-    expect(historical.textContent).toContain("早期正文");
+    expect(within(historical).getByRole("heading", { name: "第一版观察" })).toBeTruthy();
+    expect(within(historical).getByRole("link", { name: "查看来源" }).getAttribute("href")).toBe("https://example.test/source");
     expect(within(historical).queryByRole("textbox")).toBeNull();
-    expect(screen.getByText("笔记正文 2")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "第二版观察" })).toBeTruthy();
+    expect(updateBookNote).toHaveBeenCalledTimes(1); expect(createBookNote).not.toHaveBeenCalled();
   });
 
   it("conflicted notes keep their drafts and update the base revision only after an explicit reload", async () => {
+    const draft = "## 我的冲突草稿\n\n[对照资料](https://example.test/compare)\n";
+    const latest = "# 最新笔记内容\n\n> 新版引文";
     vi.mocked(getBookWorkspace).mockResolvedValueOnce(workspace({ notes: [note()] }))
-      .mockResolvedValueOnce(workspace({ notes: [note(3)] }));
+      .mockResolvedValueOnce(workspace({ notes: [{ ...note(3), content: latest }] }));
     vi.mocked(updateBookNote).mockRejectedValueOnce(new LibraryApiError(409, "版本已更新"))
-      .mockResolvedValueOnce(workspace({ notes: [{ ...note(4), content: "我的冲突草稿" }] }));
+      .mockResolvedValueOnce(workspace({ notes: [{ ...note(4), content: draft }] }));
     render(view()); await screen.findByRole("button", { name: "编辑笔记" });
-    await click("编辑笔记"); change("笔记正文", "我的冲突草稿"); await click("保存笔记");
-    await screen.findByRole("alert"); expect(input("笔记正文").value).toBe("我的冲突草稿");
-    await click("读取最新笔记"); expect(input("笔记正文").value).toBe("我的冲突草稿");
+    await click("编辑笔记"); change("笔记正文", draft); await click("保存笔记");
+    await screen.findByRole("alert"); expect(input("笔记正文").value).toBe(draft);
+    await click("读取最新笔记"); expect(input("笔记正文").value).toBe(draft);
+    const comparison = screen.getByText("刚读取的最新笔记：古道的阅读线索", { selector: "summary" }).parentElement!;
+    expect(within(comparison).getByRole("heading", { name: "最新笔记内容" })).toBeTruthy();
+    expect(comparison.querySelector("blockquote")?.textContent).toContain("新版引文");
     await click("将我的草稿保存为新版本");
-    expect(updateBookNote).toHaveBeenLastCalledWith("book-a", "note-a", expect.objectContaining({ content: "我的冲突草稿", baseRevisionId: "revision-3" }), expect.any(AbortSignal));
+    expect(updateBookNote).toHaveBeenLastCalledWith("book-a", "note-a", expect.objectContaining({ content: draft, baseRevisionId: "revision-3" }), expect.any(AbortSignal));
   });
 
   it("deletes a note only after its local confirmation and an acknowledged server response", async () => {

@@ -75,6 +75,7 @@ async function evidence(testInfo: TestInfo, network: string) {
       externalMiniMax: "NOT_EXERCISED", externalWeRead: "NOT_CONTACTED", actualGoogleOAuth: "NOT_EXERCISED",
       authentication: "real signed Google owner session, CSRF and production mounted signOut",
       persistence: "explicit production library writes; independent new Pool/store reads after generation and save",
+      savedReading: "rendered provenance after reload; actual saved note-source link returns to focused note",
       network,
     }, null, 2), contentType: "application/json",
   });
@@ -188,7 +189,16 @@ test("book AI reads actual saved sources and effective WeRead links, then explic
   expect(savedIntro.request().postDataJSON()).toEqual({ introduction: editedIntroduction, baseVersion: 1 });
   expect(await persistedWorkspace(A)).toMatchObject({ introduction: editedIntroduction, version: 2 });
   await page.reload();
-  await expect(page.getByText(editedIntroduction, { exact: true })).toBeVisible();
+  const savedIntroduction = page.getByRole("region", { name: "我的补充介绍", exact: true });
+  await expect(savedIntroduction.getByRole("heading", { name: "参考资料（生成时摘录）", exact: true })).toBeVisible();
+  await expect(savedIntroduction).toContainText("人工补充：现场核对山口旧路的位置，再补入介绍。");
+  await expect(savedIntroduction.locator("blockquote").filter({ hasText: NOTE_A })).toBeVisible();
+  const introSources = generated.sources.filter(source => generated.citedSourceIds.includes(source.id));
+  const introLinks = savedIntroduction.getByRole("link", { name: "查看来源", exact: true });
+  await expect(introLinks).toHaveCount(introSources.length);
+  for (const [index, source] of introSources.entries()) {
+    await expect(introLinks.nth(index)).toHaveAttribute("href", source.href);
+  }
   await expect(assistant(page).getByRole("textbox", { name: "AI 草稿正文", exact: true })).toHaveCount(0);
 
   const beforeSummary = await persistedWorkspace(A);
@@ -211,7 +221,27 @@ test("book AI reads actual saved sources and effective WeRead links, then explic
   expect(persisted?.notes.find(note => note.title === NOTE_A_TITLE)?.content).toBe(NOTE_A);
   expect(await persistedWorkspace(B)).toEqual(beforeOther);
   await page.reload();
-  await expect(page.getByRole("article", { name: `笔记：${savedTitle}`, exact: true }).getByText(editedSummary, { exact: true })).toBeVisible();
+  const savedSummary = page.getByRole("article", { name: `笔记：${savedTitle}`, exact: true });
+  await expect(savedSummary.getByRole("heading", { name: "参考资料（生成时摘录）", exact: true }).first()).toBeVisible();
+  await expect(savedSummary).toContainText("人工核对：下次按山口、旧驿站、聚落三个主题补记。");
+  const savedLinks = await savedSummary.getByRole("link", { name: "查看来源", exact: true })
+    .evaluateAll(links => links.map(link => link.getAttribute("href")));
+  for (const source of summary.sources.filter(source => summary.citedSourceIds.includes(source.id))) {
+    expect(savedLinks).toContain(source.href);
+  }
+  await savedSummary.screenshot({ path: testInfo.outputPath("book-ai-saved-note-reading.png") });
+  // Follow a source link from persisted Markdown, after a real page reload.
+  // The note identity comes from the actual seed response and collector result.
+  const personalSource = summary.sources.find(source => source.kind === "note")!;
+  const sourcePath = `/books/${A}#book-note-${seeded.notes[0].noteId}`;
+  expect(personalSource.href).toBe(sourcePath);
+  expect(summary.citedSourceIds).toContain(personalSource.id);
+  await savedSummary.locator(`a[href="${sourcePath}"]`).filter({ hasText: /^查看来源$/ }).last().click();
+  const sourceNote = page.getByRole("article", { name: `笔记：${NOTE_A_TITLE}`, exact: true });
+  await expect(page).toHaveURL(sourcePath);
+  await expect(sourceNote).toBeFocused();
+  await expect(sourceNote).toBeInViewport();
+  await sourceNote.screenshot({ path: testInfo.outputPath("book-ai-note-source-target.png") });
   expect(electronicRequests).toEqual([]);
   expect(errors).toEqual([]);
 });

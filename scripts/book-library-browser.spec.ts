@@ -5,7 +5,7 @@
  * the real session implementation; actual Google OAuth and Meili are untested.
  */
 import { createRequire } from "node:module";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { issueWebSession } from "../apps/api/src/auth/web-session.js";
 import { getBookBrowserCatalogIds } from "./book-browser-fixtures.js";
 
@@ -14,14 +14,30 @@ const runId = process.env.BOOK_LIBRARY_BROWSER_RUN_ID!;
 const { A, B } = getBookBrowserCatalogIds(runId);
 const TITLE_A = `古道阅读验证甲 ${runId}`, TITLE_B = `古道阅读验证乙 ${runId}`;
 const LOGIN_TITLE = "登录后，继续整理这本书与阅读资料";
-const INTRODUCTION = "这是一段持久保存的私人书籍介绍：古道的地理线索与历史沿革。";
+const INTRODUCTION = [
+  "## 古道阅读提要", "", "这是一段**持久保存**的私人书籍介绍：古道的地理线索与历史沿革。", "",
+  "- 先读道路沿革", "- 再核对地理线索", "", "> 书中叙述仍需与现场遗迹相互核对。", "",
+  "[延伸阅读目录](https://example.test/reading-guide)",
+].join("\n");
 const NOTE_SEARCH_TERM = `笔记独有石阶线索-${runId}`;
-const FIRST_NOTE_CONTENT = `第一篇笔记的私人正文。${NOTE_SEARCH_TERM}。待下次踏查核对。`;
+const FIRST_NOTE_CONTENT = [
+  "## 山口踏查札记", "", `第一篇笔记的私人正文。${NOTE_SEARCH_TERM}。待下次踏查核对。`, "",
+  "- 沿石阶观察路面", "- 在山口记录方向", "", "> 先区分现场所见与后来听到的故事。", "",
+  `[查看我的补充介绍](/books/${A}#library-introduction-heading)`,
+].join("\n");
 const RESOURCE_URL = "https://example.test/ebook.pdf";
 const apiRequire = createRequire(new URL("../apps/api/package.json", import.meta.url));
 const { Pool } = apiRequire("pg");
 const db = new Pool({ connectionString: process.env.S32_LIBRARY_TEST_DATABASE_URL });
 test.afterAll(async () => { await db.end(); });
+
+async function expectFirstNoteReading(container: Locator) {
+  await expect(container.getByRole("heading", { name: "山口踏查札记", exact: true })).toBeVisible();
+  await expect(container.getByRole("listitem")).toHaveText(["沿石阶观察路面", "在山口记录方向"]);
+  await expect(container.locator("blockquote")).toHaveText("先区分现场所见与后来听到的故事。");
+  await expect(container.getByRole("link", { name: "查看我的补充介绍", exact: true }))
+    .toHaveAttribute("href", `/books/${A}#library-introduction-heading`);
+}
 
 async function save(page: Page, method: string, suffix: string, button: string) {
   const response = page.waitForResponse(value => value.request().method() === method
@@ -56,6 +72,7 @@ test("signed owner session saves introduction, notes and resource through the UI
   await testInfo.attach("verification-scope.json", {
     body: JSON.stringify({ catalog: "two synthetic books", relatedBooks: "production collector + synthetic field-search adapter",
       savedContentSearch: "production PostgreSQL list + browser note-fragment navigation",
+      savedReading: "Markdown semantics after reload; exact source editing; rendered historical revision",
       actualMeilisearch: "NOT_EXERCISED", persistence: "real PostgreSQL", role: "s32_app",
       authentication: "real signed session + CSRF", actualGoogleOAuth: "NOT_EXERCISED" }, null, 2),
     contentType: "application/json",
@@ -130,7 +147,14 @@ test("signed owner session saves introduction, notes and resource through the UI
   await expect(resource.getByRole("link", { name: "打开电子版本 ↗" })).toHaveAttribute("href", RESOURCE_URL);
 
   await page.reload();
-  await expect(page.getByText(INTRODUCTION, { exact: true })).toBeVisible();
+  const introduction = page.getByRole("region", { name: "我的补充介绍", exact: true });
+  await expect(introduction.getByRole("heading", { name: "古道阅读提要", exact: true })).toBeVisible();
+  await expect(introduction.locator("strong")).toHaveText("持久保存");
+  await expect(introduction.getByRole("listitem")).toHaveText(["先读道路沿革", "再核对地理线索"]);
+  await expect(introduction.locator("blockquote")).toHaveText("书中叙述仍需与现场遗迹相互核对。");
+  await expect(introduction.getByRole("link", { name: "延伸阅读目录", exact: true }))
+    .toHaveAttribute("href", "https://example.test/reading-guide");
+  await expectFirstNoteReading(page.getByRole("article", { name: "笔记：第一篇阅读笔记", exact: true }));
   await expect(page.getByRole("article", { name: /^笔记：/ })).toHaveCount(2);
   await expect(resource).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("book-workspace-desktop.png"), fullPage: true });
@@ -190,19 +214,22 @@ test("signed owner session saves introduction, notes and resource through the UI
   await expect(firstNote).toBeFocused();
   await expect(firstNote).toBeInViewport();
   await firstNote.screenshot({ path: testInfo.outputPath("book-note-search-target.png") });
-  await expect(page.getByText(INTRODUCTION, { exact: true })).toBeVisible();
+  await expect(introduction.getByRole("heading", { name: "古道阅读提要", exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "编辑介绍", exact: true }).click();
   // A textarea's initial text is included by the wrapped-label text selector.
   // Its accessible textbox name stays "书籍介绍" when editing saved content.
+  await expect(page.getByRole("textbox", { name: "书籍介绍", exact: true })).toHaveValue(INTRODUCTION);
   await page.getByRole("textbox", { name: "书籍介绍", exact: true }).fill(`${INTRODUCTION}\n补充后的版本。`);
   await save(page, "PUT", `/library/books/${A}`, "保存介绍");
   await firstNote.getByRole("button", { name: "编辑笔记", exact: true }).click();
+  await expect(page.getByRole("textbox", { name: "笔记正文", exact: true })).toHaveValue(FIRST_NOTE_CONTENT);
   await page.getByRole("textbox", { name: "笔记正文", exact: true }).fill("第一篇笔记的修订正文");
   await save(page, "PUT", `/notes/${firstNoteId}`, "保存笔记");
   await firstNote.getByRole("button", { name: "查看历史版本（2）", exact: true }).click();
   await firstNote.getByRole("button", { name: "第 1 版", exact: true }).click();
-  await expect(firstNote.getByRole("region", { name: "历史版本 1", exact: true }).getByText(FIRST_NOTE_CONTENT, { exact: true })).toBeVisible();
+  await expectFirstNoteReading(firstNote.getByRole("region", { name: "历史版本 1", exact: true }));
+  await expect(firstNote.getByText("第一篇笔记的修订正文", { exact: true })).toBeVisible();
 
   await resource.getByRole("button", { name: "编辑链接", exact: true }).click();
   await page.getByLabel("资源名称", { exact: true }).fill("修订扫描本");
@@ -236,7 +263,7 @@ test("signed owner session saves introduction, notes and resource through the UI
   await expect(page.getByRole("heading", { name: LOGIN_TITLE })).toBeVisible();
   await expect(page.getByRole("link", { name: "使用 Google 登录", exact: true }))
     .toHaveAttribute("href", `/account?returnTo=${encodeURIComponent(notePath)}`);
-  await expect(page.getByText(INTRODUCTION, { exact: false })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "古道阅读提要", exact: true })).toHaveCount(0);
   await expect(page.getByRole("article", { name: /^笔记：/ })).toHaveCount(0);
   expect((await page.request.get(`/api/private/s32/library/books/${A}`)).status()).toBe(401);
   expect(pageErrors).toEqual([]);

@@ -1,5 +1,14 @@
 # BOOK-ID-SEARCH status
 
+## 2026-10-11 — Read saved introductions and notes
+
+- `task_id=BOOK_CENTERED_READING_RENDER_V1`; continues Draft [#72](https://github.com/conanxin/book-id-search/pull/72) from `20eb7da`.
+- Adds one shared Markdown reader for saved introductions, current/historical notes and AI read-only views, with readable headings, lists, quotes, tables and source links.
+- Optional editor previews render the current input; saving still submits the original text through existing version/conflict handling. Source links retain book/note fragments and the current Google-session boundaries.
+- Uses fixed `react-markdown` and `remark-gfm` versions; no API, migration or model-call changes. Imported WeRead excerpts and search-match snippets retain their plain-text scope.
+- Contract: [Reading presentation v1](development/BOOK_READING_RENDER_V1.md). Current-commit test, browser and visual evidence is maintained in PR #72.
+- The registered desktop remains offline and the real-provider trial pending. Development candidate only; no merge, image publication or Tencent deployment.
+
 ## 2026-10-11 — Find saved books by their notes
 
 - `task_id=BOOK_CENTERED_LIBRARY_CONTENT_SEARCH_V1`; continues Draft [#72](https://github.com/conanxin/book-id-search/pull/72) from `be861ce`.

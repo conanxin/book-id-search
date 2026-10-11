@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { BookWorkspace } from "./BookWorkspace";
 import { __resetWebAuthStoreForTests, __setWebAuthSnapshotForTests } from "../auth/session";
@@ -42,7 +42,7 @@ function answer(action: BookAiAction = "introduction", changes: Partial<BookAiRe
   return result;
 }
 const view = (bookId = A) => <MemoryRouter><BookWorkspace bookId={bookId} /></MemoryRouter>;
-const click = async (name: string) => { await act(async () => { fireEvent.click(screen.getByRole("button", { name, exact: true })); }); };
+const click = async (name: string) => { await act(async () => { fireEvent.click(screen.getByRole("button", { name })); }); };
 const field = (label: string) => screen.getByLabelText(label) as HTMLInputElement | HTMLTextAreaElement;
 const change = (label: string, value: string) => fireEvent.change(field(label), { target: { value } });
 const deferred = <T,>() => { let resolve!: (value: T) => void; return { promise: new Promise<T>(r => { resolve = r; }), resolve }; };
@@ -88,26 +88,68 @@ describe("book AI assistant", () => {
     expect(saveBookWorkspace).not.toHaveBeenCalled(); expect(createBookNote).not.toHaveBeenCalled();
   });
 
+  it("renders the AI original and a live draft preview without saving or requesting more material", async () => {
+    const value = answer("introduction", { draft: { title: "阅读线索", content: "## AI 阅读线索\n\n- 对照 **地名** [S3]\n\n> 回到原书核对 [S2]" } });
+    vi.mocked(generateBookAi).mockResolvedValueOnce(value);
+    await mount(); await click("生成介绍草稿");
+    const originalSummary = screen.getByText("查看 AI 原稿", { selector: "summary" });
+    const original = originalSummary.parentElement as HTMLDetailsElement;
+    expect(original.open).toBe(false);
+    await act(async () => { fireEvent.click(originalSummary); });
+    expect(within(original).getByRole("heading", { name: "AI 阅读线索" })).toBeTruthy();
+    expect(original.querySelector("strong")?.textContent).toBe("地名");
+    expect(original.querySelector("blockquote")?.textContent).toContain("回到原书核对 [S2]");
+    expect(within(original).queryByRole("textbox")).toBeNull();
+    const summary = screen.getByText("预览草稿", { selector: "summary" });
+    const preview = summary.parentElement as HTMLDetailsElement;
+    expect(preview.open).toBe(false); expect(preview.querySelector(".book-prose")).toBeNull();
+    await act(async () => { fireEvent.click(summary); });
+    await waitFor(() => expect(preview.querySelector(".book-prose")).not.toBeNull());
+    expect(within(preview).getByRole("heading", { name: "AI 阅读线索" })).toBeTruthy();
+    expect(within(preview).getByRole("heading", { name: "参考资料（生成时摘录）" })).toBeTruthy();
+    expect(within(preview).getAllByRole("link", { name: "查看来源" }).map(link => link.getAttribute("href")))
+      .toContain(`/books/${A}#book-note-${noteId}`);
+    expect(field("AI 草稿正文").value).toBe(bookAiDraftContent(value));
+    const edited = "# 我的定稿\n\n[回到笔记](/books/10000001_100000000001#book-note-11111111-1111-4111-8111-111111111111)\n";
+    change("AI 草稿正文", edited);
+    expect(within(preview).getByRole("heading", { name: "我的定稿" })).toBeTruthy();
+    expect(within(preview).queryByRole("heading", { name: "AI 阅读线索" })).toBeNull();
+    expect(within(original).getByRole("heading", { name: "AI 阅读线索" })).toBeTruthy();
+    expect(field("AI 草稿正文").value).toBe(edited);
+    await act(async () => { fireEvent.click(summary); });
+    await waitFor(() => expect(preview.querySelector(".book-prose")).toBeNull());
+    expect(generateBookAi).toHaveBeenCalledTimes(1); expect(getBookWorkspace).toHaveBeenCalledTimes(1);
+    expect(saveBookWorkspace).not.toHaveBeenCalled(); expect(createBookNote).not.toHaveBeenCalled();
+  });
+
   it("saves only the edited visible introduction using the generation's captured version", async () => {
+    const draft = "## 核对后的介绍\n\n经过我核对的介绍，保留 **原文重点**。\n\n[参考](https://example.test/source)\n";
     vi.mocked(getBookWorkspace).mockResolvedValue(workspace({ version: 7 }));
     await mount(); await click("生成介绍草稿");
-    change("AI 草稿正文", "经过我核对的介绍，不附加隐藏正文。");
+    change("AI 草稿正文", draft);
     expect(saveBookWorkspace).not.toHaveBeenCalled();
     await click("保存为书籍介绍");
-    expect(saveBookWorkspace).toHaveBeenCalledWith(A, { introduction: "经过我核对的介绍，不附加隐藏正文。", baseVersion: 2 }, expect.any(AbortSignal));
+    expect(saveBookWorkspace).toHaveBeenCalledWith(A, { introduction: draft, baseVersion: 2 }, expect.any(AbortSignal));
     expect(await screen.findByText("AI 草稿已保存为书籍介绍。")).toBeTruthy();
-    expect(within(screen.getByRole("region", { name: "我的补充介绍" })).getByText("经过我核对的介绍，不附加隐藏正文。")).toBeTruthy();
+    const introduction = screen.getByRole("region", { name: "我的补充介绍" });
+    expect(within(introduction).getByRole("heading", { name: "核对后的介绍" })).toBeTruthy();
+    expect(within(introduction).getByRole("link", { name: "参考" }).getAttribute("href")).toBe("https://example.test/source");
+    expect(field("AI 草稿正文").value).toBe(draft);
     expect(screen.getByRole("button", { name: "保存为书籍介绍" }).matches(":disabled")).toBe(true);
     expect(createBookNote).not.toHaveBeenCalled();
   });
 
   it("creates one edited summary note and updates the same book's note list", async () => {
+    const content = `## 核对后的摘要\n\n${bookAiDraftContent(answer("notes_summary"))}\n`;
     await mount(); await click("笔记摘要"); await click("生成笔记摘要");
-    change("AI 笔记标题", "我的阅读摘要"); change("AI 草稿正文", "核对后保留的摘要正文。");
+    change("AI 笔记标题", "我的阅读摘要"); change("AI 草稿正文", content);
     expect(createBookNote).not.toHaveBeenCalled();
     await click("保存为新笔记");
-    expect(createBookNote).toHaveBeenCalledWith(A, { title: "我的阅读摘要", content: "核对后保留的摘要正文。" }, expect.any(AbortSignal));
-    expect(await screen.findByRole("article", { name: "笔记：我的阅读摘要" })).toBeTruthy();
+    expect(createBookNote).toHaveBeenCalledWith(A, { title: "我的阅读摘要", content }, expect.any(AbortSignal));
+    const saved = await screen.findByRole("article", { name: "笔记：我的阅读摘要" });
+    expect(within(saved).getByRole("heading", { name: "核对后的摘要" })).toBeTruthy();
+    expect(within(saved).getAllByRole("link", { name: "查看来源" }).map(link => link.getAttribute("href")))
+      .toContain(`/books/${A}#book-note-${noteId}`);
     await click("保存为新笔记"); expect(createBookNote).toHaveBeenCalledTimes(1);
     expect(saveBookWorkspace).not.toHaveBeenCalled();
   });
@@ -199,17 +241,22 @@ describe("book AI assistant", () => {
   });
 
   it("keeps a conflicted AI introduction, reads the new version and requires a deliberate retry", async () => {
-    vi.mocked(getBookWorkspace).mockResolvedValueOnce(workspace()).mockResolvedValueOnce(workspace({ version: 3, introduction: "另一个页面保存的新介绍" }));
+    const draft = "## 我保留的 AI 编辑稿\n\n[核对来源](https://example.test/source)\n";
+    const latest = "# 另一个页面保存的新介绍\n\n> 新补充的引文";
+    vi.mocked(getBookWorkspace).mockResolvedValueOnce(workspace()).mockResolvedValueOnce(workspace({ version: 3, introduction: latest }));
     vi.mocked(saveBookWorkspace).mockRejectedValueOnce(new LibraryApiError(409, "介绍已在其他页面更新。"))
-      .mockResolvedValueOnce(workspace({ version: 4, introduction: "我保留的 AI 编辑稿" }));
-    await mount(); await click("生成介绍草稿"); change("AI 草稿正文", "我保留的 AI 编辑稿");
+      .mockResolvedValueOnce(workspace({ version: 4, introduction: draft }));
+    await mount(); await click("生成介绍草稿"); change("AI 草稿正文", draft);
     await click("保存为书籍介绍"); expect((screen.getByRole("button", { name: "保存为书籍介绍" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(field("AI 草稿正文").value).toBe("我保留的 AI 编辑稿");
+    expect(field("AI 草稿正文").value).toBe(draft);
     await click("读取最新书籍介绍");
-    expect(screen.getByText("刚读取的最新书籍介绍").parentElement?.textContent).toContain("另一个页面保存的新介绍");
+    const comparison = screen.getByText("刚读取的最新书籍介绍", { selector: "summary" }).parentElement!;
+    expect(within(comparison).getByRole("heading", { name: "另一个页面保存的新介绍" })).toBeTruthy();
+    expect(comparison.querySelector("blockquote")?.textContent).toContain("新补充的引文");
+    expect(field("AI 草稿正文").value).toBe(draft);
     expect(saveBookWorkspace).toHaveBeenCalledTimes(1);
     await click("保存为书籍介绍");
-    expect(saveBookWorkspace).toHaveBeenLastCalledWith(A, { introduction: "我保留的 AI 编辑稿", baseVersion: 3 }, expect.any(AbortSignal));
+    expect(saveBookWorkspace).toHaveBeenLastCalledWith(A, { introduction: draft, baseVersion: 3 }, expect.any(AbortSignal));
     expect(screen.getByText("AI 草稿已保存为书籍介绍。")).toBeTruthy();
   });
 
