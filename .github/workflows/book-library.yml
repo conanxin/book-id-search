@@ -58,6 +58,8 @@ jobs:
         run: >-
           pnpm exec vitest run
           apps/api/src/auth/google-owner-request.test.ts
+          apps/api/src/ai/book-assistant.test.ts
+          apps/api/src/ai/book-assistant-routes.test.ts
           apps/api/src/s32/domain/book-library.test.ts
           apps/api/src/s32/application/book-library.test.ts
           apps/api/src/s32/routes/book-library-routes.test.ts

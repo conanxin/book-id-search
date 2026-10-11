@@ -1,10 +1,11 @@
 /**
- * TEST ONLY: two synthetic catalog books + the actual signed-session,
+ * TEST ONLY: two independent pairs of synthetic catalog books + the actual signed-session,
  * Google-only middleware and S32 library router backed by PostgreSQL.
  * WeRead uses the production snapshot loaders/query services with two
  * synthetic, confirmed books; manual bindings use the production router,
- * effective-data service and PostgreSQL store. External catalog/AI/WeRead and Google OAuth
- * services are not exercised.
+ * effective-data service and PostgreSQL store. Book AI uses the production
+ * collector, prompt/parser and router with one deterministic provider injection.
+ * External catalog/MiniMax/WeRead and Google OAuth services are not exercised.
  */
 import { createRequire } from "node:module";
 import { createAuthRouter } from "../apps/api/src/auth/routes.js";
@@ -14,13 +15,17 @@ import { createS32Router } from "../apps/api/src/s32/register.js";
 import { readS32Config } from "../apps/api/src/s32/config.js";
 import { createBookLibraryBodyParser } from "../apps/api/src/s32/routes/book-library-routes.js";
 import type { CatalogBookSnapshot } from "../apps/api/src/s32/domain/catalog-promotion.js";
-import { createBookWereadFixture, getBookBrowserCatalogIds } from "./book-browser-fixtures.js";
+import { createBookWereadFixture, getBookAiBrowserFixtureKey, getBookBrowserCatalogIds } from "./book-browser-fixtures.js";
 import { normalizeNotesQuery, queryPrivateNotes, type WereadNotesQuery } from "../apps/api/src/weread/private-notes.js";
 import { buildNotesTrend, getWereadStatusByCatalogId, getWereadStatusesByCatalogIds,
   getWereadSummary, getWereadConfirmedMatches } from "../apps/api/src/weread/private-overlay.js";
 import { createPostgresWereadBindingStore } from "../apps/api/src/weread/manual-bindings-store.js";
 import { createWereadBindingsService } from "../apps/api/src/weread/manual-bindings.js";
 import { createWereadBindingsRouter } from "../apps/api/src/weread/manual-binding-routes.js";
+import { createPostgresBookLibraryStore } from "../apps/api/src/s32/postgres/book-library-store.js";
+import { createBookAssistantService } from "../apps/api/src/ai/book-assistant.js";
+import { createBookAssistantRouter } from "../apps/api/src/ai/book-assistant-routes.js";
+import type { ChatMessage, ChatCompletionResponse } from "../apps/api/src/ai/minimax.js";
 
 // Express/pg are owned by the API workspace, not new root dependencies.
 const apiRequire = createRequire(new URL("../apps/api/package.json", import.meta.url));
@@ -46,30 +51,43 @@ if (env.BOOK_LIBRARY_TEST_ONLY !== "YES" || env.NODE_ENV !== "development" || ![
 }
 
 const catalogIds = getBookBrowserCatalogIds(fixtureKey);
-const makeBook = (suffix: "a" | "b", name: string): CatalogBookSnapshot => ({
-  id: suffix === "a" ? catalogIds.A : catalogIds.B,
-  ssid: (suffix === "a" ? catalogIds.A : catalogIds.B).split("_")[0],
-  dxid: (suffix === "a" ? catalogIds.A : catalogIds.B).split("_")[1],
-  title: `古道阅读验证${name} ${fixtureKey}`, author: "合成测试作者", publisher: "合成测试出版社",
+const aiFixtureKey = getBookAiBrowserFixtureKey(fixtureKey);
+const aiCatalogIds = getBookBrowserCatalogIds(aiFixtureKey);
+const makeBook = (id: string, title: string): CatalogBookSnapshot => ({
+  id, ssid: id.split("_")[0], dxid: id.split("_")[1],
+  title, author: "合成测试作者", publisher: "合成测试出版社",
   year: 2001, pages: 208, isbn: "9787538455250", rawInfo: "SYNTHETIC BOOK LIBRARY BROWSER FIXTURE",
   parseStatus: "ok", parseWarnings: [],
 });
-const books = [makeBook("a", "甲"), makeBook("b", "乙")];
+const libraryBooks = [makeBook(catalogIds.A, `古道阅读验证甲 ${fixtureKey}`), makeBook(catalogIds.B, `古道阅读验证乙 ${fixtureKey}`)];
+const aiBooks = [makeBook(aiCatalogIds.A, `AI 阅读验证甲 ${aiFixtureKey}`), makeBook(aiCatalogIds.B, `AI 阅读验证乙 ${aiFixtureKey}`)];
+const books = [...libraryBooks, ...aiBooks];
+const isAiBook = (id: string) => id === aiCatalogIds.A || id === aiCatalogIds.B;
 const book = (id: string) => books.find(item => item.id === id);
+const getCatalogDocument = async (id: string) => {
+  const found = book(id);
+  if (found) return found;
+  throw Object.assign(new Error("Synthetic catalog book absent"), { code: "document_not_found" });
+};
 const wereadFixture = createBookWereadFixture(fixtureKey);
-process.once("exit", () => wereadFixture.dispose());
+const aiWereadFixture = createBookWereadFixture(aiFixtureKey);
+process.once("exit", () => { wereadFixture.dispose(); aiWereadFixture.dispose(); });
 process.once("SIGTERM", () => process.exit(0));
 process.once("SIGINT", () => process.exit(0));
 const bindingPool = wereadOnly ? null : new Pool({ connectionString: databaseUrl });
 const wereadBindings = createWereadBindingsService({
   dataDir: wereadFixture.directory,
   store: bindingPool ? createPostgresWereadBindingStore(bindingPool) : null,
-  getCatalogDocument: async id => {
-    const found = book(id);
-    if (found) return found;
-    throw Object.assign(new Error("Synthetic catalog book absent"), { code: "document_not_found" });
-  },
+  getCatalogDocument,
 });
+const aiWereadBindings = createWereadBindingsService({
+  dataDir: aiWereadFixture.directory,
+  store: bindingPool ? createPostgresWereadBindingStore(bindingPool) : null,
+  getCatalogDocument,
+});
+// Catalog-scoped reads select the isolated AI snapshot. The old global WeRead
+// journeys keep their original two-source totals and untouched binding rows.
+const bindingsForBook = (id: string) => isAiBook(id) ? aiWereadBindings : wereadBindings;
 const wereadData = () => wereadBindings.loadOverlay();
 
 // Only the explicit local WeRead mode omits PostgreSQL. The default CI journey
@@ -78,6 +96,43 @@ const config = wereadOnly ? null : readS32Config({ ...env, S32_FEATURES_ENABLED:
 const google = readGoogleSessionAuthConfig(env);
 const authorize = createGoogleOwnerRequestAuthorizer(google);
 const privateMiddleware = createGoogleOwnerMiddleware(google);
+const libraryReadStore = bindingPool ? createPostgresBookLibraryStore(bindingPool) : null;
+const bookAssistant = createBookAssistantService({
+  getCatalogDocument,
+  getWorkspace: libraryReadStore ? id => libraryReadStore.get(id) : null,
+  loadWereadNotes: async () => {
+    const data = await Promise.all([wereadBindings.loadNotes(), aiWereadBindings.loadNotes()]);
+    return {
+      notes: data.flatMap(item => item.notes),
+      wereadBookIdToCatalogId: new Map(data.flatMap(item => [...item.wereadBookIdToCatalogId])),
+    };
+  },
+  wereadEnabled: true,
+  isEnabled: () => true,
+  chat: deterministicBookAssistantChat,
+});
+
+// Only the model transport is replaced. The provider receives the actual
+// production prompt's bounded source excerpts and echoes one cited paragraph
+// for each kind. Production parsing validates these citations before delivery.
+async function deterministicBookAssistantChat(messages: ChatMessage[]): Promise<ChatCompletionResponse> {
+  const raw = messages.find(message => message.role === "user")?.content;
+  if (!raw) throw new Error("SYNTHETIC_BOOK_ASSISTANT_PROMPT_MISSING");
+  const input = JSON.parse(raw) as { action: string; sources: Array<{ id: string; kind: string; label: string; excerpt: string }> };
+  const seen = new Set<string>();
+  const selected = input.sources.filter(source => {
+    if (seen.has(source.kind)) return false;
+    seen.add(source.kind); return true;
+  });
+  return {
+    ok: true, model: "synthetic-book-assistant-no-network",
+    content: JSON.stringify({
+      title: `AI 合成${input.action === "introduction" ? "介绍" : input.action === "notes_summary" ? "笔记摘要" : "资料问答"}`,
+      paragraphs: selected.map(source => ({ text: `已核对的${source.label}：${source.excerpt.slice(0, 600).replace(/\[S\d+\]/g, "")}`, sourceIds: [source.id] })),
+      insufficientEvidence: false,
+    }),
+  };
+}
 let runtimeRole = "NOT_EXERCISED";
 if (!wereadOnly) {
   const probe = new Pool({ connectionString: databaseUrl });
@@ -93,16 +148,13 @@ app.use("/api/auth", createAuthRouter({ config: google }));
 app.use("/api/private", privateMiddleware);
 app.use("/api/books", privateMiddleware);
 app.use("/api/ai", privateMiddleware);
+app.use("/api/ai/books", createBookAssistantRouter({ service: bookAssistant, requestAuthorizer: authorize }));
 app.use("/api/private/weread/bindings", createWereadBindingsRouter({ service: wereadBindings, requestAuthorizer: authorize }));
 if (config) app.use("/api/private/s32/library", createBookLibraryBodyParser(config, authorize));
 app.use(express.json({ limit: "256kb" }));
 if (config) app.use("/api/private/s32", createS32Router({
   env, config, requestAuthorizer: authorize, libraryRequestAuthorizer: authorize,
-  getCatalogDocument: async id => {
-    const found = book(id);
-    if (found) return found;
-    throw Object.assign(new Error("Synthetic catalog book absent"), { code: "document_not_found" });
-  },
+  getCatalogDocument,
 }));
 
 app.get("/api/search", (req: TestRequest, res: TestResponse) => {
@@ -124,7 +176,8 @@ app.get("/api/books/:id", (req: TestRequest, res: TestResponse) => {
   res.json({ item: found });
 });
 app.get("/api/books/:id/related", (req: TestRequest, res: TestResponse) => {
-  const items = book(String(req.params.id)) ? books.filter(item => item.id !== req.params.id) : [];
+  const group = isAiBook(String(req.params.id)) ? aiBooks : libraryBooks;
+  const items = book(String(req.params.id)) ? group.filter(item => item.id !== req.params.id) : [];
   res.json({ total: items.length, items });
 });
 app.get("/api/ai/status", (_req: TestRequest, res: TestResponse) => res.json({ enabled: false }));
@@ -137,14 +190,18 @@ app.get("/api/private/weread/trends", async (_req: TestRequest, res: TestRespons
 app.get("/api/private/weread/status", async (req: TestRequest, res: TestResponse) => {
   const catalogId = String(req.query.catalogId ?? "");
   if (!/^[0-9]+_[0-9]{12}$/.test(catalogId)) return void res.status(400).json({ ok: false, error: "Invalid synthetic catalog ID" });
-  res.json({ ok: true, ...getWereadStatusByCatalogId(await wereadData(), catalogId) });
+  res.json({ ok: true, ...getWereadStatusByCatalogId(await bindingsForBook(catalogId).loadOverlay(), catalogId) });
 });
 app.post("/api/private/weread/status/batch", async (req: TestRequest, res: TestResponse) => {
   const ids = req.body?.catalogIds;
   if (!Array.isArray(ids) || ids.length < 1 || ids.length > 100 || ids.some(id => typeof id !== "string" || !/^[0-9]+_[0-9]{12}$/.test(id))) {
     return void res.status(400).json({ ok: false, error: "Invalid synthetic catalog IDs" });
   }
-  res.json({ ok: true, results: getWereadStatusesByCatalogIds(await wereadData(), ids) });
+  const [baseData, aiData] = await Promise.all([wereadData(), ids.some(isAiBook) ? aiWereadBindings.loadOverlay() : null]);
+  res.json({ ok: true, results: {
+    ...getWereadStatusesByCatalogIds(baseData, ids.filter(id => !isAiBook(id))),
+    ...(aiData ? getWereadStatusesByCatalogIds(aiData, ids.filter(isAiBook)) : {}),
+  } });
 });
 app.get("/api/private/weread/notes", async (req: TestRequest, res: TestResponse) => {
   const catalogId = req.query.catalogId;
@@ -162,11 +219,12 @@ app.get("/api/private/weread/notes", async (req: TestRequest, res: TestResponse)
     ...(req.query.hasComment !== undefined ? { hasComment: req.query.hasComment === "true" } : {}),
     ...(typeof req.query.q === "string" ? { q: req.query.q } : {}),
   });
-  res.json({ ok: true, ...queryPrivateNotes(await wereadBindings.loadNotes(), query) });
+  res.json({ ok: true, ...queryPrivateNotes(await bindingsForBook(typeof catalogId === "string" ? catalogId : "").loadNotes(), query) });
 });
 app.get("/api/health", (_req: TestRequest, res: TestResponse) => res.json({ ok: true, syntheticCatalog: true,
-  persistence: wereadOnly ? "NOT_EXERCISED" : "postgresql", wereadBindingsPersistence: wereadOnly ? "NOT_EXERCISED" : "postgresql", runtimeRole }));
+  persistence: wereadOnly ? "NOT_EXERCISED" : "postgresql", wereadBindingsPersistence: wereadOnly ? "NOT_EXERCISED" : "postgresql", runtimeRole,
+  bookAssistant: { sources: "production_collector", provider: "deterministic_injected", externalMiniMax: "NOT_EXERCISED" } }));
 
 app.listen(3001, "127.0.0.1", () => {
-  console.log(`BOOK_LIBRARY_TEST_API_READY=YES CATALOG=SYNTHETIC_TWO_BOOKS WEREAD=SYNTHETIC_SNAPSHOTS_REAL_QUERY PERSISTENCE=${wereadOnly ? "NOT_EXERCISED" : "POSTGRESQL"} ROLE=${runtimeRole} OAUTH=NOT_EXERCISED`);
+  console.log(`BOOK_LIBRARY_TEST_API_READY=YES CATALOG=SYNTHETIC_TWO_PAIRS WEREAD=SYNTHETIC_SNAPSHOTS_REAL_QUERY BOOK_AI=DETERMINISTIC_PROVIDER_REAL_COLLECTOR PERSISTENCE=${wereadOnly ? "NOT_EXERCISED" : "POSTGRESQL"} ROLE=${runtimeRole} OAUTH=NOT_EXERCISED`);
 });

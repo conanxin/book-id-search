@@ -1,5 +1,14 @@
 # BOOK-ID-SEARCH status
 
+## 2026-10-11 — Book AI assistant
+
+- `task_id=BOOK_CENTERED_AI_ASSISTANT_V1`; continues Draft [#72](https://github.com/conanxin/book-id-search/pull/72) from `63ccc1d`.
+- The book workspace offers introduction drafts, saved-note summaries and source-based questions. It reads the current catalog, introduction, independent notes and effectively associated WeRead records; source counts, excerpts and truncation remain visible.
+- Drafts include editable source snapshots before saving. Generation makes no library writes; explicit save reuses introduction version checks and independent note revisions. Book/session/mode changes discard late responses.
+- Reuses Google Owner/CSRF, the existing MiniMax client and PostgreSQL pool. No new dependency or migration; ebook URLs remain external links, not AI-readable full text.
+- Contract: [Book AI assistant v1](development/BOOK_AI_ASSISTANT_V1.md). Exact-head tests, deterministic-provider browser/PG evidence and visual checks are recorded in PR #72; real model connectivity and answer quality are not inferred from fixtures.
+- Development candidate only; merge and Tencent deployment remain separate actions.
+
 ## 2026-10-11 — Persistent WeRead book associations
 
 - `task_id=BOOK_CENTERED_WEREAD_MANUAL_BINDING_V1`; continues Draft [#72](https://github.com/conanxin/book-id-search/pull/72) from tested baseline `42c0d94`.

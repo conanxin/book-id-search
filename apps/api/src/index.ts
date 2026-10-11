@@ -75,6 +75,9 @@ import { createAuthRouter } from "./auth/routes.js";
 import { createS32RequestAuthorizer } from "./s32/routes/private-auth.js";
 import { createGoogleOwnerMiddleware, createGoogleOwnerRequestAuthorizer } from "./auth/google-owner-request.js";
 import { createBookLibraryBodyParser } from "./s32/routes/book-library-routes.js";
+import { createPostgresBookLibraryStore } from "./s32/postgres/book-library-store.js";
+import { createBookAssistantService } from "./ai/book-assistant.js";
+import { createBookAssistantRouter } from "./ai/book-assistant-routes.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(currentDir, "../../../");
@@ -160,6 +163,18 @@ app.use("/api/auth", createAuthRouter({ config: googleAuthConfig }));
 // Basic /api/search remains public. Full book pages, every AI action and all
 // personal routes use the same Google session; legacy tokens do not enter.
 app.use(["/api/books", "/api/ai", "/api/private"], createGoogleOwnerMiddleware(googleAuthConfig));
+// Read saved book material using the existing pool; generating a draft does
+// not promote, save or modify a book, note, resource or WeRead association.
+const assistantLibraryStore = wereadBindingPool ? createPostgresBookLibraryStore(wereadBindingPool) : null;
+app.use("/api/ai/books", createBookAssistantRouter({
+  service: createBookAssistantService({
+    getCatalogDocument: id => index.getDocument(id),
+    getWorkspace: assistantLibraryStore ? id => assistantLibraryStore.get(id) : null,
+    loadWereadNotes: () => wereadBindings.loadNotes(),
+    wereadEnabled: process.env.WEREAD_OVERLAY_ENABLED === "true",
+  }),
+  requestAuthorizer: googleOwnerAuthorizer,
+}));
 app.use("/api/private/weread/bindings", createWereadBindingsRouter({
   service: wereadBindings, requestAuthorizer: googleOwnerAuthorizer,
   enabled: process.env.WEREAD_OVERLAY_ENABLED === "true",

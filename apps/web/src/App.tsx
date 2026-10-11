@@ -21,7 +21,6 @@ import {
 } from "lucide-react";
 import { getBook, getRelatedBooks, getStats, searchBooks, type Book, type MatchInfo, type SearchResponse, type StatsResponse } from "./api";
 import { EDITION_COMPARE_MAX, EditionComparePanel, toggleEditionCompareSelection } from "./EditionCompare";
-import BookInsightSection from "./BookInsight";
 import { detailMatchInfo, isExactMatch, matchBadgeLabel, matchBadgeVariant, parseStatusNarrative, explainParseWarnings } from "./match-ui";
 import AiSearchPanel from "./AiSearchPanel";
 import { QueryInfoBar, RankingChips } from "./QueryInfoBar";
@@ -1277,6 +1276,7 @@ function DetailPage() {
           </div>
 
           <nav className="book-section-nav" aria-label="本书内容">
+            <a href="#book-ai-heading">本书 AI 助手</a>
             <a href="#library-introduction-heading">书籍介绍</a>
             <a href="#library-notes-heading">我的笔记</a>
             <a href="#library-resources-heading">电子版本</a>
@@ -1285,8 +1285,6 @@ function DetailPage() {
           </nav>
           <BookWorkspace key={book.id} bookId={book.id} />
           <BookWereadNotes bookId={book.id} />
-
-          <BookInsightSection bookId={book.id} />
 
           <details className="book-secondary raw-section">
             <summary>原始书目记录</summary>

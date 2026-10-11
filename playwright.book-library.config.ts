@@ -12,7 +12,7 @@ if (!["all", "weread"].includes(scope)) throw new Error("BOOK_LIBRARY_BROWSER_SC
 export default defineConfig({
   testDir: "./scripts",
   testMatch: scope === "weread" ? "book-weread-browser.spec.ts" : [
-    "book-library-browser.spec.ts", "book-weread-browser.spec.ts", "book-weread-bindings-browser.spec.ts",
+    "book-library-browser.spec.ts", "book-weread-browser.spec.ts", "book-weread-bindings-browser.spec.ts", "book-ai-browser.spec.ts",
   ],
   outputDir: "test-results/book-library",
   fullyParallel: false,

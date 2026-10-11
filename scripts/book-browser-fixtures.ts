@@ -16,6 +16,14 @@ export function getBookBrowserCatalogIds(runId: string) {
   };
 }
 
+// AI journeys save their own books. Keep their catalog IDs and searchable
+// titles outside the existing library journey's runId filter, so file order
+// cannot change either journey's initial database state or saved-book counts.
+export function getBookAiBrowserFixtureKey(runId: string): string {
+  getBookBrowserCatalogIds(runId);
+  return `ai-${createHash("sha256").update(runId).digest("hex").slice(0, 32)}`;
+}
+
 export function createBookWereadFixture(runId: string, now = Date.now()) {
   const ids = getBookBrowserCatalogIds(runId);
   const directory = mkdtempSync(join(tmpdir(), "book-weread-browser-synthetic-"));

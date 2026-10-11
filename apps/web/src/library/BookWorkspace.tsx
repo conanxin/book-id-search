@@ -9,6 +9,7 @@ import {
   type BookNote, type BookNoteRevision, type BookResource, type BookResourceInput, type BookWorkspaceData,
 } from "./api";
 import { useLibraryScope } from "./useLibraryScope";
+import { BookAiAssistant } from "./BookAiAssistant";
 import "./library.css";
 
 type WorkspaceOperation = (request: (signal: AbortSignal) => Promise<BookWorkspaceData>) => Promise<BookWorkspaceData>;
@@ -107,6 +108,7 @@ function BookWorkspaceContent({ bookId, generation }: { bookId: string; generati
     </div>
     <ErrorMessage message={error} />
     <p className="library-status" role="status" aria-live="polite">{message}</p>
+    <BookAiAssistant bookId={bookId} busy={busy} operate={operate} reload={reload} />
     <IntroductionPanel {...props} />
     <NotesPanel {...props} generation={generation} />
     <ResourcesPanel {...props} />
@@ -272,7 +274,7 @@ function NotesPanel({ bookId, item, busy, operate, reload, generation }: PanelPr
     <p className="library-status" role="status" aria-live="polite">{message}</p>
     {!item.notes.length && !editor && <p className="library-empty">还没有笔记。从一个问题或一段摘录开始。</p>}
     <div className="library-note-list">
-      {item.notes.map(note => <article className="library-note" key={note.noteId} aria-label={`笔记：${note.title}`}>
+      {item.notes.map(note => <article className="library-note" key={note.noteId} id={`book-note-${note.noteId}`} aria-label={`笔记：${note.title}`}>
         <div className="library-note-heading"><h3>{note.title}</h3><span className="library-tag">手工笔记</span></div>
         <p className="library-meta"><time dateTime={note.updatedAt}>{libraryDate(note.updatedAt)}</time> · 第 {note.revisionNo} 版</p>
         <div className="library-prose">{note.content}</div>
