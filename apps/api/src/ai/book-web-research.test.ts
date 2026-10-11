@@ -44,7 +44,8 @@ describe("book internet research evidence and read-only scope", () => {
     expect(userPayload(s.search.mock.calls[0][0])).toEqual({ book: { title: catalog.title, author: catalog.author,
       publisher: catalog.publisher, year: 2020, pages: 300, isbn: "test-isbn" }, question });
     const sent = userPayload(s.provider.mock.calls[0][0]);
-    expect(sent.sources).toEqual(result.sources.map(({ id, title, excerpt, pageAge, truncated }) => ({ id, title, excerpt, pageAge, truncated })));
+    expect(sent.sources).toEqual(result.sources.map(({ id, title, url, excerpt, pageAge, truncated }) =>
+      ({ id, title, site: new URL(url).hostname, excerpt, pageAge, truncated })));
     expect(JSON.stringify([s.search.mock.calls, s.provider.mock.calls, result])).not.toMatch(/RAW_INFO|PERSONAL_|PRIVATE_METADATA|private-resource|UNTRUSTED_SEARCH_STAGE_PROSE/);
     expect(s.provider.mock.calls[0][0][0].content).toContain("没有读取网页全文或整本书");
     expect(s.provider.mock.calls[0][1]).toMatchObject({ temperature: 0.2, maxTokens: 4000, timeoutMs: 60_000 });
