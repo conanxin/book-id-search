@@ -4,7 +4,7 @@ import { chatCompletion, type MiniMaxConfig, type WireApi } from "./minimax.js";
 const answer = '{"title":"阅读摘要","paragraphs":[{"text":"渡口附近有石桥。","sourceIds":["S2"]}],"insufficientEvidence":false}';
 const messages = [{ role: "user" as const, content: "根据提供的资料，返回带引用的 JSON。" }];
 
-function call(wireApi: WireApi, payload: unknown) {
+function call(wireApi: WireApi, payload: unknown, requireCompleted?: boolean) {
   const config: MiniMaxConfig = {
     apiKey: "fixture-key", model: "fixture-model", wireApi,
     baseUrl: wireApi === "anthropic" ? "https://provider.example.test/anthropic" : "https://provider.example.test/v1",
@@ -12,7 +12,7 @@ function call(wireApi: WireApi, payload: unknown) {
   const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(payload), {
     status: 200, headers: { "Content-Type": "application/json" },
   }));
-  return { fetchImpl, result: chatCompletion(messages, { config, fetchImpl, maxTokens: 3500 }) };
+  return { fetchImpl, result: chatCompletion(messages, { config, fetchImpl, maxTokens: 3500, requireCompleted }) };
 }
 
 function assistant(content: unknown[], extra: Record<string, unknown> = {}) {
@@ -137,5 +137,66 @@ describe("MiniMax caller cancellation", () => {
     expect(await chatCompletion(messages, { config, fetchImpl, signal: controller.signal }))
       .toMatchObject({ ok: true, content: answer });
     expect(remove).toHaveBeenCalledWith("abort", expect.any(Function));
+  });
+});
+
+describe("MiniMax opt-in completed-response requirement", () => {
+  function anthropic(extra: Record<string, unknown> = {}) {
+    return { type: "message", role: "assistant", stop_reason: "end_turn",
+      content: [{ type: "text", text: answer }], base_resp: { status_code: 0 }, ...extra };
+  }
+  const rejected = { ok: false, error: "MiniMax returned an incomplete or failed response", status: 502 };
+
+  it("accepts final Anthropic text with successful provider status", async () => {
+    expect(await call("anthropic", anthropic(), true).result).toMatchObject({ ok: true, content: answer });
+    expect(await call("anthropic", anthropic({ base_resp: undefined }), true).result)
+      .toMatchObject({ ok: true, content: answer });
+  });
+
+  it.each(["max_tokens", "tool_use", "pause_turn", "stop_sequence", null, undefined])(
+    "rejects complete-looking JSON from a nonfinal Anthropic reply (%s)", async stop_reason => {
+      const request = call("anthropic", anthropic({ stop_reason }), true);
+      expect(await request.result).toEqual(rejected);
+      expect(request.fetchImpl).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([
+    { base_resp: { status_code: 1008, status_msg: "PRIVATE_PROVIDER_DIAGNOSTIC" } },
+    { base_resp: null }, { base_resp: { status_code: "0" } },
+    { error: { message: "PRIVATE_PROVIDER_DIAGNOSTIC" } }, { type: "error" },
+    { status: "failed" }, { status: "incomplete" }, { role: "user" },
+  ])("rejects explicit failure or malformed completion metadata without exposing provider text %#", async extra => {
+    expect(await call("anthropic", anthropic(extra), true).result).toEqual(rejected);
+  });
+
+  it("preserves the existing Anthropic behavior when the strict option is omitted or false", async () => {
+    const truncated = anthropic({ stop_reason: "max_tokens" });
+    expect(await call("anthropic", truncated).result).toMatchObject({ ok: true, content: answer });
+    expect(await call("anthropic", truncated, false).result).toMatchObject({ ok: true, content: answer });
+  });
+
+  it("requires explicit completed status for both Responses output shapes", async () => {
+    const completed = { status: "completed", output: [assistant([{ type: "output_text", text: answer }])] };
+    expect(await call("responses", completed, true).result).toMatchObject({ ok: true, content: answer });
+    expect(await call("responses", { status: "completed", output_text: answer }, true).result)
+      .toMatchObject({ ok: true, content: answer });
+    expect(await call("responses", { output_text: answer }, true).result).toEqual(rejected);
+    expect(await call("responses", { ...completed, status: "incomplete" }, true).result).toEqual(rejected);
+    expect(await call("responses", { ...completed, output: [
+      assistant([{ type: "output_text", text: answer }]),
+      assistant([{ type: "output_text", text: answer }], { status: "incomplete" }),
+    ] }, true).result).toEqual(rejected);
+  });
+
+  it("requires normal final Chat Completions status", async () => {
+    const message = { role: "assistant", content: answer };
+    expect(await call("openai_chat", { choices: [{ message, finish_reason: "stop" }] }, true).result)
+      .toMatchObject({ ok: true, content: answer });
+    for (const finish_reason of ["length", "tool_calls", "content_filter", null, undefined]) {
+      expect(await call("openai_chat", { choices: [{ message, finish_reason }] }, true).result).toEqual(rejected);
+    }
+    expect(await call("openai_chat", { choices: [{ message, finish_reason: "stop" }],
+      base_resp: { status_code: 1008, status_msg: "PRIVATE_PROVIDER_DIAGNOSTIC" } }, true).result).toEqual(rejected);
   });
 });
