@@ -78,6 +78,8 @@ import { createBookLibraryBodyParser } from "./s32/routes/book-library-routes.js
 import { createPostgresBookLibraryStore } from "./s32/postgres/book-library-store.js";
 import { createBookAssistantService } from "./ai/book-assistant.js";
 import { createBookAssistantRouter } from "./ai/book-assistant-routes.js";
+import { createBookWebResearchService } from "./ai/book-web-research.js";
+import { createBookWebResearchRouter } from "./ai/book-web-research-routes.js";
 import { collectRelatedBooks, RelatedBooksUnavailableError, relatedSourceReadError } from "./search/related-books.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
@@ -164,6 +166,12 @@ app.use("/api/auth", createAuthRouter({ config: googleAuthConfig }));
 // Basic /api/search remains public. Full book pages, every AI action and all
 // personal routes use the same Google session; legacy tokens do not enter.
 app.use(["/api/books", "/api/ai", "/api/private"], createGoogleOwnerMiddleware(googleAuthConfig));
+// The exact research mount consumes its own bounded/authenticated request
+// before the older assistant router. Only public catalog identity is read.
+app.use("/api/ai/books/:bookId/research", createBookWebResearchRouter({
+  service: createBookWebResearchService({ getCatalogDocument: id => index.getDocument(id) }),
+  requestAuthorizer: googleOwnerAuthorizer,
+}));
 // Read saved book material using the existing pool; generating a draft does
 // not promote, save or modify a book, note, resource or WeRead association.
 const assistantLibraryStore = wereadBindingPool ? createPostgresBookLibraryStore(wereadBindingPool) : null;
