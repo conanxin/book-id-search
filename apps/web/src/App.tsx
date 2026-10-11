@@ -25,14 +25,16 @@ import BookInsightSection from "./BookInsight";
 import { detailMatchInfo, isExactMatch, matchBadgeLabel, matchBadgeVariant, parseStatusNarrative, explainParseWarnings } from "./match-ui";
 import AiSearchPanel from "./AiSearchPanel";
 import { QueryInfoBar, RankingChips } from "./QueryInfoBar";
-import WereadPrivatePanel from "./WereadPrivatePanel";
 import WereadBadge from "./WereadBadge";
 import { clearWereadStatusCache, fetchWereadStatusesForBooks, fetchWereadStatus, purgeLegacyWereadTokenStorage, type WereadStatus } from "./wereadPrivate";
 import { useWebAuthSession } from "./auth/useWebAuthSession";
 import WereadCenter from "./weread/WereadCenter";
 import ProjectsPage, { researchEnabled } from "./research/ProjectsPage";
 import SiteFooter from "./components/SiteFooter";
-import S32Principles from "./components/S32Principles";
+import { AppShell, AccountPage } from "./components/AppShell";
+import { RequireGoogle } from "./components/RequireGoogle";
+import { BookWorkspace } from "./library/BookWorkspace";
+import { LibraryPage } from "./library/LibraryPage";
 import { ResearchMembershipChips, useSearchMemberships, type MembershipLoadState } from "./research/SearchMemberships";
 import type { ResearchMembership } from "./research/api";
 
@@ -520,19 +522,12 @@ function BookCard({
           </div>
         ) : null}
       <ResearchMembershipChips state={membershipState} memberships={memberships} />
-      <AddToProject
-        bookId={book.id}
-        bookTitle={book.title || "未命名图书"}
-        memberships={membershipState === "ready" ? memberships : undefined}
-        membershipState={membershipState}
-        onMembershipInvalidated={onMembershipRefresh}
-      />
       {book.parseStatus !== "ok" && <TrustHint book={book} />}
       {book.parseStatus === "failed" ? (
         <div className="parse-hint parse-hint--failed">本条解析异常，请谨慎引用。</div>
       ) : null}
       <details className="book-card__tech">
-        <summary>技术信息</summary>
+        <summary>书目标识与更多操作</summary>
         <div className="book-grid">
           <Field label="SSID" value={book.ssid} highlight query={query} mono />
           <Field label="DXID" value={book.dxid} highlight query={query} mono />
@@ -544,6 +539,13 @@ function BookCard({
           <CopyButton value={fullRecordText(book)} label="整条" variant="primary" title="复制整条书目信息" />
         </div>
         <RankingChips ranking={book.ranking} />
+        <AddToProject
+          bookId={book.id}
+          bookTitle={book.title || "未命名图书"}
+          memberships={membershipState === "ready" ? memberships : undefined}
+          membershipState={membershipState}
+          onMembershipInvalidated={onMembershipRefresh}
+        />
       </details>
     </article>
   );
@@ -562,6 +564,14 @@ function SearchPage() {
   const urlMode = params.get("mode") === "ai" ? "ai" : "search";
 
   const [mode, setMode] = useState<"search" | "ai">(urlMode);
+  useEffect(() => setMode(urlMode), [urlMode]);
+  const changeMode = (next: "search" | "ai") => {
+    setMode(next);
+    const nextParams = new URLSearchParams(params);
+    if (next === "ai") nextParams.set("mode", "ai");
+    else nextParams.delete("mode");
+    setParams(nextParams);
+  };
   const [input, setInput] = useState(urlQ);
   const [debouncedQ, setDebouncedQ] = useState(urlQ);
   const [limit, setLimit] = useState(PAGE_SIZE);
@@ -573,6 +583,7 @@ function SearchPage() {
   const [recent, setRecent] = useState<string[]>([]);
   const session = useWebAuthSession();
   const wereadAuthenticated = session.status === "authenticated";
+  const authGeneration = getWebAuthAuthGeneration();
   const [wereadStatuses, setWereadStatuses] = useState<Record<string, WereadStatus>>({});
 
   // Task 9: one-time purge of the legacy sessionStorage token key —
@@ -631,6 +642,7 @@ function SearchPage() {
     const ids = data.items.map((b) => b.id).filter(Boolean);
     if (!ids.length) return;
     let cancelled = false;
+    setWereadStatuses({});
     setWereadLoading(true);
     fetchWereadStatusesForBooks(ids)
       .then((statuses) => {
@@ -645,7 +657,7 @@ function SearchPage() {
     return () => {
       cancelled = true;
     };
-  }, [wereadAuthenticated, data?.items]);
+  }, [wereadAuthenticated, authGeneration, data?.items]);
 
   // Debounce input -> debouncedQ (300ms). URL stays in sync only on submit /
   // page change so we don't shove half-typed queries into the address bar.
@@ -856,7 +868,7 @@ function SearchPage() {
           role="tab"
           aria-selected={mode === "search"}
           className={`mode-tab ${mode === "search" ? "mode-tab--active" : ""}`}
-          onClick={() => setMode("search")}
+          onClick={() => changeMode("search")}
         >
           <Search size={14} /> 普通搜索
         </button>
@@ -865,14 +877,14 @@ function SearchPage() {
           role="tab"
           aria-selected={mode === "ai"}
           className={`mode-tab ${mode === "ai" ? "mode-tab--active" : ""}`}
-          onClick={() => setMode("ai")}
+          onClick={() => changeMode("ai")}
         >
           <Sparkles size={14} /> AI 找书
         </button>
       </div>
 
       {mode === "ai" ? (
-        <AiSearchPanel />
+        <RequireGoogle inline><AiSearchPanel /></RequireGoogle>
       ) : (
       <section className="search-panel">
         <div className="brand-row">
@@ -882,7 +894,7 @@ function SearchPage() {
         <p className="search-subtitle">
           输入书名、作者、ISBN 或 SSID / DXID，找到你真正想要的版本。
         </p>
-        {researchEnabled ? <p><Link to="/research/projects">我的研究项目</Link></p> : null}
+        <p className="search-library-hint">找到书后，可以补充介绍、留下笔记，再从<Link to="/library">我的书籍</Link>继续阅读。</p>
         <form className="search-form" onSubmit={submit} role="search">
           <Search size={22} aria-hidden="true" />
           <input
@@ -924,15 +936,8 @@ function SearchPage() {
         ) : null}
 
         <details className="search-advanced">
-          <summary>高级工具与数据状态</summary>
+          <summary>书目数据状态</summary>
           <div className="search-advanced__content">
-            <WereadPrivatePanel />
-            <div className="weread-center-link-row">
-              <a href="/weread" className="weread-center-link">
-                <BookOpen size={14} />
-                微信读书中心
-              </a>
-            </div>
             <div className="stats-strip">
               <Field label="records" value={stats?.numberOfDocuments?.toLocaleString()} />
               <Field label="index" value={stats?.indexName} mono />
@@ -944,7 +949,7 @@ function SearchPage() {
       </section>
       )}
 
-      <section className="results">
+      {mode === "search" ? <section className="results">
         <QueryInfoBar queryInfo={data?.queryInfo} />
         <div className="results__bar">
           <span className="results__count">
@@ -1116,8 +1121,6 @@ function SearchPage() {
           </nav>
         ) : null}
 
-        <S32Principles />
-
         <div className="status-footer" aria-live="polite">
           {stats ? (
             <span>
@@ -1133,7 +1136,7 @@ function SearchPage() {
             <span>索引状态读取中…</span>
           )}
         </div>
-      </section>
+      </section> : null}
     </main>
   );
 }
@@ -1221,7 +1224,7 @@ function DetailPage() {
     <main className="page">
       <button className="back-button" type="button" onClick={back} aria-label="返回上一页">
         <ArrowLeft size={18} />
-        返回搜索结果
+        返回上一页
       </button>
 
       {loading ? (
@@ -1252,12 +1255,6 @@ function DetailPage() {
             <div className="parse-hint parse-hint--failed">本条解析异常，请谨慎引用。</div>
           ) : null}
 
-          {researchEnabled ? <BookDetailResearchActions
-            key={book.id + ":" + getWebAuthAuthGeneration()}
-            bookId={book.id}
-            bookTitle={book.title || "未命名图书"}
-          /> : null}
-
           <div className="detail-grid">
             <div className="detail-grid__field">
               <Field label="SSID" value={book.ssid} mono />
@@ -1277,9 +1274,18 @@ function DetailPage() {
             <Field label="解析提示" value={book.parseWarnings?.length ? explainParseWarnings(book.parseWarnings) : "无"} />
           </div>
 
+          <nav className="book-section-nav" aria-label="本书内容">
+            <a href="#library-introduction-heading">书籍介绍</a>
+            <a href="#library-notes-heading">我的笔记</a>
+            <a href="#library-resources-heading">电子版本</a>
+            <a href="#related-books">相关图书</a>
+          </nav>
+          <BookWorkspace key={book.id} bookId={book.id} />
+
           <BookInsightSection bookId={book.id} />
 
-          <section className="raw-section">
+          <details className="book-secondary raw-section">
+            <summary>原始书目记录</summary>
             <div className="section-title-row">
               <h2 className="raw-info-title">原始 TXT 记录（用于核对）</h2>
               <CopyButton value={book.rawInfo ?? ""} label="原始记录" variant="primary" title="复制原始记录" />
@@ -1292,9 +1298,9 @@ function DetailPage() {
             ) : (
               <p className="raw-info-note raw-info-note--empty">当前索引未保存原始记录。</p>
             )}
-          </section>
+          </details>
 
-          <section>
+          <section id="related-books">
             <h2>相关图书</h2>
             {relatedError ? <p role="status" className="research-muted">
               相关图书暂时无法加载，不影响当前书目信息。
@@ -1309,6 +1315,15 @@ function DetailPage() {
               <div className="state">暂无相关图书。</div>
             )}
           </section>
+
+          {researchEnabled ? <details className="book-secondary" data-testid="book-research-tools">
+            <summary>专题研究与原有资料</summary>
+            <BookDetailResearchActions
+              key={book.id + ":" + getWebAuthAuthGeneration()}
+              bookId={book.id}
+              bookTitle={book.title || "未命名图书"}
+            />
+          </details> : null}
         </article>
       ) : null}
     </main>
@@ -1321,19 +1336,22 @@ function DetailPage() {
 
 export default function App() {
   return (
-    <>
+    <AppShell>
       <Routes>
         <Route path="/" element={<SearchPage />} />
-        <Route path="/weread" element={<WereadCenter />} />
-        <Route path="/books/:id" element={<DetailPage />} />
-        <Route path="/research/projects" element={<ProjectsPage />} />
-        <Route path="/research/projects/:projectId/issues/:issueId/dossier" element={<ProjectsPage dossier />} />
-        <Route path="/research/projects/:projectId/issues/:issueId" element={<ProjectsPage />} />
-        <Route path="/research/projects/:projectId" element={<ProjectsPage />} />
+        <Route path="/account" element={<AccountPage />} />
+        <Route path="/library" element={<RequireGoogle><LibraryPage /></RequireGoogle>} />
+        <Route path="/weread" element={<RequireGoogle><WereadCenter /></RequireGoogle>} />
+        <Route path="/books/:id" element={<RequireGoogle><DetailPage /></RequireGoogle>} />
+        <Route path="/research/projects" element={<RequireGoogle><ProjectsPage /></RequireGoogle>} />
+        <Route path="/research/projects/:projectId/issues/:issueId/dossier" element={<RequireGoogle><ProjectsPage dossier /></RequireGoogle>} />
+        <Route path="/research/projects/:projectId/issues/:issueId" element={<RequireGoogle><ProjectsPage /></RequireGoogle>} />
+        <Route path="/research/projects/:projectId" element={<RequireGoogle><ProjectsPage /></RequireGoogle>} />
+        <Route path="*" element={<main className="page"><h1>没有找到这个页面</h1><Link to="/">返回搜书</Link></main>} />
       </Routes>
       {/* POST-ICP-COMPLIANCE — single global site footer shared by every route. */}
       <SiteFooter />
       <Toast />
-    </>
+    </AppShell>
   );
 }

@@ -1,5 +1,14 @@
 # BOOK-ID-SEARCH status
 
+## 2026-10-11 — Book-centered library v1
+
+- `task_id=BOOK_CENTERED_LIBRARY_V1_IMPLEMENTATION`; branch `feat/book-centered-library`, based on candidate `fe22a6d` from Draft #71.
+- Implemented Google-protected book introduction, multiple independent notes with immutable revisions, ebook external-link registration, and `/library` search/filter/pagination. Saving personal content requires no Project and automatically saves the book.
+- Shared navigation is Search / My Books / WeRead; original research routes remain under More. Server enforcement now covers full book details, all AI and all private routes with Google session + CSRF for writes; catalog search remains anonymous.
+- Added migration003 and existing-role grants; frozen001/002 unchanged. Migration runners now apply frozen schema assertions at the appropriate migration stage.
+- Targeted API/Web tests, builds and synthetic desktop/mobile visual checks pass locally. Native PostgreSQL cannot start with this environment's uid0-only mapping; actual PG16/Chromium results are recorded in the new PR's Book library workflow, not inferred from mocks.
+- Scope and API contract: [Book library v1](development/BOOK_LIBRARY_V1.md). Follow-up: WeRead content on the same book page, then saved AI drafts/answers grounded in actual notes. No merge or Tencent deployment in this development task.
+
 ## 2026-10-10 — S32 mainline source integration candidate
 
 - `task_id=S32_MAINLINE_INTEGRATION_CANDIDATE_R1`; branch `integration/s32-mainline-candidate`, based on `main@42cf1b7b4a10a6edfa53d688012728dded0b3049`.

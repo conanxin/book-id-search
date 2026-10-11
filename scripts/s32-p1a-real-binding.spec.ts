@@ -3,7 +3,9 @@
  * Vite → real Express Owner session/CSRF/S32 router → real disposable PG16.
  * Catalog source contains ONLY fixed in-memory synthetic records in the
  * TEST-ONLY API; no Meilisearch or production requests. Unlike the P1A UI
- * suite, neither public Book GET nor catalog-binding POST is mocked here.
+ * suite, neither catalog Book GET nor catalog-binding POST is mocked here.
+ * Only the new personal-book workspace GET is stubbed as empty; it is outside
+ * this existing real research-binding acceptance and never writes data.
  */
 import { execFileSync } from "node:child_process";
 import { expect, test, type Browser, type Page } from "@playwright/test";
@@ -59,9 +61,20 @@ async function context(browser: Browser, loggedIn: boolean) {
   return ctx;
 }
 async function detail(page: Page, bookId: string, name: string) {
+  await page.route("**/api/private/s32/library/books/" + bookId, route => {
+    if (route.request().method() !== "GET") return route.continue();
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ item: {
+      bookId, saved: false, editionId: null, introduction: "", version: 0,
+      updatedAt: null, notes: [], resources: [],
+    } }) });
+  });
   await page.goto(WEB + "/books/" + bookId);
   await expect(page.getByRole("heading", { name })).toBeVisible({ timeout: 20_000 });
-  return page.getByRole("region", { name: "本书的研究操作" });
+  const details = page.getByTestId("book-research-tools");
+  await details.locator("summary").click();
+  const section = details.getByRole("region", { name: "本书的研究操作" });
+  await expect(section).toBeVisible();
+  return section;
 }
 async function postBinding(page: Page, projectId: string, bookId: string, validCsrf = true) {
   return page.evaluate(async ({ projectId, bookId, validCsrf }) => {
@@ -155,7 +168,19 @@ test.describe.serial("P1A real owner session + synthetic catalog → actual PG16
   test("R04 — anonymous POST 401 and forged CSRF 403 both fail without any promotion", async ({ browser }) => {
     const anon = await context(browser, false);
     const ap = await anon.newPage();
-    await detail(ap, B, TITLE_B);
+    const restrictedCalls: string[] = [];
+    ap.on("request", request => {
+      const path = new URL(request.url()).pathname;
+      if (path.startsWith("/api/books") || path.startsWith("/api/private/")) restrictedCalls.push(request.method() + " " + path);
+    });
+    await ap.goto(WEB + "/books/" + B);
+    await expect(ap.getByRole("heading", { name: "登录后，继续整理这本书与阅读资料", level: 1 })).toBeVisible({ timeout: 20_000 });
+    await expect(ap.getByRole("link", { name: "使用 Google 登录", exact: true })).toBeVisible();
+    await expect(ap.getByRole("link", { name: "使用 Google 登录", exact: true })).toHaveAttribute("href", "/account?returnTo=" + encodeURIComponent("/books/" + B));
+    await expect(ap.getByRole("heading", { name: TITLE_B })).toHaveCount(0);
+    await expect(ap.getByTestId("book-research-tools")).toHaveCount(0);
+    expect(restrictedCalls).toEqual([]);
+    // Intentional direct request still verifies the real server's 401/no-write path.
     const unauth = await postBinding(ap, P, B);
     expect(unauth.status).toBe(401);
     expect(bindingCount(B)).toBe(0);

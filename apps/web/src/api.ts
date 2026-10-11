@@ -1,3 +1,5 @@
+import { getWebAuthSnapshot } from "./auth/session";
+
 export type MatchType =
   | "exact_identifier"
   | "exact_isbn"
@@ -100,10 +102,15 @@ export interface StatsResponse {
   parseQualityReport: ParseQualitySummary | null;
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3001/api";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, init);
+  const headers = new Headers(init?.headers);
+  if (init?.method && !["GET", "HEAD"].includes(init.method.toUpperCase())) {
+    const session = getWebAuthSnapshot();
+    if (session.status === "authenticated" && session.csrfToken) headers.set("x-csrf-token", session.csrfToken);
+  }
+  const response = await fetch(`${API_BASE}${path}`, { ...init, headers, credentials: "same-origin", cache: "no-store" });
   const data = await response.json().catch(() => null);
   if (!response.ok) {
     throw new Error(data?.error?.message ?? "请求失败");

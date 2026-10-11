@@ -1,8 +1,10 @@
 /**
  * P1-A real Chromium against isolated PG16 + real Web/API/Owner cookie.
- * Public catalog payload and POST catalog promotion are explicitly mocked:
+ * Catalog payload and POST catalog promotion are explicitly mocked:
  * no Meilisearch/full catalog and NO real new binding is inserted.
  * The destination Project Overview/deep-link is backed by real PG16 fixture.
+ * The new personal-book workspace GET is an explicit empty-content stub;
+ * this legacy suite continues to exercise the original research destination.
  */
 import { expect, test, type Browser, type Page } from "@playwright/test";
 
@@ -30,7 +32,16 @@ async function context(browser: Browser, authorized: boolean, viewport?: { width
   return ctx;
 }
 
-async function stubPublicBook(page: Page, { relatedFail = false, withOther = false } = {}) {
+async function stubCatalogBook(page: Page, { relatedFail = false, withOther = false } = {}) {
+  for (const bookId of [A, B]) {
+    await page.route("**/api/private/s32/library/books/" + bookId, route => {
+      if (route.request().method() !== "GET") return route.continue();
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ item: {
+        bookId, saved: false, editionId: null, introduction: "", version: 0,
+        updatedAt: null, notes: [], resources: [],
+      } }) });
+    });
+  }
   await page.route("**/api/books/" + A, route =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ item: bookA }) }));
   await page.route("**/api/books/" + A + "/related", route =>
@@ -42,10 +53,18 @@ async function stubPublicBook(page: Page, { relatedFail = false, withOther = fal
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ total: 0, items: [] }) }));
 }
 
+async function openResearchTools(page: Page) {
+  const details = page.getByTestId("book-research-tools");
+  await details.locator("summary").click();
+  const section = details.getByRole("region", { name: "本书的研究操作" });
+  await expect(section).toBeVisible();
+  return section;
+}
+
 test("P1A-B01: authenticated Book Detail → existing real PG project, mocked add receipt → exact binding deep-link", async ({ browser }) => {
   const ctx = await context(browser, true);
   const page = await ctx.newPage();
-  await stubPublicBook(page);
+  await stubCatalogBook(page);
   let addCalls = 0;
   await page.route("**/api/private/s32/projects/" + P + "/catalog-books", async route => {
     addCalls += 1;
@@ -66,8 +85,7 @@ test("P1A-B01: authenticated Book Detail → existing real PG project, mocked ad
   });
   await page.goto(WEB + "/books/" + A);
   await expect(page.getByRole("heading", { name: bookA.title })).toBeVisible({ timeout: 20000 });
-  const section = page.getByRole("region", { name: "本书的研究操作" });
-  await expect(section).toBeVisible();
+  const section = await openResearchTools(page);
   await section.getByRole("button", { name: "加入研究" }).click();
   await section.getByRole("button", { name: "Gate2 Run Project" }).click();
   await expect(section.getByRole("link", { name: "查看这本书在项目中的资料" })).toBeVisible();
@@ -82,31 +100,32 @@ test("P1A-B01: authenticated Book Detail → existing real PG project, mocked ad
   await ctx.close();
 });
 
-test("P1A-B02: anonymous view retains public Book Detail but no private membership traffic", async ({ browser }) => {
+test("P1A-B02: anonymous Book Detail requires Google before any catalog or private request", async ({ browser }) => {
   const ctx = await context(browser, false);
   const page = await ctx.newPage();
-  const privateCalls: string[] = [];
+  const restrictedCalls: string[] = [];
   page.on("request", request => {
-    if (request.url().includes("/api/private/s32/")) privateCalls.push(request.method() + " " + request.url());
+    const path = new URL(request.url()).pathname;
+    if (path.startsWith("/api/books") || path.startsWith("/api/private/")) restrictedCalls.push(request.method() + " " + path);
   });
-  await stubPublicBook(page);
   await page.goto(WEB + "/books/" + A);
-  await expect(page.getByRole("heading", { name: bookA.title })).toBeVisible({ timeout: 20000 });
-  const section = page.getByRole("region", { name: "本书的研究操作" });
-  await section.getByRole("button", { name: "加入研究" }).click();
-  await expect(section.getByRole("link", { name: "私人研究空间" })).toBeVisible();
-  expect(privateCalls).toEqual([]);
+  await expect(page.getByRole("heading", { name: "登录后，继续整理这本书与阅读资料", level: 1 })).toBeVisible({ timeout: 20000 });
+  await expect(page.getByRole("link", { name: "使用 Google 登录", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "使用 Google 登录", exact: true })).toHaveAttribute("href", "/account?returnTo=" + encodeURIComponent("/books/" + A));
+  await expect(page.getByRole("heading", { name: bookA.title })).toHaveCount(0);
+  await expect(page.getByTestId("book-research-tools")).toHaveCount(0);
+  expect(restrictedCalls).toEqual([]);
   await ctx.close();
 });
 
 test("P1A-B03: mobile Book Detail is usable even when related-book service fails", async ({ browser }) => {
   const ctx = await context(browser, true, { width: 390, height: 844 });
   const page = await ctx.newPage();
-  await stubPublicBook(page, { relatedFail: true });
+  await stubCatalogBook(page, { relatedFail: true });
   await page.goto(WEB + "/books/" + A);
   await expect(page.getByRole("heading", { name: bookA.title })).toBeVisible({ timeout: 20000 });
   await expect(page.getByText("相关图书暂时无法加载，不影响当前书目信息。")).toBeVisible();
-  const section = page.getByRole("region", { name: "本书的研究操作" });
+  const section = await openResearchTools(page);
   await expect(section.getByRole("button", { name: "加入研究" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
   await section.getByRole("button", { name: "加入研究" }).focus();
@@ -120,7 +139,7 @@ test("P1A-B03: mobile Book Detail is usable even when related-book service fails
 test("P1A-B04: rapid route A→B never lets A's private research action persist while B loads", async ({ browser }) => {
   const ctx = await context(browser, true);
   const page = await ctx.newPage();
-  await stubPublicBook(page, { withOther: true });
+  await stubCatalogBook(page, { withOther: true });
   let resumeB!: () => void;
   await page.route("**/api/books/" + B, async route => {
     await new Promise<void>(resolve => { resumeB = resolve; });
@@ -128,12 +147,13 @@ test("P1A-B04: rapid route A→B never lets A's private research action persist 
   });
   await page.goto(WEB + "/books/" + A);
   await expect(page.getByRole("heading", { name: bookA.title })).toBeVisible({ timeout: 20000 });
+  await openResearchTools(page);
   await page.getByRole("link", { name: "查看 P1A Synthetic Secondary 详情" }).click();
   await expect(page).toHaveURL(WEB + "/books/" + B);
   await expect(page.getByRole("heading", { name: bookA.title })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "本书的研究操作" })).toHaveCount(0);
   resumeB();
   await expect(page.getByRole("heading", { name: bookB.title })).toBeVisible({ timeout: 20000 });
-  await expect(page.getByRole("region", { name: "本书的研究操作" })).toBeVisible();
+  await openResearchTools(page);
   await ctx.close();
 });

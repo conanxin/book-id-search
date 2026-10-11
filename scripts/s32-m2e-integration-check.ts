@@ -1,4 +1,4 @@
-import { readS32MigrationChain } from "./s32-migration-chain.js";
+import { S32_MIGRATION_PATHS, readS32MigrationChain } from "./s32-migration-chain.js";
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -68,12 +68,16 @@ try {
   if (!ready) throw new Error("Disposable PostgreSQL did not become ready");
 
   const migrations = readS32MigrationChain(root);
-  if (migrations.length !== 2) throw new Error("Expected reviewed 001 -> 002 migration chain");
+  const expectedPrefix = ["db/migrations/001_s32_core_schema.sql", "db/migrations/002_s32_m2e_issue_resolution.sql"];
+  if (expectedPrefix.some((path, index) => S32_MIGRATION_PATHS[index] !== path)) {
+    throw new Error("Expected reviewed 001 -> 002 migration prefix");
+  }
   const fixture = readFileSync(resolve(root, "scripts/fixtures/s32-m2e-browser.sql"), "utf8");
   const upgradeBaseFixture = readFileSync(resolve(root, "scripts/fixtures/s32-m2d-browser.sql"), "utf8");
   const upgradeFixture = readFileSync(resolve(root, "scripts/fixtures/s32-m2e-schema-upgrade.sql"), "utf8");
 
-  // Fresh 001 -> 002 install used by the store integration suite.
+  // Current fresh install includes all reviewed additive migrations. Historical
+  // upgrade cases below intentionally exercise only the 001 -> 002 prefix.
   psql("s32_m2e_test", migrations.join("\n"));
   psql("s32_m2e_test", fixture);
 

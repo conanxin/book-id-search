@@ -46,6 +46,7 @@ vi.mock("../research/SearchMemberships", () => ({
   useSearchMemberships: mocks.useSearchMemberships,
   ResearchMembershipChips: () => null,
 }));
+vi.mock("../library/BookWorkspace", () => ({ BookWorkspace: () => null }));
 
 const appMod = await import("../App");
 const App = appMod.default;
@@ -146,11 +147,12 @@ describe("DetailPage WeRead session proof (Task 9 §十一)", () => {
     expect(mocks.fetchWereadStatus.mock.calls[0][0]).toBe(book.id);
   });
 
-  it("28 unauthenticated → no private status request", async () => {
+  it("28 unauthenticated → Google prompt without detail or private status requests", async () => {
     __setWebAuthSnapshotForTests(UNAUTH);
     mountAt(`/books/${book.id}`);
-    await waitFor(() => expect(screen.getByText("测试书")).toBeTruthy());
-    await new Promise((r) => setTimeout(r, 150));
+    expect(screen.getByRole("link", { name: "使用 Google 登录" })).toBeTruthy();
+    expect(mocks.getBook).not.toHaveBeenCalled();
+    expect(mocks.getRelatedBooks).not.toHaveBeenCalled();
     expect(mocks.fetchWereadStatus).not.toHaveBeenCalled();
     expect(mocks.clearWereadStatusCache).toHaveBeenCalled();
   });

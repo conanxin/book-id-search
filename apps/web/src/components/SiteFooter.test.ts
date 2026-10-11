@@ -5,6 +5,7 @@ import { createElement } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { renderToStaticMarkup } from "react-dom/server";
 import SiteFooter from "./SiteFooter";
+import App from "../App";
 
 /**
  * POST-ICP-COMPLIANCE — structural assertions for the global site footer.
@@ -157,18 +158,10 @@ describe("App.tsx mounts SiteFooter once (POST-ICP-COMPLIANCE)", () => {
     expect(appSrc).toContain('import SiteFooter');
   });
 
-  it("App.tsx renders <SiteFooter /> inside the app root", () => {
-    expect(appSrc).toMatch(/<SiteFooter\s*\/>/);
-    // Footer must be inside the same JSX root as <Routes>; both share the
-    // fragment wrapper so every route inherits the footer.
-    // We find the LAST top-level fragment (the App export) rather than the
-    // first `<>...</>` literal in the file (which can occur in other
-    // components such as AiSearchPanel).
-    const matches = Array.from(appSrc.matchAll(/<>[\s\S]*?<\/>/g));
-    expect(matches.length).toBeGreaterThan(0);
-    const appRoot = matches[matches.length - 1];
-    expect(appRoot[0]).toContain("<SiteFooter");
-    expect(appRoot[0]).toContain("<Routes");
+  it("the shared shell renders one global footer on a protected book-library route", () => {
+    const html = renderToStaticMarkup(createElement(MemoryRouter, { initialEntries: ["/library"] }, createElement(App)));
+    expect(html.match(/data-testid="site-footer"/g)).toHaveLength(1);
+    expect(html).toContain('data-testid="site-footer-icp"');
   });
 });
 
@@ -188,10 +181,10 @@ describe("Global 返回搜索 count (POST-ICP-COMPLIANCE)", () => {
     expect(linkMatches.length).toBe(1);
   });
 
-  it("App.tsx uses 返回搜索结果 for the results-page heading, not as a 返回搜索 link", () => {
-    // 返回搜索结果 is the page-title for the search results; it must not be
-    // conflated with the navigation link. The phrase is allowed here.
-    expect(appSrc).toContain("返回搜索结果");
+  it("the library shell retains the footer's single return-to-search link", () => {
+    const html = renderToStaticMarkup(createElement(MemoryRouter, { initialEntries: ["/library"] }, createElement(App)));
+    expect(html.match(/data-testid="site-footer-back"/g)).toHaveLength(1);
+    expect(html).toContain("返回搜索");
   });
 });
 

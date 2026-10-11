@@ -1,20 +1,55 @@
 :root {
-  color: #172033;
-  background: #f6f7f9;
+  color: #24322d;
+  background: #f6f7f4;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
     "Microsoft YaHei", sans-serif;
   line-height: 1.5;
   letter-spacing: 0;
-  --color-text: #172033;
-  --color-text-muted: #63728a;
-  --color-text-faint: #546179;
-  --color-primary: #2f6fed;
-  --color-primary-strong: #245bc5;
-  --color-border: #dfe5ee;
-  --color-border-soft: #d9dfeb;
-  --color-bg-soft: #f6f7f9;
+  --color-text: #24322d;
+  --color-text-muted: #627069;
+  --color-muted: var(--color-text-muted);
+  --color-text-faint: #58675f;
+  --color-primary: #28695a;
+  --color-primary-strong: #205444;
+  --color-border: #dbe2dc;
+  --color-border-soft: #e3e8e2;
+  --color-bg-soft: #f6f7f4;
   --color-bg-card: #ffffff;
+  --color-accent: var(--color-primary);
+  --color-accent-soft: #eaf3ec;
+  --color-card: var(--color-bg-card);
+  --color-danger: var(--color-error-text);
+  --color-input: var(--color-bg-card);
+  --color-link: var(--color-primary-strong);
+  --color-panel: var(--color-bg-card);
+  --color-surface-alt: var(--color-bg-soft);
+  --color-text-secondary: var(--color-text-muted);
+  --weread-border: var(--color-border);
+  --weread-surface: var(--color-bg-card);
+  --weread-text: var(--color-text);
+  --book-id-bg: var(--color-bg-card);
+  --book-id-card: var(--color-bg-card);
+  --book-id-fg: var(--color-text);
+  --book-id-text: var(--color-text);
+  --book-id-muted: var(--color-text-muted);
+  --book-id-border: var(--color-border);
+  --book-id-border-hover: #b8c9be;
+  --book-id-border-strong: #9fb6a8;
+  --book-id-bg-subtle: var(--color-bg-soft);
+  --book-id-bg-hover: #edf3ee;
+  --book-id-soft-bg: var(--color-bg-soft);
+  --book-id-code-bg: var(--color-bg-soft);
+  --book-id-accent: var(--color-primary);
+  --book-id-accent-strong: var(--color-primary-strong);
+  --book-id-accent-soft: #eaf3ec;
+  --book-id-danger: #b12a2a;
+  --book-id-error-fg: var(--color-error-text);
+  --book-id-error-bg: var(--color-error-bg);
+  --book-id-error-border: var(--color-error-border);
+  --book-id-info-fg: var(--color-primary-strong);
+  --book-id-info-bg: #edf5f0;
+  --book-id-info-border: #c6dacf;
   --color-warn-bg: #fff9ec;
   --color-warn-border: #e8ad32;
   --color-warn-text: #78531a;
@@ -45,7 +80,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -743,7 +779,7 @@ mark.hl {
   gap: 6px;
   min-height: 32px;
   border-radius: var(--radius-sm);
-  background: #eef3ff;
+  background: var(--color-accent-soft);
   color: var(--color-primary-strong);
   font-size: 12px;
   font-weight: 700;
@@ -753,7 +789,7 @@ mark.hl {
 }
 
 .copy-button:hover {
-  background: #dde9ff;
+  background: #dcebe2;
 }
 
 .copy-button--primary {
@@ -1612,7 +1648,7 @@ mark.hl {
   background: rgba(255, 80, 80, 0.08);
   border: 1px solid rgba(255, 80, 80, 0.3);
   border-radius: 8px;
-  color: #ff8080;
+  color: var(--color-error-text);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2013,16 +2049,16 @@ mark.hl {
   gap: 6px;
   font-size: 13px;
   padding: 8px 14px;
-  background: rgba(120, 160, 220, 0.15);
-  border: 1px solid rgba(120, 160, 220, 0.3);
+  background: var(--color-accent-soft);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   color: var(--color-text, #ddd);
   cursor: pointer;
   font-weight: 500;
 }
 .book-insight__button:hover:not(:disabled) {
-  background: rgba(120, 160, 220, 0.25);
-  border-color: rgba(120, 160, 220, 0.5);
+  background: #dcebe2;
+  border-color: var(--color-primary);
 }
 .book-insight__button:disabled {
   opacity: 0.6;
@@ -2308,7 +2344,7 @@ mark.hl {
 .weread-trend-bar__fill {
   width: 100%;
   min-height: 2px;
-  background: linear-gradient(180deg, #6cb1ff 0%, #409eff 100%);
+  background: var(--color-primary);
   border-radius: 2px 2px 0 0;
   transition: opacity 0.15s;
 }
@@ -2474,9 +2510,9 @@ mark.hl {
 }
 
 .weread-notes-actions-row__export {
-  background: #eff6ff !important;
-  color: #1d4ed8 !important;
-  border: 1px solid #bfdbfe !important;
+  background: var(--color-accent-soft) !important;
+  color: var(--color-primary-strong) !important;
+  border: 1px solid var(--color-border) !important;
 }
 
 .weread-notes-actions-row__secondary {
@@ -2940,9 +2976,9 @@ mark.hl {
 .weread-ai-summary__notice {
   margin: 0;
   font-size: 12px;
-  color: #1d4ed8;
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
+  color: var(--color-primary-strong);
+  background: var(--color-accent-soft);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   padding: 6px 10px;
   display: inline-flex;
@@ -3974,20 +4010,20 @@ mark.hl {
   gap: 4px;
   padding: 4px 10px;
   border-radius: 6px;
-  border: 1px solid #2563eb;
-  background: #2563eb;
+  border: 1px solid var(--color-primary);
+  background: var(--color-primary);
   color: #fff;
   font-size: 12px;
   cursor: pointer;
 }
 
 .weread-session-theme__primary:hover {
-  background: #1d4ed8;
+  background: var(--color-primary-strong);
 }
 
 .weread-session-theme__primary--active {
-  background: #1e3a8a;
-  border-color: #1e3a8a;
+  background: var(--color-primary-strong);
+  border-color: var(--color-primary-strong);
 }
 
 .weread-session-theme__secondary {

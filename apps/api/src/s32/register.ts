@@ -45,12 +45,16 @@ import { createPostgresResearchRunReadStore } from "./postgres/research-run-read
 import { createResearchRunRouter } from "./routes/research-run-routes.js";
 import { createPostgresResearchIssueStore } from "./postgres/research-issue-store.js";
 import { createResearchIssueRouter } from "./routes/research-issue-routes.js";
+import { createBookLibraryService, type BookLibraryService } from "./application/book-library.js";
+import { createPostgresBookLibraryStore } from "./postgres/book-library-store.js";
+import { createBookLibraryRouter } from "./routes/book-library-routes.js";
 
 export function createS32Router(deps: {
   env: NodeJS.ProcessEnv;
   getCatalogDocument: GetDocument;
   config?: ReturnType<typeof readS32Config>;
   requestAuthorizer?: S32RequestAuthorizer;
+  libraryRequestAuthorizer?: S32RequestAuthorizer;
 }) {
   const router = Router();
   const config = deps.config ?? readS32Config(deps.env);
@@ -68,6 +72,7 @@ export function createS32Router(deps: {
   let issueResolutions: IssueResolutionsService | null = null;
   let researchIssues: ResearchIssuesService | null = null;
   let researchRuns: ResearchRunsService | null = null;
+  let library: BookLibraryService | null = null;
   if (config.enabled && config.databaseUrl) {
     const pool = new Pool({ connectionString: config.databaseUrl, connectionTimeoutMillis: 3000, query_timeout: 5000 });
     pool.on("error", () => console.warn("[s32] idle database connection unavailable"));
@@ -95,8 +100,14 @@ export function createS32Router(deps: {
       store: createPostgresCatalogPromotionStore(pool),
     });
     projectItems = createProjectItemsService({ projects, promotionCommand: command, bindings: createPostgresProjectBindingStore(pool) });
+    library = createBookLibraryService({
+      store: createPostgresBookLibraryStore(pool),
+      reader: createMeiliCatalogBookReader(deps.getCatalogDocument),
+      promotionCommand: command,
+    });
   }
 
+  router.use("/library", createBookLibraryRouter(config, library, deps.libraryRequestAuthorizer));
   router.post(
     "/promotions/catalog-book",
     createCatalogPromotionHandler({ config, command, requestAuthorizer }),

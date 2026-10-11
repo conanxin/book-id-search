@@ -23,6 +23,10 @@ const ASSERTIONS = [
   resolve(ROOT, "db/tests/003_s32_m2e_schema_assertions.sql"),
   resolve(ROOT, "db/tests/004_s32_m2e_negative_invariants.sql"),
 ];
+const M0_ASSERTIONS = ASSERTIONS.slice(0, 2);
+// The M0 structural assertion describes its exact 26-table schema. The other
+// suites check existing invariants and remain valid after additive tables.
+const CURRENT_INVARIANT_ASSERTIONS = ASSERTIONS.slice(1);
 const UPGRADE_FIXTURES = [
   resolve(ROOT, "scripts/fixtures/s32-m2d-browser.sql"),
   resolve(ROOT, "scripts/fixtures/s32-m2e-schema-upgrade.sql"),
@@ -161,18 +165,38 @@ function apply(dbName: string, sql: string) {
   if (result.status !== 0) throw new Error(`MIGRATION_APPLY_FAIL\n${result.stderr}`);
 }
 
-function assertions(dbName: string) {
-  for (const a of ASSERTIONS) {
+function assertions(dbName: string, files: readonly string[] = CURRENT_INVARIANT_ASSERTIONS) {
+  for (const a of files) {
     // Existence and non-empty already enforced by checkInputs() before withContainer()
     const ar = psqlFile(dbName, readFileSync(a, "utf8"));
     if (ar.status !== 0) throw new Error(`ASSERTION_FAIL: ${a}\n${ar.stderr}`);
   }
 }
 
+interface MigrationStageChecks {
+  apply(sql: string): void;
+  assertM0(): void;
+  assertCurrent(): void;
+}
+
+/** Check the frozen schema while it exists, then check each additive stage. */
+export function applySchemaMigrationStages(migrations: readonly string[], checks: MigrationStageChecks): void {
+  if (migrations.length < 2) throw new Error("REQUIRED_MIGRATION_PREFIX_MISSING");
+  checks.apply(migrations[0]!);
+  checks.assertM0();
+  for (const sql of migrations.slice(1)) {
+    checks.apply(sql);
+    checks.assertCurrent();
+  }
+}
+
 function installOn(dbName: string, migrations: string[]) {
   createDatabase(dbName);
-  for (const sql of migrations) apply(dbName, sql);
-  assertions(dbName);
+  applySchemaMigrationStages(migrations, {
+    apply: sql => apply(dbName, sql),
+    assertM0: () => assertions(dbName, M0_ASSERTIONS),
+    assertCurrent: () => assertions(dbName),
+  });
   console.log(`[harness] ${dbName} install+assertions OK`);
 }
 
@@ -183,15 +207,41 @@ function query(dbName: string, sql: string): string {
 }
 
 function dataSnapshot(dbName: string): string {
-  const tables: string[] = JSON.parse(query(dbName, "SELECT json_agg(table_schema || '.' || table_name ORDER BY table_schema,table_name) FROM information_schema.tables WHERE table_schema IN ('core','ops')"));
-  if (tables.length !== 26 || tables.some(name => !/^(core|ops)\.[a-z_]+$/.test(name))) throw new Error("UPGRADE_TABLE_SET_INVALID");
+  const tables: unknown = JSON.parse(query(dbName, "SELECT json_agg(table_schema || '.' || table_name ORDER BY table_schema,table_name) FROM information_schema.tables WHERE table_schema IN ('core','ops')"));
+  if (!Array.isArray(tables) || tables.length === 0
+    || tables.some(name => typeof name !== "string" || !/^(core|ops)\.[a-z_]+$/.test(name))) {
+    throw new Error("UPGRADE_TABLE_SET_INVALID");
+  }
   const rows = tables.map(name => `SELECT '${name}' AS name, COALESCE(jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)::text),'[]'::jsonb) AS rows FROM ${name} t`).join(" UNION ALL ");
   return JSON.stringify(JSON.parse(query(dbName, `SELECT jsonb_object_agg(name,rows) FROM (${rows}) s`)));
+}
+
+/** Added tables are allowed; every pre-existing table and row must survive. */
+export function assertExistingRowsUnchanged(before: string, after: string): string[] {
+  const parse = (value: string): Record<string, unknown[]> => {
+    const snapshot: unknown = JSON.parse(value);
+    if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)
+      || Object.keys(snapshot).length === 0
+      || Object.entries(snapshot).some(([name, rows]) => !/^(core|ops)\.[a-z_]+$/.test(name) || !Array.isArray(rows))) {
+      throw new Error("UPGRADE_TABLE_SET_INVALID");
+    }
+    return snapshot as Record<string, unknown[]>;
+  };
+  const previous = parse(before);
+  const current = parse(after);
+  for (const [table, rows] of Object.entries(previous)) {
+    if (!Object.hasOwn(current, table)) throw new Error(`UPGRADE_EXISTING_TABLE_MISSING: ${table}`);
+    if (JSON.stringify(rows) !== JSON.stringify(current[table])) {
+      throw new Error(`UPGRADE_EXISTING_ROWS_CHANGED: ${table}`);
+    }
+  }
+  return Object.keys(current).filter(table => !Object.hasOwn(previous, table)).sort();
 }
 
 function upgradeOn(dbName: string, migrations: string[], invalid: boolean) {
   createDatabase(dbName);
   apply(dbName, migrations[0]!);
+  assertions(dbName, M0_ASSERTIONS);
   for (const fixture of UPGRADE_FIXTURES) apply(dbName, readFileSync(fixture, "utf8"));
   if (invalid) {
     apply(dbName, "UPDATE core.issue_resolutions SET preferred_claim_id='32111111-1111-4111-8111-111111111111' WHERE id='e4111111-1111-4111-8111-111111111111';");
@@ -200,11 +250,27 @@ function upgradeOn(dbName: string, migrations: string[], invalid: boolean) {
   if (incompatible !== (invalid ? "1" : "0")) throw new Error("UPGRADE_FAULT_SETUP_FAILED");
   const before = dataSnapshot(dbName);
   writeFileSync(join(evidenceDir, `${dbName}-pre.json`), before, { mode: 0o600 });
-  const result = psqlFile(dbName, migrations.slice(1).join("\n"));
+  // Keep the historical 001 -> 002 compatibility check separate from later
+  // migrations, so an invalid legacy row never reaches an additive migration.
+  let result = psqlFile(dbName, migrations[1]!);
+  if (result.status === 0 && !invalid) {
+    assertions(dbName);
+    for (const sql of migrations.slice(2)) {
+      const next = psqlFile(dbName, sql);
+      result = {
+        status: next.status,
+        stdout: `${result.stdout}\n${next.stdout}`,
+        stderr: `${result.stderr}\n${next.stderr}`,
+      };
+      if (next.status !== 0) break;
+      assertions(dbName);
+    }
+  }
   writeFileSync(join(evidenceDir, `${dbName}-migration.json`), JSON.stringify(result), { mode: 0o600 });
   const after = dataSnapshot(dbName);
   writeFileSync(join(evidenceDir, `${dbName}-post.json`), after, { mode: 0o600 });
-  if (before !== after) throw new Error("UPGRADE_EXISTING_ROWS_CHANGED");
+  const addedTables = assertExistingRowsUnchanged(before, after);
+  console.log(`UPGRADE_ADDED_TABLES=${addedTables.join(",") || "NONE"}`);
   if (invalid) {
     if (result.status === 0 || !result.stderr.includes("S32_M2E_LEGACY_PREFERRED_CLAIM_NOT_MEMBER")) throw new Error("INVALID_LEGACY_PREFLIGHT_NOT_REJECTED");
     const partial = query(dbName, "SELECT (SELECT count(*) FROM pg_constraint WHERE conrelid='core.issue_resolutions'::regclass AND conname='fk_ir_preferred_claim_same_issue') + (SELECT count(*) FROM pg_trigger WHERE tgrelid='core.issue_resolutions'::regclass AND NOT tgisinternal) + (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='core' AND p.proname='fn_issue_resolutions_immutable')");

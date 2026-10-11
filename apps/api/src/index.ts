@@ -70,6 +70,8 @@ import { createProjectItemNoteBodyParser } from "./s32/routes/project-item-note-
 import { readGoogleSessionAuthConfig } from "./auth/config.js";
 import { createAuthRouter } from "./auth/routes.js";
 import { createS32RequestAuthorizer } from "./s32/routes/private-auth.js";
+import { createGoogleOwnerMiddleware, createGoogleOwnerRequestAuthorizer } from "./auth/google-owner-request.js";
+import { createBookLibraryBodyParser } from "./s32/routes/book-library-routes.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(currentDir, "../../../");
@@ -135,12 +137,17 @@ app.use(cors());
 // Google web-session auth. Mounted BEFORE the global 256kb express.json so
 // POST /api/auth/google consumes its own 16kb bounded raw-body parser
 // (malformed/oversized payloads are answered here and never forwarded).
-// When GOOGLE_AUTH_ENABLED is off the router 404s, leaving legacy behavior untouched.
+// The sign-in endpoints have their own feature/configuration checks.
 const googleAuthConfig = readGoogleSessionAuthConfig(process.env);
 const s32Config = readS32Config(process.env);
 const s32RequestAuthorizer = createS32RequestAuthorizer(s32Config, googleAuthConfig);
 const wereadRequestAuthorizer = createWereadRequestAuthorizer(googleAuthConfig);
+const googleOwnerAuthorizer = createGoogleOwnerRequestAuthorizer(googleAuthConfig);
 app.use("/api/auth", createAuthRouter({ config: googleAuthConfig }));
+// Basic /api/search remains public. Full book pages, every AI action and all
+// personal routes use the same Google session; legacy tokens do not enter.
+app.use(["/api/books", "/api/ai", "/api/private"], createGoogleOwnerMiddleware(googleAuthConfig));
+app.use("/api/private/s32/library", createBookLibraryBodyParser(s32Config, googleOwnerAuthorizer));
 app.use("/api/private/s32/projects/:projectId/items/:bindingId/note", createProjectItemNoteBodyParser(s32Config, s32RequestAuthorizer));
 app.use("/api/private/s32/projects", createIssueResolutionBodyParser(s32Config, s32RequestAuthorizer));
 app.use("/api/private/s32/projects", createResearchRunBodyParser(s32Config, s32RequestAuthorizer));
@@ -153,6 +160,7 @@ app.use(
     getCatalogDocument: (id) => index.getDocument(id),
     config: s32Config,
     requestAuthorizer: s32RequestAuthorizer,
+    libraryRequestAuthorizer: googleOwnerAuthorizer,
   }),
 );
 

@@ -30,6 +30,7 @@ vi.mock("./research/SearchMemberships", () => ({
   ResearchMembershipChips: () => null,
 }));
 vi.mock("./BookInsight", () => ({ default: () => null }));
+vi.mock("./library/BookWorkspace", () => ({ BookWorkspace: ({ bookId }: { bookId: string }) => <div>本书内容：{bookId}</div> }));
 vi.mock("./api", () => ({
   getBook: mocks.getBook,
   getRelatedBooks: mocks.getRelatedBooks,
@@ -60,7 +61,7 @@ beforeEach(() => {
   __resetWebAuthStoreForTests();
   vi.clearAllMocks();
   mocks.feature.enabled = true;
-  __setWebAuthSnapshotForTests({ status: "unauthenticated", user: null, csrfToken: null, error: null });
+  __setWebAuthSnapshotForTests({ status: "authenticated", user: { email: "owner@example.com", name: "Owner" }, csrfToken: "route-test-csrf", error: null });
   mocks.getBook.mockImplementation(async (id: string) => ({ item: id === "book-b" ? B : A }));
   mocks.getRelatedBooks.mockResolvedValue({ items: [] });
   mocks.fetchWereadStatus.mockResolvedValue({ ok: true, matched: false });
@@ -109,11 +110,36 @@ describe("P1-A Book Detail route integration", () => {
     expect(screen.getByRole("heading", { name: "图书甲" })).toBeTruthy();
   });
 
-  it("keeps public detail readable with the S32 feature switched off", async () => {
+  it("keeps the signed-in book page readable with the research feature switched off", async () => {
     mocks.feature.enabled = false;
     mountAt();
     expect(await screen.findByRole("heading", { name: "图书甲" })).toBeTruthy();
     expect(screen.queryByTestId("detail-research-action")).toBeNull();
     expect(screen.getByText("RAW")).toBeTruthy();
+  });
+
+  it("requires Google before any detail request, then resumes the same book after sign-in", async () => {
+    __setWebAuthSnapshotForTests({ status: "unauthenticated", user: null, csrfToken: null, error: null });
+    mountAt();
+    expect(screen.getByRole("link", { name: "使用 Google 登录" }).getAttribute("href")).toBe("/account?returnTo=%2Fbooks%2Fbook-a");
+    expect(mocks.getBook).not.toHaveBeenCalled();
+    expect(mocks.getRelatedBooks).not.toHaveBeenCalled();
+    expect(mocks.fetchWereadStatus).not.toHaveBeenCalled();
+    await act(async () => __setWebAuthSnapshotForTests({ status: "authenticated", user: { email: "owner@example.com" }, csrfToken: "new-session", error: null }));
+    expect(await screen.findByRole("heading", { name: "图书甲" })).toBeTruthy();
+    expect(screen.getByText("本书内容：book-a")).toBeTruthy();
+    await act(async () => __setWebAuthSnapshotForTests({ status: "unauthenticated", user: null, csrfToken: null, error: null }));
+    expect(screen.queryByText("本书内容：book-a")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "图书甲" })).toBeNull();
+  });
+
+  it("keeps the AI route through sign-in and hides the ordinary results section", async () => {
+    __setWebAuthSnapshotForTests({ status: "unauthenticated", user: null, csrfToken: null, error: null });
+    mountAt("/");
+    await userEvent.click(screen.getByRole("tab", { name: "AI 找书" }));
+    expect(screen.getByRole("link", { name: "使用 Google 登录" }).getAttribute("href")).toContain("%3Fmode%3Dai");
+    expect(screen.queryByText("等待搜索")).toBeNull();
+    await userEvent.click(screen.getByRole("tab", { name: "普通搜索" }));
+    expect(screen.getByRole("search")).toBeTruthy();
   });
 });

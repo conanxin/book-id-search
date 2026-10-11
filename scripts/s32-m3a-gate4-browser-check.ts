@@ -102,13 +102,12 @@ async function main(): Promise<void> {
   if (!dbPort) throw new Error(`Unexpected port mapping: ${portOut}`);
   const dbUrl = `postgresql://${DB_USER}:${PASSWORD}@127.0.0.1:${dbPort}/${DB_NAME}`;
 
-  // ---- 2. Frozen migrations 001 then 002, then Gate2 + Gate3 fixtures.
-  const { readS32MigrationChain } = await import("./s32-migration-chain.js");
+  // ---- 2. Reviewed migration chain, then Gate2 + Gate3 fixtures.
+  const { S32_MIGRATION_PATHS, readS32MigrationChain } = await import("./s32-migration-chain.js");
   const migrationSqls = readS32MigrationChain(root);
-  const migrationFiles = ["db/migrations/001_s32_core_schema.sql", "db/migrations/002_s32_m2e_issue_resolution.sql"];
   migrationSqls.forEach((sql, i) => {
     docker(["exec", "-i", CONTAINER, "psql", "-X", "-h", "127.0.0.1", "-U", DB_USER, "-d", DB_NAME, "-v", "ON_ERROR_STOP=1", "-f", "-"], sql);
-    log(`migration applied: ${migrationFiles[i]}`);
+    log(`migration applied: ${S32_MIGRATION_PATHS[i]}`);
   });
   for (const fixture of ["scripts/fixtures/s32-m3a-gate2-researchrun.sql", "scripts/fixtures/s32-m3a-gate3-browser.sql", "scripts/fixtures/s32-m3a-gate4-dossier.sql"]) {
     docker(["exec", "-i", CONTAINER, "psql", "-X", "-h", "127.0.0.1", "-U", DB_USER, "-d", DB_NAME, "-v", "ON_ERROR_STOP=1", "-f", "-"], readFileSync(resolve(root, fixture), "utf8"));
