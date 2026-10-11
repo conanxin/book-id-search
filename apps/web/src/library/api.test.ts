@@ -20,6 +20,8 @@ const workspace = (bookId = "book/a"): BookWorkspaceData => ({
 });
 const fetcher = vi.fn<typeof fetch>();
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+const listItem = { bookId: "book/a", editionId: "edition-a", title: "书名", author: null, publisher: null, year: null,
+  introductionExcerpt: "原介绍", noteCount: 1, resourceCount: 0, updatedAt: now };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -74,6 +76,28 @@ describe("book library private API", () => {
     expect(parsed.searchParams.get("page")).toBe("3");
     expect(parsed.searchParams.get("filter")).toBe("notes");
     expect(options).toMatchObject({ method: "GET", credentials: "same-origin", headers: {} });
+  });
+
+  it("accepts optional legacy search metadata and both current content match kinds", async () => {
+    for (const searchMatch of [undefined, null, { kind: "introduction", excerpt: "介绍中的古道" },
+      { kind: "note", noteId: "note/a", noteTitle: "我的古道记录", excerpt: `…${"𠮷".repeat(240)}…` }]) {
+      const entry = { ...listItem, ...(searchMatch === undefined ? {} : { searchMatch }) };
+      fetcher.mockResolvedValueOnce(json({ items: [entry], page: 1, limit: 24, total: 1 }));
+      expect((await listLibrary({ page: 1, q: "古道" })).items[0]).toEqual(entry);
+    }
+  });
+
+  it("rejects malformed match metadata instead of presenting it as a valid content hit", async () => {
+    for (const searchMatch of [
+      { kind: "note", excerpt: "正文", noteTitle: "缺少编号" },
+      { kind: "note", excerpt: "正文", noteId: "note-a", noteTitle: 7 },
+      { kind: "introduction", excerpt: ["错误类型"] },
+      { kind: "weread", excerpt: "不属于这个搜索范围" },
+      { kind: "introduction", excerpt: "𠮷".repeat(243) },
+    ]) {
+      fetcher.mockResolvedValueOnce(json({ items: [{ ...listItem, searchMatch }], page: 1, limit: 24, total: 1 }));
+      await expect(listLibrary({ page: 1, q: "正文" })).rejects.toMatchObject({ status: 502 });
+    }
   });
 
   it("rejects a valid workspace returned for the wrong book", async () => {

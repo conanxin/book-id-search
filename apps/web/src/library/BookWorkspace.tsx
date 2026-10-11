@@ -9,6 +9,7 @@ import {
   type BookNote, type BookNoteRevision, type BookResource, type BookResourceInput, type BookWorkspaceData,
 } from "./api";
 import { useLibraryScope } from "./useLibraryScope";
+import { useBookContentAnchor } from "./useBookContentAnchor";
 import { BookAiAssistant } from "./BookAiAssistant";
 import "./library.css";
 
@@ -50,6 +51,8 @@ function BookWorkspaceContent({ bookId, generation }: { bookId: string; generati
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const pending = useRef(false);
+  const contentRoot = useRef<HTMLDivElement>(null);
+  const anchorMessage = useBookContentAnchor(bookId, generation, item, contentRoot);
 
   const operate = useCallback<WorkspaceOperation>(async request => {
     if (pending.current) throw new LibraryApiError(409, "正在保存其他内容，请稍候。");
@@ -100,13 +103,14 @@ function BookWorkspaceContent({ bookId, generation }: { bookId: string; generati
   </section>;
 
   const props = { bookId, item, busy, operate, reload };
-  return <div className="book-workspace" aria-label="本书的个人内容">
+  return <div className="book-workspace" aria-label="本书的个人内容" ref={contentRoot}>
     <div className="library-workspace-bar">
       <div><strong>我的阅读资料</strong><p className="library-muted">介绍、笔记和电子版本会保存在这本书下，方便随时回来继续整理。</p></div>
       {item.saved ? <Link className="library-button library-button--quiet" to="/library">已在我的书籍中</Link>
         : <button className="library-button library-button--primary" onClick={() => void saveToLibrary()} disabled={busy}>加入我的书籍</button>}
     </div>
     <ErrorMessage message={error} />
+    {anchorMessage && <p className="library-anchor-message" role="status">{anchorMessage} <Link className="library-text-link" to="/library">返回我的书籍</Link></p>}
     <p className="library-status" role="status" aria-live="polite">{message}</p>
     <BookAiAssistant bookId={bookId} busy={busy} operate={operate} reload={reload} />
     <IntroductionPanel {...props} />
@@ -162,7 +166,7 @@ function IntroductionPanel({ bookId, item, busy, operate, reload }: PanelProps) 
 
   return <section className="library-panel" aria-labelledby="library-introduction-heading">
     <div className="library-section-heading">
-      <div><span className="library-eyebrow">了解这本书</span><h2 id="library-introduction-heading">我的补充介绍</h2></div>
+      <div><span className="library-eyebrow">了解这本书</span><h2 id="library-introduction-heading" className="library-content-target" tabIndex={-1}>我的补充介绍</h2></div>
       {!editing && <button className="library-button" onClick={edit} disabled={busy}>{item.introduction ? "编辑介绍" : "补充介绍"}</button>}
     </div>
     <p className="library-muted">记录内容简介、阅读价值、目录线索或版本说明。原始书目信息仍可在上方查看。</p>
@@ -274,7 +278,7 @@ function NotesPanel({ bookId, item, busy, operate, reload, generation }: PanelPr
     <p className="library-status" role="status" aria-live="polite">{message}</p>
     {!item.notes.length && !editor && <p className="library-empty">还没有笔记。从一个问题或一段摘录开始。</p>}
     <div className="library-note-list">
-      {item.notes.map(note => <article className="library-note" key={note.noteId} id={`book-note-${note.noteId}`} aria-label={`笔记：${note.title}`}>
+      {item.notes.map(note => <article className="library-note library-content-target" key={note.noteId} id={`book-note-${note.noteId}`} tabIndex={-1} aria-label={`笔记：${note.title}`}>
         <div className="library-note-heading"><h3>{note.title}</h3><span className="library-tag">手工笔记</span></div>
         <p className="library-meta"><time dateTime={note.updatedAt}>{libraryDate(note.updatedAt)}</time> · 第 {note.revisionNo} 版</p>
         <div className="library-prose">{note.content}</div>

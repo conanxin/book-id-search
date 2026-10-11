@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Link, MemoryRouter } from "react-router-dom";
+import { Link, MemoryRouter, useLocation } from "react-router-dom";
 import { __resetWebAuthStoreForTests, __setWebAuthSnapshotForTests } from "./auth/session";
 
 const mocks = vi.hoisted(() => ({
@@ -78,10 +78,15 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); __resetWebAuthStoreForTests(); });
 
+function CurrentLocation() {
+  const location = useLocation();
+  return <output aria-label="当前页面地址">{location.pathname}{location.search}{location.hash}</output>;
+}
 function mountAt(path = "/books/book-a") {
   return render(<MemoryRouter initialEntries={[path]}>
     <Link to="/books/book-b">切换到图书乙</Link>
     <App />
+    <CurrentLocation />
   </MemoryRouter>);
 }
 
@@ -149,6 +154,21 @@ describe("P1-A Book Detail route integration", () => {
     expect(screen.queryByText("等待搜索")).toBeNull();
     await userEvent.click(screen.getByRole("tab", { name: "普通搜索" }));
     expect(screen.getByRole("search")).toBeTruthy();
+  });
+
+  it("preserves the content fragment in both Google login links and resumes it after sign-in", async () => {
+    __setWebAuthSnapshotForTests({ status: "unauthenticated", user: null, csrfToken: null, error: null });
+    const destination = "/books/book-a?from=library#book-note-note-a";
+    mountAt(destination);
+    const loginUrl = `/account?returnTo=${encodeURIComponent(destination)}`;
+    expect(screen.getByRole("link", { name: "Google 登录", exact: true }).getAttribute("href")).toBe(loginUrl);
+    expect(screen.getByRole("link", { name: "使用 Google 登录", exact: true }).getAttribute("href")).toBe(loginUrl);
+    expect(mocks.getBook).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("link", { name: "使用 Google 登录", exact: true }));
+    expect(await screen.findByRole("heading", { name: "账号与设置", level: 1 })).toBeTruthy();
+    await act(async () => __setWebAuthSnapshotForTests({ status: "authenticated", user: { email: "owner@example.com", name: "Owner" }, csrfToken: "fragment-session", error: null }));
+    expect(await screen.findByRole("heading", { name: A.title, level: 1 })).toBeTruthy();
+    expect(screen.getByLabelText("当前页面地址").textContent).toBe(destination);
   });
 });
 

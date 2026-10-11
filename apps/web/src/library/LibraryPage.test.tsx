@@ -14,7 +14,7 @@ const result = (overrides: Partial<LibraryResult> = {}): LibraryResult => ({ ite
 const auth = (csrf = "csrf-a") => ({ status: "authenticated" as const, user: { email: "owner@example.test", name: "Owner" }, csrfToken: csrf, error: null });
 function Navigation() {
   const location = useLocation(); const navigate = useNavigate();
-  return <><output aria-label="当前地址">{location.pathname}{location.search}</output><button onClick={() => navigate(-1)}>浏览器后退</button></>;
+  return <><output aria-label="当前地址">{location.pathname}{location.search}{location.hash}</output><button onClick={() => navigate(-1)}>浏览器后退</button></>;
 }
 const view = (entry = "/library") => <MemoryRouter initialEntries={[entry]}><LibraryPage /><Navigation /></MemoryRouter>;
 async function click(name: string) { await act(async () => { fireEvent.click(screen.getByRole("button", { name, exact: true })); }); }
@@ -34,6 +34,41 @@ describe("my books collection", () => {
     expect(screen.getByText("1 个电子版本")).toBeTruthy();
     expect(screen.getByText(item.introductionExcerpt)).toBeTruthy();
     expect(listLibrary).toHaveBeenCalledWith({ page: 1, limit: 24, q: "", filter: "all" }, expect.any(AbortSignal));
+    fireEvent.change(screen.getByLabelText("在我的书籍中查找"), { target: { value: "旅行" } });
+    await click("查找");
+    expect(await screen.findByText(item.introductionExcerpt)).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "查看这篇笔记" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "查看介绍" })).toBeNull();
+  });
+
+  it("shows the matching note excerpt and constructs a local link from the book and note ids", async () => {
+    vi.mocked(listLibrary).mockResolvedValue(result({ items: [{ ...item, bookId: "book/a", searchMatch: {
+      kind: "note", noteId: "note/a", noteTitle: "山口与古道的考察笔记", excerpt: "…山口附近保留了旧路，需要核对地方志。",
+    } }] }));
+    render(view("/library?q=山口&filter=notes"));
+    const link = await screen.findByRole("link", { name: "查看这篇笔记", exact: true });
+    expect(screen.getByText("笔记命中")).toBeTruthy();
+    expect(screen.getByText("山口与古道的考察笔记")).toBeTruthy();
+    expect(screen.getByText("…山口附近保留了旧路，需要核对地方志。")).toBeTruthy();
+    expect(screen.queryByText(item.introductionExcerpt)).toBeNull();
+    expect(link.getAttribute("href")).toBe("/books/book%2Fa#book-note-note%2Fa");
+    await act(async () => { fireEvent.click(link); });
+    expect(screen.getByLabelText("当前地址").textContent).toBe("/books/book%2Fa#book-note-note%2Fa");
+    await click("浏览器后退");
+    expect(screen.getByLabelText("当前地址").textContent).toBe("/library?q=山口&filter=notes");
+  });
+
+  it("shows an introduction hit with its exact excerpt and a direct introduction link", async () => {
+    vi.mocked(listLibrary).mockResolvedValue(result({ items: [{ ...item, searchMatch: {
+      kind: "introduction", excerpt: `…介绍后半部分谈及沿途驿站和道路。
+第二行仍作为纯文本展示。`,
+    } }] }));
+    render(view("/library?q=驿站"));
+    const link = await screen.findByRole("link", { name: "查看介绍", exact: true });
+    expect(screen.getByText("介绍命中")).toBeTruthy();
+    expect(link.getAttribute("href")).toBe("/books/book-a#library-introduction-heading");
+    expect(screen.getByText(/介绍后半部分谈及沿途驿站和道路/).textContent).toContain("第二行仍作为纯文本展示。");
+    expect(screen.queryByRole("link", { name: "查看这篇笔记" })).toBeNull();
   });
 
   it("does not query before login and immediately removes cards on logout", async () => {

@@ -53,6 +53,10 @@ export interface BookWorkspaceData {
 
 export type LibraryFilter = "all" | "introduction" | "notes" | "resources";
 
+export type LibrarySearchMatch =
+  | { kind: "introduction"; excerpt: string }
+  | { kind: "note"; noteId: string; noteTitle: string; excerpt: string };
+
 export interface LibraryItem {
   bookId: string;
   editionId: string;
@@ -64,6 +68,7 @@ export interface LibraryItem {
   noteCount: number;
   resourceCount: number;
   updatedAt: string;
+  searchMatch?: LibrarySearchMatch | null;
 }
 
 export interface LibraryResult {
@@ -146,12 +151,18 @@ function isWorkspace(value: unknown, bookId: string): value is BookWorkspaceData
     && Array.isArray(value.notes) && value.notes.every(isNote)
     && Array.isArray(value.resources) && value.resources.every(isResource);
 }
+function isLibrarySearchMatch(value: unknown): value is LibrarySearchMatch | null | undefined {
+  if (value === undefined || value === null) return true;
+  if (!isRecord(value) || !isString(value.excerpt) || Array.from(value.excerpt).length > 242) return false;
+  return value.kind === "introduction"
+    || (value.kind === "note" && isId(value.noteId) && isString(value.noteTitle));
+}
 function isLibraryItem(value: unknown): value is LibraryItem {
   return isRecord(value) && isId(value.bookId) && isId(value.editionId) && isString(value.title)
     && isNullableString(value.author) && isNullableString(value.publisher)
     && (value.year === null || isString(value.year) || typeof value.year === "number")
     && isString(value.introductionExcerpt) && isCount(value.noteCount) && isCount(value.resourceCount)
-    && isDate(value.updatedAt);
+    && isDate(value.updatedAt) && isLibrarySearchMatch(value.searchMatch);
 }
 function isLibraryResult(value: unknown): value is LibraryResult {
   return isRecord(value) && Array.isArray(value.items) && value.items.every(isLibraryItem)

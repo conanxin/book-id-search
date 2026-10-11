@@ -127,6 +127,13 @@
 .library-book-card h2 a { color: var(--color-text); text-decoration: none; }
 .library-book-card h2 a:hover { color: var(--color-primary-strong); text-decoration: underline; text-underline-offset: 3px; }
 .library-book-excerpt { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; line-height: 1.8; font-size: 0.9rem; margin: 21px 0 18px; }
+.library-search-match { margin: 20px 0 18px; padding: 15px 16px; border-left: 3px solid var(--color-primary); border-radius: 0 8px 8px 0; background: var(--color-bg-soft); }
+.library-search-match-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.library-search-match-heading strong { min-width: 0; overflow-wrap: anywhere; font-size: 0.9rem; line-height: 1.6; }
+.library-search-match-excerpt { margin: 10px 0 13px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.9rem; line-height: 1.85; }
+.library-content-target { scroll-margin-top: 24px; }
+.library-content-target:focus { outline: 2px solid var(--color-primary); outline-offset: 6px; border-radius: 4px; }
+.library-anchor-message { margin: 0; padding: 14px 16px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-bg-soft); color: var(--color-text-muted); font-size: 0.9rem; line-height: 1.8; }
 .library-book-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; }
 .library-book-updated { padding-top: 15px; margin-top: 15px; border-top: 1px solid var(--color-border); }
 .library-collection-empty { text-align: center; padding: 46px 24px; }

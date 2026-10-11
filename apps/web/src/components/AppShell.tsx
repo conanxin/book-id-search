@@ -9,7 +9,7 @@ import "./app-shell.css";
 export function AppShell({ children }: { children: ReactNode }) {
   const session = useWebAuthSession();
   const location = useLocation();
-  const returnTo = location.pathname + location.search;
+  const returnTo = location.pathname + location.search + location.hash;
   const more = useRef<HTMLDetailsElement>(null);
   useEffect(() => { if (more.current) more.current.open = false; }, [returnTo]);
   useEffect(() => {

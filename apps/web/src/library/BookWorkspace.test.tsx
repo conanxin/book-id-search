@@ -2,7 +2,7 @@
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { Link, MemoryRouter, Route, Routes, useParams } from "react-router-dom";
 import { BookWorkspace } from "./BookWorkspace";
 import { __resetWebAuthStoreForTests, __setWebAuthSnapshotForTests } from "../auth/session";
 import {
@@ -25,6 +25,7 @@ const note = (revisionNo = 1): BookNote => ({
   revisionNo, createdAt: time, updatedAt: time,
   revisions: Array.from({ length: revisionNo }, (_, i) => ({ revisionId: `revision-${i + 1}`, revisionNo: i + 1, createdAt: time })),
 });
+
 const resource: BookResource = { resourceId: "resource-a", label: "原版扫描本", url: "https://example.test/book.pdf#page=21", format: "PDF", versionLabel: "1936 年版", notes: "原书扫描", createdAt: time, updatedAt: time };
 const workspace = (overrides: Partial<BookWorkspaceData> = {}): BookWorkspaceData => ({
   bookId: "book-a", saved: false, editionId: null, introduction: "", version: 0, updatedAt: null, notes: [], resources: [], ...overrides,
@@ -203,5 +204,111 @@ describe("book workspace", () => {
     expect(screen.queryByLabelText("笔记标题")).toBeNull();
     await screen.findByRole("button", { name: "写一篇笔记" }); await click("写一篇笔记");
     expect(input("笔记标题").value).toBe("");
+  });
+});
+
+function AnchoredBook() {
+  const { bookId = "book-a" } = useParams();
+  return <BookWorkspace bookId={bookId} />;
+}
+function anchoredView(entry = "/books/book-a#book-note-note-a") {
+  return <MemoryRouter initialEntries={[entry]}>
+    <Routes><Route path="/books/:bookId" element={<AnchoredBook />} /></Routes>
+    <Link to="#library-introduction-heading">定位介绍</Link>
+    <Link to="#book-note-note-b">定位第二篇笔记</Link>
+    <Link to="/books/book-b#book-note-note-a">切换书籍</Link>
+  </MemoryRouter>;
+}
+
+describe("book content anchors", () => {
+  const scroll = vi.fn();
+  const originalScroll = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollIntoView");
+  beforeEach(() => {
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: scroll });
+  });
+  afterEach(() => {
+    if (originalScroll) Object.defineProperty(HTMLElement.prototype, "scrollIntoView", originalScroll);
+    else delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView;
+    window.history.replaceState({}, "", "/");
+  });
+
+  it("waits for the workspace, focuses the requested note once, and does not jump again after a save", async () => {
+    let finish!: (value: BookWorkspaceData) => void;
+    vi.mocked(getBookWorkspace).mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    const rendered = render(anchoredView());
+    expect(scroll).not.toHaveBeenCalled();
+    expect(screen.queryByRole("article", { name: "笔记：古道的阅读线索" })).toBeNull();
+    await act(async () => finish(workspace({ introduction: "原介绍", notes: [note()] })));
+    const target = screen.getByRole("article", { name: "笔记：古道的阅读线索" });
+    expect(document.activeElement).toBe(target);
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(scroll.mock.instances[0]).toBe(target);
+    rendered.rerender(anchoredView());
+    expect(scroll).toHaveBeenCalledTimes(1);
+    vi.mocked(saveBookWorkspace).mockResolvedValueOnce(workspace({ introduction: "更新后的介绍", notes: [note()], version: 1 }));
+    await click("编辑介绍"); change("书籍介绍", "更新后的介绍"); await click("保存介绍");
+    expect(await screen.findByText("书籍介绍已保存。")).toBeTruthy();
+    expect(scroll).toHaveBeenCalledTimes(1);
+  });
+
+  it("handles a different fragment in the same book without refetching its workspace", async () => {
+    const second = { ...note(), noteId: "note-b", title: "第二篇笔记" };
+    vi.mocked(getBookWorkspace).mockResolvedValue(workspace({ introduction: "介绍", notes: [note(), second] }));
+    render(anchoredView("/books/book-a#library-introduction-heading"));
+    const heading = await screen.findByRole("heading", { name: "我的补充介绍" });
+    expect(document.activeElement).toBe(heading);
+    await act(async () => { fireEvent.click(screen.getByRole("link", { name: "定位第二篇笔记" })); });
+    expect(document.activeElement).toBe(screen.getByRole("article", { name: "笔记：第二篇笔记" }));
+    await act(async () => { fireEvent.click(screen.getByRole("link", { name: "定位介绍" })); });
+    expect(document.activeElement).toBe(heading);
+    expect(scroll).toHaveBeenCalledTimes(3);
+    expect(getBookWorkspace).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      window.history.replaceState({}, "", "/books/book-a#book-note-note-b");
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    });
+    expect(document.activeElement).toBe(screen.getByRole("article", { name: "笔记：第二篇笔记" }));
+    expect(scroll).toHaveBeenCalledTimes(4);
+  });
+
+  it("explains missing or invalid note targets without focusing an unrelated element", async () => {
+    const unrelated = document.createElement("article");
+    unrelated.id = "book-note-elsewhere"; unrelated.tabIndex = -1;
+    document.body.append(unrelated);
+    try {
+      render(anchoredView("/books/book-a#book-note-elsewhere"));
+      expect(await screen.findByText(/这篇笔记已不在当前书籍中/)).toBeTruthy();
+      expect(document.activeElement).not.toBe(unrelated);
+      expect(scroll).not.toHaveBeenCalled();
+      await act(async () => {
+        window.history.replaceState({}, "", "/books/book-a#book-note-%E0%A4%A");
+        window.dispatchEvent(new HashChangeEvent("hashchange"));
+      });
+      expect(screen.getByText(/这篇笔记的定位地址无效/)).toBeTruthy();
+      expect(scroll).not.toHaveBeenCalled();
+    } finally { unrelated.remove(); }
+  });
+
+  it("never focuses an old book note after a delayed workspace resolves", async () => {
+    let finish!: (value: BookWorkspaceData) => void;
+    vi.mocked(getBookWorkspace).mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    render(anchoredView());
+    await act(async () => { fireEvent.click(screen.getByRole("link", { name: "切换书籍" })); });
+    expect(await screen.findByText(/这篇笔记已不在当前书籍中/)).toBeTruthy();
+    await act(async () => finish(workspace({ notes: [note()] })));
+    expect(screen.queryByRole("article", { name: "笔记：古道的阅读线索" })).toBeNull();
+    expect(scroll).not.toHaveBeenCalled();
+    expect(getBookWorkspace).toHaveBeenLastCalledWith("book-b", expect.any(AbortSignal));
+  });
+
+  it("never focuses a late note from a previous Google session", async () => {
+    let finish!: (value: BookWorkspaceData) => void;
+    vi.mocked(getBookWorkspace).mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    render(anchoredView());
+    act(() => __setWebAuthSnapshotForTests(auth("csrf-b")));
+    expect(await screen.findByText(/这篇笔记已不在当前书籍中/)).toBeTruthy();
+    await act(async () => finish(workspace({ notes: [note()] })));
+    expect(screen.queryByRole("article", { name: "笔记：古道的阅读线索" })).toBeNull();
+    expect(scroll).not.toHaveBeenCalled();
   });
 });

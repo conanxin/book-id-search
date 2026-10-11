@@ -1,5 +1,14 @@
 # BOOK-ID-SEARCH status
 
+## 2026-10-11 — Find saved books by their notes
+
+- `task_id=BOOK_CENTERED_LIBRARY_CONTENT_SEARCH_V1`; continues Draft [#72](https://github.com/conanxin/book-id-search/pull/72) from `be861ce`.
+- Extends My Books keyword search to current active personal-note titles and bodies, preserving literal search, existing filters, book-level counts and recent-update pagination.
+- Adds a bounded matching excerpt and a direct introduction/note link to the shared book card; old response shapes remain supported. Archived notes and superseded revisions do not supply current matches.
+- Book content resolves its fragment after asynchronous loading; Google return links retain the fragment so refresh/login can return to the intended note.
+- Contract: [Library content search v1](development/BOOK_LIBRARY_CONTENT_SEARCH_V1.md). Exact-head PostgreSQL, browser and visual evidence is maintained in PR #72.
+- No new dependency, migration, search service or AI call. Registered desktop remains offline; real-provider trial is pending. No merge, image publication or Tencent deployment.
+
 ## 2026-10-11 — Explainable related books
 
 - `task_id=BOOK_CENTERED_RELATED_DISCOVERY_V1`; continues Draft [#72](https://github.com/conanxin/book-id-search/pull/72) from `c9a39cb`.

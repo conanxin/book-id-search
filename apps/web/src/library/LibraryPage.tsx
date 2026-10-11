@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { getWebAuthAuthGeneration } from "../auth/session";
 import { useWebAuthSession } from "../auth/useWebAuthSession";
-import { isLibraryAbort, libraryErrorMessage, listLibrary, type LibraryFilter, type LibraryResult } from "./api";
+import { isLibraryAbort, libraryErrorMessage, listLibrary, type LibraryFilter, type LibraryResult, type LibrarySearchMatch } from "./api";
 import { libraryDate } from "./BookWorkspace";
 import "./library.css";
 
@@ -75,7 +75,7 @@ function LibraryCollection() {
   return <>
     <form className="library-filter-bar" aria-label="查找我的书籍" onSubmit={search}>
       <label className="library-field library-search-field" htmlFor="library-search">在我的书籍中查找
-        <input id="library-search" type="search" value={draftQuery} maxLength={200} onChange={event => setDraftQuery(event.target.value)} placeholder="书名、作者或介绍中的关键词" />
+        <input id="library-search" type="search" value={draftQuery} maxLength={200} onChange={event => setDraftQuery(event.target.value)} placeholder="书名、作者、介绍或我的笔记关键词" />
       </label>
       <label className="library-field" htmlFor="library-filter">内容筛选
         <select id="library-filter" value={filter} onChange={event => change({ filter: event.target.value as LibraryFilter, page: 1 })}>
@@ -101,7 +101,8 @@ function LibraryCollection() {
             <div><h2><Link to={`/books/${encodeURIComponent(item.bookId)}`}>{item.title || "未题名书目"}</Link></h2>
               <p className="library-meta">{[item.author, item.publisher, item.year].filter(value => value !== null && value !== "").join(" · ") || "书目信息待补充"}</p></div>
           </div>
-          <p className={`library-book-excerpt${item.introductionExcerpt ? "" : " library-muted"}`}>{item.introductionExcerpt || "尚未补充介绍，可以从一个阅读线索开始。"}</p>
+          {query.trim() && item.searchMatch ? <SearchMatch bookId={item.bookId} match={item.searchMatch} />
+            : <p className={`library-book-excerpt${item.introductionExcerpt ? "" : " library-muted"}`}>{item.introductionExcerpt || "尚未补充介绍，可以从一个阅读线索开始。"}</p>}
           <div className="library-book-tags">
             {item.introductionExcerpt && <span className="library-tag">有介绍</span>}
             <span className="library-tag">{item.noteCount} 篇笔记</span><span className="library-tag">{item.resourceCount} 个电子版本</span>
@@ -116,4 +117,16 @@ function LibraryCollection() {
       </nav>}
     </>}
   </>;
+}
+
+function SearchMatch({ bookId, match }: { bookId: string; match: LibrarySearchMatch }) {
+  const hash = match.kind === "note" ? `book-note-${encodeURIComponent(match.noteId)}` : "library-introduction-heading";
+  return <div className="library-search-match">
+    <div className="library-search-match-heading">
+      <span className="library-tag">{match.kind === "note" ? "笔记命中" : "介绍命中"}</span>
+      {match.kind === "note" && <strong>{match.noteTitle || "未命名笔记"}</strong>}
+    </div>
+    <p className="library-search-match-excerpt">{match.excerpt}</p>
+    <Link className="library-text-link" to={`/books/${encodeURIComponent(bookId)}#${hash}`}>{match.kind === "note" ? "查看这篇笔记" : "查看介绍"}</Link>
+  </div>;
 }

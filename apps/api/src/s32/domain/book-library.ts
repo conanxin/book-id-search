@@ -42,6 +42,10 @@ export interface BookWorkspace {
   resources: BookResource[];
 }
 
+export type LibrarySearchMatch =
+  | { kind: "introduction"; excerpt: string }
+  | { kind: "note"; noteId: string; noteTitle: string; excerpt: string };
+
 export interface LibraryBookSummary {
   bookId: string;
   editionId: string;
@@ -53,6 +57,7 @@ export interface LibraryBookSummary {
   noteCount: number;
   resourceCount: number;
   updatedAt: string;
+  searchMatch?: LibrarySearchMatch | null;
 }
 
 export interface LibraryListInput {

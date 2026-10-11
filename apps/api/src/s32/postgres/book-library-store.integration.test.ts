@@ -146,20 +146,99 @@ describe.skipIf(!pool)("Book library real PostgreSQL, s32_app runtime role", () 
   });
 
   it("lists saved books with persisted metadata, content filters, literal search and pagination", async () => {
-    const prefix = bookId(), ids = [`${prefix}-a`, `${prefix}-b`, `${prefix}-c`];
-    await library.save(ids[0], { introduction: "阅读介绍", baseVersion: 0 });
-    await library.createNote(ids[1], { title: "阅读问题", content: "待核实" });
+    const prefix = bookId(), ids = [`${prefix}-a`, `${prefix}-b`, `${prefix}-c`], term = `检索-${randomUUID()}`;
+    await library.save(ids[0], { introduction: `阅读介绍 ${term}`, baseVersion: 0 });
+    const first = note(await library.createNote(ids[1], { title: "阅读问题", content: `待核实 ${term}%_字面量` }));
+    const latest = note(await library.createNote(ids[1], { title: `标题 ${term}%_字面量`, content: "第二篇的正文" }));
     await library.createResource(ids[2], resourceInput);
     const all = await library.list({ q: prefix, limit: "2" });
     expect(all).toMatchObject({ total: 3, page: 1, limit: 2 });
     expect(all.items).toHaveLength(2);
     expect(all.items[0]).toMatchObject({ author: "测试作者", publisher: "测试出版社", year: 2001 });
+    expect(all.items.every(item => item.searchMatch === null)).toBe(true);
     expect((await library.list({ q: prefix, page: "2", limit: "2" })).items).toHaveLength(1);
     for (const [filter, id] of [["introduction", ids[0]], ["notes", ids[1]], ["resources", ids[2]]]) {
       const filtered = await library.list({ q: prefix, filter });
       expect(filtered.total).toBe(1); expect(filtered.items[0].bookId).toBe(id);
     }
     expect((await library.list({ q: `${prefix}%` })).total).toBe(0);
+
+    // Current Note title/body both contribute, but a book remains one row.
+    await db.query("UPDATE core.notes SET updated_at = '2001-01-01T00:00:00Z' WHERE id = $1", [first.noteId]);
+    await db.query("UPDATE core.notes SET updated_at = '2002-01-01T00:00:00Z' WHERE id = $1", [latest.noteId]);
+    const content = await library.list({ q: term });
+    expect(content.total).toBe(2);
+    expect(content.items.find(item => item.bookId === ids[1])).toMatchObject({
+      noteCount: 2, searchMatch: { kind: "note", noteId: latest.noteId, noteTitle: latest.title, excerpt: latest.title },
+    });
+    expect(content.items.find(item => item.bookId === ids[0])?.searchMatch).toEqual({ kind: "introduction", excerpt: `阅读介绍 ${term}` });
+    const literal = await library.list({ q: `${term}%_` });
+    expect(literal.total).toBe(1); expect(literal.items[0].bookId).toBe(ids[1]);
+    expect((await library.list({ q: `${term}__` })).total).toBe(0);
+    expect((await library.list({ q: term, filter: "introduction" })).items.map(item => item.bookId)).toEqual([ids[0]]);
+    expect((await library.list({ q: term, filter: "notes" })).items.map(item => item.bookId)).toEqual([ids[1]]);
+    expect((await library.list({ q: term, filter: "resources" })).total).toBe(0);
+
+    // A Note match never jumps ahead of a newer book; pagination counts books.
+    await db.query("UPDATE core.library_books SET updated_at = '2005-01-01T00:00:00Z' WHERE catalog_book_id = $1", [ids[0]]);
+    await db.query("UPDATE core.library_books SET updated_at = '2004-01-01T00:00:00Z' WHERE catalog_book_id = $1", [ids[1]]);
+    const pageOne = await library.list({ q: term, limit: "1" });
+    const pageTwo = await library.list({ q: term, limit: "1", page: "2" });
+    expect(pageOne.total).toBe(2); expect(pageTwo.total).toBe(2);
+    expect([...pageOne.items, ...pageTwo.items].map(item => item.bookId)).toEqual([ids[0], ids[1]]);
+    await db.query("UPDATE core.notes SET updated_at = '2003-01-01T00:00:00Z' WHERE id = ANY($1::uuid[])", [[first.noteId, latest.noteId]]);
+    const tied = (await library.list({ q: `${term}%_` })).items[0].searchMatch;
+    expect(tied).toMatchObject({ kind: "note", noteId: [first.noteId, latest.noteId].sort()[0] });
+    expect((await library.list({ limit: "100" })).items.every(item => item.searchMatch === null)).toBe(true);
+  });
+
+  it("searches only current active library Note revisions, excluding history, archives and other Note types", async () => {
+    const id = bookId(), oldTerm = `旧版-${randomUUID()}`, currentTerm = `当前-${randomUUID()}`;
+    const initial = note(await library.createNote(id, { title: `旧标题 ${oldTerm}`, content: `旧正文 ${oldTerm}` }));
+    expect((await library.list({ q: oldTerm })).items.map(item => item.bookId)).toEqual([id]);
+    const current = note(await library.updateNote(id, initial.noteId, {
+      title: "当前标题", content: `当前正文 ${currentTerm}`, baseRevisionId: initial.currentRevisionId,
+    }));
+    expect((await library.list({ q: oldTerm })).total).toBe(0);
+    expect((await library.list({ q: currentTerm })).items[0].searchMatch).toEqual({
+      kind: "note", noteId: current.noteId, noteTitle: "当前标题", excerpt: `当前正文 ${currentTerm}`,
+    });
+    await library.deleteNote(id, current.noteId);
+    expect((await library.list({ q: currentTerm })).total).toBe(0);
+    expect((await db.query("SELECT count(*)::int AS total FROM core.note_revisions WHERE note_id = $1", [current.noteId])).rows[0].total).toBe(2);
+    const other = note(await library.createNote(id, { title: "其他类型", content: currentTerm }));
+    await db.query("UPDATE core.notes SET note_type = 'GENERAL' WHERE id = $1", [other.noteId]);
+    expect((await library.list({ q: currentTerm })).total).toBe(0);
+  });
+
+  it("returns bounded Unicode excerpts around late matches and prefers a current Note over an introduction", async () => {
+    const id = bookId(), term = `Late-${randomUUID()}`;
+    const introduction = "介绍前文".repeat(200) + term + "介绍后文".repeat(200);
+    await library.save(id, { introduction, baseVersion: 0 });
+    const introMatch = (await library.list({ q: term.toLowerCase() })).items[0].searchMatch;
+    expect(introMatch?.kind).toBe("introduction");
+    expect(introMatch?.excerpt).toContain(term);
+    expect(Array.from(introMatch!.excerpt)).toHaveLength(242);
+    expect(introMatch?.excerpt.startsWith("…")).toBe(true);
+    expect(introMatch?.excerpt.endsWith("…")).toBe(true);
+
+    const content = "🧭".repeat(400) + term + "🚲".repeat(400);
+    const saved = note(await library.createNote(id, { title: "正文晚段命中", content }));
+    const matched = (await library.list({ q: term.toLowerCase() })).items[0];
+    expect(matched.searchMatch).toMatchObject({ kind: "note", noteId: saved.noteId, noteTitle: saved.title });
+    expect(matched.searchMatch?.excerpt).toBe("…" + "🧭".repeat(60) + term + "🚲".repeat(240 - 60 - Array.from(term).length) + "…");
+    expect(Array.from(matched.searchMatch!.excerpt)).toHaveLength(242);
+    expect(matched).not.toHaveProperty("content");
+    expect(matched).not.toHaveProperty("search_text");
+    expect(matched).not.toHaveProperty("revisions");
+
+    const longTerm = `Long-${"字".repeat(195)}`;
+    await library.createNote(id, { title: "长查询", content: "🧭".repeat(300) + longTerm + "🚲".repeat(300) });
+    const longMatch = (await library.list({ q: longTerm })).items[0].searchMatch;
+    expect(longMatch?.excerpt).toContain(longTerm);
+    expect(Array.from(longMatch!.excerpt)).toHaveLength(242);
+    await library.deleteNote(id, saved.noteId);
+    expect((await library.list({ q: term })).items[0].searchMatch?.kind).toBe("introduction");
   });
 
   it("keeps an existing project Note independent when enriching the same canonical Edition", async () => {
@@ -176,6 +255,7 @@ describe.skipIf(!pool)("Book library real PostgreSQL, s32_app runtime role", () 
     expect(saved.notes).toHaveLength(1);
     expect(saved.notes[0].noteId).not.toBe(historical.noteId);
     expect(await projectNotes.get(projectId, item.bindingId)).toEqual(historical);
+    expect((await library.list({ q: historical.currentRevision.content })).total).toBe(0);
     const after = await counts();
     expect(after.projects).toBe(before.projects); expect(after.bindings).toBe(before.bindings);
     expect(after.editions).toBe(before.editions); expect(after.works).toBe(before.works);

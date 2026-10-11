@@ -15,7 +15,7 @@ export function RequireGoogle({ children, inline = false }: { children: ReactNod
   if (["idle", "loading", "signing_in", "signing_out"].includes(session.status)) {
     return <Container className={inline ? "" : "page"}><div className="state" role="status"><Loader2 className="spin" size={18} />正在确认登录状态…</div></Container>;
   }
-  const returnTo = location.pathname + location.search;
+  const returnTo = location.pathname + location.search + location.hash;
   return (
     <Container className={inline ? "" : "page"}>
       <section className="login-required" aria-labelledby="login-required-title">

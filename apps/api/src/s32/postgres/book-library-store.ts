@@ -25,6 +25,7 @@ interface SummaryRow {
   catalog_book_id: string; edition_id: string; title: string; author: string;
   publisher: string; year: number | null; introduction_excerpt: string;
   note_count: number; resource_count: number; updated_at: Date;
+  search_note_id: string | null; search_note_title: string | null; search_excerpt: string | null;
 }
 
 function number(value: string | number): number {
@@ -174,29 +175,64 @@ export function createPostgresBookLibraryStore(pool: Pool): BookLibraryStore {
     get(bookId) { return transaction(pool, true, client => workspace(client, bookId)); },
     list(input) {
       return transaction(pool, true, async client => {
+        // At most one current, active library Note per book: note matches do
+        // not multiply books or change count/pagination. The ordinary list
+        // does not join revisions or read any Note title/content at all.
+        const matchingNote = input.q ? `LEFT JOIN LATERAL (
+          SELECT n.id, COALESCE(r.title, '') AS title,
+            CASE WHEN strpos(lower(COALESCE(r.title, '')), lower($1)) > 0
+              THEN r.title ELSE r.content END AS match_text
+          FROM core.library_book_notes bn JOIN core.notes n ON n.id = bn.note_id
+          JOIN core.note_revisions r ON r.note_id = n.id AND r.id = n.current_revision_id
+          WHERE bn.catalog_book_id = b.catalog_book_id
+            AND n.note_type = 'BOOK_LIBRARY_NOTE' AND n.lifecycle_state = 'ACTIVE'
+            AND (strpos(lower(COALESCE(r.title, '')), lower($1)) > 0 OR strpos(lower(r.content), lower($1)) > 0)
+          ORDER BY n.updated_at DESC, n.id LIMIT 1
+        ) matched_note ON true` : "";
+        const searchColumns = input.q ? `matched_note.id AS search_note_id, matched_note.title AS search_note_title,
+            CASE WHEN matched_note.id IS NOT NULL THEN matched_note.match_text
+              WHEN strpos(lower(b.introduction), lower($1)) > 0 THEN b.introduction END AS search_text`
+          : "NULL::uuid AS search_note_id, NULL::text AS search_note_title, NULL::text AS search_text";
         const cte = `WITH summaries AS (
           SELECT b.catalog_book_id, b.edition_id, w.title,
             COALESCE(s.metadata->'catalogDocument'->>'author', '') AS author,
             COALESCE(e.publisher, '') AS publisher,
             EXTRACT(YEAR FROM e.publication_date)::int AS year,
             left(b.introduction, 180) AS introduction_excerpt, b.introduction, b.updated_at,
+            ${searchColumns},
             (SELECT count(*)::int FROM core.library_book_notes bn JOIN core.notes n ON n.id = bn.note_id
               WHERE bn.catalog_book_id = b.catalog_book_id AND n.note_type = 'BOOK_LIBRARY_NOTE' AND n.lifecycle_state = 'ACTIVE') AS note_count,
             (SELECT count(*)::int FROM core.library_book_resources r
               WHERE r.catalog_book_id = b.catalog_book_id AND r.removed_at IS NULL) AS resource_count
           FROM core.library_books b JOIN core.editions e ON e.id = b.edition_id
           JOIN core.works w ON w.id = e.work_id JOIN core.sources s ON s.id = b.catalog_source_id
+          ${matchingNote}
         )`;
-        const where = `WHERE ($1 = '' OR strpos(lower(title || ' ' || author || ' ' || publisher || ' ' || introduction), lower($1)) > 0)
+        const where = `WHERE ($1 = '' OR strpos(lower(title || ' ' || author || ' ' || publisher || ' ' || introduction), lower($1)) > 0
+            OR search_note_id IS NOT NULL)
           AND ($2 = 'all' OR ($2 = 'introduction' AND length(btrim(introduction)) > 0)
             OR ($2 = 'notes' AND note_count > 0) OR ($2 = 'resources' AND resource_count > 0))`;
         const total = (await client.query<{ total: number }>(`${cte} SELECT count(*)::int AS total FROM summaries ${where}`, [input.q, input.filter])).rows[0].total;
-        const rows = (await client.query<SummaryRow>(`${cte} SELECT * FROM summaries ${where}
+        // PostgreSQL substring/char_length count Unicode characters, not JS
+        // UTF-16 units. Keep the whole query in a 240-character window and
+        // return only that window, with ellipses for omitted surrounding text.
+        const excerptStart = "GREATEST(1, strpos(lower(search_text), lower($1)) - LEAST(60, GREATEST(0, (240 - char_length($1)) / 2)))";
+        const rows = (await client.query<SummaryRow>(`${cte} SELECT catalog_book_id, edition_id, title, author, publisher, year,
+            introduction_excerpt, note_count, resource_count, updated_at, search_note_id, search_note_title,
+            CASE WHEN search_text IS NOT NULL THEN
+              CASE WHEN ${excerptStart} > 1 THEN '…' ELSE '' END
+              || substring(search_text FROM ${excerptStart} FOR 240)
+              || CASE WHEN char_length(search_text) >= ${excerptStart} + 240 THEN '…' ELSE '' END
+            END AS search_excerpt
+          FROM summaries ${where}
           ORDER BY updated_at DESC, catalog_book_id LIMIT $3 OFFSET $4`, [input.q, input.filter, input.limit, (input.page - 1) * input.limit])).rows;
         const items: LibraryBookSummary[] = rows.map(row => ({
           bookId: row.catalog_book_id, editionId: row.edition_id, title: row.title, author: row.author,
           publisher: row.publisher, year: row.year, introductionExcerpt: row.introduction_excerpt,
           noteCount: row.note_count, resourceCount: row.resource_count, updatedAt: row.updated_at.toISOString(),
+          searchMatch: row.search_excerpt === null ? null : row.search_note_id
+            ? { kind: "note", noteId: row.search_note_id, noteTitle: row.search_note_title ?? "", excerpt: row.search_excerpt }
+            : { kind: "introduction", excerpt: row.search_excerpt },
         }));
         return { items, total, page: input.page, limit: input.limit };
       });
