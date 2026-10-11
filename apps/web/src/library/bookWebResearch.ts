@@ -12,6 +12,7 @@ export interface BookWebResearchSource {
 export interface BookWebResearchResponse {
   bookId: string;
   question: string;
+  mode: "source_excerpts";
   source: "web_research" | "insufficient_sources";
   draft: { title: string; content: string };
   sources: BookWebResearchSource[];
@@ -28,6 +29,9 @@ export class BookWebResearchError extends Error {
 }
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
+export const BOOK_WEB_RESEARCH_EXCERPTS_NOTICE = "已根据本次问题选出相关网页，以下保留搜索工具返回的来源节选。节选不等于网页或原书全文；来源之间可能有不同说法。";
+const RESULT_TITLE = "查到的相关资料";
+const INSUFFICIENT_CONTENT = "本次已执行联网搜索，但没有选出与问题充分相关的资料。下方如有搜索结果，可以打开原链接核对，或调整问题后再查。";
 const ERRORS: Record<number, string> = {
   400: "请填写想研究的问题，最多 1,000 字符。",
   401: "登录已失效，请使用 Google 登录后继续。",
@@ -71,9 +75,9 @@ function validSource(value: unknown, index: number): value is BookWebResearchSou
 }
 function validResponse(value: unknown, bookId: string, question: string): value is BookWebResearchResponse {
   if (!record(value) || value.bookId !== bookId || value.question !== question || !record(value.draft)
-    || !text(value.draft.title, 300) || !text(value.draft.content, 12000)
+    || value.mode !== "source_excerpts" || value.draft.title !== RESULT_TITLE || !text(value.draft.content, 12000)
     || !Array.isArray(value.sources) || value.sources.length > 12 || !value.sources.every(validSource)
-    || !Array.isArray(value.citedSourceIds) || !value.citedSourceIds.every(id => typeof id === "string")
+    || !Array.isArray(value.citedSourceIds) || value.citedSourceIds.length > 4 || !value.citedSourceIds.every(id => typeof id === "string")
     || new Set(value.citedSourceIds).size !== value.citedSourceIds.length
     || (value.source !== "web_research" && value.source !== "insufficient_sources")
     || !text(value.generatedAt, 40) || !/^\d{4}-\d\d-\d\dT/.test(value.generatedAt)
@@ -90,7 +94,14 @@ function validResponse(value: unknown, bookId: string, question: string): value 
   const markers = new Set(Array.from(value.draft.content.matchAll(/\[((?:W|S)\d+)\]/g), match => match[1]));
   if (Array.from(cited).some(id => !known.has(id)) || markers.size !== cited.size
     || Array.from(markers).some(id => !cited.has(id))) return false;
-  return value.source === "web_research" ? cited.size > 0 : cited.size === 0;
+  return value.source === "web_research"
+    ? cited.size > 0 && value.draft.content === `${BOOK_WEB_RESEARCH_EXCERPTS_NOTICE}\n\n建议先查看：${value.citedSourceIds.map(id => `[${id}]`).join(" ")}`
+    : cited.size === 0 && value.draft.content === INSUFFICIENT_CONTENT;
+}
+
+/** Prevent older or free-form research output from entering the excerpt-only view. */
+export function assertBookWebResearchResponse(value: unknown, bookId: string, question: string): asserts value is BookWebResearchResponse {
+  if (!bookIdValid(bookId) || !text(question, 1000) || !validResponse(value, bookId, question)) throw new BookWebResearchError(502, ERRORS[502]);
 }
 function requireCurrent(generation: number, signal?: AbortSignal): void {
   if (signal?.aborted || getWebAuthAuthGeneration() !== generation || getWebAuthSnapshot().status !== "authenticated") {
@@ -131,7 +142,7 @@ export async function generateBookWebResearch(bookId: string, value: BookWebRese
       && /^BOOK_RESEARCH_[A-Z_]+$/.test(result.error.code) ? result.error.code : undefined;
     throw new BookWebResearchError(response.status, ERRORS[response.status] ?? "暂时无法完成研究，请稍后重试。", code);
   }
-  if (!validResponse(result, bookId, question)) throw new BookWebResearchError(502, ERRORS[502]);
+  assertBookWebResearchResponse(result, bookId, question);
   return result;
 }
 
@@ -139,13 +150,10 @@ function oneLine(value: string): string { return value.replace(/\s+/g, " ").repl
 
 /** Copy only validated results, together with the actual cited search snapshots. */
 export function bookWebResearchContent(result: BookWebResearchResponse): string {
-  if (!bookIdValid(result.bookId) || !text(result.question, 1000) || !validResponse(result, result.bookId, result.question)) {
-    throw new BookWebResearchError(502, ERRORS[502]);
-  }
+  assertBookWebResearchResponse(result, result.bookId, result.question);
   if (result.source !== "web_research") throw new BookWebResearchError(400, "本次资料不足，请调整问题后继续查找。");
-  const cited = new Set(result.citedSourceIds);
-  const references = result.sources.filter(source => cited.has(source.id)).map(source =>
-    `[${source.id}] ${oneLine(source.title)}\n${source.url}\n${source.pageAge ? `页面时间：${oneLine(source.pageAge)}\n` : ""}\n搜索结果节选：\n${source.excerpt.split(/\r?\n/).map(line => `> ${line}`).join("\n")}${source.truncated ? "\n\n（本条搜索节选已截短）" : ""}`,
+  const references = result.citedSourceIds.map(id => result.sources.find(source => source.id === id)!).map(source =>
+    `[${source.id}] ${oneLine(source.title)}\n${source.url}\n${source.pageAge ? `页面时间：${oneLine(source.pageAge)}\n` : ""}\n搜索结果节选：\n${source.excerpt}${source.truncated ? "\n\n（本条搜索节选已截短）" : ""}`,
   ).join("\n\n");
   return `# ${oneLine(result.draft.title)}\n\n问题：${result.question}\n\n${result.draft.content}\n\n---\n\n### 联网研究来源（搜索时摘录）\n\n生成时间：${result.generatedAt}\n\n本次搜索：\n${result.search.queries.map(query => `- ${oneLine(query)}`).join("\n")}\n\n${references}`;
 }

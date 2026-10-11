@@ -3,14 +3,17 @@ import { __resetWebAuthStoreForTests, __setWebAuthSnapshotForTests } from "../au
 import { bookWebResearchContent, generateBookWebResearch, type BookWebResearchInput, type BookWebResearchResponse } from "./bookWebResearch";
 
 const A = "14000000_000000000001", B = "14000001_000000000002", QUESTION = "这本书有哪些相关研究？";
+const NOTICE = "已根据本次问题选出相关网页，以下保留搜索工具返回的来源节选。节选不等于网页或原书全文；来源之间可能有不同说法。";
+const INSUFFICIENT = "本次已执行联网搜索，但没有选出与问题充分相关的资料。下方如有搜索结果，可以打开原链接核对，或调整问题后再查。";
+const draftFor = (ids = ["W1"]) => ({ title: "查到的相关资料", content: `${NOTICE}\n\n建议先查看：${ids.map(id => `[${id}]`).join(" ")}` });
 const fetchMock = vi.fn<typeof fetch>();
 function login(csrfToken: string | null = "synthetic-current-csrf") {
   __setWebAuthSnapshotForTests({ status: "authenticated", user: { email: "owner@example.test", name: "合成账号" }, csrfToken, error: null });
 }
 function result(): BookWebResearchResponse {
   return {
-    bookId: A, question: QUESTION, source: "web_research", generatedAt: "2026-10-11T12:00:00.000Z",
-    draft: { title: "古道研究线索", content: "这条研究资料讨论了旅行史和地方文献之间的联系。[W1]" },
+    bookId: A, question: QUESTION, mode: "source_excerpts", source: "web_research", generatedAt: "2026-10-11T12:00:00.000Z",
+    draft: draftFor(),
     sources: [
       { id: "W1", kind: "web", title: "某馆藏研究目录", url: "https://catalog.example.test/books/1", excerpt: "旅行史研究目录。\n与地方文献对照。", pageAge: "2025-01-01", truncated: false },
       { id: "W2", kind: "web", title: "其他搜索结果", url: "https://journal.example.test/papers/2", excerpt: "另一条搜索摘要", pageAge: null, truncated: false },
@@ -67,6 +70,14 @@ describe("book web research client", () => {
   it.each([
     ["other book", (r: BookWebResearchResponse) => { r.bookId = B; }],
     ["other question", (r: BookWebResearchResponse) => { r.question = "different question"; }],
+    ["missing mode from an older response", (r: BookWebResearchResponse) => { delete (r as Partial<BookWebResearchResponse>).mode; }],
+    ["unsupported research mode", (r: BookWebResearchResponse) => { Object.assign(r, { mode: "synthesis" }); }],
+    ["free-form facts despite excerpt mode", (r: BookWebResearchResponse) => { r.draft.content = "模型推断本书版本相同。[W1]"; }],
+    ["invented result title", (r: BookWebResearchResponse) => { r.draft.title = "模型推断的版本关系"; }],
+    ["more than four selected sources", (r: BookWebResearchResponse) => {
+      r.sources = Array.from({ length: 5 }, (_, i) => ({ ...r.sources[0], id: `W${i + 1}`, url: `https://example.test/${i}` }));
+      r.citedSourceIds = r.sources.map(source => source.id); r.draft = draftFor(r.citedSourceIds);
+    }],
     ["claimed search without trace", (r: BookWebResearchResponse) => { r.search.performed = false as true; }],
     ["missing search query", (r: BookWebResearchResponse) => { r.search.queries = []; }],
     ["zero calls", (r: BookWebResearchResponse) => { r.search.calls = 0; }],
@@ -96,7 +107,7 @@ describe("book web research client", () => {
   it("preserves repeated real searches and honest insufficient results, without inventing an answer", async () => {
     const value = result(); value.search = { performed: true, queries: ["实际搜词", "实际搜词"], calls: 2 };
     value.source = "insufficient_sources"; value.sources = []; value.citedSourceIds = [];
-    value.draft = { title: "资料不足", content: "这次未找到足够的网页资料。" };
+    value.draft = { title: "查到的相关资料", content: INSUFFICIENT };
     fetchMock.mockResolvedValue(json(value));
     expect(await generateBookWebResearch(A, { question: QUESTION })).toEqual(value);
     expect(() => bookWebResearchContent(value)).toThrow("本次资料不足");
@@ -109,7 +120,7 @@ describe("book web research client", () => {
     expect(copied).toContain(value.generatedAt);
     expect(copied).toContain(value.search.queries[0]);
     expect(copied).toContain("https://catalog.example.test/books/1");
-    expect(copied).toContain("> 旅行史研究目录。\n> 与地方文献对照。");
+    expect(copied).toContain("旅行史研究目录。\n与地方文献对照。");
     expect(copied).toContain("搜索结果节选");
     expect(copied).not.toContain("https://journal.example.test/papers/2");
     expect(fetchMock).not.toHaveBeenCalled();
@@ -119,6 +130,23 @@ describe("book web research client", () => {
     const value = result(); value.citedSourceIds.push("W99"); value.draft.content += "[W99]";
     expect(() => bookWebResearchContent(value)).toThrow("来源核对未完成");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("copies selected sources in chosen order and preserves their complete literal excerpts", () => {
+    const value = result(); value.citedSourceIds = ["W2", "W1"]; value.draft = draftFor(value.citedSourceIds);
+    value.sources[0].excerpt = "原文标题\r\n**这是来源中的原文符号**\n" + "完整来源节选。".repeat(100);
+    const copied = bookWebResearchContent(value);
+    expect(copied).toContain(value.sources[0].excerpt);
+    expect(copied.indexOf(value.sources[1].url)).toBeLessThan(copied.indexOf(value.sources[0].url));
+    expect(copied).toContain(NOTICE);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects old or fabricated excerpt mode before copying any generated facts", () => {
+    const old = result(); delete (old as Partial<BookWebResearchResponse>).mode;
+    expect(() => bookWebResearchContent(old)).toThrow("来源核对未完成");
+    const forged = result(); forged.draft.content = "两个出版社属于同一版本。[W1]";
+    expect(() => bookWebResearchContent(forged)).toThrow("来源核对未完成");
   });
 
   it("maps network/provider failures to bounded errors rather than provider payloads", async () => {

@@ -1,17 +1,36 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Copy, ExternalLink, Globe } from "lucide-react";
-import { BookProse } from "./BookProse";
 import { useLibraryScope } from "./useLibraryScope";
 import {
+  assertBookWebResearchResponse, BOOK_WEB_RESEARCH_EXCERPTS_NOTICE,
   bookWebResearchContent, bookWebResearchErrorMessage, generateBookWebResearch, isBookWebResearchAbort,
-  type BookWebResearchResponse,
+  type BookWebResearchResponse, type BookWebResearchSource,
 } from "./bookWebResearch";
 
 const EXAMPLES = [
-  { label: "内容与背景", question: "查找这本书的内容介绍、作者背景与出版信息，并说明资料出处。" },
-  { label: "相关研究", question: "查找与这本书主题有关的研究文章和书评，区分已有依据与待查线索。" },
-  { label: "延伸阅读", question: "查找适合与这本书对照阅读的图书，说明关联及推荐依据。" },
+  { label: "内容与背景", question: "查找关于这本书内容、作者背景与出版信息的网页资料。" },
+  { label: "相关研究", question: "查找与这本书主题有关的研究文章和书评资料。" },
+  { label: "延伸阅读", question: "查找介绍相关图书或延伸阅读书目的网页资料。" },
 ];
+
+function SelectedSourceExcerpt({ source }: { source: BookWebResearchSource }) {
+  const [expanded, setExpanded] = useState(false);
+  const excerptId = useId();
+  return <li className="book-ai-source book-web-selected-source" data-web-excerpt-source-id={source.id}>
+    <div className="book-ai-source-heading">
+      <a href={source.url} target="_blank" rel="noopener noreferrer" aria-label={`打开所选网页 [${source.id}] ${source.title}`}>
+        [{source.id}] {source.title} <ExternalLink size={12} aria-hidden="true" />
+      </a>
+    </div>
+    <p className="book-web-source-url">{source.url}</p>
+    {source.pageAge && <p className="library-meta">页面时间：{source.pageAge}</p>}
+    <p className="book-web-excerpt-label">搜索结果节选</p>
+    <blockquote id={excerptId} className={expanded ? "book-web-excerpt is-expanded" : "book-web-excerpt"}>{source.excerpt}</blockquote>
+    <button type="button" className="library-text-button book-web-excerpt-toggle" aria-expanded={expanded} aria-controls={excerptId}
+      onClick={() => setExpanded(value => !value)}>{expanded ? "收起搜索节选" : "展开完整搜索节选"}</button>
+    {source.truncated && <p className="library-meta">本条搜索节选已截短，可打开网页进一步核对。</p>}
+  </li>;
+}
 
 /** A read-only research task, unmounted when its book, session or sidebar scope changes. */
 export function BookWebResearch({ bookId, generation }: { bookId: string; generation: number }) {
@@ -72,7 +91,7 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
           .finally(() => signal.removeEventListener("abort", abort));
       });
       if (request !== sequence.current || controller.signal.aborted || !current()) return;
-      if (value.source === "web_research") bookWebResearchContent(value);
+      assertBookWebResearchResponse(value, bookId, asked);
       setResponse(value);
     } catch (e) {
       if (request === sequence.current && current() && !controller.signal.aborted && !isBookWebResearchAbort(e)) setError(bookWebResearchErrorMessage(e));
@@ -91,7 +110,7 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
     try {
       if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
       await navigator.clipboard.writeText(content);
-      if (stillCurrent()) setMessage("已复制研究结果与网页来源。");
+      if (stillCurrent()) setMessage("已复制所选节选与网页来源。");
     } catch {
       if (stillCurrent()) {
         setCopyFallback(content); setMessage("无法自动复制，请在下方选择文字并手动复制。");
@@ -104,12 +123,12 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
   }
 
   return <div ref={taskRoot} className="book-ai-task book-web-research" aria-busy={loading}>
-    <p className="book-ai-mode-description">围绕这本书查找网上资料，核对出处，发现新的阅读线索。</p>
+    <p className="book-ai-mode-description">真实搜索网页，由 AI 挑选相关资料，保留来源的原文节选供你阅读。</p>
     <details className="book-ai-scope">
       <summary>联网研究会使用哪些资料？</summary>
       <div className="book-ai-limits" aria-label="联网研究资料范围">
-        使用公开的书目信息和你输入的问题搜索网页，根据搜索结果节选整理回答。不会读取你的补充介绍、笔记或微信读书记录。
-        <br />搜索节选不等于网页全文，也不代表已读过电子书。
+        使用公开的书目信息和你输入的问题搜索网页，AI 从搜索结果中挑选相关资料，页面直接展示来源节选。不会读取你的补充介绍、笔记或微信读书记录。
+        <br />搜索节选不等于网页全文，也不代表已读过电子书。原文中的事实和版本信息仍需打开来源核对。
       </div>
     </details>
     <form aria-label="联网查资料" onSubmit={event => void research(event)}>
@@ -123,13 +142,13 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
       </div>
       <div className="library-actions">
         <button type="submit" className="library-button library-button--primary" disabled={loading}>
-          <Globe size={16} aria-hidden="true" />{loading ? "正在搜索与整理…" : "联网查资料"}
+          <Globe size={16} aria-hidden="true" />{loading ? "正在搜索与挑选…" : "联网查资料"}
         </button>
         {loading && <button type="button" className="library-button library-button--quiet" onClick={cancel}>取消研究</button>}
       </div>
       <p className="library-field-hint">每次围绕当前问题重新搜索。结果仅在当前页面保留。</p>
     </form>
-    {loading && <p className="library-status" role="status">正在查找网页并整理依据，请稍候。</p>}
+    {loading && <p className="library-status" role="status">正在查找网页并挑选相关资料，请稍候。</p>}
     {error && <p className="library-error" role="alert">{error}</p>}
     {response && <div className="book-ai-result">
       <div className="book-ai-result-heading">
@@ -142,8 +161,13 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
         <ul aria-label="本次实际搜索词">{response.search.queries.map((query, index) => <li key={`${index}:${query}`}>{query}</li>)}</ul>
       </details>
       {response.source === "insufficient_sources" ? <div className="library-empty">{response.draft.content}</div> : <>
-        <div role="region" aria-label="联网研究结果"><BookProse content={response.draft.content} /></div>
-        <div className="book-ai-citations" aria-label="研究结果引用的网页">
+        <div role="region" aria-label="联网研究结果">
+          <p className="book-web-selection-notice">{BOOK_WEB_RESEARCH_EXCERPTS_NOTICE}</p>
+          <ol className="book-ai-source-list">
+            {response.citedSourceIds.map(id => <SelectedSourceExcerpt key={id} source={response.sources.find(source => source.id === id)!} />)}
+          </ol>
+        </div>
+        <div className="book-ai-citations" aria-label="AI 选中的网页资料">
           {response.citedSourceIds.map(id => <button key={id} type="button" className="library-text-button" onClick={() => showSource(id)}>查看网页依据 {id}</button>)}
         </div>
       </>}
@@ -164,7 +188,7 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
             tabIndex={-1} ref={element => { sourceElements.current[source.id] = element; }}>
             <div className="book-ai-source-heading">
               <a href={source.url} target="_blank" rel="noopener noreferrer">[{source.id}] {source.title} <ExternalLink size={12} aria-hidden="true" /></a>
-              {response.citedSourceIds.includes(source.id) && <span className="library-tag">已引用</span>}
+              {response.citedSourceIds.includes(source.id) && <span className="library-tag">已选中</span>}
             </div>
             <p className="book-web-source-url">{source.url}</p>
             {source.pageAge && <p className="library-meta">页面时间：{source.pageAge}</p>}

@@ -50,6 +50,10 @@
 .book-web-excerpt-label { margin: 12px 0 0; color: var(--color-text-muted); font-size: 11px; font-weight: 600; }
 .book-web-research .book-ai-source blockquote { margin-top: 4px; }
 .book-web-research .book-ai-source-heading a svg { display: inline; vertical-align: baseline; }
+.book-web-selection-notice { margin: 14px 0; color: var(--color-text-muted); font-size: 12px; line-height: 1.8; }
+.book-web-selected-source .book-web-excerpt { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; line-clamp: 5; overflow: hidden; }
+.book-web-selected-source .book-web-excerpt.is-expanded { display: block; -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }
+.book-web-excerpt-toggle { margin-top: 8px; font-size: 12px; }
 
 @media (max-width: 1050px) {
   .book-detail-layout { display: block; }

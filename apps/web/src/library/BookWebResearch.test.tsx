@@ -15,14 +15,17 @@ vi.mock("./bookAi", async original => ({ ...await original<typeof import("./book
 vi.mock("./bookWebResearch", async original => ({ ...await original<typeof import("./bookWebResearch")>(), generateBookWebResearch: vi.fn() }));
 
 const A = "10000001_100000000001", B = "10000002_100000000002", QUESTION = "这本书有哪些相关研究？";
+const NOTICE = "已根据本次问题选出相关网页，以下保留搜索工具返回的来源节选。节选不等于网页或原书全文；来源之间可能有不同说法。";
+const INSUFFICIENT = "本次已执行联网搜索，但没有选出与问题充分相关的资料。下方如有搜索结果，可以打开原链接核对，或调整问题后再查。";
+const draftFor = (ids = ["W1"]) => ({ title: "查到的相关资料", content: `${NOTICE}\n\n建议先查看：${ids.map(id => `[${id}]`).join(" ")}` });
 const auth = (csrf = "csrf-a") => ({ status: "authenticated" as const, user: { email: "owner@example.test", name: "Owner" }, csrfToken: csrf, error: null });
 const writeClipboard = vi.fn<(text: string) => Promise<void>>();
 const originalClipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
 
 function answer(changes: Partial<BookWebResearchResponse> = {}): BookWebResearchResponse {
   return {
-    bookId: A, question: QUESTION, source: "web_research", generatedAt: "2026-10-11T12:00:00.000Z",
-    draft: { title: "旅行史研究线索", content: "这条网页资料讨论了旅行史和地方文献的联系。[W1]" },
+    bookId: A, question: QUESTION, mode: "source_excerpts", source: "web_research", generatedAt: "2026-10-11T12:00:00.000Z",
+    draft: draftFor(),
     sources: [
       { id: "W1", kind: "web", title: "旅行史目录", url: "https://catalog.example.test/books/1", excerpt: "旅行史资料目录。\n与地方文献对照。", pageAge: "2025-01-01", truncated: false },
       { id: "W2", kind: "web", title: "其他研究线索", url: "https://journal.example.test/research/2", excerpt: "其他文章片段", pageAge: null, truncated: true },
@@ -81,13 +84,18 @@ describe("book web research sidebar", () => {
     rendered.unmount();
   });
 
-  it("shows a read-only answer with actual queries and inspectable real URLs and excerpts", async () => {
+  it("shows the selected original excerpt with actual queries and inspectable real URLs", async () => {
     await mount(); await search();
     expect(generateBookWebResearch).toHaveBeenCalledWith(A, { question: QUESTION }, expect.any(AbortSignal));
-    expect(result().textContent).toContain("旅行史和地方文献的联系。[W1]");
+    const chosen = result().querySelector('[data-web-excerpt-source-id="W1"]')!;
+    expect(chosen.querySelector("blockquote")?.textContent).toBe(answer().sources[0].excerpt);
+    expect(result().textContent).toContain(NOTICE);
+    expect(result().querySelector(".book-prose")).toBeNull();
+    expect(within(result()).getByRole("link", { name: "打开所选网页 [W1] 旅行史目录", exact: true }).getAttribute("href")).toBe(answer().sources[0].url);
+    expect(result().querySelector('[data-web-excerpt-source-id="W2"]')).toBeNull();
     expect(within(result()).queryByRole("textbox")).toBeNull();
     expect(screen.getByLabelText("本次实际搜索词").textContent).toBe("旅行史 地方文献 相关研究");
-    expect(screen.getByRole("heading", { name: "旅行史研究线索" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "查到的相关资料" })).toBeTruthy();
     await click("查看网页依据 W1");
     const source = document.querySelector('[data-web-source-id="W1"]') as HTMLElement;
     const link = within(source).getByRole("link", { name: "[W1] 旅行史目录" });
@@ -106,7 +114,7 @@ describe("book web research sidebar", () => {
   it("retains the result through the mobile close control without searching again", async () => {
     await mount(); await click("打开 AI 助手"); await search(); await click("关闭 AI 助手");
     expect(screen.getByRole("button", { name: "打开 AI 助手" }).getAttribute("aria-expanded")).toBe("false");
-    await click("打开 AI 助手"); expect(result().textContent).toContain("旅行史和地方文献");
+    await click("打开 AI 助手"); expect(result().textContent).toContain("旅行史资料目录");
     expect(generateBookWebResearch).toHaveBeenCalledOnce();
   });
 
@@ -115,7 +123,7 @@ describe("book web research sidebar", () => {
     await click("联网研究"); await search(); await click("复制结果与来源");
     expect(writeClipboard).toHaveBeenCalledWith(bookWebResearchContent(answer()));
     expect(field("我的手工编辑").value).toBe("我的原文保持不变");
-    expect(screen.getByText("已复制研究结果与网页来源。")).toBeTruthy();
+    expect(screen.getByText("已复制所选节选与网页来源。")).toBeTruthy();
     expect(generateBookWebResearch).toHaveBeenCalledOnce();
   });
 
@@ -198,8 +206,9 @@ describe("book web research sidebar", () => {
   it("keeps a newer result if an older cancelled research returns late", async () => {
     const pending = deferred<BookWebResearchResponse>(); vi.mocked(generateBookWebResearch).mockReturnValueOnce(pending.promise);
     await mount(); await search(); await click("取消研究");
-    await click("联网查资料"); expect(result().textContent).toContain("旅行史和地方文献");
-    await act(async () => pending.resolve(answer({ draft: { title: "旧结果", content: "迟到的搜索内容。[W1]" } })));
+    await click("联网查资料"); expect(result().textContent).toContain("旅行史资料目录");
+    const old = answer(); old.sources[0].excerpt = "迟到的搜索内容。";
+    await act(async () => pending.resolve(old));
     expect(result().textContent).not.toContain("迟到的搜索内容");
   });
 
@@ -227,9 +236,9 @@ describe("book web research sidebar", () => {
   });
 
   it("shows insufficient evidence with search terms and available excerpts, without a copyable answer", async () => {
-    vi.mocked(generateBookWebResearch).mockResolvedValueOnce(answer({ source: "insufficient_sources", citedSourceIds: [], draft: { title: "资料不足", content: "现有搜索节选不足以回答这个问题。" } }));
+    vi.mocked(generateBookWebResearch).mockResolvedValueOnce(answer({ source: "insufficient_sources", citedSourceIds: [], draft: { title: "查到的相关资料", content: INSUFFICIENT } }));
     await mount(); await search();
-    expect(screen.getByText("现有搜索节选不足以回答这个问题。")).toBeTruthy();
+    expect(screen.getByText(INSUFFICIENT)).toBeTruthy();
     expect(screen.getByLabelText("本次实际搜索词")).toBeTruthy();
     expect(document.querySelectorAll("[data-web-source-id]")).toHaveLength(2);
     expect(screen.queryByRole("button", { name: "复制结果与来源" })).toBeNull();
@@ -255,6 +264,63 @@ describe("book web research sidebar", () => {
     expect(source.textContent).toContain("<script>literal</script>");
     expect(source.querySelector("script")).toBeNull();
     expect(screen.getByText("本条搜索节选已截短，可打开网页进一步核对。")).toBeTruthy();
+  });
+
+  it("keeps the full literal excerpt in the DOM and clipboard while its preview expands or collapses", async () => {
+    const value = answer();
+    value.sources[0].excerpt = "**原文中的符号**\n<script>来源原文</script>\n" + "完整搜索原文：初版时间仍需核对。".repeat(60);
+    vi.mocked(generateBookWebResearch).mockResolvedValueOnce(value);
+    await mount(); await search();
+    const chosen = result().querySelector('[data-web-excerpt-source-id="W1"]')!;
+    const quote = chosen.querySelector("blockquote")!;
+    expect(quote.textContent).toBe(value.sources[0].excerpt);
+    expect(quote.querySelector("strong, script")).toBeNull();
+    const expand = within(chosen as HTMLElement).getByRole("button", { name: "展开完整搜索节选" });
+    expect(expand.getAttribute("aria-expanded")).toBe("false");
+    expect(expand.getAttribute("aria-controls")).toBe(quote.id);
+    await act(async () => { fireEvent.click(expand); });
+    expect(quote.classList.contains("is-expanded")).toBe(true);
+    expect(quote.textContent).toBe(value.sources[0].excerpt);
+    await click("收起搜索节选");
+    expect(quote.classList.contains("is-expanded")).toBe(false);
+    expect(quote.textContent).toBe(value.sources[0].excerpt);
+    await click("复制结果与来源");
+    expect(writeClipboard.mock.calls[0][0]).toContain(value.sources[0].excerpt);
+  });
+
+  it("preserves the chosen source order without combining conflicting original claims", async () => {
+    const value = answer({ citedSourceIds: ["W2", "W1"], draft: draftFor(["W2", "W1"]) });
+    value.sources[0].excerpt = "1935 年初版。";
+    value.sources[1].excerpt = "最早于 1937 年出版。";
+    vi.mocked(generateBookWebResearch).mockResolvedValueOnce(value);
+    await mount(); await search();
+    const cards = Array.from(result().querySelectorAll("[data-web-excerpt-source-id]"));
+    expect(cards.map(card => card.getAttribute("data-web-excerpt-source-id"))).toEqual(["W2", "W1"]);
+    expect(cards.map(card => card.querySelector("blockquote")?.textContent)).toEqual(["最早于 1937 年出版。", "1935 年初版。"]);
+    expect(result().textContent).not.toContain("1937 年再版");
+    expect(document.querySelectorAll("[data-web-source-id]")).toHaveLength(2);
+    await click("复制结果与来源");
+    const copied = writeClipboard.mock.calls[0][0];
+    expect(copied.indexOf("最早于 1937 年出版。")).toBeLessThan(copied.indexOf("1935 年初版。"));
+    expect(copied).not.toContain("1937 年再版");
+  });
+
+  it.each(["missing mode", "unknown mode", "free facts", "old insufficient"])("rejects %s before showing an excerpt-mode result", async changed => {
+    const value = answer();
+    if (changed === "missing mode") delete (value as Partial<BookWebResearchResponse>).mode;
+    else if (changed === "unknown mode") Object.assign(value, { mode: "generated_answer" });
+    else if (changed === "free facts") value.draft.content = "AI 把不同年份解释为再版。[W1]";
+    else {
+      value.source = "insufficient_sources"; value.citedSourceIds = [];
+      value.draft = { title: "查到的相关资料", content: INSUFFICIENT };
+      delete (value as Partial<BookWebResearchResponse>).mode;
+    }
+    vi.mocked(generateBookWebResearch).mockResolvedValueOnce(value);
+    await mount(); await search();
+    expect(screen.getByRole("alert").textContent).toContain("来源核对未完成");
+    expect(screen.queryByRole("region", { name: "联网研究结果" })).toBeNull();
+    expect(document.querySelector("[data-web-source-id]")).toBeNull();
+    expect(writeClipboard).not.toHaveBeenCalled();
   });
 
   it("shows a bounded error and allows an explicit fresh request", async () => {
