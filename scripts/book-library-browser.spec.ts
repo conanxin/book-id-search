@@ -71,13 +71,13 @@ test("signed owner session saves introduction, notes and resource through the UI
   expect((await db.query("SELECT count(*)::int AS n FROM core.library_books WHERE catalog_book_id = $1", [B])).rows[0].n).toBe(0);
 
   await page.getByRole("button", { name: "补充介绍", exact: true }).click();
-  await page.getByLabel("书籍介绍", { exact: true }).fill(INTRODUCTION);
+  await page.getByRole("textbox", { name: "书籍介绍", exact: true }).fill(INTRODUCTION);
   const saved = await save(page, "PUT", `/library/books/${A}`, "保存介绍");
   expect(saved.item).toMatchObject({ bookId: A, saved: true, version: 1, introduction: INTRODUCTION });
   for (const [title, content] of [["第一篇阅读笔记", "第一篇笔记的私人正文"], ["第二篇阅读笔记", "第二篇笔记的私人正文"]]) {
     await page.getByRole("button", { name: "写一篇笔记", exact: true }).click();
     await page.getByLabel("笔记标题", { exact: true }).fill(title);
-    await page.getByLabel("笔记正文", { exact: true }).fill(content);
+    await page.getByRole("textbox", { name: "笔记正文", exact: true }).fill(content);
     await save(page, "POST", `/library/books/${A}/notes`, "保存笔记");
     await expect(page.getByRole("article", { name: `笔记：${title}`, exact: true })).toBeVisible();
   }
@@ -85,7 +85,7 @@ test("signed owner session saves introduction, notes and resource through the UI
   await page.getByLabel("资源名称", { exact: true }).fill("原版扫描本");
   await page.getByLabel("电子版链接", { exact: true }).fill(RESOURCE_URL);
   await page.getByLabel("版本说明（可选）", { exact: true }).fill("2001 年版");
-  await page.getByLabel("来源与备注（可选）", { exact: true }).fill("仅登记外链");
+  await page.getByRole("textbox", { name: "来源与备注（可选）", exact: true }).fill("仅登记外链");
   await save(page, "POST", `/library/books/${A}/resources`, "保存电子版链接");
   const resource = page.getByRole("article", { name: "电子版本：原版扫描本", exact: true });
   await expect(resource.getByRole("link", { name: "打开电子版本 ↗" })).toHaveAttribute("href", RESOURCE_URL);
@@ -125,11 +125,13 @@ test("signed owner session saves introduction, notes and resource through the UI
   await expect(page.getByText(INTRODUCTION, { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "编辑介绍", exact: true }).click();
-  await page.getByLabel("书籍介绍", { exact: true }).fill(`${INTRODUCTION}\n补充后的版本。`);
+  // A textarea's initial text is included by the wrapped-label text selector.
+  // Its accessible textbox name stays "书籍介绍" when editing saved content.
+  await page.getByRole("textbox", { name: "书籍介绍", exact: true }).fill(`${INTRODUCTION}\n补充后的版本。`);
   await save(page, "PUT", `/library/books/${A}`, "保存介绍");
   const firstNote = page.getByRole("article", { name: "笔记：第一篇阅读笔记", exact: true });
   await firstNote.getByRole("button", { name: "编辑笔记", exact: true }).click();
-  await page.getByLabel("笔记正文", { exact: true }).fill("第一篇笔记的修订正文");
+  await page.getByRole("textbox", { name: "笔记正文", exact: true }).fill("第一篇笔记的修订正文");
   await save(page, "PUT", "/notes/" + (await db.query(`SELECT bn.note_id FROM core.library_book_notes bn
     JOIN core.notes n ON n.id = bn.note_id JOIN core.note_revisions r ON r.id = n.current_revision_id
     WHERE bn.catalog_book_id = $1 AND r.title = '第一篇阅读笔记'`, [A])).rows[0].note_id, "保存笔记");
@@ -159,9 +161,12 @@ test("signed owner session saves introduction, notes and resource through the UI
   expect((await db.query("SELECT count(*)::int AS n FROM core.source_assets WHERE id = $1", [resourceId])).rows[0].n).toBe(1);
 
   await page.goto("/account");
+  const signedOut = page.waitForResponse(response => new URL(response.url()).pathname === "/api/auth/logout"
+    && response.request().method() === "POST");
   await page.getByRole("region", { name: "Google 账号", exact: true })
     .getByRole("button", { name: "退出登录", exact: true }).click();
   await expect(page.getByTestId("google-login-authenticated")).toHaveCount(0);
+  expect((await signedOut).status()).toBe(204);
   await page.goto(`/books/${A}`);
   await expect(page.getByRole("heading", { name: LOGIN_TITLE })).toBeVisible();
   await expect(page.getByText(INTRODUCTION, { exact: false })).toHaveCount(0);
