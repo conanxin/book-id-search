@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { chatCompletion, type MiniMaxConfig, type WireApi } from "./minimax.js";
 
 const answer = '{"title":"阅读摘要","paragraphs":[{"text":"渡口附近有石桥。","sourceIds":["S2"]}],"insufficientEvidence":false}';
@@ -96,5 +96,46 @@ describe("MiniMax wire response compatibility", () => {
     expect(url).toBe("https://provider.example.test/v1/chat/completions");
     expect(JSON.parse(init!.body as string)).toMatchObject({ messages, max_tokens: 3500, stream: false });
     expect(JSON.parse(init!.body as string)).not.toHaveProperty("max_output_tokens");
+  });
+});
+
+describe("MiniMax caller cancellation", () => {
+  const config: MiniMaxConfig = {
+    apiKey: "fixture-key", model: "fixture-model", wireApi: "anthropic",
+    baseUrl: "https://provider.example.test/anthropic",
+  };
+  afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
+
+  it("skips an already cancelled synthesis request", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const fetchImpl = vi.fn<typeof fetch>();
+    expect(await chatCompletion(messages, { config, fetchImpl, signal: controller.signal }))
+      .toEqual({ ok: false, error: "MiniMax request cancelled", status: 499 });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("aborts fetch and releases the caller listener and timer", async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const remove = vi.spyOn(controller.signal, "removeEventListener");
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation((_url, init) => new Promise((_resolve, reject) => {
+      init!.signal!.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+    }));
+    const response = chatCompletion(messages, { config, fetchImpl, signal: controller.signal });
+    controller.abort("private cancellation reason");
+    expect(await response).toEqual({ ok: false, error: "MiniMax request cancelled", status: 499 });
+    expect(fetchImpl.mock.calls[0][1]!.signal!.aborted).toBe(true);
+    expect(remove).toHaveBeenCalledWith("abort", expect.any(Function));
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("releases the listener after successful synthesis", async () => {
+    const controller = new AbortController();
+    const remove = vi.spyOn(controller.signal, "removeEventListener");
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ content: [{ type: "text", text: answer }] })));
+    expect(await chatCompletion(messages, { config, fetchImpl, signal: controller.signal }))
+      .toMatchObject({ ok: true, content: answer });
+    expect(remove).toHaveBeenCalledWith("abort", expect.any(Function));
   });
 });

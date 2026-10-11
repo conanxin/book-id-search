@@ -147,6 +147,7 @@ export async function chatCompletion(
     maxTokens?: number;
     fetchImpl?: typeof fetch;
     timeoutMs?: number;
+    signal?: AbortSignal;
   } = {}
 ): Promise<ChatCompletionResponse> {
   const config = options.config ?? resolveMiniMaxConfig();
@@ -155,8 +156,13 @@ export async function chatCompletion(
   }
   const f = options.fetchImpl ?? fetch;
   const timeoutMs = options.timeoutMs ?? REQUEST_TIMEOUT_MS;
+  if (options.signal?.aborted) {
+    return { ok: false, error: "MiniMax request cancelled", status: 499 };
+  }
 
   const ctl = new AbortController();
+  const onAbort = () => ctl.abort();
+  options.signal?.addEventListener("abort", onAbort, { once: true });
   const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
     let url: string;
@@ -251,6 +257,9 @@ export async function chatCompletion(
     }
 
     const data = (await res.json()) as unknown;
+    if (options.signal?.aborted) {
+      return { ok: false, error: "MiniMax request cancelled", status: 499 };
+    }
     const content = extractor(data);
     if (!content) {
       return {
@@ -265,6 +274,9 @@ export async function chatCompletion(
       model: config.model,
     };
   } catch (e) {
+    if (options.signal?.aborted) {
+      return { ok: false, error: "MiniMax request cancelled", status: 499 };
+    }
     const msg = (e as Error)?.message ?? String(e);
     if (msg.toLowerCase().includes("abort")) {
       return { ok: false, error: "MiniMax request timed out", status: 504 };
@@ -272,6 +284,7 @@ export async function chatCompletion(
     return { ok: false, error: `MiniMax request failed: ${redact(msg)}`, status: 502 };
   } finally {
     clearTimeout(timer);
+    options.signal?.removeEventListener("abort", onAbort);
   }
 }
 
