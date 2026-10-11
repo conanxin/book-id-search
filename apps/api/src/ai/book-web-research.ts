@@ -227,7 +227,7 @@ export function createBookWebResearchService(deps: {
             ({ id: sourceId, title, excerpt, pageAge, truncated })) }) }];
       let generated;
       try { generated = await (deps.provider ?? chatCompletion)(messages,
-        { signal, temperature: 0.2, maxTokens: 4000, timeoutMs: 60_000 }); }
+        { signal, temperature: 0.2, maxTokens: 4000, timeoutMs: 60_000, requireCompleted: true }); }
       catch { checkCancelled(signal); throw searchFailed(); }
       checkCancelled(signal);
       if (!generated?.ok) throw generated?.status === 503 ? unavailable() : searchFailed();

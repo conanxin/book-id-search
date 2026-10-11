@@ -70,6 +70,7 @@ describe("book web research client", () => {
     ["claimed search without trace", (r: BookWebResearchResponse) => { r.search.performed = false as true; }],
     ["missing search query", (r: BookWebResearchResponse) => { r.search.queries = []; }],
     ["zero calls", (r: BookWebResearchResponse) => { r.search.calls = 0; }],
+    ["search calls without their queries", (r: BookWebResearchResponse) => { r.search.calls = 2; }],
     ["made-up source", (r: BookWebResearchResponse) => { r.citedSourceIds.push("W99"); r.draft.content += "[W99]"; }],
     ["unmapped citation", (r: BookWebResearchResponse) => { r.draft.content += "[W2]"; }],
     ["missing citations", (r: BookWebResearchResponse) => { r.draft.content = "unsupported answer"; r.citedSourceIds = []; }],

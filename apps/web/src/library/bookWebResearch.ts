@@ -81,7 +81,7 @@ function validResponse(value: unknown, bookId: string, question: string): value 
     || value.search.performed !== true || !Array.isArray(value.search.queries)
     || value.search.queries.length < 1 || value.search.queries.length > 12
     || !value.search.queries.every(query => text(query, 1000)) || !Number.isSafeInteger(value.search.calls)
-    || Number(value.search.calls) < value.search.queries.length || Number(value.search.calls) > 32) return false;
+    || Number(value.search.calls) !== value.search.queries.length || Number(value.search.calls) > 12) return false;
   const sources = value.sources as BookWebResearchSource[];
   if (sources.reduce((sum, source) => sum + source.excerpt.length, 0) > 24000
     || new Set(sources.map(source => webUrl(source.url))).size !== sources.length) return false;

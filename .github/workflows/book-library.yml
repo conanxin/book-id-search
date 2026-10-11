@@ -61,6 +61,9 @@ jobs:
           apps/api/src/ai/book-assistant.test.ts
           apps/api/src/ai/book-assistant-routes.test.ts
           apps/api/src/ai/minimax.test.ts
+          apps/api/src/ai/minimax-web-search.test.ts
+          apps/api/src/ai/book-web-research.test.ts
+          apps/api/src/ai/book-web-research-routes.test.ts
           apps/api/src/search/related-books.test.ts
           apps/api/src/s32/domain/book-library.test.ts
           apps/api/src/s32/application/book-library.test.ts
@@ -83,6 +86,7 @@ jobs:
           apps/web/src/weread/WereadCenterBookScope.test.tsx
           scripts/book-browser-fixtures.test.ts
           scripts/book-ai-live-trial.test.ts
+          scripts/book-web-research-live-trial.test.ts
           scripts/s32-migration-chain.test.ts
           scripts/s32-schema-check.test.ts
           scripts/s32-schema-contract.test.ts

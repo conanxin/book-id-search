@@ -17,7 +17,7 @@ import { createS32Router } from "../apps/api/src/s32/register.js";
 import { readS32Config } from "../apps/api/src/s32/config.js";
 import { createBookLibraryBodyParser } from "../apps/api/src/s32/routes/book-library-routes.js";
 import type { CatalogBookSnapshot } from "../apps/api/src/s32/domain/catalog-promotion.js";
-import { createBookWereadFixture, getBookAiBrowserFixtureKey, getBookBrowserCatalogIds } from "./book-browser-fixtures.js";
+import { createBookWereadFixture, getBookAiBrowserFixtureKey, getBookWebResearchBrowserFixtureKey, getBookBrowserCatalogIds } from "./book-browser-fixtures.js";
 import { normalizeNotesQuery, queryPrivateNotes, type WereadNotesQuery } from "../apps/api/src/weread/private-notes.js";
 import { buildNotesTrend, getWereadStatusByCatalogId, getWereadStatusesByCatalogIds,
   getWereadSummary, getWereadConfirmedMatches } from "../apps/api/src/weread/private-overlay.js";
@@ -27,6 +27,9 @@ import { createWereadBindingsRouter } from "../apps/api/src/weread/manual-bindin
 import { createPostgresBookLibraryStore } from "../apps/api/src/s32/postgres/book-library-store.js";
 import { createBookAssistantService } from "../apps/api/src/ai/book-assistant.js";
 import { createBookAssistantRouter } from "../apps/api/src/ai/book-assistant-routes.js";
+import { createBookWebResearchService } from "../apps/api/src/ai/book-web-research.js";
+import { createBookWebResearchRouter } from "../apps/api/src/ai/book-web-research-routes.js";
+import { searchMiniMaxWeb } from "../apps/api/src/ai/minimax-web-search.js";
 import type { ChatMessage, ChatCompletionResponse } from "../apps/api/src/ai/minimax.js";
 import { collectRelatedBooks } from "../apps/api/src/search/related-books.js";
 
@@ -56,6 +59,8 @@ if (env.BOOK_LIBRARY_TEST_ONLY !== "YES" || env.NODE_ENV !== "development" || ![
 const catalogIds = getBookBrowserCatalogIds(fixtureKey);
 const aiFixtureKey = getBookAiBrowserFixtureKey(fixtureKey);
 const aiCatalogIds = getBookBrowserCatalogIds(aiFixtureKey);
+const webResearchKey = getBookWebResearchBrowserFixtureKey(fixtureKey);
+const webResearchIds = getBookBrowserCatalogIds(webResearchKey);
 const makeBook = (id: string, title: string): CatalogBookSnapshot => ({
   id, ssid: id.split("_")[0], dxid: id.split("_")[1],
   title, author: "合成测试作者", publisher: "合成测试出版社",
@@ -64,7 +69,8 @@ const makeBook = (id: string, title: string): CatalogBookSnapshot => ({
 });
 const libraryBooks = [makeBook(catalogIds.A, `古道阅读验证甲 ${fixtureKey}`), makeBook(catalogIds.B, `古道阅读验证乙 ${fixtureKey}`)];
 const aiBooks = [makeBook(aiCatalogIds.A, `AI 阅读验证甲 ${aiFixtureKey}`), makeBook(aiCatalogIds.B, `AI 阅读验证乙 ${aiFixtureKey}`)];
-const books = [...libraryBooks, ...aiBooks];
+const webResearchBooks = [makeBook(webResearchIds.A, `联网研究验证甲 ${webResearchKey}`), makeBook(webResearchIds.B, `联网研究验证乙 ${webResearchKey}`)];
+const books = [...libraryBooks, ...aiBooks, ...webResearchBooks];
 const isAiBook = (id: string) => id === aiCatalogIds.A || id === aiCatalogIds.B;
 const book = (id: string) => books.find(item => item.id === id);
 const getCatalogDocument = async (id: string) => {
@@ -136,6 +142,40 @@ async function deterministicBookAssistantChat(messages: ChatMessage[]): Promise<
     }),
   };
 }
+
+// Research retains production search trace parsing and cited-answer parsing.
+// Only outbound provider HTTP and the final synthesis response are fixtures.
+const webResearch = createBookWebResearchService({
+  getCatalogDocument, isEnabled: () => true,
+  search: (messages, options) => searchMiniMaxWeb(messages, {
+    ...options,
+    config: { apiKey: "synthetic-web-search-not-a-real-key", model: "synthetic-web-search", wireApi: "anthropic", baseUrl: "https://provider.invalid/anthropic" },
+    fetchImpl: async (_url, init) => {
+      const body = JSON.parse(String(init?.body));
+      if (body.tools?.[0]?.name !== "web_search") throw new Error("WEB_SEARCH_TOOL_NOT_REQUESTED");
+      const input = JSON.parse(body.messages.find((message: ChatMessage) => message.role === "user").content);
+      const publicBook = input.book ?? input.catalog;
+      const title = String(publicBook?.title ?? "合成书目");
+      const query = `${title} ${input.question}`.slice(0, 1000);
+      return Response.json({ type: "message", role: "assistant", stop_reason: "end_turn", base_resp: { status_code: 0 }, content: [
+        { type: "text", text: "这段生成文字不是来源，也没有真的读过全文。" },
+        { type: "server_tool_use", id: "synthetic-search-1", name: "web_search", input: { query } },
+        { type: "web_search_tool_result", tool_use_id: "synthetic-search-1", content: [
+          { type: "web_search_result", title: `${title} · 公开馆藏条目`, url: "https://example.org/catalog/research-book", content: `${title}：这是一条合成的外部馆藏检索片段，列出作者、出版信息和版本说明。`, page_age: "2026-10-01" },
+          { type: "web_search_result", title: "古道研究方法 · 公开文献线索", url: "https://example.org/research/ancient-routes", content: "合成研究片段：将文献记载、旧地图和现场遗迹相互核对。片段没有提供全书内容。", page_age: null },
+        ] },
+      ] });
+    },
+  }),
+  provider: async messages => {
+    const input = JSON.parse(messages.find(message => message.role === "user")!.content);
+    return { ok: true, model: "synthetic-web-research-no-network", content: JSON.stringify({
+      title: "本书资料与后续研究线索",
+      paragraphs: input.sources.map((source: { id: string; excerpt: string }) => ({ text: source.excerpt, sourceIds: [source.id] })),
+      insufficientEvidence: false,
+    }) };
+  },
+});
 let runtimeRole = "NOT_EXERCISED";
 if (!wereadOnly) {
   const probe = new Pool({ connectionString: databaseUrl });
@@ -151,6 +191,7 @@ app.use("/api/auth", createAuthRouter({ config: google }));
 app.use("/api/private", privateMiddleware);
 app.use("/api/books", privateMiddleware);
 app.use("/api/ai", privateMiddleware);
+app.use("/api/ai/books/:bookId/research", createBookWebResearchRouter({ service: webResearch, requestAuthorizer: authorize }));
 app.use("/api/ai/books", createBookAssistantRouter({ service: bookAssistant, requestAuthorizer: authorize }));
 app.use("/api/private/weread/bindings", createWereadBindingsRouter({ service: wereadBindings, requestAuthorizer: authorize }));
 if (config) app.use("/api/private/s32/library", createBookLibraryBodyParser(config, authorize));
@@ -182,7 +223,7 @@ app.get("/api/books/:id/related", async (req: TestRequest, res: TestResponse) =>
   const id = String(req.params.id);
   const source = book(id);
   if (!source) return void res.status(404).json({ error: { message: "Synthetic book not found" } });
-  const group = isAiBook(id) ? aiBooks : libraryBooks;
+  const group = webResearchBooks.some(item => item.id === id) ? webResearchBooks : isAiBook(id) ? aiBooks : libraryBooks;
   // Keep the original isolated catalog groups. This field-only in-memory
   // adapter replaces Meili transport while collection/ranking/reasons are real.
   const normalize = (value: string) => value.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
@@ -240,7 +281,8 @@ app.get("/api/private/weread/notes", async (req: TestRequest, res: TestResponse)
 });
 app.get("/api/health", (_req: TestRequest, res: TestResponse) => res.json({ ok: true, syntheticCatalog: true,
   persistence: wereadOnly ? "NOT_EXERCISED" : "postgresql", wereadBindingsPersistence: wereadOnly ? "NOT_EXERCISED" : "postgresql", runtimeRole,
-  bookAssistant: { sources: "production_collector", provider: "deterministic_injected", externalMiniMax: "NOT_EXERCISED" } }));
+  bookAssistant: { sources: "production_collector", provider: "deterministic_injected", externalMiniMax: "NOT_EXERCISED" },
+  bookWebResearch: { search: "production_adapter_injected_http", synthesis: "deterministic_injected", externalMiniMax: "NOT_EXERCISED" } }));
 
 app.listen(3001, "127.0.0.1", () => {
   console.log(`BOOK_LIBRARY_TEST_API_READY=YES CATALOG=SYNTHETIC_TWO_PAIRS WEREAD=SYNTHETIC_SNAPSHOTS_REAL_QUERY BOOK_AI=DETERMINISTIC_PROVIDER_REAL_COLLECTOR PERSISTENCE=${wereadOnly ? "NOT_EXERCISED" : "POSTGRESQL"} ROLE=${runtimeRole} OAUTH=NOT_EXERCISED`);
