@@ -19,6 +19,7 @@
     "s32:m3a:gate3:browser:check": "tsx scripts/s32-m3a-gate3-browser-check.ts",
     "health:check": "tsx scripts/production-health-check.ts",
     "ai:probe": "tsx scripts/ai-probe.ts",
+    "book-ai:trial": "node --import tsx scripts/book-ai-live-trial.ts",
     "verify": "tsx scripts/verify.ts",
     "import:sample": "tsx scripts/import-books.ts --file data/sample-books.txt --reset-index --report reports/latest-import-report.json",
     "import:file": "tsx scripts/import-books.ts",

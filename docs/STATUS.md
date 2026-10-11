@@ -1,5 +1,14 @@
 # BOOK-ID-SEARCH status
 
+## 2026-10-11 — Real-provider compatibility and live trial entry
+
+- `task_id=BOOK_CENTERED_AI_REAL_PROVIDER_READINESS_R1`; continues Draft [#72](https://github.com/conanxin/book-id-search/pull/72) from `9645283`.
+- Corrects MiniMax Responses to `max_output_tokens`, extracts completed reply text without reasoning blocks, joins text blocks, and refuses incomplete/failed Responses results. Existing model/configuration choices remain.
+- The book assistant now tells the model actual source coverage and excerpt truncation. A read-only `book-ai:trial` CLI uses configured catalog, saved library and effective WeRead sources, at most one model call, and a local review receipt.
+- Current execution environment has no real model/database configuration or WSL/Hermes/Tencent connection. Missing-configuration execution is separate from real-provider and answer-quality validation; the latter remain pending on the configured machine.
+- Contract and handoff: [AI actual-provider readiness](development/BOOK_AI_REAL_PROVIDER_READINESS.md); cumulative release: [incremental release notes](operations/BOOK_CENTERED_RELEASE.md). Exact-head CI evidence remains in PR #72.
+- No dependency/schema changes, merge or Tencent deployment in this phase.
+
 ## 2026-10-11 — Book AI assistant
 
 - `task_id=BOOK_CENTERED_AI_ASSISTANT_V1`; continues Draft [#72](https://github.com/conanxin/book-id-search/pull/72) from `63ccc1d`.

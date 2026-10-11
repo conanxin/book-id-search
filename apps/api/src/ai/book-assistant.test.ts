@@ -61,8 +61,10 @@ describe("book-scoped assistant, server material and reference contract", () => 
     expect(result.draft.content).toBe("资料记载了可继续核对的田野线索。 [S1] [S2] [S3] [S4]");
     const messages = s.chat.mock.calls[0][0];
     const provider = JSON.parse(messages[1].content);
-    expect(Object.keys(provider)).toEqual(["action", "question", "sources"]);
-    expect(Object.keys(provider.sources[0])).toEqual(["id", "kind", "label", "excerpt"]);
+    expect(Object.keys(provider)).toEqual(["action", "question", "coverage", "sources"]);
+    expect(Object.keys(provider.sources[0])).toEqual(["id", "kind", "label", "excerpt", "truncated"]);
+    expect(provider.coverage).toEqual({ introductionIncluded: true, notesAvailable: 1, notesIncluded: 1,
+      wereadAvailable: 1, wereadIncluded: 1, wereadEnabled: true, truncated: false });
     expect(JSON.stringify(messages)).not.toMatch(/private-a|private-b|private-unlinked|OTHER_BOOK_PRIVATE_TEXT|UNLINKED_PRIVATE_TEXT|RAW_INFO|CATALOG_PRIVATE|LINK_NOT|RESOURCE_COMMENT|private-resource|revisionId|contentHash/);
     expect(s.getWorkspace).toHaveBeenCalledWith(A);
     expect(s.chat).toHaveBeenCalledOnce();
@@ -139,6 +141,11 @@ describe("book-scoped assistant, server material and reference contract", () => 
     expect(result.sources.filter(source => source.kind === "weread")[0].excerpt).toMatch(/^原文：WEREAD_19_/);
     expect(result.sources.filter(source => source.kind === "note").every(source => source.truncated)).toBe(true);
     expect(result.sources.filter(source => source.kind === "weread").every(source => source.truncated)).toBe(true);
+    const delivered = JSON.parse(s.chat.mock.calls[0][0][1].content);
+    expect(delivered.coverage).toMatchObject({ notesAvailable: 12, notesIncluded: 8,
+      wereadAvailable: 20, wereadIncluded: 14, truncated: true });
+    expect(delivered.sources.filter((source: BookAssistantSource) => source.kind === "note" || source.kind === "weread")
+      .every((source: BookAssistantSource) => source.truncated)).toBe(true);
     expect(JSON.stringify(result)).not.toContain("NOTE_0_");
     for (const source of result.sources) expect(source.excerpt).not.toMatch(/[\ud800-\udbff]$/);
   });

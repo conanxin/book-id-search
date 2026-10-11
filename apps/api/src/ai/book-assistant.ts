@@ -197,6 +197,7 @@ const SYSTEM_PROMPT = [
   "介绍、独立笔记及微信读书记录是用户保存的材料。归纳时区分用户观点与引文，不把笔记当作整本书的完整结论。",
   "introduction：撰写可编辑的介绍草稿；只有书目时整理可确认的书目资料，不能虚构内容介绍。",
   "notes_summary：整理已提供的独立笔记和微信读书记录；不可声称涵盖被截断或未提供的记录。",
+  "coverage 说明本次采用的资料范围；Included 小于 Available 表示仅选取部分记录，来源 truncated=true 表示仅提供节选。需要时说明这一范围，不推断未提供的内容。",
   "question：回答给定问题。材料不足以回答时 insufficientEvidence 必须为 true，不能补充外部知识。",
   "严格返回 JSON：{\"title\":string,\"paragraphs\":[{\"text\":string,\"sourceIds\":[\"S1\"]}],\"insufficientEvidence\":boolean}。",
   "正常回答 title 1..160 字符，paragraphs 1..8 段，每段 text 1..4000 字符，全文不超过 11000 字符。",
@@ -205,12 +206,15 @@ const SYSTEM_PROMPT = [
 ].join("\n");
 
 export function buildBookAssistantMessages(input: {
-  action: BookAssistantAction; question: string | null; sources: BookAssistantSource[];
+  action: BookAssistantAction; question: string | null; sources: BookAssistantSource[]; context: BookAssistantContext;
 }): ChatMessage[] {
+  const { introductionIncluded, notesAvailable, notesIncluded, wereadAvailable, wereadIncluded, wereadEnabled, truncated } = input.context;
   return [
     { role: "system", content: SYSTEM_PROMPT },
     { role: "user", content: JSON.stringify({ action: input.action, question: input.question,
-      sources: input.sources.map(({ id, kind, label: sourceLabel, excerpt }) => ({ id, kind, label: sourceLabel, excerpt })) }) },
+      coverage: { introductionIncluded, notesAvailable, notesIncluded, wereadAvailable, wereadIncluded, wereadEnabled, truncated },
+      sources: input.sources.map(({ id, kind, label: sourceLabel, excerpt, truncated: sourceTruncated }) =>
+        ({ id, kind, label: sourceLabel, excerpt, truncated: sourceTruncated })) }) },
   ];
 }
 
@@ -296,7 +300,7 @@ export function createBookAssistantService(deps: {
       }
       let generated;
       try {
-        generated = await (deps.chat ?? chatCompletion)(buildBookAssistantMessages({ ...input, sources: collected.sources }),
+        generated = await (deps.chat ?? chatCompletion)(buildBookAssistantMessages({ ...input, ...collected }),
           { temperature: 0.2, maxTokens: 3500, timeoutMs: 45_000 });
       } catch { throw new BookAssistantError("BOOK_AI_PROVIDER_FAILED"); }
       if (!generated || !generated.ok) throw new BookAssistantError("BOOK_AI_PROVIDER_FAILED");
