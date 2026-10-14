@@ -164,7 +164,9 @@ def evaluate():
                 base_ids = [x["id"] for x in b["items"][:10]]
                 predicted = target["ranked_ids"]
                 if len(predicted) != 10 or len(set(predicted)) != 10 or set(predicted)!=set(base_ids):
-                    raise ValueError(case_id+": invalid re-ranked book IDs")
+                    # Preserve invalid output without discarding other valid cases in the batch.
+                    issues.append(key+": INVALID_RANKED_IDS: "+case_id)
+                    continue
                 judged = {book: int(rows[(case_id,book)]["grade"]) for book in base_ids}
                 grades = [judged[x] for x in predicted]
                 origin_grades = [judged[x] for x in base_ids]
@@ -186,13 +188,29 @@ def evaluate():
             issues.append(key+": PARSE_OR_SCHEMA_ERROR: "+str(exc))
     def aggregate(arm):
         z=[x for x in findings if x["arm"]==arm]
+        run_times = [json.loads((OUT/f"batch{b}_{a}.raw.json").read_text())["elapsed_seconds"]
+                     for b,a in SEQUENCE if a==arm and (OUT/f"batch{b}_{a}.raw.json").exists()]
         return {"cases":len(z),"diagnosis_correct":sum(x["diagnosis_correct"] for x in z),
                 "mean_ndcg10":round(sum(x["ndcg10"] for x in z)/len(z),6) if z else None,
                 "baseline_mean_ndcg10":round(sum(x["baseline_ndcg10"] for x in z)/len(z),6) if z else None,
                 "mean_delta_ndcg10":round(sum(x["delta_ndcg10"] for x in z)/len(z),6) if z else None,
-                "call_elapsed_seconds":round(sum(x["elapsed_seconds"] for x in z)/4,3) if z else None}
+                "call_elapsed_seconds":round(sum(run_times),3) if run_times else None}
+    a_cases = {x["case_id"]: x for x in findings if x["arm"] == "A"}
+    b_cases = {x["case_id"]: x for x in findings if x["arm"] == "B"}
+    paired_ids = sorted(set(a_cases) & set(b_cases))
+    def pair_arm(index):
+        vals = [index[c] for c in paired_ids]
+        return {
+            "diagnosis_correct": sum(x["diagnosis_correct"] for x in vals),
+            "mean_ndcg10": round(sum(x["ndcg10"] for x in vals)/len(vals), 6) if vals else None,
+            "mean_delta_ndcg10": round(sum(x["delta_ndcg10"] for x in vals)/len(vals), 6) if vals else None,
+        }
+    paired = {"n": len(paired_ids), "case_ids": paired_ids,
+              "A": pair_arm(a_cases), "B": pair_arm(b_cases)}
     summary={"status":"COMPLETE" if len(findings)==16 and not issues else "PARTIAL",
-             "issues":issues,"A":aggregate("A"),"B":aggregate("B"),"cases":findings}
+             "calls_recorded": sum((OUT/f"batch{b}_{a}.raw.json").exists() for b,a in SEQUENCE),
+             "issues":issues,"A":aggregate("A"),"B":aggregate("B"),
+             "paired":paired,"cases":findings}
     (OUT/"pilot_results.json").write_text(json.dumps(summary,ensure_ascii=False,indent=2)+"\n")
     text=[f"# P3 8-case pilot — {summary['status']}","",
           "Historical frozen S31 v1.1 pooled ranking. Not independent new retrieval; no significance test.",
