@@ -1,0 +1,115 @@
+{
+  "schema_version": "ambition-p4-facets-v1",
+  "benchmark": "s31-v1.1",
+  "provenance": "Frozen S31 v1.1 QREL and the captured original Top-10. Manually articulated facets are operational review criteria, not independently verified full-text facts.",
+  "cases": [
+    {
+      "case_id": "edition-choice-02",
+      "question": "钱钟书《围城》漓江1997 vs 人民文学2000：两个版本必须分别被定位",
+      "facets": [
+        {
+          "id": "lijiang_1997",
+          "verification": "catalog_metadata",
+          "selector": {
+            "title_eq": "围城",
+            "author_contains": "钱钟书",
+            "publisher_contains": "漓江出版社",
+            "year_eq": "1997"
+          }
+        },
+        {
+          "id": "renminwenxue_2000",
+          "verification": "catalog_metadata",
+          "selector": {
+            "title_eq": "围城",
+            "author_contains": "钱钟书",
+            "publisher_contains": "人民文学出版社",
+            "year_eq": "2000"
+          }
+        }
+      ],
+      "note": "Locating two editions is prerequisite only; actual edition differences still require original pages and bibliographical comparison."
+    },
+    {
+      "case_id": "edition-choice-05",
+      "question": "《乡土中国》经典版、排除教辅改写",
+      "facets": [
+        {
+          "id": "fei_work_identity",
+          "verification": "catalog_metadata",
+          "selector": {
+            "title_eq": "乡土中国",
+            "author_contains": "费孝通"
+          }
+        },
+        {
+          "id": "human_labeled_standalone_original",
+          "verification": "human_qrel",
+          "selector": {
+            "title_eq": "乡土中国",
+            "qrel_rule_in": [
+              "standalone-original"
+            ],
+            "grade_min": 3
+          }
+        }
+      ],
+      "note": "Human QREL classification supports bibliographic type, not a comparison of full text across printings."
+    },
+    {
+      "case_id": "edition-choice-06",
+      "question": "梁思成《中国建筑史》及其内容完整性",
+      "facets": [
+        {
+          "id": "liang_exact_work",
+          "verification": "catalog_metadata",
+          "selector": {
+            "title_eq": "中国建筑史",
+            "author_contains": "梁思成"
+          }
+        },
+        {
+          "id": "content_complete",
+          "verification": "primary_required",
+          "selector": {
+            "title_eq": "中国建筑史",
+            "author_contains": "梁思成"
+          }
+        }
+      ],
+      "note": "Candidate catalog identities exist; completeness cannot be certified without original edition contents/page evidence."
+    },
+    {
+      "case_id": "exact-natural-02",
+      "question": "找鲁迅的《呐喊》",
+      "facets": [
+        {
+          "id": "lu_xun_exact_work",
+          "verification": "catalog_metadata",
+          "selector": {
+            "title_eq": "呐喊",
+            "author_contains": "鲁迅"
+          }
+        }
+      ],
+      "note": "Missing from original Top-10 only; the work may be found elsewhere in the corpus."
+    },
+    {
+      "case_id": "exact-natural-10",
+      "question": "找《汉语大词典》正文记录，非研究或索引",
+      "facets": [
+        {
+          "id": "main_dictionary_bibliographic_entry",
+          "verification": "human_qrel",
+          "selector": {
+            "qrel_rule_in": [
+              "dictionary-work"
+            ],
+            "grade_min": 3
+          }
+        }
+      ],
+      "note": "Original QREL classifies one Top-10 candidate as a dictionary-work; this does not prove the full multivolume original text is complete."
+    }
+  ]
+}
