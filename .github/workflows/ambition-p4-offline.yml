@@ -1,0 +1,27 @@
+name: Ambition P4 offline contract check
+on:
+  push:
+    branches:
+      - research/ambition-p4-facets-20261015
+    paths:
+      - experiments/ambition-p4/**
+      - .github/workflows/ambition-p4-offline.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  p4-offline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test deterministic index and facet rules
+        run: python -m unittest discover -s experiments/ambition-p4 -p 'test_*.py' -v
+      - name: Evaluate frozen S31 v1.1 cases, without API calls
+        run: |
+          python experiments/ambition-p4/facet_eval.py --output /tmp/ambition-p4-facets.json
+          python -c 'import json; d=json.load(open("/tmp/ambition-p4-facets.json")); assert len(d["cases"]) == 5; print("P4 source cases:", len(d["cases"]))'
