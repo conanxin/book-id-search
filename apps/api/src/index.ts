@@ -693,13 +693,16 @@ export async function handleSearch(
       }
     }
 
-    // S24-3: Intent-aware over-fetch + unified rerank.
-    // Bump fetchSize from 3x → 5x to give the intent reranker more
-    // candidates to promote.
+    // Stable, aligned over-fetch windows: per-page reranking of overlapping
+    // Meilisearch offsets can show the same ID on adjacent pages. Keep the
+    // existing first-page candidate set and rerank order, but align every page
+    // of a given page size to disjoint fetchSize-sized windows. A page crossing
+    // a window boundary uses at most two consecutive windows.
     const fetchSize = Math.min(Math.max(limit, 1) * 5, 120);
-    const result = await meiliIndex.search(searchQuery, { limit: fetchSize, offset });
-
-    const decorated = attachMatch(result.hits, original, searchQuery, detectedType);
+    const firstWindowOffset = Math.floor(offset / fetchSize) * fetchSize;
+    const endExclusive = offset + limit;
+    let estimatedTotalHits: number | undefined;
+    const pageItems: any[] = [];
     const rerankContext = {
       originalQuery: original,
       normalizedQuery: normalized,
@@ -708,15 +711,34 @@ export async function handleSearch(
       detectedType,
       intentProfile: intent,
     };
-    const ranked = rankSearchResults(decorated, rerankContext);
+
+    for (
+      let windowOffset = firstWindowOffset;
+      windowOffset < endExclusive;
+      windowOffset += fetchSize
+    ) {
+      const result = await meiliIndex.search(searchQuery, {
+        limit: fetchSize,
+        offset: windowOffset,
+      });
+      estimatedTotalHits ??= result.estimatedTotalHits;
+      if (result.hits.length === 0) break;
+
+      const decorated = attachMatch(result.hits, original, searchQuery, detectedType);
+      const ranked = rankSearchResults(decorated, rerankContext);
+      const start = Math.max(0, offset - windowOffset);
+      const end = Math.min(ranked.length, endExclusive - windowOffset);
+      if (start < end) pageItems.push(...ranked.slice(start, end));
+      if (result.hits.length < fetchSize) break;
+    }
 
     return res.json({
       query: original,
       queryInfo,
-      total: result.estimatedTotalHits ?? ranked.length,
+      total: estimatedTotalHits ?? pageItems.length,
       page,
       limit,
-      items: ranked.slice(0, limit)
+      items: pageItems,
     });
   } catch (error) {
     return sendError(res, 500, "搜索失败，请检查关键词或稍后重试。", error);

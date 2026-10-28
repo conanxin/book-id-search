@@ -493,6 +493,68 @@ describe("handleSearch — non-empty query", () => {
     expect((res.body as any).error.message).toMatch(/搜索失败/);
   });
 
+  it("does not repeat search result IDs across aligned adjacent pages", async () => {
+    const catalog = Array.from({ length: 55 }, (_, i) => ({
+      id: `page-row-${i}`,
+      title: `时尚秋冬图录 ${i}`,
+      author: "测试作者",
+      publisher: "测试出版社",
+      parseStatus: "ok",
+    }));
+    const meili = {
+      search: vi.fn(async (_q: string, opts: { limit: number; offset: number }) => ({
+        estimatedTotalHits: catalog.length,
+        hits: catalog.slice(opts.offset, opts.offset + opts.limit),
+      })),
+    };
+    const seen = new Set<string>();
+    const offsets: number[] = [];
+    for (let page = 1; page <= 7; page++) {
+      const req = { query: { q: "时尚秋冬", page: String(page), limit: "4" } } as unknown as Request;
+      const res = mockRes();
+      const previousCalls = meili.search.mock.calls.length;
+      await handleSearch(req, res, meili, exactSearchImpl, isExactLikeImpl);
+      const items = (res.body as any).items;
+      expect(items).toHaveLength(4);
+      for (const item of items) {
+        expect(seen.has(item.id)).toBe(false);
+        seen.add(item.id);
+      }
+      for (const [,opts] of meili.search.mock.calls.slice(previousCalls)) offsets.push(opts.offset);
+    }
+    expect(offsets).toEqual([0, 0, 0, 0, 0, 20, 20]);
+    expect(seen.size).toBe(28);
+  });
+
+  it("fills a page spanning the 120-document candidate window boundary", async () => {
+    const catalog = Array.from({ length: 250 }, (_, i) => ({
+      id: `cross-window-${i}`,
+      title: `时尚秋冬图录 ${i}`,
+      author: "测试作者",
+      publisher: "测试出版社",
+      parseStatus: "ok",
+    }));
+    const meili = {
+      search: vi.fn(async (_q: string, opts: { limit: number; offset: number }) => ({
+        estimatedTotalHits: catalog.length,
+        hits: catalog.slice(opts.offset, opts.offset + opts.limit),
+      })),
+    };
+    const getPage = async (page: number) => {
+      const req = { query: { q: "时尚秋冬", page: String(page), limit: "25" } } as unknown as Request;
+      const res = mockRes();
+      await handleSearch(req, res, meili, exactSearchImpl, isExactLikeImpl);
+      return (res.body as any).items as Array<{ id: string }>;
+    };
+    const page4 = await getPage(4);
+    const previousCalls = meili.search.mock.calls.length;
+    const page5 = await getPage(5);
+    expect(page4).toHaveLength(25);
+    expect(page5).toHaveLength(25);
+    expect(new Set([...page4, ...page5].map(x => x.id)).size).toBe(50);
+    expect(meili.search.mock.calls.slice(previousCalls).map(([,opts]) => opts.offset)).toEqual([0, 120]);
+  });
+
   it("page/limit works with the rerank path", async () => {
     const meili = {
       search: vi.fn(async (q: string, opts: any) => ({
@@ -509,8 +571,8 @@ describe("handleSearch — non-empty query", () => {
     const req = { query: { q: "时尚秋冬", page: "2", limit: "5" } } as unknown as Request;
     const res = mockRes();
     await handleSearch(req, res, meili, exactSearchImpl, isExactLikeImpl);
-    // fetchSize = limit*5 capped at 120 → 25 here; offset = (2-1)*5 = 5
-    expect(meili.search).toHaveBeenCalledWith("时尚秋冬", { limit: 25, offset: 5 });
+    // Page 2 uses the same aligned over-fetch window as page 1.
+    expect(meili.search).toHaveBeenCalledWith("时尚秋冬", { limit: 25, offset: 0 });
     expect((res.body as any).page).toBe(2);
     expect((res.body as any).limit).toBe(5);
     expect((res.body as any).items.length).toBeLessThanOrEqual(5);
@@ -790,7 +852,7 @@ describe("handleSearch — S31-B2 query interpretation", () => {
       id: `s31-b2-page-${i}`, title: "围城", author: "钱钟书", parseStatus: "ok",
     }));
     const { meili, body } = await lookup("找钱钟书的《围城》", { page: "2", limit: "5" }, hits);
-    expect(meili.search).toHaveBeenCalledExactlyOnceWith("围城 钱钟书", { limit: 25, offset: 5 });
+    expect(meili.search).toHaveBeenCalledExactlyOnceWith("围城 钱钟书", { limit: 25, offset: 0 });
     expect(body.page).toBe(2);
     expect(body.limit).toBe(5);
     expect(body.items).toHaveLength(5);
