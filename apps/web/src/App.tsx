@@ -20,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { getBook, getStats, searchBooks, type Book, type BookRelation, type MatchInfo, type SearchResponse, type StatsResponse } from "./api";
+import { getSearchBrowseScope } from "./searchPagination";
 import { EDITION_COMPARE_MAX, EditionComparePanel, toggleEditionCompareSelection } from "./EditionCompare";
 import { detailMatchInfo, isExactMatch, matchBadgeLabel, matchBadgeVariant, parseStatusNarrative, explainParseWarnings } from "./match-ui";
 import AiSearchPanel from "./AiSearchPanel";
@@ -710,10 +711,10 @@ function SearchPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedQ, params, limit]);
 
-  const totalPages = useMemo(() => {
-    if (!data) return 1;
-    return Math.max(Math.ceil(data.total / data.limit), 1);
-  }, [data]);
+  // The API total is Meilisearch estimatedTotalHits, not the number of
+  // navigable results. The current index only serves the first 1,000 hits.
+  const browseScope = getSearchBrowseScope(data?.total ?? 0, data?.limit ?? limit, urlPage);
+  const totalPages = browseScope.totalPages;
 
   const submit = useCallback(
     (event: FormEvent) => {
@@ -734,7 +735,8 @@ function SearchPage() {
   );
 
   const goPage = (nextPage: number) => {
-    setParams({ q: input.trim(), page: String(Math.max(nextPage, 1)) });
+    // Do not generate links to pages that the current Meili index cannot serve.
+    setParams({ q: input.trim(), page: String(Math.min(Math.max(nextPage, 1), totalPages)) });
   };
 
   const clearInput = () => {
@@ -962,7 +964,9 @@ function SearchPage() {
         <div className="results__bar">
           <span className="results__count">
             {data && currentQ
-              ? `共找到 ${data.total.toLocaleString()} 条结果`
+              ? browseScope.truncated
+                ? `约 ${data.total.toLocaleString()} 条匹配结果（前 ${browseScope.browsableTotal.toLocaleString()} 条可浏览）`
+                : `共找到 ${data.total.toLocaleString()} 条结果`
               : input.trim() === ""
               ? "等待搜索"
               : "准备搜索"}
@@ -981,6 +985,22 @@ function SearchPage() {
             ) : null}
           </div>
         </div>
+
+        {data && currentQ && browseScope.truncated ? (
+          <p className="results__browse-note" role="status">
+            当前索引最多允许浏览前 {browseScope.browsableTotal.toLocaleString()} 条结果。
+            若要找更多书目，请用完整书名、作者或 SSID 缩小搜索范围。
+          </p>
+        ) : null}
+
+        {data && currentQ && browseScope.outOfRange ? (
+          <div className="state" role="status">
+            此搜索最多可浏览第 {totalPages} 页，当前链接请求的第 {urlPage} 页超出了范围。
+            <button type="button" className="toolbar-button" onClick={() => goPage(totalPages)}>
+              返回第 {totalPages} 页
+            </button>
+          </div>
+        ) : null}
 
         {currentQ ? (
           <details className="results-tools">
@@ -1080,7 +1100,7 @@ function SearchPage() {
 
         {error ? <div className="state state--error" role="alert">{error}</div> : null}
 
-        {!loading && !error && data && currentQ && data.items.length === 0 ? (
+        {!loading && !error && data && currentQ && data.items.length === 0 && !browseScope.outOfRange ? (
           <div className="state">没有找到匹配“{currentQ}”的图书。</div>
         ) : null}
 

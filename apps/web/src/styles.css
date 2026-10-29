@@ -325,6 +325,13 @@ mark.hl {
   color: var(--color-text);
 }
 
+.results__browse-note {
+  margin: -3px 0 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-text-muted);
+}
+
 .results__bar-right {
   display: inline-flex;
   align-items: center;
