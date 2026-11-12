@@ -493,6 +493,66 @@ describe("handleSearch — non-empty query", () => {
     expect((res.body as any).error.message).toMatch(/搜索失败/);
   });
 
+  it("keeps a promoted exact match unique across pages and returns every catalog ID", async () => {
+    const catalog = Array.from({ length: 55 }, (_, i) => ({
+      id: `page-row-${i}`,
+      // This row is promoted from inside both of the old overlapping windows.
+      title: i === 10 ? "时尚秋冬" : `时尚秋冬图录 ${i}`,
+      author: "测试作者",
+      publisher: "测试出版社",
+      parseStatus: "ok",
+    }));
+    const meili = {
+      search: vi.fn(async (_q: string, opts: { limit: number; offset: number }) => ({
+        estimatedTotalHits: catalog.length,
+        hits: catalog.slice(opts.offset, opts.offset + opts.limit),
+      })),
+    };
+    const seen = new Set<string>();
+    for (let page = 1; page <= Math.ceil(catalog.length / 4); page++) {
+      const req = { query: { q: "时尚秋冬", page: String(page), limit: "4" } } as unknown as Request;
+      const res = mockRes();
+      await handleSearch(req, res, meili, exactSearchImpl, isExactLikeImpl);
+      const items = (res.body as any).items;
+      expect(items).toHaveLength(Math.min(4, catalog.length - (page - 1) * 4));
+      if (page === 1) expect(items[0].id).toBe("page-row-10");
+      for (const item of items) {
+        expect([...seen]).not.toContain(item.id);
+        seen.add(item.id);
+      }
+    }
+    expect([...seen].sort()).toEqual(catalog.map((item) => item.id).sort());
+  });
+
+  it("fills a page spanning the 120-document candidate window boundary", async () => {
+    const catalog = Array.from({ length: 250 }, (_, i) => ({
+      id: `cross-window-${i}`,
+      title: `时尚秋冬图录 ${i}`,
+      author: "测试作者",
+      publisher: "测试出版社",
+      parseStatus: "ok",
+    }));
+    const meili = {
+      search: vi.fn(async (_q: string, opts: { limit: number; offset: number }) => ({
+        estimatedTotalHits: catalog.length,
+        hits: catalog.slice(opts.offset, opts.offset + opts.limit),
+      })),
+    };
+    const getPage = async (page: number) => {
+      const req = { query: { q: "时尚秋冬", page: String(page), limit: "25" } } as unknown as Request;
+      const res = mockRes();
+      await handleSearch(req, res, meili, exactSearchImpl, isExactLikeImpl);
+      return (res.body as any).items as Array<{ id: string }>;
+    };
+    const page4 = await getPage(4);
+    const previousCalls = meili.search.mock.calls.length;
+    const page5 = await getPage(5);
+    expect(page4).toHaveLength(25);
+    expect(page5).toHaveLength(25);
+    expect(new Set([...page4, ...page5].map(x => x.id)).size).toBe(50);
+    expect(meili.search.mock.calls.slice(previousCalls).map(([,opts]) => opts.offset)).toEqual([0, 120]);
+  });
+
   it("page/limit works with the rerank path", async () => {
     const meili = {
       search: vi.fn(async (q: string, opts: any) => ({
@@ -509,8 +569,8 @@ describe("handleSearch — non-empty query", () => {
     const req = { query: { q: "时尚秋冬", page: "2", limit: "5" } } as unknown as Request;
     const res = mockRes();
     await handleSearch(req, res, meili, exactSearchImpl, isExactLikeImpl);
-    // fetchSize = limit*5 capped at 120 → 25 here; offset = (2-1)*5 = 5
-    expect(meili.search).toHaveBeenCalledWith("时尚秋冬", { limit: 25, offset: 5 });
+    // Page 2 uses the same aligned over-fetch window as page 1.
+    expect(meili.search).toHaveBeenCalledWith("时尚秋冬", { limit: 25, offset: 0 });
     expect((res.body as any).page).toBe(2);
     expect((res.body as any).limit).toBe(5);
     expect((res.body as any).items.length).toBeLessThanOrEqual(5);
@@ -790,7 +850,7 @@ describe("handleSearch — S31-B2 query interpretation", () => {
       id: `s31-b2-page-${i}`, title: "围城", author: "钱钟书", parseStatus: "ok",
     }));
     const { meili, body } = await lookup("找钱钟书的《围城》", { page: "2", limit: "5" }, hits);
-    expect(meili.search).toHaveBeenCalledExactlyOnceWith("围城 钱钟书", { limit: 25, offset: 5 });
+    expect(meili.search).toHaveBeenCalledExactlyOnceWith("围城 钱钟书", { limit: 25, offset: 0 });
     expect(body.page).toBe(2);
     expect(body.limit).toBe(5);
     expect(body.items).toHaveLength(5);

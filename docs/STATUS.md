@@ -1,6 +1,14 @@
 # BOOK-ID-SEARCH status
 
-## Current — 2026-10-11 — Book web research candidate
+## Current — 2026-11-12 — Public search pagination candidate
+
+- `task_id=BOOK_SEARCH_PAGINATION_R5`; branch `fix/search-pagination-r5-20261112`, preserving the original local R1 `8c1b0c6` and R4 `6038ebd` commits on deployed PR #74 merge `8c9d3383`.
+- Fixes repeated results across ranked pages, limits navigation to the current 1,000 browseable hits, and distinguishes an out-of-range page from a query with no matches. New queries start at page 1; Back/Forward restores the active query and page.
+- The strengthened API regression reproduces a repeated ID on the deployed old handler. Current native dependency, targeted-test, API/Web-build and desktop/mobile browser evidence is recorded in the PR; the focused checks also join existing CI.
+- Fresh Tencent read-only inspection confirms API/Web still run `8c9d3383` and Meili `pagination.maxTotalHits=1000`. This candidate is not merged or deployed. It requires API + Web, no migration or index-setting change; personal content and the read-only AI sidebar are unchanged.
+- Contract: [Public search pagination](development/BOOK_SEARCH_PAGINATION_R5.md). The dated notes below are historical; PR #74's web research was deployed on 2026-10-11.
+
+## 2026-10-11 — Book web research candidate (subsequently deployed as PR #74)
 
 - `task_id=BOOK_AI_WEB_RESEARCH_V1`; branch `feat/book-web-research`, based on deployed PR #73 merge `9ef09095bf34b6b2eedd6363c7163b26d8996699`.
 - Adds a separate read-only web research scope: actual MiniMax search records, AI selection of up to four source IDs, and original URL/excerpt cards. Public book identity and explicit question only; no personal-content writes or database migration. Free factual synthesis is deferred after two live content reviews found unsupported inferences.

@@ -59,7 +59,7 @@ jobs:
 
   browser-pg16:
     name: Disposable PG16 + Chromium P1-A product journey
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # Playwright 1.55 does not support Ubuntu 26.04.
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
@@ -93,7 +93,7 @@ jobs:
 
   real-binding-pg16:
     name: Real Owner + S32 HTTP → disposable PG16 write acceptance
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # Playwright 1.55 does not support Ubuntu 26.04.
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4

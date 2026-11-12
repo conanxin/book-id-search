@@ -20,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { getBook, getStats, searchBooks, type Book, type BookRelation, type MatchInfo, type SearchResponse, type StatsResponse } from "./api";
+import { getSearchBrowseScope } from "./searchPagination";
 import { EDITION_COMPARE_MAX, EditionComparePanel, toggleEditionCompareSelection } from "./EditionCompare";
 import { detailMatchInfo, isExactMatch, matchBadgeLabel, matchBadgeVariant, parseStatusNarrative, explainParseWarnings } from "./match-ui";
 import AiSearchPanel from "./AiSearchPanel";
@@ -581,7 +582,6 @@ function SearchPage() {
     setParams(nextParams);
   };
   const [input, setInput] = useState(urlQ);
-  const [debouncedQ, setDebouncedQ] = useState(urlQ);
   const [limit, setLimit] = useState(PAGE_SIZE);
   const [data, setData] = useState<SearchResponse | null>(null);
   const [stats, setStats] = useState<StatsResponse | null>(null);
@@ -604,10 +604,9 @@ function SearchPage() {
   const [compareOpen, setCompareOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
-  // currentQ = the query that the latest request was fired with. Used by
-  // results__bar so it always renders against the query that produced `data`,
-  // not whatever is in the input field at the moment.
-  const currentQ = useMemo(() => debouncedQ.trim(), [debouncedQ]);
+  // The URL owns the committed query and page. Input remains a local draft
+  // until submit or the typing debounce commits it.
+  const currentQ = urlQ.trim();
   const researchMemberships = useSearchMemberships(data?.items.map(book => book.id) ?? []);
 
   // Version comparison belongs to the active search query.
@@ -667,23 +666,30 @@ function SearchPage() {
     };
   }, [wereadAuthenticated, authGeneration, data?.items]);
 
-  // Debounce input -> debouncedQ (300ms). URL stays in sync only on submit /
-  // page change so we don't shove half-typed queries into the address bar.
+  // Restore the input on Back/Forward as well as in-app navigation. A search
+  // request must never write its older query back into the editor.
   useEffect(() => {
-    if (input === urlQ) {
-      setDebouncedQ(input);
-      return;
-    }
-    const t = window.setTimeout(() => setDebouncedQ(input), 300);
-    return () => window.clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [input]);
+    setInput(urlQ);
+  }, [urlQ, urlPage]);
 
-  // Trigger search whenever the debounced query or page changes.
+  // A different query starts at page 1, including automatic searches while
+  // typing. Keep one URL entry per debounced query so Back restores it.
   useEffect(() => {
-    const page = Math.max(Number(params.get("page") ?? "1"), 1);
-    setInput(debouncedQ);
-    if (debouncedQ.trim() === "") {
+    const query = input.trim();
+    if (query === currentQ) return;
+    const t = window.setTimeout(() => setParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.set("q", query);
+      next.set("page", "1");
+      return next;
+    }), 300);
+    return () => window.clearTimeout(t);
+  }, [input, currentQ, setParams]);
+
+  // Trigger search for the committed URL state.
+  useEffect(() => {
+    const page = urlPage;
+    if (currentQ === "") {
       setLoading(false);
       setError("");
       setData({ total: 0, page, limit, items: [] });
@@ -692,7 +698,7 @@ function SearchPage() {
     let cancelled = false;
     setLoading(true);
     setError("");
-    searchBooks(debouncedQ, page, limit)
+    searchBooks(currentQ, page, limit)
       .then((result) => {
         if (cancelled) return;
         setData(result);
@@ -707,13 +713,12 @@ function SearchPage() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedQ, params, limit]);
+  }, [currentQ, urlPage, limit]);
 
-  const totalPages = useMemo(() => {
-    if (!data) return 1;
-    return Math.max(Math.ceil(data.total / data.limit), 1);
-  }, [data]);
+  // The API total is Meilisearch estimatedTotalHits, not the number of
+  // navigable results. The current index only serves the first 1,000 hits.
+  const browseScope = getSearchBrowseScope(data?.total ?? 0, data?.limit ?? limit, urlPage);
+  const totalPages = browseScope.totalPages;
 
   const submit = useCallback(
     (event: FormEvent) => {
@@ -723,18 +728,18 @@ function SearchPage() {
       pushRecent(trimmed);
       setRecent(readRecent());
 
-      // Submit is an explicit query commit. Promote the current input
-      // immediately instead of waiting for the 300ms typing debounce;
-      // otherwise a params-triggered search effect can restore the stale
-      // debounced query before the debounce fires.
-      setDebouncedQ(trimmed);
+      setInput(trimmed);
       setParams({ q: trimmed, page: "1" });
     },
     [input, setParams]
   );
 
   const goPage = (nextPage: number) => {
-    setParams({ q: input.trim(), page: String(Math.max(nextPage, 1)) });
+    // Do not generate links to pages that the current Meili index cannot serve.
+    // If the user has started another query, commit it at its first page.
+    const query = input.trim();
+    const page = query === currentQ ? Math.min(Math.max(nextPage, 1), totalPages) : 1;
+    setParams({ q: query, page: String(page) });
   };
 
   const clearInput = () => {
@@ -962,7 +967,9 @@ function SearchPage() {
         <div className="results__bar">
           <span className="results__count">
             {data && currentQ
-              ? `共找到 ${data.total.toLocaleString()} 条结果`
+              ? browseScope.truncated
+                ? `约 ${data.total.toLocaleString()} 条匹配结果（前 ${browseScope.browsableTotal.toLocaleString()} 条可浏览）`
+                : `共找到 ${data.total.toLocaleString()} 条结果`
               : input.trim() === ""
               ? "等待搜索"
               : "准备搜索"}
@@ -981,6 +988,22 @@ function SearchPage() {
             ) : null}
           </div>
         </div>
+
+        {data && currentQ && browseScope.truncated ? (
+          <p className="results__browse-note" role="status">
+            当前最多可浏览前 {browseScope.browsableTotal.toLocaleString()} 条结果。
+            若要找更多书目，请用完整书名、作者或 SSID 缩小搜索范围。
+          </p>
+        ) : null}
+
+        {data && currentQ && browseScope.outOfRange ? (
+          <div className="state" role="status">
+            此搜索最多可浏览第 {totalPages} 页，当前链接请求的第 {urlPage} 页超出了范围。
+            <button type="button" className="toolbar-button" onClick={() => goPage(totalPages)}>
+              返回第 {totalPages} 页
+            </button>
+          </div>
+        ) : null}
 
         {currentQ ? (
           <details className="results-tools">
@@ -1080,7 +1103,7 @@ function SearchPage() {
 
         {error ? <div className="state state--error" role="alert">{error}</div> : null}
 
-        {!loading && !error && data && currentQ && data.items.length === 0 ? (
+        {!loading && !error && data && currentQ && data.items.length === 0 && !browseScope.outOfRange ? (
           <div className="state">没有找到匹配“{currentQ}”的图书。</div>
         ) : null}
 

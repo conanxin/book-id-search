@@ -11,7 +11,8 @@ on:
 
 jobs:
   verification:
-    runs-on: ubuntu-latest
+    # Keep the runner compatible with the pinned Playwright 1.55 browser.
+    runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
