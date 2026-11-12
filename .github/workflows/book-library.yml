@@ -57,6 +57,7 @@ jobs:
       - name: Real PostgreSQL application-role contracts
         run: >-
           pnpm exec vitest run
+          apps/api/src/handle-search.test.ts
           apps/api/src/auth/google-owner-request.test.ts
           apps/api/src/ai/book-assistant.test.ts
           apps/api/src/ai/book-assistant-routes.test.ts
@@ -74,6 +75,7 @@ jobs:
           apps/api/src/weread/manual-bindings.integration.test.ts
           apps/api/src/weread/private-overlay.test.ts
           apps/web/src/library
+          apps/web/src/searchPagination.test.ts
           apps/web/src/api-session.test.ts
           apps/web/src/components/SiteFooter.test.ts
           apps/web/src/p1a-book-detail-route.test.tsx
@@ -100,6 +102,8 @@ jobs:
         env:
           BOOK_LIBRARY_BROWSER_SCOPE: all
         run: pnpm exec playwright test --config playwright.book-library.config.ts
+      - name: Public search pagination on the built Web preview
+        run: pnpm exec playwright test --config playwright.search-pagination.config.ts
       - name: Save browser evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -108,4 +112,5 @@ jobs:
           path: |
             test-results/book-library
             test-results/book-library-report
+            test-results/search-pagination
           if-no-files-found: ignore

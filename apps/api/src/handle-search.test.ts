@@ -493,10 +493,11 @@ describe("handleSearch — non-empty query", () => {
     expect((res.body as any).error.message).toMatch(/搜索失败/);
   });
 
-  it("does not repeat search result IDs across aligned adjacent pages", async () => {
+  it("keeps a promoted exact match unique across pages and returns every catalog ID", async () => {
     const catalog = Array.from({ length: 55 }, (_, i) => ({
       id: `page-row-${i}`,
-      title: `时尚秋冬图录 ${i}`,
+      // This row is promoted from inside both of the old overlapping windows.
+      title: i === 10 ? "时尚秋冬" : `时尚秋冬图录 ${i}`,
       author: "测试作者",
       publisher: "测试出版社",
       parseStatus: "ok",
@@ -508,22 +509,19 @@ describe("handleSearch — non-empty query", () => {
       })),
     };
     const seen = new Set<string>();
-    const offsets: number[] = [];
-    for (let page = 1; page <= 7; page++) {
+    for (let page = 1; page <= Math.ceil(catalog.length / 4); page++) {
       const req = { query: { q: "时尚秋冬", page: String(page), limit: "4" } } as unknown as Request;
       const res = mockRes();
-      const previousCalls = meili.search.mock.calls.length;
       await handleSearch(req, res, meili, exactSearchImpl, isExactLikeImpl);
       const items = (res.body as any).items;
-      expect(items).toHaveLength(4);
+      expect(items).toHaveLength(Math.min(4, catalog.length - (page - 1) * 4));
+      if (page === 1) expect(items[0].id).toBe("page-row-10");
       for (const item of items) {
-        expect(seen.has(item.id)).toBe(false);
+        expect([...seen]).not.toContain(item.id);
         seen.add(item.id);
       }
-      for (const [,opts] of meili.search.mock.calls.slice(previousCalls)) offsets.push(opts.offset);
     }
-    expect(offsets).toEqual([0, 0, 0, 0, 0, 20, 20]);
-    expect(seen.size).toBe(28);
+    expect([...seen].sort()).toEqual(catalog.map((item) => item.id).sort());
   });
 
   it("fills a page spanning the 120-document candidate window boundary", async () => {
