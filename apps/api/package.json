@@ -15,6 +15,7 @@
     "express": "^5.2.1",
     "google-auth-library": "^11.1.0",
     "meilisearch": "^0.52.0",
+    "parse5": "7.3.0",
     "pg": "^8.23.0"
   },
   "devDependencies": {
