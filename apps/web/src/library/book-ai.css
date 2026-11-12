@@ -54,6 +54,11 @@
 .book-web-selected-source .book-web-excerpt { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; line-clamp: 5; overflow: hidden; }
 .book-web-selected-source .book-web-excerpt.is-expanded { display: block; -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }
 .book-web-excerpt-toggle { margin-top: 8px; font-size: 12px; }
+.book-web-source-reader { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--color-border); }
+.book-web-source-reader .book-web-excerpt-label { margin-top: 0; }
+.book-web-source-reader .library-meta { overflow-wrap: anywhere; }
+.book-web-readable-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 8; line-clamp: 8; overflow: hidden; }
+.book-web-readable-text.is-expanded { display: block; -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }
 
 @media (max-width: 1050px) {
   .book-detail-layout { display: block; }

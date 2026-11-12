@@ -29,6 +29,7 @@ import { createBookAssistantService } from "../apps/api/src/ai/book-assistant.js
 import { createBookAssistantRouter } from "../apps/api/src/ai/book-assistant-routes.js";
 import { createBookWebResearchService } from "../apps/api/src/ai/book-web-research.js";
 import { createBookWebResearchRouter } from "../apps/api/src/ai/book-web-research-routes.js";
+import { createBookWebSourceReader } from "../apps/api/src/ai/book-web-source.js";
 import { searchMiniMaxWeb } from "../apps/api/src/ai/minimax-web-search.js";
 import type { ChatMessage, ChatCompletionResponse } from "../apps/api/src/ai/minimax.js";
 import { collectRelatedBooks } from "../apps/api/src/search/related-books.js";
@@ -145,8 +146,22 @@ async function deterministicBookAssistantChat(messages: ChatMessage[]): Promise<
 
 // Research retains production search trace parsing and source-ID selection.
 // Only outbound provider HTTP and the final ID-only response are fixtures.
+// Source reading keeps the production token, extractor and router. Only the
+// public-page transport is replaced; no real source or model is contacted.
+const webSourceReader = createBookWebSourceReader({
+  fetchPage: async (url, { signal }) => {
+    if (signal?.aborted) throw new Error("SYNTHETIC_SOURCE_ABORTED");
+    if (new URL(url).pathname === "/research/ancient-routes") throw new Error("SYNTHETIC_SOURCE_UNAVAILABLE");
+    if (new URL(url).pathname !== "/catalog/research-book") throw new Error("UNEXPECTED_SYNTHETIC_SOURCE");
+    return {
+      finalUrl: `${url}?view=full`, contentType: "text/html", charset: "utf-8",
+      body: Buffer.from(`<html><head><title>合成馆藏正文</title></head><body><nav>不应提取的导航文字</nav><main><h1>已读取的合成馆藏正文</h1><p>这段正文只存在于网页读取响应，不在搜索节选中。</p><p>字面文字 &lt;img src=x&gt; 保持纯文本。</p><p>${"公开网页段落：馆藏记录列出了版本线索，仍需查阅原始出版物。".repeat(1500)}</p></main><script>不应提取的脚本文字</script></body></html>`),
+    };
+  },
+});
 const webResearch = createBookWebResearchService({
   getCatalogDocument, isEnabled: () => true,
+  issueSourceReadToken: webSourceReader.issueToken,
   search: (messages, options) => searchMiniMaxWeb(messages, {
     ...options,
     config: { apiKey: "synthetic-web-search-not-a-real-key", model: "synthetic-web-search", wireApi: "anthropic", baseUrl: "https://provider.invalid/anthropic" },
@@ -190,7 +205,7 @@ app.use("/api/auth", createAuthRouter({ config: google }));
 app.use("/api/private", privateMiddleware);
 app.use("/api/books", privateMiddleware);
 app.use("/api/ai", privateMiddleware);
-app.use("/api/ai/books/:bookId/research", createBookWebResearchRouter({ service: webResearch, requestAuthorizer: authorize }));
+app.use("/api/ai/books/:bookId/research", createBookWebResearchRouter({ service: webResearch, sourceReader: webSourceReader, requestAuthorizer: authorize }));
 app.use("/api/ai/books", createBookAssistantRouter({ service: bookAssistant, requestAuthorizer: authorize }));
 app.use("/api/private/weread/bindings", createWereadBindingsRouter({ service: wereadBindings, requestAuthorizer: authorize }));
 if (config) app.use("/api/private/s32/library", createBookLibraryBodyParser(config, authorize));

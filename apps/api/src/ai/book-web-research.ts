@@ -11,6 +11,7 @@ export interface BookWebResearchSource {
   excerpt: string;
   pageAge: string | null;
   truncated: boolean;
+  readToken?: string;
 }
 export interface BookWebResearchResponse {
   bookId: string;
@@ -179,6 +180,7 @@ export function createBookWebResearchService(deps: {
   search?: typeof searchMiniMaxWeb;
   provider?: typeof chatCompletion;
   now?: () => Date;
+  issueSourceReadToken?: (bookId: string, source: Pick<BookWebResearchSource, "id" | "title" | "url">) => string | undefined;
 }) {
   const reader = createMeiliCatalogBookReader(deps.getCatalogDocument);
   return {
@@ -206,6 +208,10 @@ export function createBookWebResearchService(deps: {
       checkCancelled(signal);
       if (!searched?.ok) throw searched?.status === 503 ? unavailable() : searchFailed();
       const search = searchEvidence(searched), sources = snapshotSources(searched.results);
+      if (deps.issueSourceReadToken) for (const source of sources) {
+        const token = deps.issueSourceReadToken(input.bookId, source);
+        if (token) source.readToken = token;
+      }
       const base = { ...input, mode: "source_excerpts" as const, sources, search };
       const completedAt = () => (deps.now ?? (() => new Date()))().toISOString();
       const insufficient = (): BookWebResearchResponse => ({ ...base, source: "insufficient_sources",

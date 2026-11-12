@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Copy, ExternalLink, Globe } from "lucide-react";
 import { useLibraryScope } from "./useLibraryScope";
+import { BookWebSourceReader } from "./BookWebSourceReader";
 import {
   assertBookWebResearchResponse, BOOK_WEB_RESEARCH_EXCERPTS_NOTICE,
   bookWebResearchContent, bookWebResearchErrorMessage, generateBookWebResearch, isBookWebResearchAbort,
@@ -13,7 +14,7 @@ const EXAMPLES = [
   { label: "延伸阅读", question: "查找介绍相关图书或延伸阅读书目的网页资料。" },
 ];
 
-function SelectedSourceExcerpt({ source }: { source: BookWebResearchSource }) {
+function SelectedSourceExcerpt({ source, bookId, generation }: { source: BookWebResearchSource; bookId: string; generation: number }) {
   const [expanded, setExpanded] = useState(false);
   const excerptId = useId();
   return <li className="book-ai-source book-web-selected-source" data-web-excerpt-source-id={source.id}>
@@ -29,6 +30,7 @@ function SelectedSourceExcerpt({ source }: { source: BookWebResearchSource }) {
     <button type="button" className="library-text-button book-web-excerpt-toggle" aria-expanded={expanded} aria-controls={excerptId}
       onClick={() => setExpanded(value => !value)}>{expanded ? "收起搜索节选" : "展开完整搜索节选"}</button>
     {source.truncated && <p className="library-meta">本条搜索节选已截短，可打开网页进一步核对。</p>}
+    <BookWebSourceReader bookId={bookId} generation={generation} source={source} />
   </li>;
 }
 
@@ -37,6 +39,7 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
   const { run, current } = useLibraryScope(generation);
   const [question, setQuestion] = useState("");
   const [response, setResponse] = useState<BookWebResearchResponse | null>(null);
+  const [resultRevision, setResultRevision] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copying, setCopying] = useState(false);
@@ -67,6 +70,7 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
   }, [sourcesOpen, activeSource]);
 
   function clearResult() {
+    setResultRevision(value => value + 1);
     setResponse(null); setCopying(false); setCopyFallback(null); setMessage("");
     setSourcesOpen(false); setActiveSource(null);
   }
@@ -123,12 +127,12 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
   }
 
   return <div ref={taskRoot} className="book-ai-task book-web-research" aria-busy={loading}>
-    <p className="book-ai-mode-description">真实搜索网页，由 AI 挑选相关资料，保留来源的原文节选供你阅读。</p>
+    <p className="book-ai-mode-description">真实搜索网页，由 AI 挑选相关资料。先看搜索节选，再按需读取网页文字。</p>
     <details className="book-ai-scope">
       <summary>联网研究会使用哪些资料？</summary>
       <div className="book-ai-limits" aria-label="联网研究资料范围">
         使用公开的书目信息和你输入的问题搜索网页，AI 从搜索结果中挑选相关资料，页面直接展示来源节选。不会读取你的补充介绍、笔记或微信读书记录。
-        <br />搜索节选不等于网页全文，也不代表已读过电子书。原文中的事实和版本信息仍需打开来源核对。
+        <br />搜索节选不等于网页全文。点击“读取网页正文”后，会单独获取该公开网页并自动提取可读文字；提取可能不完整，也不代表已读过电子书。原文中的事实和版本信息仍需打开来源核对。
       </div>
     </details>
     <form aria-label="联网查资料" onSubmit={event => void research(event)}>
@@ -150,7 +154,7 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
     </form>
     {loading && <p className="library-status" role="status">正在查找网页并挑选相关资料，请稍候。</p>}
     {error && <p className="library-error" role="alert">{error}</p>}
-    {response && <div className="book-ai-result">
+    {response && <div key={resultRevision} className="book-ai-result">
       <div className="book-ai-result-heading">
         <h3 ref={resultHeading} tabIndex={-1}>{response.source === "web_research" ? response.draft.title : "本次搜索资料不足"}</h3>
         <span className="library-tag">{response.source === "web_research" ? "请核对网页来源" : "资料不足"}</span>
@@ -164,7 +168,7 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
         <div role="region" aria-label="联网研究结果">
           <p className="book-web-selection-notice">{BOOK_WEB_RESEARCH_EXCERPTS_NOTICE}</p>
           <ol className="book-ai-source-list">
-            {response.citedSourceIds.map(id => <SelectedSourceExcerpt key={id} source={response.sources.find(source => source.id === id)!} />)}
+            {response.citedSourceIds.map(id => <SelectedSourceExcerpt key={id} bookId={bookId} generation={generation} source={response.sources.find(source => source.id === id)!} />)}
           </ol>
         </div>
         <div className="book-ai-citations" aria-label="AI 选中的网页资料">
@@ -195,6 +199,7 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
             <p className="book-web-excerpt-label">搜索结果节选</p>
             <blockquote>{source.excerpt}</blockquote>
             {source.truncated && <p className="library-meta">本条搜索节选已截短，可打开网页进一步核对。</p>}
+            {!response.citedSourceIds.includes(source.id) && <BookWebSourceReader bookId={bookId} generation={generation} source={source} />}
           </li>)}
         </ol>
       </details>}

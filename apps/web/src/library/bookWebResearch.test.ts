@@ -53,6 +53,13 @@ describe("book web research client", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("accepts optional source read tokens without adding them to the copied search snapshot", async () => {
+    const value = result(); value.sources[0].readToken = "A".repeat(32);
+    fetchMock.mockResolvedValue(json(value));
+    expect(await generateBookWebResearch(A, { question: QUESTION })).toEqual(value);
+    expect(bookWebResearchContent(value)).not.toContain(value.sources[0].readToken);
+  });
+
   it.each([
     { question: "" }, { question: " " }, { question: "字".repeat(1001) },
     { question: "bad\ud800" }, { question: "bad\0" },
@@ -89,6 +96,7 @@ describe("book web research client", () => {
     ["duplicate source IDs", (r: BookWebResearchResponse) => { r.sources[1].id = "W1"; }],
     ["duplicate source URLs", (r: BookWebResearchResponse) => { r.sources[1].url = r.sources[0].url; }],
     ["empty excerpt", (r: BookWebResearchResponse) => { r.sources[0].excerpt = ""; }],
+    ["malformed source read token", (r: BookWebResearchResponse) => { r.sources[0].readToken = "not-a-source-token"; }],
     ["too much source material", (r: BookWebResearchResponse) => { r.sources = Array.from({ length: 9 }, (_, i) => ({ ...r.sources[0], id: `W${i + 1}`, url: `https://example.test/${i}`, excerpt: "x".repeat(3000) })); }],
     ["insufficient response claiming citations", (r: BookWebResearchResponse) => { r.source = "insufficient_sources"; }],
     ["invalid timestamp", (r: BookWebResearchResponse) => { r.generatedAt = "yesterday"; }],

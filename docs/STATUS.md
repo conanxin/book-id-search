@@ -1,11 +1,19 @@
 # BOOK-ID-SEARCH status
 
-## Current — 2026-11-12 — Public search pagination candidate
+## Current — 2026-11-12 — Read public webpage text in the AI sidebar
+
+- `task_id=BOOK_AI_WEB_SOURCE_READER_V1`; branch `feat/book-web-source-reader`, based on PR #78 merge `6c04c95bdf478b9bae38a2a437039190ff43acd5`.
+- A source card can now read a selected public webpage on demand, show extracted text with its URL/time/truncation state, and copy it separately from the original search excerpts. Reading does not call a model or write personal introductions, notes or resources.
+- Reuses Google Owner/CSRF and current proxy configuration; bounded source tokens and public-address connections keep requests tied to the chosen search source. API + Web change, one existing locked parser dependency, no migration or new service/key.
+- Targeted API/UI and real-browser evidence belongs in the new PR. This candidate is not merged or deployed; the separately authorized pagination release is tracked in PR #78.
+- Contract: [Webpage source reader](development/BOOK_AI_WEB_SOURCE_READER_V1.md). The dated entries below describe their original development stage.
+
+## 2026-11-12 — Public search pagination (merged as PR #78)
 
 - `task_id=BOOK_SEARCH_PAGINATION_R5`; branch `fix/search-pagination-r5-20261112`, preserving the original local R1 `8c1b0c6` and R4 `6038ebd` commits on deployed PR #74 merge `8c9d3383`.
 - Fixes repeated results across ranked pages, limits navigation to the current 1,000 browseable hits, and distinguishes an out-of-range page from a query with no matches. New queries start at page 1; Back/Forward restores the active query and page.
 - The strengthened API regression reproduces a repeated ID on the deployed old handler. Current native dependency, targeted-test, API/Web-build and desktop/mobile browser evidence is recorded in the PR; the focused checks also join existing CI.
-- Fresh Tencent read-only inspection confirms API/Web still run `8c9d3383` and Meili `pagination.maxTotalHits=1000`. This candidate is not merged or deployed. It requires API + Web, no migration or index-setting change; personal content and the read-only AI sidebar are unchanged.
+- Candidate-time Tencent inspection found API/Web `8c9d3383` and Meili `pagination.maxTotalHits=1000`. PR #78 was subsequently approved and merged as `6c04c95`; the fresh deployment receipt is maintained in PR #78. It requires API + Web, no migration or index-setting change; personal content and the read-only AI sidebar are unchanged.
 - Contract: [Public search pagination](development/BOOK_SEARCH_PAGINATION_R5.md). The dated notes below are historical; PR #74's web research was deployed on 2026-10-11.
 
 ## 2026-10-11 — Book web research candidate (subsequently deployed as PR #74)

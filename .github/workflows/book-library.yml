@@ -34,7 +34,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          # Match the API release image, including pinned-socket HTTP/TLS behavior.
+          node-version: 22
       - name: Install frozen workspace dependencies
         run: |
           corepack enable
@@ -66,6 +67,9 @@ jobs:
           apps/api/src/ai/minimax-web-search.test.ts
           apps/api/src/ai/book-web-research.test.ts
           apps/api/src/ai/book-web-research-routes.test.ts
+          apps/api/src/ai/book-web-source.test.ts
+          apps/api/src/ai/book-web-source-routes.test.ts
+          apps/api/src/ai/web-source-fetch.test.ts
           apps/api/src/search/related-books.test.ts
           apps/api/src/s32/domain/book-library.test.ts
           apps/api/src/s32/application/book-library.test.ts

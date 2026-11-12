@@ -1,5 +1,6 @@
 /** Real browser/HTTP/Google session/PG; deterministic provider HTTP, no live model. */
 import { createRequire } from "node:module";
+import { writeFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import { issueWebSession } from "../apps/api/src/auth/web-session.js";
 import type { BookWebResearchResponse } from "../apps/api/src/ai/book-web-research.js";
@@ -16,6 +17,7 @@ const apiRequire = createRequire(new URL("../apps/api/package.json", import.meta
 const { Pool } = apiRequire("pg");
 const workspacePath = `/api/private/s32/library/books/${A}`;
 const researchPath = `/api/ai/books/${A}/research`;
+const sourcePath = `${researchPath}/source`;
 
 async function persisted() {
   const pool = new Pool({ connectionString: process.env.S32_LIBRARY_TEST_DATABASE_URL });
@@ -23,7 +25,7 @@ async function persisted() {
   finally { await pool.end(); }
 }
 
-test("web research exposes actual search trace and external excerpts while preserving personal content on desktop and mobile", async ({ page, context }, testInfo) => {
+test("web research and explicit webpage reading preserve personal content on desktop and mobile", async ({ page, context }, testInfo) => {
   const { token } = issueWebSession({ sub: "book-library-test-owner", name: "合成验证账号", email: "library-test@example.test" }, {
     secret: "book-library-synthetic-session-secret-for-local-ci-only",
   });
@@ -35,12 +37,13 @@ test("web research exposes actual search trace and external excerpts while prese
   expect((await page.request.put(workspacePath, { headers, data: { introduction: INTRO, baseVersion: 0 } })).ok()).toBe(true);
   expect((await page.request.post(`${workspacePath}/notes`, { headers, data: { title: "私人阅读笔记", content: NOTE } })).ok()).toBe(true);
   const before = await persisted();
-  const writes: string[] = [], pageErrors: string[] = [], sourcePageReads: string[] = [];
+  const writes: string[] = [], pageErrors: string[] = [], sourcePageReads: string[] = [], readerRequests: unknown[] = [];
   page.on("pageerror", error => pageErrors.push(error.message));
   page.on("request", request => {
     const url = new URL(request.url());
     if (url.pathname.startsWith("/api/private/s32/library/") && ["POST", "PUT", "PATCH", "DELETE"].includes(request.method())) writes.push(`${request.method()} ${url.pathname}`);
     if (url.hostname === "example.org") sourcePageReads.push(request.url());
+    if (url.pathname === sourcePath && request.method() === "POST") readerRequests.push(request.postDataJSON());
   });
   await page.goto(`/books/${A}`);
   await expect(page.getByRole("heading", { name: TITLE, exact: true })).toBeVisible();
@@ -75,7 +78,7 @@ test("web research exposes actual search trace and external excerpts while prese
     for (const source of value.sources) {
       expect(value.citedSourceIds).toContain(source.id);
       expect(value.draft.content).toContain(`[${source.id}]`);
-      const excerpt = resultRegion.locator(`[data-web-excerpt-source-id="${source.id}"] blockquote`);
+      const excerpt = resultRegion.locator(`[data-web-excerpt-source-id="${source.id}"] > blockquote.book-web-excerpt`);
       expect(await excerpt.textContent()).toBe(source.excerpt);
       await pane.getByRole("button", { name: `查看网页依据 ${source.id}`, exact: true }).click();
       const row = pane.locator(`[data-web-source-id="${source.id}"]`);
@@ -88,6 +91,7 @@ test("web research exposes actual search trace and external excerpts while prese
   }
 
   const result = await research();
+  expect(readerRequests).toEqual([]);
   await pane.getByRole("button", { name: "复制结果与来源", exact: true }).click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain(result.generatedAt);
   const copied = await page.evaluate(() => navigator.clipboard.readText());
@@ -99,12 +103,61 @@ test("web research exposes actual search trace and external excerpts while prese
   expect(copied).toContain("1935年初版");
   expect(copied).toContain("最早于1937年出版");
   expect(copied).not.toContain("1937年再版");
+
+  async function readFirstSource(value: BookWebResearchResponse) {
+    const source = value.sources[0];
+    expect(source.readToken).toEqual(expect.any(String));
+    const pending = page.waitForResponse(response => new URL(response.url()).pathname === sourcePath && response.request().method() === "POST");
+    await pane.getByRole("button", { name: `读取网页正文 ${source.id}`, exact: true }).click();
+    const response = await pending;
+    expect(response.ok()).toBe(true);
+    expect(response.request().postDataJSON()).toEqual({ sourceToken: source.readToken });
+    const body = await response.json();
+    expect(body).toMatchObject({ bookId: A, sourceId: source.id, requestedUrl: source.url,
+      finalUrl: `${source.url}?view=full`, extraction: "html_readable_text", truncated: true });
+    expect(body.text).toContain("这段正文只存在于网页读取响应，不在搜索节选中。");
+    expect(body.text).toContain("字面文字 <img src=x> 保持纯文本。");
+    expect(body.text).not.toContain("不应提取");
+    const reader = pane.getByRole("region", { name: `网页可读文字 ${source.id}`, exact: true });
+    await expect(reader).toBeVisible();
+    expect(await reader.locator("blockquote").textContent()).toBe(body.text);
+    await expect(reader).toContainText("本次提取已截短");
+    await expect(reader.locator("img")).toHaveCount(0);
+    await expect(reader.getByRole("link", { name: `查看已读取网页 ${source.id}`, exact: true })).toHaveAttribute("href", body.finalUrl);
+    await reader.getByRole("button", { name: `展开网页文字 ${source.id}`, exact: true }).click();
+    await expect(reader.getByRole("button", { name: `收起网页文字 ${source.id}`, exact: true })).toHaveAttribute("aria-expanded", "true");
+    await reader.getByRole("button", { name: `收起网页文字 ${source.id}`, exact: true }).click();
+    await reader.getByRole("button", { name: `复制网页文字与来源 ${source.id}`, exact: true }).click();
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain(body.text);
+    const bodyCopy = await page.evaluate(() => navigator.clipboard.readText());
+    for (const provenance of [source.url, body.finalUrl, body.fetchedAt, `[${source.id}]`]) expect(bodyCopy).toContain(provenance);
+    await pane.getByRole("button", { name: "复制结果与来源", exact: true }).click();
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(copied.replace(result.generatedAt, value.generatedAt));
+    return body;
+  }
+  const readBody = await readFirstSource(result);
+  const second = result.sources[1];
+  const failed = page.waitForResponse(response => new URL(response.url()).pathname === sourcePath && response.request().method() === "POST");
+  await pane.getByRole("button", { name: `读取网页正文 ${second.id}`, exact: true }).click();
+  const failureResponse = await failed;
+  expect(failureResponse.status()).toBe(502);
+  expect((await failureResponse.json()).error.code).toBe("BOOK_SOURCE_UNAVAILABLE");
+  await expect(pane.locator(`[data-web-reader-source-id="${second.id}"]`)).toContainText("未提取网页文字，搜索节选仍保留");
+  await expect(pane.locator(`[data-web-excerpt-source-id="${second.id}"] > blockquote.book-web-excerpt`)).toHaveText(second.excerpt);
   await expect(introEditor).toHaveValue(pendingIntro);
   await expect(noteEditor).toHaveValue(pendingNote);
   expect(await persisted()).toEqual(before);
   expect(writes).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  expect(await pane.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+  await pane.getByRole("region", { name: "网页可读文字 W1", exact: true }).getByText("网页可读文字（自动提取）", { exact: true }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath("web-research-desktop.png"), fullPage: true });
+
+  // A new search can reuse W1, but must never reuse the previous page text/token.
+  const refreshed = await research();
+  expect(refreshed.sources[0].readToken).not.toBe(result.sources[0].readToken);
+  await expect(pane.getByRole("region", { name: "网页可读文字 W1", exact: true })).toHaveCount(0);
+  expect(readerRequests).toHaveLength(2);
 
   await pane.getByRole("button", { name: "清除结果", exact: true }).click();
   await expect(pane.getByRole("region", { name: "联网研究结果", exact: true })).toHaveCount(0);
@@ -112,20 +165,30 @@ test("web research exposes actual search trace and external excerpts while prese
   await expect(pane.getByRole("button", { name: "生成参考介绍", exact: true })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "打开 AI 助手", exact: true }).click();
-  await research();
+  const mobileResult = await research();
+  await readFirstSource(mobileResult);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  expect(await pane.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+  await pane.getByRole("region", { name: "网页可读文字 W1", exact: true }).getByText("网页可读文字（自动提取）", { exact: true }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath("web-research-mobile.png"), fullPage: true });
   await page.getByRole("button", { name: "关闭 AI 助手", exact: true }).click();
   await expect(introEditor).toHaveValue(pendingIntro);
   await expect(noteEditor).toHaveValue(pendingNote);
   expect(await persisted()).toEqual(before);
   expect(writes).toEqual([]); expect(pageErrors).toEqual([]); expect(sourcePageReads).toEqual([]);
-  await testInfo.attach("web-research-evidence.json", { contentType: "application/json", body: JSON.stringify({
-    task_id: "BOOK_AI_WEB_RESEARCH_V1", provider: "INJECTED_HTTP_AND_ID_SELECTION_NO_LIVE_MODEL",
+  expect(readerRequests).toHaveLength(3);
+  const evidence = {
+    task_id: "BOOK_AI_WEB_SOURCE_READER_V1", provider: "INJECTED_HTTP_AND_ID_SELECTION_NO_LIVE_MODEL",
     output_mode: "source_excerpts", excerpt_text: "EXACT_SERVER_SNAPSHOTS", version_conflict: "PRESERVED_WITHOUT_INVENTED_EDITION_SEQUENCE",
     search_trace: "REAL_PRODUCTION_ADAPTER_PARSED_SYNTHETIC_TOOL_RESULTS", auth: "SIGNED_SYNTHETIC_OWNER_AND_REAL_CSRF",
     library_writes: writes.length, persistence: "REAL_POSTGRESQL_UNCHANGED", unsaved_editors: "PRESERVED",
     desktop_width: 1440, mobile_width: 390, page_errors: pageErrors, source_pages_fetched: sourcePageReads.length,
+    reader: { requests: readerRequests.length, transport: "INJECTED_PUBLIC_HTML_NO_NETWORK", extractor: "PRODUCTION",
+      explicit_only: true, text_characters: readBody.text.length, truncated: readBody.truncated,
+      failed_source_retains_excerpt: true, refreshed_result_clears_body: true, separate_provenance_copy: true },
     real_google_oauth: "NOT_EXERCISED", real_minimax: "NOT_EXERCISED",
-  }, null, 2) });
+  };
+  const evidencePath = testInfo.outputPath("web-research-evidence.json");
+  writeFileSync(evidencePath, JSON.stringify(evidence, null, 2));
+  await testInfo.attach("web-research-evidence.json", { contentType: "application/json", path: evidencePath });
 });

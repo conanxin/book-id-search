@@ -8,6 +8,7 @@ export interface BookWebResearchSource {
   excerpt: string;
   pageAge: string | null;
   truncated: boolean;
+  readToken?: string;
 }
 export interface BookWebResearchResponse {
   bookId: string;
@@ -71,7 +72,8 @@ function webUrl(value: unknown): string | null {
 function validSource(value: unknown, index: number): value is BookWebResearchSource {
   return record(value) && value.id === `W${index + 1}` && value.kind === "web"
     && text(value.title, 300) && webUrl(value.url) !== null && text(value.excerpt, 3000)
-    && (value.pageAge === null || text(value.pageAge, 100)) && typeof value.truncated === "boolean";
+    && (value.pageAge === null || text(value.pageAge, 100)) && typeof value.truncated === "boolean"
+    && (value.readToken === undefined || (typeof value.readToken === "string" && /^[A-Za-z0-9_-]{32}$/.test(value.readToken)));
 }
 function validResponse(value: unknown, bookId: string, question: string): value is BookWebResearchResponse {
   if (!record(value) || value.bookId !== bookId || value.question !== question || !record(value.draft)
