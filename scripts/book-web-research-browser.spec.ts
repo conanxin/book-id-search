@@ -511,12 +511,15 @@ test("multi-source original passages preserve distinct wording, selection scope 
 
 const recoveryFixtureKey = "recovery-" + fixtureKey;
 const recoveryCatalogIds = getBookBrowserCatalogIds(recoveryFixtureKey);
+const unselectedRecoveryId = getBookBrowserCatalogIds("unselected-" + fixtureKey).A;
 const recoveryCases = [
   { kind: "limited", bookId: recoveryCatalogIds.A, title: "联网研究上限验证 " + recoveryFixtureKey },
   { kind: "retry", bookId: recoveryCatalogIds.B, title: "联网研究重试验证 " + recoveryFixtureKey },
+  { kind: "unselected", bookId: unselectedRecoveryId, title: "联网研究未挑选验证 " + recoveryFixtureKey },
 ] as const;
 const LIMITED_NOTICE = "本次搜索已达到上限，已保留返回的资料。可以调整问题后再查。";
 const SEARCH_FAILURE_NOTICE = "本次网页搜索未完成，请稍后重试。";
+const UNSELECTED_NOTICE = "已完成网页搜索，但本次自动挑选未完成。下方保留搜索返回的资料，可以打开原链接核对或读取网页正文。";
 type RecoveryCounters = { searchRequests: number; selectionCalls: number; readerCalls: number };
 
 for (const scenario of recoveryCases) {
@@ -603,43 +606,90 @@ for (const scenario of recoveryCases) {
 
     expect(response.status()).toBe(200);
     const value = await response.json() as BookWebResearchResponse;
-    const limited = scenario.kind === "limited";
-    expect(value).toMatchObject({ bookId: scenario.bookId, question, mode: "source_excerpts", source: "web_research" });
+    const limited = scenario.kind === "limited", unselected = scenario.kind === "unselected";
+    expect(value).toMatchObject({ bookId: scenario.bookId, question, mode: "source_excerpts", source: unselected ? "unselected_sources" : "web_research" });
     const expectedQueries = limited
       ? Array.from({ length: 10 }, (_, index) => scenario.title + " " + question + " · 已完成检索 " + (index + 1))
       : [scenario.title + " " + question];
     expect(value.search).toEqual({ performed: true, calls: limited ? 10 : 1, queries: expectedQueries, ...(limited ? { limited: true } : {}) });
-    expect(value.sources).toHaveLength(limited ? 10 : 2);
-    expect(value.citedSourceIds).toEqual(limited ? ["W1", "W2", "W3", "W4"] : ["W1", "W2"]);
+    expect(value.sources).toHaveLength(limited ? 10 : unselected ? 6 : 2);
+    expect(value.citedSourceIds).toEqual(unselected ? [] : limited ? ["W1", "W2", "W3", "W4"] : ["W1", "W2"]);
     for (const forbidden of [INTRO, NOTE, pendingIntro, pendingNote, "待执行检索", "SYNTHETIC_RECOVERY_PROVIDER_DETAIL", "这段生成文字不是来源"]) {
       expect(JSON.stringify(value)).not.toContain(forbidden);
     }
-    const resultRegion = pane.getByRole("region", { name: "联网研究结果", exact: true });
+    const resultRegion = pane.getByRole("region", { name: unselected ? "待核对的网页资料" : "联网研究结果", exact: true });
     await expect(resultRegion).toBeVisible();
     await expect(pane.getByText(SEARCH_FAILURE_NOTICE, { exact: true })).toHaveCount(0);
     if (limited) await expect(pane.getByText(LIMITED_NOTICE, { exact: true })).toBeVisible();
     else await expect(pane.getByText(LIMITED_NOTICE, { exact: true })).toHaveCount(0);
-    for (const id of value.citedSourceIds) {
-      const source = value.sources.find(item => item.id === id)!;
-      const card = resultRegion.locator('[data-web-excerpt-source-id="' + id + '"]');
+    if (unselected) {
+      expect(value.draft).toMatchObject({ title: "待核对的网页资料", content: UNSELECTED_NOTICE });
+      await expect(pane.getByRole("heading", { name: "待核对的网页资料", exact: true })).toBeVisible();
+      await expect(pane.getByText("未自动挑选", { exact: true })).toBeVisible();
+      await expect(pane.getByText(UNSELECTED_NOTICE, { exact: true })).toBeVisible();
+      await expect(pane.getByText("资料不足", { exact: true })).toHaveCount(0);
+      await expect(pane.getByText("已选中", { exact: true })).toHaveCount(0);
+      await expect(pane.locator("[data-web-excerpt-source-id]")).toHaveCount(0);
+      await expect(resultRegion.locator("[data-web-source-id]")).toHaveCount(6);
+    }
+    const displayedSources = unselected ? value.sources : value.citedSourceIds.map(id => value.sources.find(item => item.id === id)!);
+    for (const source of displayedSources) {
+      const attribute = unselected ? "data-web-source-id" : "data-web-excerpt-source-id";
+      const card = resultRegion.locator("[" + attribute + '="' + source.id + '"]');
       await expect(card).toBeVisible();
-      expect(await card.locator("blockquote.book-web-excerpt").textContent()).toBe(source.excerpt);
+      expect(await card.locator("blockquote").first().textContent()).toBe(source.excerpt);
+      if (unselected) {
+        await expect(card.getByRole("link", { name: "[" + source.id + "] " + source.title, exact: true })).toHaveAttribute("href", source.url);
+        await expect(card.getByRole("button", { name: "读取网页正文 " + source.id, exact: true })).toBeVisible();
+        await expect(card.getByRole("button", { name: "读取网页正文 " + source.id, exact: true })).toBeEnabled();
+        expect(source.readToken).toEqual(expect.any(String));
+      }
     }
     await pane.getByRole("button", { name: "复制结果与来源", exact: true }).click();
     await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain(question);
     const copied = await page.evaluate(() => navigator.clipboard.readText());
     if (limited) expect(copied).toContain(LIMITED_NOTICE);
+    if (unselected) {
+      expect(copied).toContain(UNSELECTED_NOTICE);
+      for (const source of value.sources) {
+        expect(copied).toContain(source.title);
+        expect(copied).toContain(source.url);
+        expect(copied).toContain(source.excerpt);
+      }
+      await expect(pane.getByText("已复制待核对的网页资料与出处。", { exact: true })).toBeVisible();
+    }
     for (const forbidden of [INTRO, NOTE, pendingIntro, pendingNote, "待执行检索", ...value.sources.map(source => source.readToken!)]) {
       expect(copied).not.toContain(forbidden);
     }
     await expect(questionInput).toHaveValue(question);
     await expect(introEditor).toHaveValue(pendingIntro);
     await expect(noteEditor).toHaveValue(pendingNote);
-    const expectedRequests = limited ? 1 : 2;
-    const finalCounters = await counters();
-    expect(finalCounters).toEqual({ searchRequests: expectedRequests, selectionCalls: 1, readerCalls: 0 });
-    expect(researchRequests).toEqual(Array.from({ length: expectedRequests }, () => ({ question })));
+    const expectedRequests = scenario.kind === "retry" ? 2 : 1;
+    expect(await counters()).toEqual({ searchRequests: expectedRequests, selectionCalls: 1, readerCalls: 0 });
     expect(otherResearchRequests).toEqual([]);
+    if (unselected) {
+      // Reading is a separate, explicit action after all unselected sources are retained.
+      const source = value.sources[0];
+      const readUrl = researchUrl + "/source";
+      const pending = page.waitForResponse(item => new URL(item.url()).pathname === readUrl && item.request().method() === "POST");
+      await resultRegion.getByRole("button", { name: "读取网页正文 " + source.id, exact: true }).click();
+      const readResponse = await pending;
+      expect(readResponse.status()).toBe(200);
+      expect(readResponse.request().postDataJSON()).toEqual({ sourceToken: source.readToken });
+      const read = await readResponse.json() as BookWebSourceResponse;
+      expect(read).toMatchObject({ bookId: scenario.bookId, sourceId: source.id, requestedUrl: source.url });
+      expect(read.text).toContain("这是未自动挑选资料的合成网页正文，只在用户显式读取后展示。");
+      const readRegion = resultRegion.getByRole("region", { name: "网页可读文字 " + source.id, exact: true });
+      await expect(readRegion).toBeVisible();
+      expect(await readRegion.locator(".book-web-page-text").textContent()).toBe(read.text);
+      await expect(questionInput).toHaveValue(question);
+      await expect(introEditor).toHaveValue(pendingIntro);
+      await expect(noteEditor).toHaveValue(pendingNote);
+    }
+    const finalCounters = await counters();
+    expect(finalCounters).toEqual({ searchRequests: expectedRequests, selectionCalls: 1, readerCalls: unselected ? 1 : 0 });
+    expect(researchRequests).toEqual(Array.from({ length: expectedRequests }, () => ({ question })));
+    expect(otherResearchRequests).toEqual(unselected ? [researchUrl + "/source"] : []);
     expect(await persisted(scenario.bookId)).toEqual(before);
     expect(writes).toEqual([]);
     expect(sourcePageRequests).toEqual([]);
@@ -647,11 +697,12 @@ for (const scenario of recoveryCases) {
     await resultRegion.scrollIntoViewIfNeeded();
     await page.screenshot({ path: testInfo.outputPath("web-research-" + scenario.kind + "-success.png"), fullPage: true });
     const evidence = {
-      task_id: "BOOK_WEB_RESEARCH_RECOVERY_V1", scenario: scenario.kind,
+      task_id: "BOOK_AI_WEB_RESEARCH_RECOVERY_V1", scenario: scenario.kind,
       transport: "REAL_APP_HTTP_CSRF_AND_PRODUCTION_SEARCH_ADAPTER_SERVICE",
       provider: "INJECTED_HTTP_AND_IDS_ONLY_NO_LIVE_MODEL", question_example: "内容与背景", question_preserved: true,
       server_search_calls: value.search.calls, completed_queries: value.search.queries.length,
       returned_sources: value.sources.length, limited_notice: limited, pending_search_calls_excluded: limited ? 2 : 0,
+      source: value.source, unselected_sources_retained: unselected, displayed_source_cards: displayedSources.length,
       failed_request_counts: failureCounters, final_counts: finalCounters, explicit_http_requests: researchRequests.length,
       automatic_continuation_or_retry: "NONE_OBSERVED", reader_http_requests: otherResearchRequests.length,
       personal_writes: writes.length, persistence: "REAL_POSTGRESQL_UNCHANGED", unsaved_editors: "PRESERVED",

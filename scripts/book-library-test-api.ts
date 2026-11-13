@@ -68,6 +68,7 @@ const comparisonKey = getBookWebSourceComparisonBrowserFixtureKey(fixtureKey);
 const comparisonIds = getBookBrowserCatalogIds(comparisonKey);
 const recoveryKey = "recovery-" + webResearchKey;
 const recoveryIds = getBookBrowserCatalogIds(recoveryKey);
+const unselectedRecoveryId = getBookBrowserCatalogIds("unselected-" + webResearchKey).A;
 const makeBook = (id: string, title: string): CatalogBookSnapshot => ({
   id, ssid: id.split("_")[0], dxid: id.split("_")[1],
   title, author: "合成测试作者", publisher: "合成测试出版社",
@@ -78,18 +79,20 @@ const libraryBooks = [makeBook(catalogIds.A, `古道阅读验证甲 ${fixtureKey
 const aiBooks = [makeBook(aiCatalogIds.A, `AI 阅读验证甲 ${aiFixtureKey}`), makeBook(aiCatalogIds.B, `AI 阅读验证乙 ${aiFixtureKey}`)];
 const webResearchBooks = [makeBook(webResearchIds.A, `联网研究验证甲 ${webResearchKey}`), makeBook(webResearchIds.B, `联网研究验证乙 ${webResearchKey}`)];
 const comparisonBooks = [makeBook(comparisonIds.A, `多来源对照验证甲 ${comparisonKey}`), makeBook(comparisonIds.B, `多来源对照验证乙 ${comparisonKey}`)];
-const recoveryBooks = [makeBook(recoveryIds.A, "联网研究上限验证 " + recoveryKey), makeBook(recoveryIds.B, "联网研究重试验证 " + recoveryKey)];
+const recoveryBooks = [makeBook(recoveryIds.A, "联网研究上限验证 " + recoveryKey), makeBook(recoveryIds.B, "联网研究重试验证 " + recoveryKey),
+  makeBook(unselectedRecoveryId, "联网研究未挑选验证 " + recoveryKey)];
 const books = [...libraryBooks, ...aiBooks, ...webResearchBooks, ...comparisonBooks, ...recoveryBooks];
 if (new Set(books.map(item => item.id)).size !== books.length) throw new Error("SYNTHETIC_BOOK_GROUPS_MUST_BE_DISJOINT");
 const isAiBook = (id: string) => id === aiCatalogIds.A || id === aiCatalogIds.B;
 const book = (id: string) => books.find(item => item.id === id);
-type ResearchRecoveryCase = "limited" | "retry";
+type ResearchRecoveryCase = "limited" | "retry" | "unselected";
 const recoveryCalls: Record<ResearchRecoveryCase, { searchRequests: number; selectionCalls: number; readerCalls: number }> = {
   limited: { searchRequests: 0, selectionCalls: 0, readerCalls: 0 },
   retry: { searchRequests: 0, selectionCalls: 0, readerCalls: 0 },
+  unselected: { searchRequests: 0, selectionCalls: 0, readerCalls: 0 },
 };
 const recoveryCaseById = (id: unknown): ResearchRecoveryCase | undefined =>
-  id === recoveryIds.A ? "limited" : id === recoveryIds.B ? "retry" : undefined;
+  id === recoveryIds.A ? "limited" : id === recoveryIds.B ? "retry" : id === unselectedRecoveryId ? "unselected" : undefined;
 const recoveryCaseByTitle = (title: unknown): ResearchRecoveryCase | undefined =>
   recoveryCaseById(recoveryBooks.find(item => item.title === title)?.id);
 function assertRecoveryPromptSafe(value: unknown): void {
@@ -177,6 +180,10 @@ const webSourceReader = createBookWebSourceReader({
     if (signal?.aborted) throw new Error("SYNTHETIC_SOURCE_ABORTED");
     const pathname = new URL(url).pathname;
     if (pathname === "/research/ancient-routes" || pathname === "/comparison/unavailable") throw new Error("SYNTHETIC_SOURCE_UNAVAILABLE");
+    if (/^\/recovery\/unselected\/[1-6]$/.test(pathname)) return {
+      finalUrl: `${url}?view=full`, contentType: "text/html", charset: "utf-8",
+      body: Buffer.from(`<html><head><title>合成待核对网页正文</title></head><body><main><h1>待核对资料的公开网页</h1><p>这是未自动挑选资料的合成网页正文，只在用户显式读取后展示。</p><p>${"公开来源的内容仍需核对，自动挑选失败不代表这些资料不存在。".repeat(12)}</p></main></body></html>`),
+    };
     const comparisonPages: Record<string, string> = {
       "/comparison/catalog": `<html><head><title>合成馆藏版本记录</title></head><body><main><h1>馆藏版本记录</h1><p>馆藏原文写道：“1935年初版”。目录号：CAT-1935。</p><p>这是独立馆藏条目的合成正文，不在搜索节选中。它没有解释另一条记录的不同年份。</p><p>阅读上下文保留 🧭 和字面文字 &lt;img src=x&gt;，原句与出处应保持一致。</p><p>${"馆藏上下文：应查阅原始出版物后再作研究判断。".repeat(12)}</p></main></body></html>`,
       "/comparison/review": `<html><head><title>合成书评版本记录</title></head><body><main><h1>书评版本记录</h1><p>书评原文写道：“最早于1937年出版”。这条记录没有提供目录号，也没有说明与馆藏初版记载的版本关系。</p><p>这是独立书评的合成正文，不在搜索节选中。原文不应被改写成确定的初版与再版关系。</p><p>${"书评上下文：不同来源的记载需要保留各自的说法。".repeat(12)}</p></main></body></html>`,
@@ -266,7 +273,7 @@ const webResearch = createBookWebResearchService({
           const completedQuery = recovery === "limited" ? query + " · 已完成检索 " + index : query;
           content.push({ type: "server_tool_use", id, name: "web_search", input: { query: completedQuery } });
           content.push({ type: "web_search_tool_result", tool_use_id: id, content:
-            Array.from({ length: recovery === "limited" ? 1 : 2 }, (_, offset) => {
+            Array.from({ length: recovery === "limited" ? 1 : recovery === "unselected" ? 6 : 2 }, (_, offset) => {
               const number = recovery === "limited" ? index : offset + 1;
               return { type: "web_search_result", title: title + " · 已返回资料 " + number,
                 url: "https://example.org/recovery/" + recovery + "/" + number,
@@ -307,6 +314,9 @@ const webResearch = createBookWebResearchService({
     if (recovery) {
       assertRecoveryPromptSafe(messages);
       recoveryCalls[recovery].selectionCalls++;
+      if (recovery === "unselected") return { ok: true, model: "synthetic-web-research-no-network", content: JSON.stringify({
+        sourceIds: ["W3", "W6"], insufficientEvidence: true,
+      }) };
     }
     return { ok: true, model: "synthetic-web-research-no-network", content: JSON.stringify({
       sourceIds: input.sources.slice(0, 4).map((source: { id: string }) => source.id),
