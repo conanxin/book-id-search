@@ -66,6 +66,8 @@ const webResearchKey = getBookWebResearchBrowserFixtureKey(fixtureKey);
 const webResearchIds = getBookBrowserCatalogIds(webResearchKey);
 const comparisonKey = getBookWebSourceComparisonBrowserFixtureKey(fixtureKey);
 const comparisonIds = getBookBrowserCatalogIds(comparisonKey);
+const recoveryKey = "recovery-" + webResearchKey;
+const recoveryIds = getBookBrowserCatalogIds(recoveryKey);
 const makeBook = (id: string, title: string): CatalogBookSnapshot => ({
   id, ssid: id.split("_")[0], dxid: id.split("_")[1],
   title, author: "合成测试作者", publisher: "合成测试出版社",
@@ -76,10 +78,26 @@ const libraryBooks = [makeBook(catalogIds.A, `古道阅读验证甲 ${fixtureKey
 const aiBooks = [makeBook(aiCatalogIds.A, `AI 阅读验证甲 ${aiFixtureKey}`), makeBook(aiCatalogIds.B, `AI 阅读验证乙 ${aiFixtureKey}`)];
 const webResearchBooks = [makeBook(webResearchIds.A, `联网研究验证甲 ${webResearchKey}`), makeBook(webResearchIds.B, `联网研究验证乙 ${webResearchKey}`)];
 const comparisonBooks = [makeBook(comparisonIds.A, `多来源对照验证甲 ${comparisonKey}`), makeBook(comparisonIds.B, `多来源对照验证乙 ${comparisonKey}`)];
-const books = [...libraryBooks, ...aiBooks, ...webResearchBooks, ...comparisonBooks];
+const recoveryBooks = [makeBook(recoveryIds.A, "联网研究上限验证 " + recoveryKey), makeBook(recoveryIds.B, "联网研究重试验证 " + recoveryKey)];
+const books = [...libraryBooks, ...aiBooks, ...webResearchBooks, ...comparisonBooks, ...recoveryBooks];
 if (new Set(books.map(item => item.id)).size !== books.length) throw new Error("SYNTHETIC_BOOK_GROUPS_MUST_BE_DISJOINT");
 const isAiBook = (id: string) => id === aiCatalogIds.A || id === aiCatalogIds.B;
 const book = (id: string) => books.find(item => item.id === id);
+type ResearchRecoveryCase = "limited" | "retry";
+const recoveryCalls: Record<ResearchRecoveryCase, { searchRequests: number; selectionCalls: number; readerCalls: number }> = {
+  limited: { searchRequests: 0, selectionCalls: 0, readerCalls: 0 },
+  retry: { searchRequests: 0, selectionCalls: 0, readerCalls: 0 },
+};
+const recoveryCaseById = (id: unknown): ResearchRecoveryCase | undefined =>
+  id === recoveryIds.A ? "limited" : id === recoveryIds.B ? "retry" : undefined;
+const recoveryCaseByTitle = (title: unknown): ResearchRecoveryCase | undefined =>
+  recoveryCaseById(recoveryBooks.find(item => item.title === title)?.id);
+function assertRecoveryPromptSafe(value: unknown): void {
+  const prompt = JSON.stringify(value) ?? "";
+  for (const privateText of ["我的原始介绍：这是个人保存的文字", "我的原始笔记：山口与旧驿站的位置", "尚未保存：下次核对版本", "尚未保存：先读完附录"]) {
+    if (prompt.includes(privateText)) throw new Error("PERSONAL_CONTENT_ENTERED_RESEARCH_RECOVERY_PROMPT");
+  }
+}
 const getCatalogDocument = async (id: string) => {
   const found = book(id);
   if (found) return found;
@@ -174,6 +192,15 @@ const webSourceReader = createBookWebSourceReader({
     };
   },
 });
+// Measure actual reader entry calls for the isolated recovery cases.
+const countedWebSourceReader = {
+  ...webSourceReader,
+  read: async (...args: Parameters<typeof webSourceReader.read>) => {
+    const recovery = recoveryCaseById(args[0]);
+    if (recovery) recoveryCalls[recovery].readerCalls++;
+    return webSourceReader.read(...args);
+  },
+};
 // The real snapshot/segmentation/parser path runs; the model chooses fixture IDs only.
 const webSourceEvidence = createBookWebSourceEvidenceService({
   getSnapshot: webSourceReader.getSnapshot, isEnabled: () => true,
@@ -224,6 +251,40 @@ const webResearch = createBookWebResearchService({
       const publicBook = input.book ?? input.catalog;
       const title = String(publicBook?.title ?? "合成书目");
       const query = `${title} ${input.question}`.slice(0, 1000);
+      const recovery = recoveryCaseByTitle(title);
+      if (recovery) {
+        assertRecoveryPromptSafe(body);
+        const state = recoveryCalls[recovery];
+        state.searchRequests++;
+        if (recovery === "retry" && state.searchRequests === 1) {
+          return Response.json({ error: { message: "SYNTHETIC_RECOVERY_PROVIDER_DETAIL" } }, { status: 502 });
+        }
+        const completed = recovery === "limited" ? 10 : 1;
+        const content: unknown[] = [{ type: "text", text: "这段生成文字不是来源，也没有真的读过全文。" }];
+        for (let index = 1; index <= completed; index++) {
+          const id = "synthetic-recovery-" + recovery + "-" + index;
+          const completedQuery = recovery === "limited" ? query + " · 已完成检索 " + index : query;
+          content.push({ type: "server_tool_use", id, name: "web_search", input: { query: completedQuery } });
+          content.push({ type: "web_search_tool_result", tool_use_id: id, content:
+            Array.from({ length: recovery === "limited" ? 1 : 2 }, (_, offset) => {
+              const number = recovery === "limited" ? index : offset + 1;
+              return { type: "web_search_result", title: title + " · 已返回资料 " + number,
+                url: "https://example.org/recovery/" + recovery + "/" + number,
+                content: "已返回的公开资料 " + number + "：这是用于核对本书研究问题的合成来源节选。",
+                page_age: null };
+            }) });
+        }
+        if (recovery === "limited") {
+          // Match the observed pause_turn: ten completed pairs, then two pending calls.
+          for (const index of [11, 12]) content.push({
+            type: "server_tool_use", id: "synthetic-recovery-limited-" + index,
+            name: "web_search", input: { query: query + " · 待执行检索 " + index },
+          });
+        }
+        return Response.json({ type: "message", role: "assistant",
+          stop_reason: recovery === "limited" ? "pause_turn" : "end_turn",
+          base_resp: { status_code: 0 }, content });
+      }
       const comparison = comparisonBooks.some(item => item.title === title);
       const results = comparison ? [
         { type: "web_search_result", title: `${title} · 馆藏版本记录`, url: "https://example.org/comparison/catalog", content: "合成馆藏的公开搜索节选，需读取正文核对版本原句。", page_age: "2026-10-01" },
@@ -242,6 +303,11 @@ const webResearch = createBookWebResearchService({
   }),
   provider: async messages => {
     const input = JSON.parse(messages.find(message => message.role === "user")!.content);
+    const recovery = recoveryCaseByTitle(input.book?.title ?? input.catalog?.title);
+    if (recovery) {
+      assertRecoveryPromptSafe(messages);
+      recoveryCalls[recovery].selectionCalls++;
+    }
     return { ok: true, model: "synthetic-web-research-no-network", content: JSON.stringify({
       sourceIds: input.sources.slice(0, 4).map((source: { id: string }) => source.id),
       insufficientEvidence: false,
@@ -263,7 +329,7 @@ app.use("/api/auth", createAuthRouter({ config: google }));
 app.use("/api/private", privateMiddleware);
 app.use("/api/books", privateMiddleware);
 app.use("/api/ai", privateMiddleware);
-app.use("/api/ai/books/:bookId/research", createBookWebResearchRouter({ service: webResearch, sourceReader: webSourceReader, sourceEvidence: webSourceEvidence, sourceComparison: webSourceComparison, requestAuthorizer: authorize }));
+app.use("/api/ai/books/:bookId/research", createBookWebResearchRouter({ service: webResearch, sourceReader: countedWebSourceReader, sourceEvidence: webSourceEvidence, sourceComparison: webSourceComparison, requestAuthorizer: authorize }));
 app.use("/api/ai/books", createBookAssistantRouter({ service: bookAssistant, requestAuthorizer: authorize }));
 app.use("/api/private/weread/bindings", createWereadBindingsRouter({ service: wereadBindings, requestAuthorizer: authorize }));
 if (config) app.use("/api/private/s32/library", createBookLibraryBodyParser(config, authorize));
@@ -295,7 +361,7 @@ app.get("/api/books/:id/related", async (req: TestRequest, res: TestResponse) =>
   const id = String(req.params.id);
   const source = book(id);
   if (!source) return void res.status(404).json({ error: { message: "Synthetic book not found" } });
-  const group = comparisonBooks.some(item => item.id === id) ? comparisonBooks : webResearchBooks.some(item => item.id === id) ? webResearchBooks : isAiBook(id) ? aiBooks : libraryBooks;
+  const group = recoveryBooks.some(item => item.id === id) ? recoveryBooks : comparisonBooks.some(item => item.id === id) ? comparisonBooks : webResearchBooks.some(item => item.id === id) ? webResearchBooks : isAiBook(id) ? aiBooks : libraryBooks;
   // Keep the original isolated catalog groups. This field-only in-memory
   // adapter replaces Meili transport while collection/ranking/reasons are real.
   const normalize = (value: string) => value.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
@@ -355,7 +421,9 @@ app.get("/api/health", (_req: TestRequest, res: TestResponse) => res.json({ ok: 
   persistence: wereadOnly ? "NOT_EXERCISED" : "postgresql", wereadBindingsPersistence: wereadOnly ? "NOT_EXERCISED" : "postgresql", runtimeRole,
   bookAssistant: { sources: "production_collector", provider: "deterministic_injected", externalMiniMax: "NOT_EXERCISED" },
   bookWebResearch: { search: "production_adapter_injected_http", selection: "deterministic_ids_only", excerptText: "production_snapshots_unchanged", externalMiniMax: "NOT_EXERCISED" },
-  bookWebSourceComparison: { providerCalls: comparisonProviderCalls, provider: "deterministic_ids_only", externalMiniMax: "NOT_EXERCISED" } }));
+  bookWebSourceComparison: { providerCalls: comparisonProviderCalls, provider: "deterministic_ids_only", externalMiniMax: "NOT_EXERCISED" },
+  bookWebResearchRecovery: { cases: recoveryCalls, search: "production_adapter_injected_http",
+    selection: "deterministic_ids_only", externalMiniMax: "NOT_EXERCISED" } }));
 
 app.listen(3001, "127.0.0.1", () => {
   console.log(`BOOK_LIBRARY_TEST_API_READY=YES CATALOG=SYNTHETIC_ISOLATED_GROUPS WEREAD=SYNTHETIC_SNAPSHOTS_REAL_QUERY BOOK_AI=DETERMINISTIC_PROVIDER_REAL_COLLECTOR PERSISTENCE=${wereadOnly ? "NOT_EXERCISED" : "POSTGRESQL"} ROLE=${runtimeRole} OAUTH=NOT_EXERCISED`);
