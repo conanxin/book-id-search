@@ -5,7 +5,7 @@ import { BookWebSourceReader } from "./BookWebSourceReader";
 import { BookWebSourceComparison } from "./BookWebSourceComparison";
 import { BookWebSourceComparisonProvider } from "./BookWebSourceComparisonScope";
 import {
-  assertBookWebResearchResponse, BOOK_WEB_RESEARCH_EXCERPTS_NOTICE,
+  assertBookWebResearchResponse, BOOK_WEB_RESEARCH_EXCERPTS_NOTICE, BOOK_WEB_RESEARCH_LIMITED_NOTICE,
   bookWebResearchContent, bookWebResearchErrorMessage, generateBookWebResearch, isBookWebResearchAbort,
   type BookWebResearchResponse, type BookWebResearchSource,
 } from "./bookWebResearch";
@@ -163,6 +163,7 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
         <span className="library-tag">{response.source === "web_research" ? "请核对网页来源" : "资料不足"}</span>
       </div>
       <p className="book-ai-question-note">本次问题：{response.question}</p>
+      {response.search.limited === true && <p className="library-status" role="status">{BOOK_WEB_RESEARCH_LIMITED_NOTICE}</p>}
       <details className="book-ai-sources book-web-queries">
         <summary>本次实际搜索词（{response.search.queries.length}）</summary>
         <ul aria-label="本次实际搜索词">{response.search.queries.map((query, index) => <li key={`${index}:${query}`}>{query}</li>)}</ul>

@@ -102,13 +102,13 @@ describe("book web research client", () => {
     ["invalid timestamp", (r: BookWebResearchResponse) => { r.generatedAt = "yesterday"; }],
   ])("rejects a request response containing %s", async (_name, change) => {
     const value = result(); change(value); fetchMock.mockResolvedValue(json(value));
-    await expect(generateBookWebResearch(A, { question: QUESTION })).rejects.toMatchObject({ status: 502 });
+    await expect(generateBookWebResearch(A, { question: QUESTION })).rejects.toMatchObject({ status: 502, code: "BOOK_RESEARCH_CLIENT_INVALID_RESPONSE" });
   });
 
   it.each(["javascript:alert(1)", "/books/1", "//example.test/path", "https://user:pass@example.test/x", "https://example.test/with space", "https://example.test\\other"]) (
     "does not turn unsafe source URL %s into a citation", async url => {
       const value = result(); value.sources[0].url = url; fetchMock.mockResolvedValue(json(value));
-      await expect(generateBookWebResearch(A, { question: QUESTION })).rejects.toMatchObject({ status: 502 });
+      await expect(generateBookWebResearch(A, { question: QUESTION })).rejects.toMatchObject({ status: 502, code: "BOOK_RESEARCH_CLIENT_INVALID_RESPONSE" });
     },
   );
 
@@ -136,7 +136,7 @@ describe("book web research client", () => {
 
   it("rechecks actual source citations before making copied text", () => {
     const value = result(); value.citedSourceIds.push("W99"); value.draft.content += "[W99]";
-    expect(() => bookWebResearchContent(value)).toThrow("来源核对未完成");
+    expect(() => bookWebResearchContent(value)).toThrow("返回的研究资料未通过核对");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -152,16 +152,78 @@ describe("book web research client", () => {
 
   it("rejects old or fabricated excerpt mode before copying any generated facts", () => {
     const old = result(); delete (old as Partial<BookWebResearchResponse>).mode;
-    expect(() => bookWebResearchContent(old)).toThrow("来源核对未完成");
+    expect(() => bookWebResearchContent(old)).toThrow("返回的研究资料未通过核对");
     const forged = result(); forged.draft.content = "两个出版社属于同一版本。[W1]";
-    expect(() => bookWebResearchContent(forged)).toThrow("来源核对未完成");
+    expect(() => bookWebResearchContent(forged)).toThrow("返回的研究资料未通过核对");
   });
 
   it("maps network/provider failures to bounded errors rather than provider payloads", async () => {
     fetchMock.mockResolvedValueOnce(json({ error: { code: "BOOK_RESEARCH_SEARCH_FAILED", message: "private upstream diagnostic" } }, 502));
-    await expect(generateBookWebResearch(A, { question: QUESTION })).rejects.toMatchObject({ status: 502, message: "本次搜索或来源核对未完成，请重试。", code: "BOOK_RESEARCH_SEARCH_FAILED" });
+    await expect(generateBookWebResearch(A, { question: QUESTION })).rejects.toMatchObject({ status: 502, message: "本次网页搜索未完成，请稍后重试。", code: "BOOK_RESEARCH_SEARCH_FAILED" });
     fetchMock.mockRejectedValueOnce(new Error("private network detail"));
     await expect(generateBookWebResearch(A, { question: QUESTION })).rejects.toMatchObject({ message: "暂时无法连接联网研究服务，请重试。" });
+  });
+
+
+  it.each([undefined, false, true])("accepts optional limited=%s and preserves its meaning in copied results", async limited => {
+    const value = result();
+    if (limited !== undefined) value.search.limited = limited;
+    fetchMock.mockResolvedValue(json(value));
+    expect(await generateBookWebResearch(A, { question: QUESTION })).toEqual(value);
+    const copied = bookWebResearchContent(value);
+    const notice = "本次搜索已达到上限，已保留返回的资料。可以调整问题后再查。";
+    if (limited === true) expect(copied).toContain(notice);
+    else expect(copied).not.toContain(notice);
+    expect(copied).toContain(value.sources[0].excerpt);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it.each([null, "true", "false", 0, 1, {}, []])("rejects a non-boolean search limit flag %# as a local response mismatch", async limited => {
+    const value = result(); Object.assign(value.search, { limited });
+    fetchMock.mockResolvedValue(json(value));
+    await expect(generateBookWebResearch(A, { question: QUESTION })).rejects.toMatchObject({
+      status: 502, code: "BOOK_RESEARCH_CLIENT_INVALID_RESPONSE", message: "返回的研究资料未通过核对，请重新查询。",
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    [502, "BOOK_RESEARCH_SEARCH_FAILED", "本次网页搜索未完成，请稍后重试。"],
+    [502, "BOOK_RESEARCH_INVALID_RESPONSE", "本次来源挑选结果未通过核对，请重新查询。"],
+    [502, "BOOK_RESEARCH_SELECTION_FAILED", "网页搜索已完成，但来源挑选未完成，请重试。"],
+    [504, "BOOK_RESEARCH_SEARCH_TIMEOUT", "本次网页搜索超时，请稍后重试。"],
+    [504, "BOOK_RESEARCH_SELECTION_TIMEOUT", "网页搜索已完成，但来源挑选超时，请重试。"],
+    [429, "BOOK_RESEARCH_SEARCH_RATE_LIMITED", "网页搜索请求较多，请稍后重试。"],
+    [429, "BOOK_RESEARCH_SELECTION_RATE_LIMITED", "来源挑选请求较多，请稍后重试。"],
+    [503, "BOOK_RESEARCH_UNAVAILABLE", "联网研究暂不可用，请稍后重试。"],
+  ] as const)("maps %s/%s to a bounded stage-specific message without retrying", async (status, code, message) => {
+    fetchMock.mockResolvedValue(json({ error: { code, message: "private upstream detail" } }, status));
+    await expect(generateBookWebResearch(A, { question: QUESTION })).rejects.toMatchObject({ status, code, message });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    [502, "BOOK_RESEARCH_UNKNOWN", "本次搜索或来源核对未完成，请重试。"],
+    [502, "BOOK_RESEARCH_SEARCH_TIMEOUT", "本次搜索或来源核对未完成，请重试。"],
+    [502, "BOOK_RESEARCH_CLIENT_INVALID_RESPONSE", "本次搜索或来源核对未完成，请重试。"],
+    [504, "BOOK_RESEARCH_SEARCH_FAILED", "本次研究超时，请稍后重试。"],
+    [500, "BOOK_RESEARCH_SELECTION_FAILED", "暂时无法完成研究，请稍后重试。"],
+  ] as const)("keeps unknown or mismatched %s/%s errors safe", async (status, code, message) => {
+    fetchMock.mockResolvedValue(json({ error: { code, message: "<script>private upstream detail</script>" } }, status));
+    await expect(generateBookWebResearch(A, { question: QUESTION })).rejects.toMatchObject({ status, code, message });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a non-JSON gateway 502 generic and distinguishes malformed HTTP 200 content", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("<html>private gateway detail</html>", { status: 502 }));
+    await expect(generateBookWebResearch(A, { question: QUESTION })).rejects.toMatchObject({
+      status: 502, code: undefined, message: "本次搜索或来源核对未完成，请重试。",
+    });
+    fetchMock.mockResolvedValueOnce(new Response("<html>private gateway detail</html>", { status: 200 }));
+    await expect(generateBookWebResearch(A, { question: QUESTION })).rejects.toMatchObject({
+      status: 502, code: "BOOK_RESEARCH_CLIENT_INVALID_RESPONSE", message: "返回的研究资料未通过核对，请重新查询。",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("does not fetch an already cancelled request", async () => {
