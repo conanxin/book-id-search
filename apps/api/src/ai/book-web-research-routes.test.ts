@@ -107,7 +107,9 @@ describe("book web research Google-owner HTTP boundary", () => {
 
   it.each([
     ["BOOK_RESEARCH_INVALID_INPUT", 400], ["BOOK_RESEARCH_BOOK_NOT_FOUND", 404], ["BOOK_RESEARCH_UNAVAILABLE", 503],
-    ["BOOK_RESEARCH_SEARCH_FAILED", 502], ["BOOK_RESEARCH_INVALID_RESPONSE", 502],
+    ["BOOK_RESEARCH_SEARCH_FAILED", 502], ["BOOK_RESEARCH_SELECTION_FAILED", 502], ["BOOK_RESEARCH_INVALID_RESPONSE", 502],
+    ["BOOK_RESEARCH_SEARCH_TIMEOUT", 504], ["BOOK_RESEARCH_SELECTION_TIMEOUT", 504],
+    ["BOOK_RESEARCH_SEARCH_RATE_LIMITED", 429], ["BOOK_RESEARCH_SELECTION_RATE_LIMITED", 429],
   ] as const)("maps %s to %s without caching", async (code, status) => {
     await start(); vi.mocked(service.research).mockRejectedValueOnce(new BookWebResearchError(code));
     const response = await fetch(base + path, { method: "POST", headers: ownerHeaders(), body: "{}" });

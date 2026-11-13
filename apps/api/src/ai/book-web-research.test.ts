@@ -46,6 +46,7 @@ describe("book internet research evidence and read-only scope", () => {
       ({ id, title, site: new URL(url).hostname, excerpt, pageAge, truncated })));
     expect(JSON.stringify([s.search.mock.calls, s.provider.mock.calls, result])).not.toMatch(/RAW_INFO|PERSONAL_|PRIVATE_METADATA|private-resource|UNTRUSTED_SEARCH_STAGE_PROSE/);
     expect(s.provider.mock.calls[0][0][0].content).toContain("没有读取网页全文或整本书");
+    expect(s.search.mock.calls[0][1]).toMatchObject({ timeoutMs: 90_000 });
     expect(s.provider.mock.calls[0][1]).toMatchObject({ temperature: 0.2, maxTokens: 1024, timeoutMs: 60_000, requireCompleted: true });
     // The service has only a catalog reader and model calls: it has no
     // workspace, note, resource, WeRead, persistence or page-fetch adapter.
@@ -57,6 +58,36 @@ describe("book internet research evidence and read-only scope", () => {
     const result = await s.service.research(A, { question });
     expect(result.search).toEqual({ performed: true, queries: ["运河田野调查", "运河田野调查"], calls: 2 });
     expect(s.search).toHaveBeenCalledOnce();
+  });
+
+  it.each([true, false, undefined])("preserves completed search counts and only exposes limited when true: %s", async limited => {
+    const s = setup(), queries = ["completed query", "completed query"];
+    s.search.mockResolvedValueOnce({ ...searchResult(), queries, searchCalls: 2, limited });
+    const result = await s.service.research(A, { question });
+    expect(result.search).toEqual({ performed: true, queries, calls: 2, ...(limited === true ? { limited: true } : {}) });
+    expect(result.source).toBe("web_research");
+    expect(result.sources).toHaveLength(2);
+    expect(s.search).toHaveBeenCalledOnce(); expect(s.provider).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the limited notice for a completed empty search without spending a selection call", async () => {
+    const s = setup();
+    s.search.mockResolvedValueOnce({ ...searchResult(), results: [], limited: true });
+    const result = await s.service.research(A, { question });
+    expect(result).toMatchObject({ source: "insufficient_sources", sources: [], citedSourceIds: [],
+      search: { performed: true, calls: 1, limited: true } });
+    expect(s.search).toHaveBeenCalledOnce(); expect(s.provider).not.toHaveBeenCalled();
+  });
+
+  it("keeps the limited notice when completed sources do not support a selection", async () => {
+    const s = setup();
+    s.search.mockResolvedValueOnce({ ...searchResult(), limited: true });
+    s.provider.mockResolvedValueOnce({ ok: true, model: "fixture", content: JSON.stringify({ sourceIds: [], insufficientEvidence: true }) });
+    const result = await s.service.research(A, { question });
+    expect(result).toMatchObject({ source: "insufficient_sources", citedSourceIds: [],
+      search: { performed: true, calls: 1, limited: true } });
+    expect(result.sources).toHaveLength(2);
+    expect(s.search).toHaveBeenCalledOnce(); expect(s.provider).toHaveBeenCalledOnce();
   });
 
   it("returns honest insufficiency after a completed empty search and does not spend a selection call", async () => {
@@ -186,6 +217,13 @@ describe("book internet research request, response and failure boundaries", () =
     expect(s.provider).not.toHaveBeenCalled();
   });
 
+  it.each([null, 0, 1, "true", "false", [], {}])("rejects a non-boolean limited flag before selecting sources: %j", async limited => {
+    const s = setup();
+    s.search.mockResolvedValueOnce({ ...searchResult(), limited } as unknown as MiniMaxWebSearchResponse);
+    await expect(s.service.research(A, { question })).rejects.toMatchObject({ code: "BOOK_RESEARCH_SEARCH_FAILED", status: 502 });
+    expect(s.search).toHaveBeenCalledOnce(); expect(s.provider).not.toHaveBeenCalled();
+  });
+
   it.each([
     "not json", "```json\n{}\n```", JSON.stringify({}),
     JSON.stringify({ ...selectionObject(), conclusion: "1935年初版，1937年再版。" }),
@@ -206,14 +244,23 @@ describe("book internet research request, response and failure boundaries", () =
     expect(s.search).toHaveBeenCalledOnce(); expect(s.provider).toHaveBeenCalledOnce();
   });
 
-  it.each([503, 401, 429, 502, 504])("maps provider status %s to a fixed safe error and never retries", async status => {
-    const s = setup();
-    s.search.mockResolvedValueOnce({ ok: false, status, error: "provider body secret / request prompt" });
-    await expect(s.service.research(A, { question })).rejects.toMatchObject({
-      code: status === 503 ? "BOOK_RESEARCH_UNAVAILABLE" : "BOOK_RESEARCH_SEARCH_FAILED",
-      message: status === 503 ? "联网研究暂不可用，请稍后重试。" : "联网研究暂未完成，请稍后重试。",
+  describe.each(["SEARCH", "SELECTION"] as const)("%s provider failures", stage => {
+    it.each([
+      [503, "UNAVAILABLE", 503], [401, "FAILED", 502], [403, "FAILED", 502],
+      [429, "RATE_LIMITED", 429], [502, "FAILED", 502], [504, "TIMEOUT", 504],
+    ] as const)("maps upstream %s to %s / HTTP %s without retries or user-auth errors", async (upstreamStatus, reason, status) => {
+      const s = setup();
+      const failure = { ok: false as const, status: upstreamStatus, error: "PRIVATE_PROVIDER_BODY secret / request prompt" };
+      if (stage === "SEARCH") s.search.mockResolvedValueOnce(failure);
+      else s.provider.mockResolvedValueOnce(failure);
+      const code = reason === "UNAVAILABLE" ? "BOOK_RESEARCH_UNAVAILABLE" : `BOOK_RESEARCH_${stage}_${reason}`;
+      const error = await s.service.research(A, { question }).catch((value: unknown) => value);
+      expect(error).toMatchObject({ code, status });
+      expect(error).toBeInstanceOf(Error);
+      expect(String(error)).not.toMatch(/PRIVATE_PROVIDER_BODY|secret|request prompt|AUTH/);
+      expect(s.search).toHaveBeenCalledOnce();
+      expect(s.provider).toHaveBeenCalledTimes(stage === "SELECTION" ? 1 : 0);
     });
-    expect(s.search).toHaveBeenCalledOnce(); expect(s.provider).not.toHaveBeenCalled();
   });
 
   it("stops before a first request when cancelled, and never selects sources after a cancelled search even if its provider resolves late", async () => {
@@ -233,8 +280,10 @@ describe("book internet research request, response and failure boundaries", () =
     s.search.mockRejectedValueOnce(new Error("private upstream body and credentials"));
     await expect(s.service.research(A, { question })).rejects.toMatchObject({ code: "BOOK_RESEARCH_SEARCH_FAILED", message: "联网研究暂未完成，请稍后重试。" });
     expect(s.provider).not.toHaveBeenCalled();
-    s.provider.mockResolvedValueOnce({ ok: false, status: 504, error: "private provider response" });
-    await expect(s.service.research(A, { question })).rejects.toMatchObject({ code: "BOOK_RESEARCH_SEARCH_FAILED", status: 502 });
+    s.provider.mockRejectedValueOnce(new Error("private provider body and credentials"));
+    await expect(s.service.research(A, { question })).rejects.toMatchObject({
+      code: "BOOK_RESEARCH_SELECTION_FAILED", status: 502, message: "来源选择暂未完成，请稍后重试。",
+    });
     expect(s.search).toHaveBeenCalledTimes(2); expect(s.provider).toHaveBeenCalledOnce();
   });
 

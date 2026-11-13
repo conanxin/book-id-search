@@ -17,6 +17,7 @@ export type MiniMaxWebSearchResponse = {
   queries: string[];
   searchCalls: number;
   results: MiniMaxWebResult[];
+  limited?: boolean;
 } | ChatCompletionError;
 
 const REQUEST_TIMEOUT_MS = 90_000;
@@ -56,12 +57,13 @@ function safeUrl(value: string): string | null {
 function extractSearch(data: unknown): MiniMaxWebSearchResponse {
   const invalid = () => failure("MiniMax web search returned an invalid or incomplete response");
   if (!isRecord(data) || data.type !== "message" || data.role !== "assistant"
-      || data.stop_reason !== "end_turn" || data.error != null
+      || (data.stop_reason !== "end_turn" && data.stop_reason !== "pause_turn") || data.error != null
       || (data.status !== undefined && data.status !== "completed")
       || !Array.isArray(data.content) || data.content.length > MAX_CONTENT_BLOCKS) return invalid();
   if (data.base_resp !== undefined && (!isRecord(data.base_resp)
       || data.base_resp.status_code !== 0)) return invalid();
 
+  const limited = data.stop_reason === "pause_turn";
   const calls = new Map<string, { query: string; complete: boolean }>();
   const results = new Map<string, MiniMaxWebResult>();
   let resultEntries = 0;
@@ -101,12 +103,23 @@ function extractSearch(data: unknown): MiniMaxWebSearchResponse {
     }
     // Text, thinking and client tool blocks are never search evidence.
   }
-  if (!calls.size || [...calls.values()].some(call => !call.complete)) return invalid();
+  // A paused turn may end with searches that were requested but not executed.
+  // Only a completed prefix is evidence; a gap before a later completed call
+  // is still an invalid trace, and end_turn must pair every initiated search.
+  const completedCalls: { query: string; complete: boolean }[] = [];
+  let pendingTail = false;
+  for (const call of calls.values()) {
+    if (!call.complete) { pendingTail = true; continue; }
+    if (pendingTail) return invalid();
+    completedCalls.push(call);
+  }
+  if (!completedCalls.length || (pendingTail && !limited)) return invalid();
   return {
     ok: true,
-    queries: [...calls.values()].map(call => call.query),
-    searchCalls: calls.size,
+    queries: completedCalls.map(call => call.query),
+    searchCalls: completedCalls.length,
     results: [...results.values()],
+    ...(limited ? { limited: true } : {}),
   };
 }
 
@@ -143,8 +156,9 @@ async function boundedJson(response: Response): Promise<unknown> {
  * MiniMax hosted web search, Anthropic Messages wire only.
  * Official format: https://platform.minimax.cn/docs/guides/server-tools
  *
- * A completed, paired server trace is required. Generated text is deliberately
- * discarded: downstream synthesis uses only the provider's result snapshots.
+ * Only completed, paired searches are evidence. A pause_turn can preserve its
+ * completed prefix, marked limited, while omitting trailing unexecuted calls.
+ * Generated text is discarded; only provider result snapshots are returned.
  * No page fetch, continuation, retry, or response-body logging occurs here.
  */
 export async function searchMiniMaxWeb(

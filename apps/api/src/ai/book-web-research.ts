@@ -21,7 +21,7 @@ export interface BookWebResearchResponse {
   draft: { title: string; content: string };
   sources: BookWebResearchSource[];
   citedSourceIds: string[];
-  search: { performed: true; queries: string[]; calls: number };
+  search: { performed: true; queries: string[]; calls: number; limited?: boolean };
   generatedAt: string;
 }
 
@@ -37,6 +37,11 @@ const errors = {
   BOOK_RESEARCH_BOOK_NOT_FOUND: [404, "这本书不存在，请重新打开书籍详情。"],
   BOOK_RESEARCH_UNAVAILABLE: [503, "联网研究暂不可用，请稍后重试。"],
   BOOK_RESEARCH_SEARCH_FAILED: [502, "联网研究暂未完成，请稍后重试。"],
+  BOOK_RESEARCH_SELECTION_FAILED: [502, "来源选择暂未完成，请稍后重试。"],
+  BOOK_RESEARCH_SEARCH_TIMEOUT: [504, "联网搜索超时，请稍后重试。"],
+  BOOK_RESEARCH_SELECTION_TIMEOUT: [504, "来源选择超时，请稍后重试。"],
+  BOOK_RESEARCH_SEARCH_RATE_LIMITED: [429, "联网搜索请求过于频繁，请稍后再试。"],
+  BOOK_RESEARCH_SELECTION_RATE_LIMITED: [429, "来源选择请求过于频繁，请稍后再试。"],
   BOOK_RESEARCH_INVALID_RESPONSE: [502, "资料选择或来源标注不完整，请重新查询。"],
 } as const;
 export class BookWebResearchError extends Error {
@@ -50,6 +55,12 @@ const invalid = () => new BookWebResearchError("BOOK_RESEARCH_INVALID_INPUT");
 const unavailable = () => new BookWebResearchError("BOOK_RESEARCH_UNAVAILABLE");
 const searchFailed = () => new BookWebResearchError("BOOK_RESEARCH_SEARCH_FAILED");
 const invalidResponse = () => new BookWebResearchError("BOOK_RESEARCH_INVALID_RESPONSE");
+function upstreamFailure(stage: "SEARCH" | "SELECTION", status?: number): BookWebResearchError {
+  if (status === 503) return unavailable();
+  const reason = status === 504 ? "TIMEOUT" : status === 429 ? "RATE_LIMITED" : "FAILED";
+  // Provider credentials and access errors are not the user's Google session.
+  return new BookWebResearchError(`BOOK_RESEARCH_${stage}_${reason}`);
+}
 const forbiddenControl = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
 const unpairedSurrogate = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
 
@@ -166,12 +177,14 @@ const selectedDraft = (ids: string[]) => ({ title: "查到的相关资料",
 const insufficientDraft = () => ({ title: "查到的相关资料",
   content: "本次已执行联网搜索，但没有选出与问题充分相关的资料。下方如有搜索结果，可以打开原链接核对，或调整问题后再查。" });
 
-function searchEvidence(result: Extract<MiniMaxWebSearchResponse, { ok: true }>) {
+function searchEvidence(result: Extract<MiniMaxWebSearchResponse, { ok: true }>): BookWebResearchResponse["search"] {
   if (!Array.isArray(result.results) || !Array.isArray(result.queries) || !result.queries.length
     || result.queries.length > BOOK_WEB_RESEARCH_LIMITS.SEARCH_CALLS
     || !Number.isSafeInteger(result.searchCalls) || result.searchCalls !== result.queries.length
+    || (result.limited !== undefined && typeof result.limited !== "boolean")
     || result.queries.some(query => !validText(query) || !query.trim() || query.length > BOOK_WEB_RESEARCH_LIMITS.QUERY_CHARS)) throw searchFailed();
-  return { performed: true as const, queries: [...result.queries], calls: result.searchCalls };
+  return { performed: true, queries: [...result.queries], calls: result.searchCalls,
+    ...(result.limited === true ? { limited: true } : {}) };
 }
 
 export function createBookWebResearchService(deps: {
@@ -206,7 +219,7 @@ export function createBookWebResearchService(deps: {
       try { searched = await (deps.search ?? searchMiniMaxWeb)(searchMessages, { signal, timeoutMs: 90_000 }); }
       catch { checkCancelled(signal); throw searchFailed(); }
       checkCancelled(signal);
-      if (!searched?.ok) throw searched?.status === 503 ? unavailable() : searchFailed();
+      if (!searched?.ok) throw upstreamFailure("SEARCH", searched?.status);
       const search = searchEvidence(searched), sources = snapshotSources(searched.results);
       if (deps.issueSourceReadToken) for (const source of sources) {
         const token = deps.issueSourceReadToken(input.bookId, source);
@@ -224,9 +237,9 @@ export function createBookWebResearchService(deps: {
       let generated;
       try { generated = await (deps.provider ?? chatCompletion)(messages,
         { signal, temperature: 0.2, maxTokens: 1024, timeoutMs: 60_000, requireCompleted: true }); }
-      catch { checkCancelled(signal); throw searchFailed(); }
+      catch { checkCancelled(signal); throw upstreamFailure("SELECTION"); }
       checkCancelled(signal);
-      if (!generated?.ok) throw generated?.status === 503 ? unavailable() : searchFailed();
+      if (!generated?.ok) throw upstreamFailure("SELECTION", generated?.status);
       const selected = parseSelection(generated.content, sources);
       return selected ? { ...base, draft: selectedDraft(selected), citedSourceIds: selected,
         source: "web_research", generatedAt: completedAt() } : insufficient();
