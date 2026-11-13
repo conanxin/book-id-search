@@ -2,11 +2,13 @@ import { Router, json, type ErrorRequestHandler } from "express";
 import type { S32RequestAuthorizer } from "../s32/routes/private-auth.js";
 import { BookWebResearchError, type BookWebResearchService } from "./book-web-research.js";
 import { BookWebSourceError, type BookWebSourceReader } from "./book-web-source.js";
+import { BookWebSourceEvidenceError, type BookWebSourceEvidenceService } from "./book-web-source-evidence.js";
 
 /** Mount at /api/ai/books/:bookId/research before the assistant/global parser. */
 export function createBookWebResearchRouter(deps: {
   service: BookWebResearchService;
   sourceReader?: BookWebSourceReader;
+  sourceEvidence?: BookWebSourceEvidenceService;
   requestAuthorizer?: S32RequestAuthorizer;
 }) {
   const router = Router({ mergeParams: true });
@@ -24,10 +26,28 @@ export function createBookWebResearchRouter(deps: {
   });
   router.use(json({ limit: "16kb" }));
   const invalidJson: ErrorRequestHandler = (_error, req, res, _next) => {
-    res.status(400).json({ error: { code: req.path === "/source" ? "BOOK_SOURCE_INVALID_INPUT" : "BOOK_RESEARCH_INVALID_INPUT",
+    res.status(400).json({ error: { code: req.path === "/source/evidence" ? "BOOK_EVIDENCE_INVALID_INPUT"
+      : req.path === "/source" ? "BOOK_SOURCE_INVALID_INPUT" : "BOOK_RESEARCH_INVALID_INPUT",
       message: "请求内容必须是有效的 JSON，且不能超过 16 KiB。" } });
   };
   router.use(invalidJson);
+  router.post<{ bookId: string }>("/source/evidence", async (req, res) => {
+    const controller = new AbortController();
+    const cancel = () => { if (!res.writableFinished) controller.abort(); };
+    const usable = () => !controller.signal.aborted && !res.destroyed && !res.writableEnded;
+    res.once("close", cancel);
+    if (res.destroyed) controller.abort();
+    try {
+      if (!deps.sourceEvidence) throw new BookWebSourceEvidenceError("BOOK_EVIDENCE_UNAVAILABLE");
+      const result = await deps.sourceEvidence.find(req.params.bookId, req.body, { signal: controller.signal });
+      if (usable()) res.json(result);
+    } catch (error) {
+      if (usable()) {
+        const safe = error instanceof BookWebSourceEvidenceError ? error : new BookWebSourceEvidenceError("BOOK_EVIDENCE_UNAVAILABLE");
+        res.status(safe.status).json({ error: { code: safe.code, message: safe.message } });
+      }
+    } finally { res.off("close", cancel); }
+  });
   router.post<{ bookId: string }>("/source", async (req, res) => {
     const controller = new AbortController();
     const cancel = () => { if (!res.writableFinished) controller.abort(); };

@@ -3,6 +3,8 @@ import { parse, type DefaultTreeAdapterMap } from "parse5";
 import { BOOK_WEB_SOURCE_LIMITS as LIMITS, BookWebSourceError, checkSourceCancelled,
   type BookWebSourceFetcher, type BookWebSourcePage, type BookWebSourceResponse } from "./book-web-source-contract.js";
 import { createPublicWebPageFetcher, parsePublicWebUrl } from "./web-source-fetch.js";
+import { BOOK_WEB_SOURCE_EVIDENCE_LIMITS as EVIDENCE_LIMITS, BookWebSourceEvidenceError,
+  type BookWebSourceSnapshot } from "./book-web-source-evidence-contract.js";
 
 export { BookWebSourceError, BOOK_WEB_SOURCE_LIMITS } from "./book-web-source-contract.js";
 export type { BookWebSourceFetcher, BookWebSourcePage, BookWebSourceResponse } from "./book-web-source-contract.js";
@@ -92,12 +94,38 @@ export type BookWebSourceIdentity = { id: string; url: string; title: string };
  * No arbitrary client URL, database writer, provider call or persistent cache. */
 export function createBookWebSourceReader(deps: { fetchPage?: BookWebSourceFetcher; now?: () => Date } = {}) {
   const grants = new Map<string, SourceGrant>();
+  const snapshots = new Map<string, { value: BookWebSourceSnapshot; expiresAt: number }>();
   const fetchPage = deps.fetchPage ?? createPublicWebPageFetcher();
   const now = deps.now ?? (() => new Date());
   function prune(time: number): void {
     for (const [token, grant] of grants) if (grant.expiresAt <= time) grants.delete(token);
   }
+  function pruneSnapshots(time: number): void {
+    for (const [token, snapshot] of snapshots) if (snapshot.expiresAt <= time) snapshots.delete(token);
+  }
+  function rememberSnapshot(source: BookWebSourceResponse): string {
+    const time = now().getTime();
+    pruneSnapshots(time);
+    while (snapshots.size >= EVIDENCE_LIMITS.SNAPSHOTS) snapshots.delete(snapshots.keys().next().value!);
+    let token: string;
+    do { token = randomBytes(24).toString("base64url"); } while (snapshots.has(token));
+    snapshots.set(token, { value: Object.freeze({ ...source, snapshotToken: token }),
+      expiresAt: time + EVIDENCE_LIMITS.SNAPSHOT_TTL_MS });
+    return token;
+  }
   return {
+    /** A request captures this immutable snapshot while its token is valid. */
+    getSnapshot(bookId: unknown, snapshotToken: unknown): BookWebSourceSnapshot {
+      if (typeof bookId !== "string" || bookId.length > 128 || !/^[0-9]+_[0-9]{12}$/.test(bookId)
+        || typeof snapshotToken !== "string" || !/^[A-Za-z0-9_-]{32}$/.test(snapshotToken)) {
+        throw new BookWebSourceEvidenceError("BOOK_EVIDENCE_INVALID_INPUT");
+      }
+      pruneSnapshots(now().getTime());
+      const snapshot = snapshots.get(snapshotToken);
+      if (!snapshot) throw new BookWebSourceEvidenceError("BOOK_EVIDENCE_EXPIRED");
+      if (snapshot.value.bookId !== bookId) throw new BookWebSourceEvidenceError("BOOK_EVIDENCE_INVALID_INPUT");
+      return snapshot.value;
+    },
     issueToken(bookId: string, source: BookWebSourceIdentity): string | undefined {
       if (!/^[0-9]+_[0-9]{12}$/.test(bookId) || bookId.length > 128 || !/^W(?:[1-9]|1[0-2])$/.test(source.id)
         || typeof source.title !== "string" || !source.title.trim()) return undefined;
@@ -143,10 +171,11 @@ export function createBookWebSourceReader(deps: { fetchPage?: BookWebSourceFetch
       checkSourceCancelled(options.signal);
       if (!extracted.text) throw new BookWebSourceError("BOOK_SOURCE_UNREADABLE");
       const text = prefix(extracted.text, LIMITS.TEXT_CHARS);
-      return { bookId, sourceId: grant.sourceId, requestedUrl: grant.url, finalUrl,
+      const result: BookWebSourceResponse = { bookId, sourceId: grant.sourceId, requestedUrl: grant.url, finalUrl,
         title: prefix(extracted.title || grant.title, LIMITS.TITLE_CHARS), text, contentType: page.contentType,
         extraction: page.contentType === "text/plain" ? "plain_text" : "html_readable_text",
         truncated: text.length < extracted.text.length, fetchedAt: now().toISOString() };
+      return { ...result, snapshotToken: rememberSnapshot(result) };
     },
   };
 }
