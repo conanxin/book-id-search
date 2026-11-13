@@ -4,7 +4,7 @@
 
 - `task_id=BOOK_AI_WEB_RESEARCH_RECOVERY_V1`; branch `fix/book-web-research-recovery`, based on deployed PR #81 merge `5305e28571f697ddd1a0bd46d690c90521ce3186`.
 - Reproduced the reported 《梁思成》 question through deployed research modules: the provider returned ten completed searches and two pending calls with `pause_turn`; the old parser rejected all results before source selection.
-- Preserve only paired, completed results from a limited search, disclose the limit in the sidebar, and distinguish search/selection failures and timeouts. The model still selects existing source IDs; requests do not automatically continue or retry.
+- Preserve paired, completed results from a limited search and disclose the limit. If automatic source selection fails, keep the actual source cards visible as unselected so they can still be opened, read and copied. Invalid model IDs are discarded; requests do not automatically continue or retry.
 - Focused parser/service/client checks and browser journeys cover this real response shape and explicit retry while retaining personal drafts. Actual-provider and deployed-version evidence are recorded separately in the PR.
 - API + Web change; no new dependency, migration, service, credential or model/deadline setting. Production remains PR #81 until this repair is separately merged and published.
 - Contract: [Paused web-search recovery](development/BOOK_AI_WEB_RESEARCH_RECOVERY_V1.md).
