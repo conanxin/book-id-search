@@ -5,9 +5,11 @@ import {
   assertBookWebSourceReadResponse, bookWebSourceContent, bookWebSourceReadErrorMessage, readBookWebSource,
   type BookWebSourceReadResponse,
 } from "./bookWebSourceReader";
+import { BookWebSourceEvidence } from "./BookWebSourceEvidence";
+import type { BookWebSourcePassage } from "./bookWebSourceEvidence";
 import { useLibraryScope } from "./useLibraryScope";
 
-interface Props { bookId: string; generation: number; source: BookWebResearchSource }
+interface Props { bookId: string; generation: number; source: BookWebResearchSource; researchQuestion?: string }
 
 /** Each source belongs to one search result; older responses without a read token remain excerpt-only. */
 export function BookWebSourceReader(props: Props) {
@@ -15,12 +17,14 @@ export function BookWebSourceReader(props: Props) {
   return <SourceReader key={JSON.stringify([props.bookId, props.generation, props.source.id, props.source.url, props.source.readToken])} {...props} />;
 }
 
-function SourceReader({ bookId, generation, source }: Props) {
+function SourceReader({ bookId, generation, source, researchQuestion = "" }: Props) {
   const { run, current } = useLibraryScope(generation);
   const [response, setResponse] = useState<BookWebSourceReadResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [readRevision, setReadRevision] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [highlight, setHighlight] = useState<BookWebSourcePassage | null>(null);
   const [copying, setCopying] = useState(false);
   const [copyFallback, setCopyFallback] = useState<string | null>(null);
   const [message, setMessage] = useState("");
@@ -29,12 +33,19 @@ function SourceReader({ bookId, generation, source }: Props) {
   const active = useRef<AbortController | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const resultHeading = useRef<HTMLParagraphElement>(null);
+  const highlightedText = useRef<HTMLElement>(null);
   const copyField = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => () => { sequence.current += 1; active.current?.abort(); }, []);
   useEffect(() => {
     if (response && root.current?.contains(document.activeElement)) resultHeading.current?.focus({ preventScroll: true });
   }, [response]);
+  useEffect(() => {
+    if (highlight && root.current?.contains(document.activeElement)) {
+      highlightedText.current?.focus({ preventScroll: true });
+      highlightedText.current?.scrollIntoView?.({ block: "nearest" });
+    }
+  }, [highlight]);
   useEffect(() => {
     if (copyFallback && root.current?.contains(document.activeElement)) {
       copyField.current?.focus(); copyField.current?.select();
@@ -44,9 +55,14 @@ function SourceReader({ bookId, generation, source }: Props) {
   function cancel() {
     sequence.current += 1; active.current?.abort(); active.current = null; setLoading(false);
   }
+  function clear() {
+    cancel(); setResponse(null); setError(null); setExpanded(false); setHighlight(null);
+    setCopying(false); setCopyFallback(null); setMessage("");
+  }
   async function read() {
     if (active.current || !current()) return;
-    setError(null); setResponse(null); setLoading(true); setExpanded(false);
+    setReadRevision(value => value + 1);
+    setError(null); setLoading(true); setExpanded(false); setHighlight(null);
     setCopying(false); setCopyFallback(null); setMessage("");
     const request = ++sequence.current, controller = new AbortController();
     active.current = controller;
@@ -84,6 +100,10 @@ function SourceReader({ bookId, generation, source }: Props) {
       }
     } finally { if (stillCurrent()) setCopying(false); }
   }
+  function locate(passage: BookWebSourcePassage | null) {
+    setHighlight(passage ? { ...passage } : null);
+    if (passage) setExpanded(true);
+  }
 
   return <div ref={root} className="book-web-source-reader" data-web-reader-source-id={source.id} aria-busy={loading}>
     {!response && <>
@@ -93,10 +113,12 @@ function SourceReader({ bookId, generation, source }: Props) {
           aria-label={`读取网页正文 ${source.id}`} onClick={() => void read()}>
           {loading ? "正在读取网页…" : error ? "重试读取网页正文" : "读取网页正文"}
         </button>
-        {loading && <button type="button" className="library-text-button" aria-label={`取消读取网页 ${source.id}`} onClick={cancel}>取消读取</button>}
       </div>
     </>}
-    {loading && <p className="library-status" role="status">正在提取这个网页的可读文字。</p>}
+    {loading && <div>
+      <p className="library-status" role="status">正在提取这个网页的可读文字。</p>
+      <button type="button" className="library-text-button" aria-label={"取消读取网页 " + source.id} onClick={cancel}>取消读取</button>
+    </div>}
     {error && <p className="library-error" role="alert">{error}</p>}
     {response && <section aria-label={`网页可读文字 ${source.id}`}>
       <div className="book-ai-source-heading">
@@ -111,7 +133,11 @@ function SourceReader({ bookId, generation, source }: Props) {
       <p className="library-meta">读取时间：<time dateTime={response.fetchedAt}>{response.fetchedAt}</time></p>
       <p className="library-meta">自动提取的网页文字可能不完整，不代表已读取原书。</p>
       {response.truncated && <p className="library-meta">本次提取已截短，可打开网页查看余下内容。</p>}
-      <blockquote id={bodyId} className={expanded ? "book-web-readable-text is-expanded" : "book-web-readable-text"}>{response.text}</blockquote>
+      {error && <p className="library-meta">重新读取未完成，仍保留上次成功读取的网页文字。</p>}
+      <blockquote id={bodyId} className={"book-web-page-text book-web-readable-text" + (expanded ? " is-expanded" : "")}>
+        {highlight ? <>{response.text.slice(0, highlight.start)}<mark ref={highlightedText} tabIndex={-1}
+          data-web-source-highlight={highlight.id} aria-label={"原文片段 " + highlight.id + " " + source.id}>{highlight.text}</mark>{response.text.slice(highlight.end)}</> : response.text}
+      </blockquote>
       <button type="button" className="library-text-button book-web-excerpt-toggle" aria-expanded={expanded} aria-controls={bodyId}
         aria-label={`${expanded ? "收起" : "展开"}网页文字 ${source.id}`} onClick={() => setExpanded(value => !value)}>
         {expanded ? "收起网页文字" : "展开已提取文字"}
@@ -120,7 +146,12 @@ function SourceReader({ bookId, generation, source }: Props) {
         <button type="button" className="library-button" disabled={copying} aria-label={`复制网页文字与来源 ${source.id}`} onClick={() => void copyText()}>
           <Copy size={16} aria-hidden="true" />复制文字与来源
         </button>
+        <button type="button" className="library-text-button" disabled={loading} aria-label={"重新读取网页正文 " + source.id}
+          onClick={() => void read()}>重新读取网页正文</button>
+        <button type="button" className="library-text-button" aria-label={"清除网页正文 " + source.id} onClick={clear}>清除已读文字</button>
       </div>
+      {!loading && <BookWebSourceEvidence key={readRevision} snapshot={response} source={source} generation={generation}
+        initialQuestion={researchQuestion} onLocate={locate} />}
     </section>}
     {copyFallback !== null && <label className="library-field"><span>可复制的网页文字 {source.id}</span>
       <textarea ref={copyField} rows={8} value={copyFallback} readOnly onFocus={event => event.currentTarget.select()} />

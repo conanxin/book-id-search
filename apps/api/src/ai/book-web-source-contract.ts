@@ -43,6 +43,7 @@ export interface BookWebSourceResponse {
   extraction: "html_readable_text" | "plain_text";
   truncated: boolean;
   fetchedAt: string;
+  snapshotToken?: string;
 }
 
 export function checkSourceCancelled(signal?: AbortSignal): void {

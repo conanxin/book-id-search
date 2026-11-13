@@ -1,11 +1,20 @@
 # BOOK-ID-SEARCH status
 
-## Current — 2026-11-12 — Read public webpage text in the AI sidebar
+## Current — 2026-11-13 — Locate original passages in a read webpage
+
+- `task_id=BOOK_AI_WEB_SOURCE_EVIDENCE_V1`; branch `feat/book-web-source-evidence`, based on deployed PR #79 merge `74fa3677dbb829f5a48abe20b363d600a574cd27`.
+- After reading one public webpage, explicitly ask a question, inspect AI-selected original passages, locate their surrounding text and copy the passages with source/read-time metadata. The model selects IDs; the server returns exact slices of that immutable read snapshot.
+- Question edits, new searches, rereads, clearing and book/session changes discard old results. Personal introductions, notes and unsaved editors remain independent. No migration, service, dependency or new credential is required.
+- Native API and Web focused tests (130 + 174) and integrated API/Web builds passed. Real-browser/PG CI and one bounded live-provider content review are recorded in the PR; fixture evidence is distinct from actual provider evidence.
+- Development candidate only: not merged or deployed. Current production remains PR #79. The earlier free-synthesis content-review failures remain historical failures; this feature returns selected source wording, not a synthesized factual answer.
+- Contract: [Original webpage passages](development/BOOK_AI_WEB_SOURCE_EVIDENCE_V1.md).
+
+## 2026-11-12 — Read public webpage text (merged and deployed as PR #79)
 
 - `task_id=BOOK_AI_WEB_SOURCE_READER_V1`; branch `feat/book-web-source-reader`, based on PR #78 merge `6c04c95bdf478b9bae38a2a437039190ff43acd5`.
 - A source card can now read a selected public webpage on demand, show extracted text with its URL/time/truncation state, and copy it separately from the original search excerpts. Reading does not call a model or write personal introductions, notes or resources.
 - Reuses Google Owner/CSRF and current proxy configuration; bounded source tokens and public-address connections keep requests tied to the chosen search source. API + Web change, one existing locked parser dependency, no migration or new service/key.
-- Targeted API/UI and real-browser evidence belongs in the new PR. This candidate is not merged or deployed; the separately authorized pagination release is tracked in PR #78.
+- PR #79 was approved, merged as `74fa3677dbb829f5a48abe20b363d600a574cd27`, and deployed to Tencent Cloud on 2026-11-12. Its final receipt records a successful real webpage read after the API DNS correction; detailed evidence remains in PR #79.
 - Contract: [Webpage source reader](development/BOOK_AI_WEB_SOURCE_READER_V1.md). The dated entries below describe their original development stage.
 
 ## 2026-11-12 — Public search pagination (merged as PR #78)

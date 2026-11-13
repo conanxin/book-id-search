@@ -59,6 +59,17 @@
 .book-web-source-reader .library-meta { overflow-wrap: anywhere; }
 .book-web-readable-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 8; line-clamp: 8; overflow: hidden; }
 .book-web-readable-text.is-expanded { display: block; -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }
+.book-web-source-evidence { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--color-border); }
+.book-web-source-evidence .library-field { margin-top: 10px; }
+.book-web-evidence-form textarea { min-height: 96px; }
+.book-web-evidence-result { margin-top: 16px; }
+.book-web-evidence-passages { padding: 0; margin: 12px 0; list-style: none; }
+.book-web-evidence-passages > li { margin-top: 14px; }
+.book-web-evidence-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; line-clamp: 6; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; }
+.book-web-evidence-text.is-expanded { display: block; -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }
+.book-web-page-text mark { color: inherit; background: var(--color-accent-soft, #fff0ad); border-radius: 2px; }
+.book-web-page-text mark:focus { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.book-web-evidence-legacy { margin-top: 14px; }
 
 @media (max-width: 1050px) {
   .book-detail-layout { display: block; }
