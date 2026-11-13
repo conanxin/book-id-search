@@ -6,6 +6,7 @@ import {
   type BookWebSourceReadResponse,
 } from "./bookWebSourceReader";
 import { BookWebSourceEvidence } from "./BookWebSourceEvidence";
+import { useBookWebSourceComparisonRegistration } from "./BookWebSourceComparisonScope";
 import type { BookWebSourcePassage } from "./bookWebSourceEvidence";
 import { useLibraryScope } from "./useLibraryScope";
 
@@ -35,6 +36,7 @@ function SourceReader({ bookId, generation, source, researchQuestion = "" }: Pro
   const resultHeading = useRef<HTMLParagraphElement>(null);
   const highlightedText = useRef<HTMLElement>(null);
   const copyField = useRef<HTMLTextAreaElement>(null);
+  const invalidateComparison = useBookWebSourceComparisonRegistration(source, response, loading);
 
   useEffect(() => () => { sequence.current += 1; active.current?.abort(); }, []);
   useEffect(() => {
@@ -56,11 +58,12 @@ function SourceReader({ bookId, generation, source, researchQuestion = "" }: Pro
     sequence.current += 1; active.current?.abort(); active.current = null; setLoading(false);
   }
   function clear() {
-    cancel(); setResponse(null); setError(null); setExpanded(false); setHighlight(null);
+    invalidateComparison(); cancel(); setResponse(null); setError(null); setExpanded(false); setHighlight(null);
     setCopying(false); setCopyFallback(null); setMessage("");
   }
   async function read() {
     if (active.current || !current()) return;
+    invalidateComparison();
     setReadRevision(value => value + 1);
     setError(null); setLoading(true); setExpanded(false); setHighlight(null);
     setCopying(false); setCopyFallback(null); setMessage("");

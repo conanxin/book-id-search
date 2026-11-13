@@ -2,6 +2,8 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Copy, ExternalLink, Globe } from "lucide-react";
 import { useLibraryScope } from "./useLibraryScope";
 import { BookWebSourceReader } from "./BookWebSourceReader";
+import { BookWebSourceComparison } from "./BookWebSourceComparison";
+import { BookWebSourceComparisonProvider } from "./BookWebSourceComparisonScope";
 import {
   assertBookWebResearchResponse, BOOK_WEB_RESEARCH_EXCERPTS_NOTICE,
   bookWebResearchContent, bookWebResearchErrorMessage, generateBookWebResearch, isBookWebResearchAbort,
@@ -154,7 +156,8 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
     </form>
     {loading && <p className="library-status" role="status">正在查找网页并挑选相关资料，请稍候。</p>}
     {error && <p className="library-error" role="alert">{error}</p>}
-    {response && <div key={resultRevision} className="book-ai-result">
+    {response && <BookWebSourceComparisonProvider key={resultRevision} bookId={bookId} sources={response.sources}>
+      <div className="book-ai-result">
       <div className="book-ai-result-heading">
         <h3 ref={resultHeading} tabIndex={-1}>{response.source === "web_research" ? response.draft.title : "本次搜索资料不足"}</h3>
         <span className="library-tag">{response.source === "web_research" ? "请核对网页来源" : "资料不足"}</span>
@@ -164,6 +167,7 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
         <summary>本次实际搜索词（{response.search.queries.length}）</summary>
         <ul aria-label="本次实际搜索词">{response.search.queries.map((query, index) => <li key={`${index}:${query}`}>{query}</li>)}</ul>
       </details>
+      <BookWebSourceComparison bookId={bookId} generation={generation} initialQuestion={response.question} />
       {response.source === "insufficient_sources" ? <div className="library-empty">{response.draft.content}</div> : <>
         <div role="region" aria-label="联网研究结果">
           <p className="book-web-selection-notice">{BOOK_WEB_RESEARCH_EXCERPTS_NOTICE}</p>
@@ -203,6 +207,7 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
           </li>)}
         </ol>
       </details>}
-    </div>}
+      </div>
+    </BookWebSourceComparisonProvider>}
   </div>;
 }

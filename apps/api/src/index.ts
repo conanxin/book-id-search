@@ -82,6 +82,7 @@ import { createBookWebResearchService } from "./ai/book-web-research.js";
 import { createBookWebResearchRouter } from "./ai/book-web-research-routes.js";
 import { createBookWebSourceReader } from "./ai/book-web-source.js";
 import { createBookWebSourceEvidenceService } from "./ai/book-web-source-evidence.js";
+import { createBookWebSourceComparisonService } from "./ai/book-web-source-comparison.js";
 import { collectRelatedBooks, RelatedBooksUnavailableError, relatedSourceReadError } from "./search/related-books.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
@@ -176,6 +177,7 @@ app.use("/api/ai/books/:bookId/research", createBookWebResearchRouter({
     issueSourceReadToken: bookWebSourceReader.issueToken }),
   sourceReader: bookWebSourceReader,
   sourceEvidence: createBookWebSourceEvidenceService({ getSnapshot: bookWebSourceReader.getSnapshot }),
+  sourceComparison: createBookWebSourceComparisonService({ getSnapshot: bookWebSourceReader.getSnapshot }),
   requestAuthorizer: googleOwnerAuthorizer,
 }));
 // Read saved book material using the existing pool; generating a draft does
