@@ -12,6 +12,7 @@ export interface BookWebSourceReadResponse {
   extraction: "html_readable_text" | "plain_text";
   truncated: boolean;
   fetchedAt: string;
+  snapshotToken?: string;
 }
 
 export class BookWebSourceReadError extends Error {
@@ -80,6 +81,7 @@ export function assertBookWebSourceReadResponse(value: unknown, bookId: string, 
   if (!bookIdValid(bookId) || !sourceIdentityValid(source) || !record(value)
     || value.bookId !== bookId || value.sourceId !== source.id || value.requestedUrl !== source.url
     || !webUrl(value.finalUrl) || !text(value.title, 300) || !text(value.text, 30000)
+    || (value.snapshotToken !== undefined && (typeof value.snapshotToken !== "string" || !/^[A-Za-z0-9_-]{32}$/.test(value.snapshotToken)))
     || typeof value.truncated !== "boolean" || !text(value.fetchedAt, 40)
     || !/^\d{4}-\d\d-\d\dT/.test(value.fetchedAt) || !Number.isFinite(Date.parse(value.fetchedAt))
     || !((value.contentType === "text/html" || value.contentType === "application/xhtml+xml") && value.extraction === "html_readable_text"

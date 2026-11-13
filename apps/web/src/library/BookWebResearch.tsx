@@ -14,7 +14,7 @@ const EXAMPLES = [
   { label: "延伸阅读", question: "查找介绍相关图书或延伸阅读书目的网页资料。" },
 ];
 
-function SelectedSourceExcerpt({ source, bookId, generation }: { source: BookWebResearchSource; bookId: string; generation: number }) {
+function SelectedSourceExcerpt({ source, bookId, generation, researchQuestion }: { source: BookWebResearchSource; bookId: string; generation: number; researchQuestion: string }) {
   const [expanded, setExpanded] = useState(false);
   const excerptId = useId();
   return <li className="book-ai-source book-web-selected-source" data-web-excerpt-source-id={source.id}>
@@ -30,7 +30,7 @@ function SelectedSourceExcerpt({ source, bookId, generation }: { source: BookWeb
     <button type="button" className="library-text-button book-web-excerpt-toggle" aria-expanded={expanded} aria-controls={excerptId}
       onClick={() => setExpanded(value => !value)}>{expanded ? "收起搜索节选" : "展开完整搜索节选"}</button>
     {source.truncated && <p className="library-meta">本条搜索节选已截短，可打开网页进一步核对。</p>}
-    <BookWebSourceReader bookId={bookId} generation={generation} source={source} />
+    <BookWebSourceReader bookId={bookId} generation={generation} source={source} researchQuestion={researchQuestion} />
   </li>;
 }
 
@@ -168,7 +168,7 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
         <div role="region" aria-label="联网研究结果">
           <p className="book-web-selection-notice">{BOOK_WEB_RESEARCH_EXCERPTS_NOTICE}</p>
           <ol className="book-ai-source-list">
-            {response.citedSourceIds.map(id => <SelectedSourceExcerpt key={id} bookId={bookId} generation={generation} source={response.sources.find(source => source.id === id)!} />)}
+            {response.citedSourceIds.map(id => <SelectedSourceExcerpt key={id} bookId={bookId} generation={generation} researchQuestion={response.question} source={response.sources.find(source => source.id === id)!} />)}
           </ol>
         </div>
         <div className="book-ai-citations" aria-label="AI 选中的网页资料">
@@ -199,7 +199,7 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
             <p className="book-web-excerpt-label">搜索结果节选</p>
             <blockquote>{source.excerpt}</blockquote>
             {source.truncated && <p className="library-meta">本条搜索节选已截短，可打开网页进一步核对。</p>}
-            {!response.citedSourceIds.includes(source.id) && <BookWebSourceReader bookId={bookId} generation={generation} source={source} />}
+            {!response.citedSourceIds.includes(source.id) && <BookWebSourceReader bookId={bookId} generation={generation} source={source} researchQuestion={response.question} />}
           </li>)}
         </ol>
       </details>}

@@ -41,6 +41,13 @@ describe("book webpage source reader client", () => {
     expect(String(options?.body)).not.toContain(source.url);
   });
 
+  it("accepts an optional evidence snapshot token without copying it", async () => {
+    const value = { ...result(), snapshotToken: "S".repeat(32) };
+    fetchMock.mockResolvedValue(json(value));
+    expect(await readBookWebSource(A, source)).toEqual(value);
+    expect(bookWebSourceContent(value, source)).not.toContain(value.snapshotToken);
+  });
+
   it("requires a current Google session and CSRF before reading", async () => {
     __setWebAuthSnapshotForTests({ status: "unauthenticated", user: null, csrfToken: null, error: null });
     await expect(readBookWebSource(A, source)).rejects.toMatchObject({ status: 401 });
@@ -70,6 +77,9 @@ describe("book webpage source reader client", () => {
     ["oversized title", { title: "字".repeat(301) }], ["invalid time", { fetchedAt: "yesterday" }],
     ["PDF", { contentType: "application/pdf" }], ["mismatched extraction", { extraction: "plain_text" }],
     ["missing truncation state", { truncated: undefined }],
+    ["short snapshot token", { snapshotToken: "S".repeat(31) }],
+    ["invalid snapshot token alphabet", { snapshotToken: "+".repeat(32) }],
+    ["null snapshot token", { snapshotToken: null }],
   ])("rejects %s before exposing retrieved text", async (_name, changes) => {
     fetchMock.mockResolvedValue(json({ ...result(), ...changes }));
     await expect(readBookWebSource(A, source)).rejects.toMatchObject({ status: 502 });
