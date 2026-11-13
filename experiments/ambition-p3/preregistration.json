@@ -1,0 +1,78 @@
+{
+  "status": "PREREGISTERED_NOT_RUN",
+  "git_base": "8c9d3383b02e08e98b595dc58b76f3f93f7e1913",
+  "benchmark": "s31-v1.1",
+  "cases": [
+    [
+      "edition-choice-02",
+      "edition-choice-05",
+      "exact-natural-02",
+      "exact-natural-06"
+    ],
+    [
+      "edition-choice-01",
+      "edition-choice-06",
+      "exact-natural-03",
+      "exact-natural-10"
+    ]
+  ],
+  "model": "MiniMax-M3",
+  "provider": "minimax-cn",
+  "reasoning": "low",
+  "max_turns": 1,
+  "run_budget_seconds": 120,
+  "sequence": [
+    "batch1_A",
+    "batch1_B",
+    "batch2_B",
+    "batch2_A"
+  ],
+  "prompts": {
+    "batch1_A": {
+      "file": "outputs/batch1_A.prompt.txt",
+      "sha256": "4834b247d43bb0232d3fc9933e5f8311a77f2f62c7cee9534494b59a157e5400",
+      "chars": 5753,
+      "cases": [
+        "edition-choice-02",
+        "edition-choice-05",
+        "exact-natural-02",
+        "exact-natural-06"
+      ]
+    },
+    "batch1_B": {
+      "file": "outputs/batch1_B.prompt.txt",
+      "sha256": "2325b7d3551f38a17ed5fd9e84e2bfa46f2bee00820961d4c4e48419315db173",
+      "chars": 5950,
+      "cases": [
+        "edition-choice-02",
+        "edition-choice-05",
+        "exact-natural-02",
+        "exact-natural-06"
+      ]
+    },
+    "batch2_B": {
+      "file": "outputs/batch2_B.prompt.txt",
+      "sha256": "f51f2aee6bd0cbd29912e875c4140f482a1c029d94ee47be1748201258d01e98",
+      "chars": 5930,
+      "cases": [
+        "edition-choice-01",
+        "edition-choice-06",
+        "exact-natural-03",
+        "exact-natural-10"
+      ]
+    },
+    "batch2_A": {
+      "file": "outputs/batch2_A.prompt.txt",
+      "sha256": "1efb1095f6f68996ad5e8bcd9b62998fce28c0965580f26ece1733c68426e87a",
+      "chars": 5733,
+      "cases": [
+        "edition-choice-01",
+        "edition-choice-06",
+        "exact-natural-03",
+        "exact-natural-10"
+      ]
+    }
+  },
+  "rubric": "candidate_gap if no grade>0 in frozen top10; healthy if rank1 grade3; else rank_order",
+  "notes": "Purposive 8-case pilot, not a representative/randomized trial. No outcome-driven changes after preregistration."
+}
