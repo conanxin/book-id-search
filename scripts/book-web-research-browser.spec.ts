@@ -438,6 +438,8 @@ test("multi-source original passages preserve distinct wording, selection scope 
   expect(await pane.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
   await comparison.scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath("web-source-comparison-desktop.png"), fullPage: true });
+  await comparison.getByRole("heading", { name: "多来源原文对照", exact: true }).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath("web-source-comparison-desktop-controls.png"), fullPage: true });
 
   await comparison.getByRole("checkbox", { name: "选择来源 W1", exact: true }).uncheck();
   await expect(comparison.getByRole("region", { name: "多来源原文依据", exact: true })).toHaveCount(0);
@@ -481,6 +483,8 @@ test("multi-source original passages preserve distinct wording, selection scope 
   expect(readRequests).toHaveLength(4);
   await comparison.scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath("web-source-comparison-mobile.png"), fullPage: true });
+  await comparison.getByRole("heading", { name: "多来源原文对照", exact: true }).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath("web-source-comparison-mobile-controls.png"), fullPage: true });
   expect(await persisted(comparisonBook)).toEqual(before);
   expect(writes).toEqual([]);
   expect(pageErrors).toEqual([]);

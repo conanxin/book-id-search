@@ -71,6 +71,7 @@ jobs:
           apps/api/src/ai/book-web-source-routes.test.ts
           apps/api/src/ai/book-web-source-evidence.test.ts
           apps/api/src/ai/book-web-source-evidence-routes.test.ts
+          apps/api/src/ai/book-web-source-comparison-passages.test.ts
           apps/api/src/ai/book-web-source-comparison.test.ts
           apps/api/src/ai/book-web-source-comparison-routes.test.ts
           apps/api/src/ai/web-source-fetch.test.ts
