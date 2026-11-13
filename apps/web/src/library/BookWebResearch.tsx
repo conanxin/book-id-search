@@ -5,7 +5,7 @@ import { BookWebSourceReader } from "./BookWebSourceReader";
 import { BookWebSourceComparison } from "./BookWebSourceComparison";
 import { BookWebSourceComparisonProvider } from "./BookWebSourceComparisonScope";
 import {
-  assertBookWebResearchResponse, BOOK_WEB_RESEARCH_EXCERPTS_NOTICE,
+  assertBookWebResearchResponse, BOOK_WEB_RESEARCH_EXCERPTS_NOTICE, BOOK_WEB_RESEARCH_LIMITED_NOTICE,
   bookWebResearchContent, bookWebResearchErrorMessage, generateBookWebResearch, isBookWebResearchAbort,
   type BookWebResearchResponse, type BookWebResearchSource,
 } from "./bookWebResearch";
@@ -106,7 +106,7 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
     }
   }
   async function copyResult() {
-    if (!response || response.source !== "web_research" || copying || !current()) return;
+    if (!response || response.source === "insufficient_sources" || copying || !current()) return;
     let content: string;
     try { content = bookWebResearchContent(response); }
     catch (e) { setError(bookWebResearchErrorMessage(e)); return; }
@@ -116,7 +116,8 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
     try {
       if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
       await navigator.clipboard.writeText(content);
-      if (stillCurrent()) setMessage("已复制所选节选与网页来源。");
+      if (stillCurrent()) setMessage(response.source === "unselected_sources"
+        ? "已复制待核对的网页资料与出处。" : "已复制所选节选与网页来源。");
     } catch {
       if (stillCurrent()) {
         setCopyFallback(content); setMessage("无法自动复制，请在下方选择文字并手动复制。");
@@ -127,6 +128,22 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
     setSourcesOpen(true); setActiveSource(id);
     if (sourcesOpen) sourceElements.current[id]?.focus();
   }
+
+  const allSourceCards = response ? <ol className="book-ai-source-list">
+    {response.sources.map(source => <li key={source.id} className="book-ai-source" data-web-source-id={source.id}
+      tabIndex={-1} ref={element => { sourceElements.current[source.id] = element; }}>
+      <div className="book-ai-source-heading">
+        <a href={source.url} target="_blank" rel="noopener noreferrer">[{source.id}] {source.title} <ExternalLink size={12} aria-hidden="true" /></a>
+        {response.citedSourceIds.includes(source.id) && <span className="library-tag">已选中</span>}
+      </div>
+      <p className="book-web-source-url">{source.url}</p>
+      {source.pageAge && <p className="library-meta">页面时间：{source.pageAge}</p>}
+      <p className="book-web-excerpt-label">搜索结果节选</p>
+      <blockquote>{source.excerpt}</blockquote>
+      {source.truncated && <p className="library-meta">本条搜索节选已截短，可打开网页进一步核对。</p>}
+      {!response.citedSourceIds.includes(source.id) && <BookWebSourceReader bookId={bookId} generation={generation} source={source} researchQuestion={response.question} />}
+    </li>)}
+  </ol> : null;
 
   return <div ref={taskRoot} className="book-ai-task book-web-research" aria-busy={loading}>
     <p className="book-ai-mode-description">真实搜索网页，由 AI 挑选相关资料。先看搜索节选，再按需读取网页文字。</p>
@@ -159,16 +176,20 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
     {response && <BookWebSourceComparisonProvider key={resultRevision} bookId={bookId} sources={response.sources}>
       <div className="book-ai-result">
       <div className="book-ai-result-heading">
-        <h3 ref={resultHeading} tabIndex={-1}>{response.source === "web_research" ? response.draft.title : "本次搜索资料不足"}</h3>
-        <span className="library-tag">{response.source === "web_research" ? "请核对网页来源" : "资料不足"}</span>
+        <h3 ref={resultHeading} tabIndex={-1}>{response.source === "insufficient_sources" ? "本次搜索资料不足" : response.draft.title}</h3>
+        <span className="library-tag">{response.source === "unselected_sources" ? "未自动挑选" : response.source === "web_research" ? "请核对网页来源" : "资料不足"}</span>
       </div>
       <p className="book-ai-question-note">本次问题：{response.question}</p>
+      {response.search.limited === true && <p className="library-status" role="status">{BOOK_WEB_RESEARCH_LIMITED_NOTICE}</p>}
       <details className="book-ai-sources book-web-queries">
         <summary>本次实际搜索词（{response.search.queries.length}）</summary>
         <ul aria-label="本次实际搜索词">{response.search.queries.map((query, index) => <li key={`${index}:${query}`}>{query}</li>)}</ul>
       </details>
       <BookWebSourceComparison bookId={bookId} generation={generation} initialQuestion={response.question} />
-      {response.source === "insufficient_sources" ? <div className="library-empty">{response.draft.content}</div> : <>
+      {response.source === "unselected_sources" ? <section aria-label="待核对的网页资料">
+        <p className="book-web-selection-notice">{response.draft.content}</p>
+        {allSourceCards}
+      </section> : response.source === "insufficient_sources" ? <div className="library-empty">{response.draft.content}</div> : <>
         <div role="region" aria-label="联网研究结果">
           <p className="book-web-selection-notice">{BOOK_WEB_RESEARCH_EXCERPTS_NOTICE}</p>
           <ol className="book-ai-source-list">
@@ -180,7 +201,7 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
         </div>
       </>}
       <div className="library-actions">
-        {response.source === "web_research" && <button type="button" className="library-button" disabled={copying} onClick={() => void copyResult()}>
+        {response.source !== "insufficient_sources" && <button type="button" className="library-button" disabled={copying} onClick={() => void copyResult()}>
           <Copy size={16} aria-hidden="true" />复制结果与来源
         </button>}
         <button type="button" className="library-button library-button--quiet" onClick={clear}>清除结果</button>
@@ -189,23 +210,9 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
         <textarea ref={copyField} rows={8} value={copyFallback} readOnly onFocus={event => event.currentTarget.select()} />
       </label>}
       <p className="library-status" role="status" aria-live="polite">{message}</p>
-      {response.sources.length > 0 && <details className="book-ai-sources" open={sourcesOpen} onToggle={event => setSourcesOpen(event.currentTarget.open)}>
+      {response.source !== "unselected_sources" && response.sources.length > 0 && <details className="book-ai-sources" open={sourcesOpen} onToggle={event => setSourcesOpen(event.currentTarget.open)}>
         <summary>查看本次网页来源（{response.sources.length}）</summary>
-        <ol className="book-ai-source-list">
-          {response.sources.map(source => <li key={source.id} className="book-ai-source" data-web-source-id={source.id}
-            tabIndex={-1} ref={element => { sourceElements.current[source.id] = element; }}>
-            <div className="book-ai-source-heading">
-              <a href={source.url} target="_blank" rel="noopener noreferrer">[{source.id}] {source.title} <ExternalLink size={12} aria-hidden="true" /></a>
-              {response.citedSourceIds.includes(source.id) && <span className="library-tag">已选中</span>}
-            </div>
-            <p className="book-web-source-url">{source.url}</p>
-            {source.pageAge && <p className="library-meta">页面时间：{source.pageAge}</p>}
-            <p className="book-web-excerpt-label">搜索结果节选</p>
-            <blockquote>{source.excerpt}</blockquote>
-            {source.truncated && <p className="library-meta">本条搜索节选已截短，可打开网页进一步核对。</p>}
-            {!response.citedSourceIds.includes(source.id) && <BookWebSourceReader bookId={bookId} generation={generation} source={source} researchQuestion={response.question} />}
-          </li>)}
-        </ol>
+        {allSourceCards}
       </details>}
       </div>
     </BookWebSourceComparisonProvider>}

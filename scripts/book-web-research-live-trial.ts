@@ -71,8 +71,9 @@ async function main(argv: string[]) {
         },
       });
       response = await service.research(args.bookId, { question: args.question });
-      status = response.source === "web_research" ? "STRUCTURAL_PASS_REVIEW_PENDING" : "INSUFFICIENT_SOURCES";
-      exitCode = response.source === "web_research" ? 0 : 1;
+      status = response.source === "web_research" ? "STRUCTURAL_PASS_REVIEW_PENDING"
+        : response.source === "unselected_sources" ? "SOURCES_AVAILABLE_SELECTION_UNFINISHED" : "INSUFFICIENT_SOURCES";
+      exitCode = response.source === "insufficient_sources" ? 1 : 0;
     }
   } catch (error) {
     const code = error && typeof error === "object" && "code" in error ? error.code : null;

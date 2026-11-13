@@ -14,11 +14,11 @@ export interface BookWebResearchResponse {
   bookId: string;
   question: string;
   mode: "source_excerpts";
-  source: "web_research" | "insufficient_sources";
+  source: "web_research" | "insufficient_sources" | "unselected_sources";
   draft: { title: string; content: string };
   sources: BookWebResearchSource[];
   citedSourceIds: string[];
-  search: { performed: true; queries: string[]; calls: number };
+  search: { performed: true; queries: string[]; calls: number; limited?: boolean };
   generatedAt: string;
 }
 export interface BookWebResearchInput { question: string }
@@ -31,7 +31,11 @@ export class BookWebResearchError extends Error {
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
 export const BOOK_WEB_RESEARCH_EXCERPTS_NOTICE = "已根据本次问题选出相关网页，以下保留搜索工具返回的来源节选。节选不等于网页或原书全文；来源之间可能有不同说法。";
+export const BOOK_WEB_RESEARCH_LIMITED_NOTICE = "本次搜索已达到上限，已保留返回的资料。可以调整问题后再查。";
 const RESULT_TITLE = "查到的相关资料";
+const UNSELECTED_TITLE = "待核对的网页资料";
+const UNSELECTED_CONTENT = "已完成网页搜索，但本次自动挑选未完成。下方保留搜索返回的资料，可以打开原链接核对或读取网页正文。";
+const INVALID_RESULT = "返回的研究资料未通过核对，请重新查询。";
 const INSUFFICIENT_CONTENT = "本次已执行联网搜索，但没有选出与问题充分相关的资料。下方如有搜索结果，可以打开原链接核对，或调整问题后再查。";
 const ERRORS: Record<number, string> = {
   400: "请填写想研究的问题，最多 1,000 字符。",
@@ -43,6 +47,17 @@ const ERRORS: Record<number, string> = {
   502: "本次搜索或来源核对未完成，请重试。",
   503: "联网研究暂不可用，请稍后重试。",
   504: "本次研究超时，请稍后重试。",
+};
+
+const CODE_ERRORS: Record<string, { status: number; message: string }> = {
+  BOOK_RESEARCH_SEARCH_FAILED: { status: 502, message: "本次网页搜索未完成，请稍后重试。" },
+  BOOK_RESEARCH_INVALID_RESPONSE: { status: 502, message: "本次来源挑选结果未通过核对，请重新查询。" },
+  BOOK_RESEARCH_SELECTION_FAILED: { status: 502, message: "网页搜索已完成，但来源挑选未完成，请重试。" },
+  BOOK_RESEARCH_SEARCH_TIMEOUT: { status: 504, message: "本次网页搜索超时，请稍后重试。" },
+  BOOK_RESEARCH_SELECTION_TIMEOUT: { status: 504, message: "网页搜索已完成，但来源挑选超时，请重试。" },
+  BOOK_RESEARCH_SEARCH_RATE_LIMITED: { status: 429, message: "网页搜索请求较多，请稍后重试。" },
+  BOOK_RESEARCH_SELECTION_RATE_LIMITED: { status: 429, message: "来源挑选请求较多，请稍后重试。" },
+  BOOK_RESEARCH_UNAVAILABLE: { status: 503, message: ERRORS[503] },
 };
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -77,14 +92,16 @@ function validSource(value: unknown, index: number): value is BookWebResearchSou
 }
 function validResponse(value: unknown, bookId: string, question: string): value is BookWebResearchResponse {
   if (!record(value) || value.bookId !== bookId || value.question !== question || !record(value.draft)
-    || value.mode !== "source_excerpts" || value.draft.title !== RESULT_TITLE || !text(value.draft.content, 12000)
+    || value.mode !== "source_excerpts"
+    || value.draft.title !== (value.source === "unselected_sources" ? UNSELECTED_TITLE : RESULT_TITLE) || !text(value.draft.content, 12000)
     || !Array.isArray(value.sources) || value.sources.length > 12 || !value.sources.every(validSource)
     || !Array.isArray(value.citedSourceIds) || value.citedSourceIds.length > 4 || !value.citedSourceIds.every(id => typeof id === "string")
     || new Set(value.citedSourceIds).size !== value.citedSourceIds.length
-    || (value.source !== "web_research" && value.source !== "insufficient_sources")
+    || (value.source !== "web_research" && value.source !== "insufficient_sources" && value.source !== "unselected_sources")
     || !text(value.generatedAt, 40) || !/^\d{4}-\d\d-\d\dT/.test(value.generatedAt)
     || !Number.isFinite(Date.parse(value.generatedAt)) || !record(value.search)
-    || value.search.performed !== true || !Array.isArray(value.search.queries)
+    || value.search.performed !== true || (value.search.limited !== undefined && typeof value.search.limited !== "boolean")
+    || !Array.isArray(value.search.queries)
     || value.search.queries.length < 1 || value.search.queries.length > 12
     || !value.search.queries.every(query => text(query, 1000)) || !Number.isSafeInteger(value.search.calls)
     || Number(value.search.calls) !== value.search.queries.length || Number(value.search.calls) > 12) return false;
@@ -96,6 +113,7 @@ function validResponse(value: unknown, bookId: string, question: string): value 
   const markers = new Set(Array.from(value.draft.content.matchAll(/\[((?:W|S)\d+)\]/g), match => match[1]));
   if (Array.from(cited).some(id => !known.has(id)) || markers.size !== cited.size
     || Array.from(markers).some(id => !cited.has(id))) return false;
+  if (value.source === "unselected_sources") return sources.length > 0 && cited.size === 0 && value.draft.content === UNSELECTED_CONTENT;
   return value.source === "web_research"
     ? cited.size > 0 && value.draft.content === `${BOOK_WEB_RESEARCH_EXCERPTS_NOTICE}\n\n建议先查看：${value.citedSourceIds.map(id => `[${id}]`).join(" ")}`
     : cited.size === 0 && value.draft.content === INSUFFICIENT_CONTENT;
@@ -103,7 +121,9 @@ function validResponse(value: unknown, bookId: string, question: string): value 
 
 /** Prevent older or free-form research output from entering the excerpt-only view. */
 export function assertBookWebResearchResponse(value: unknown, bookId: string, question: string): asserts value is BookWebResearchResponse {
-  if (!bookIdValid(bookId) || !text(question, 1000) || !validResponse(value, bookId, question)) throw new BookWebResearchError(502, ERRORS[502]);
+  if (!bookIdValid(bookId) || !text(question, 1000) || !validResponse(value, bookId, question)) {
+    throw new BookWebResearchError(502, INVALID_RESULT, "BOOK_RESEARCH_CLIENT_INVALID_RESPONSE");
+  }
 }
 function requireCurrent(generation: number, signal?: AbortSignal): void {
   if (signal?.aborted || getWebAuthAuthGeneration() !== generation || getWebAuthSnapshot().status !== "authenticated") {
@@ -142,7 +162,10 @@ export async function generateBookWebResearch(bookId: string, value: BookWebRese
     if (response.status === 401 || response.status === 403) void ensureAuthSessionLoaded();
     const code = record(result) && record(result.error) && typeof result.error.code === "string"
       && /^BOOK_RESEARCH_[A-Z_]+$/.test(result.error.code) ? result.error.code : undefined;
-    throw new BookWebResearchError(response.status, ERRORS[response.status] ?? "暂时无法完成研究，请稍后重试。", code);
+    const known = code && Object.hasOwn(CODE_ERRORS, code) ? CODE_ERRORS[code] : undefined;
+    const message = known?.status === response.status ? known.message
+      : ERRORS[response.status] ?? "暂时无法完成研究，请稍后重试。";
+    throw new BookWebResearchError(response.status, message, code);
   }
   assertBookWebResearchResponse(result, bookId, question);
   return result;
@@ -150,12 +173,15 @@ export async function generateBookWebResearch(bookId: string, value: BookWebRese
 
 function oneLine(value: string): string { return value.replace(/\s+/g, " ").replace(/[\\`*_\[\]<>]/g, "\\$&"); }
 
-/** Copy only validated results, together with the actual cited search snapshots. */
+/** Copy validated source excerpts, retaining all search snapshots when selection was incomplete. */
 export function bookWebResearchContent(result: BookWebResearchResponse): string {
   assertBookWebResearchResponse(result, result.bookId, result.question);
-  if (result.source !== "web_research") throw new BookWebResearchError(400, "本次资料不足，请调整问题后继续查找。");
-  const references = result.citedSourceIds.map(id => result.sources.find(source => source.id === id)!).map(source =>
+  if (result.source === "insufficient_sources") throw new BookWebResearchError(400, "本次资料不足，请调整问题后继续查找。");
+  const sources = result.source === "unselected_sources" ? result.sources
+    : result.citedSourceIds.map(id => result.sources.find(source => source.id === id)!);
+  const references = sources.map(source =>
     `[${source.id}] ${oneLine(source.title)}\n${source.url}\n${source.pageAge ? `页面时间：${oneLine(source.pageAge)}\n` : ""}\n搜索结果节选：\n${source.excerpt}${source.truncated ? "\n\n（本条搜索节选已截短）" : ""}`,
   ).join("\n\n");
-  return `# ${oneLine(result.draft.title)}\n\n问题：${result.question}\n\n${result.draft.content}\n\n---\n\n### 联网研究来源（搜索时摘录）\n\n生成时间：${result.generatedAt}\n\n本次搜索：\n${result.search.queries.map(query => `- ${oneLine(query)}`).join("\n")}\n\n${references}`;
+  const limitedNotice = result.search.limited === true ? `${BOOK_WEB_RESEARCH_LIMITED_NOTICE}\n\n` : "";
+  return `# ${oneLine(result.draft.title)}\n\n问题：${result.question}\n\n${result.draft.content}\n\n---\n\n### 联网研究来源（搜索时摘录）\n\n生成时间：${result.generatedAt}\n\n${limitedNotice}本次搜索：\n${result.search.queries.map(query => `- ${oneLine(query)}`).join("\n")}\n\n${references}`;
 }

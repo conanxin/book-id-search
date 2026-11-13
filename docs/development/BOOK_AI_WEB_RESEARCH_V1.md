@@ -46,6 +46,10 @@ AI 结果留在侧栏。查看来源、复制及清除结果均不保存或修�
 
 因此，本版把第二次模型调用限定为选择来源 ID，事实文字直接来自搜索快照，不让模型重新改写。相异的原文可并列查看，产品不替它们补出解释。两次自由综合审阅保留 `REQUIRES_REVISION`，不能覆盖为 PASS；来源选择、逐字展示和真人内容审阅分别记录。未来的综合判断需要另行改善与验收，不靠不断抽样获得一次好答案。
 
+## 2026-11-13 搜索暂停恢复
+
+[联网研究暂停结果恢复](BOOK_AI_WEB_RESEARCH_RECOVERY_V1.md) 扩展本合同：提供方以 `pause_turn` 暂停时，保留已经配对完成的搜索来源，尾部待执行调用不计作完成；响应通过 `search.limited=true` 披露单次搜索上限。正常 `end_turn` 仍须全部配对，错误与不完整来源仍拒绝。搜索已取得来源但自动挑选失败时，以 `unselected_sources` 保留全部来源和固定未挑选说明，仍可打开、读取及复制；有效空选择继续使用 `insufficient_sources`。此变化不引入自动续跑或自由答案。
+
 ## 官方接口依据
 
 - [MiniMax 服务端工具](https://platform.minimax.cn/docs/guides/server-tools)：Anthropic Messages 可声明 `tools: [{type: "web_search_20250305", name: "web_search"}]`；返回搜索调用和搜索结果内容块。能力当前为 Beta。
@@ -57,7 +61,7 @@ AI 结果留在侧栏。查看来源、复制及清除结果均不保存或修�
 
 `POST /api/ai/books/:bookId/research`，请求体 `{ "question": "研究问题" }`。
 
-成功响应包含 `bookId/question/mode/source/draft/sources/citedSourceIds/search/generatedAt`，`mode` 固定为 `source_excerpts`。`source` 为 `web_research` 或 `insufficient_sources`；`draft` 只有服务端固定说明及编号，`citedSourceIds` 为选中的最多四个 ID。`sources` 中每项包含 `id/kind/title/url/excerpt/pageAge/truncated`。`search` 保留 `performed/queries/calls`。错误响应使用静态业务错误，不回传模型密钥或提供方原始错误。
+成功响应包含 `bookId/question/mode/source/draft/sources/citedSourceIds/search/generatedAt`，`mode` 固定为 `source_excerpts`。`source` 为 `web_research`、`insufficient_sources` 或 `unselected_sources`；`draft` 只有服务端固定说明及编号，`citedSourceIds` 为选中的最多四个 ID。`sources` 中每项包含 `id/kind/title/url/excerpt/pageAge/truncated`。`search` 保留 `performed/queries/calls`，单次搜索达到上限时带 `limited=true`。错误响应使用静态业务错误，不回传模型密钥或提供方原始错误。
 
 ## 验证与接续
 

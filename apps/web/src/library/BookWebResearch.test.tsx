@@ -16,6 +16,8 @@ vi.mock("./bookWebResearch", async original => ({ ...await original<typeof impor
 
 const A = "10000001_100000000001", B = "10000002_100000000002", QUESTION = "这本书有哪些相关研究？";
 const NOTICE = "已根据本次问题选出相关网页，以下保留搜索工具返回的来源节选。节选不等于网页或原书全文；来源之间可能有不同说法。";
+const LIMITED = "本次搜索已达到上限，已保留返回的资料。可以调整问题后再查。";
+const UNSELECTED = "已完成网页搜索，但本次自动挑选未完成。下方保留搜索返回的资料，可以打开原链接核对或读取网页正文。";
 const INSUFFICIENT = "本次已执行联网搜索，但没有选出与问题充分相关的资料。下方如有搜索结果，可以打开原链接核对，或调整问题后再查。";
 const draftFor = (ids = ["W1"]) => ({ title: "查到的相关资料", content: `${NOTICE}\n\n建议先查看：${ids.map(id => `[${id}]`).join(" ")}` });
 const auth = (csrf = "csrf-a") => ({ status: "authenticated" as const, user: { email: "owner@example.test", name: "Owner" }, csrfToken: csrf, error: null });
@@ -33,6 +35,13 @@ function answer(changes: Partial<BookWebResearchResponse> = {}): BookWebResearch
     citedSourceIds: ["W1"], search: { performed: true, queries: ["旅行史 地方文献 相关研究"], calls: 1 }, ...changes,
   };
 }
+function unselectedAnswer(limited = true): BookWebResearchResponse {
+  const value = answer({ source: "unselected_sources", citedSourceIds: [],
+    draft: { title: "待核对的网页资料", content: UNSELECTED } });
+  value.search.limited = limited;
+  value.sources.forEach((source, index) => { source.readToken = (index ? "B" : "A").repeat(32); });
+  return value;
+}
 const view = (bookId = A) => <MemoryRouter><BookAiAssistant bookId={bookId} /></MemoryRouter>;
 const click = async (name: string) => { await act(async () => { fireEvent.click(screen.getByRole("button", { name })); }); };
 const field = (label: string) => screen.getByLabelText(label) as HTMLTextAreaElement;
@@ -47,6 +56,19 @@ const mount = async () => {
   await click("联网研究"); return rendered;
 };
 const search = async () => { change(QUESTION); await click("联网查资料"); };
+async function useHttpResearch(first: Response | Promise<Response>) {
+  const actual = await vi.importActual<typeof import("./bookWebResearch")>("./bookWebResearch");
+  const transport = vi.fn<typeof fetch>()
+    .mockReturnValueOnce(Promise.resolve(first))
+    .mockImplementation(async () => new Response(JSON.stringify(answer()), { headers: { "content-type": "application/json" } }));
+  vi.stubGlobal("fetch", transport);
+  vi.mocked(generateBookWebResearch).mockImplementation(actual.generateBookWebResearch);
+  return transport;
+}
+const privateEditors = () => <>
+  <textarea aria-label="个人介绍草稿" defaultValue="尚未保存的个人介绍" />
+  <textarea aria-label="个人笔记草稿" defaultValue="尚未保存的个人笔记" />
+</>;
 
 beforeEach(() => {
   vi.clearAllMocks(); __resetWebAuthStoreForTests(); __setWebAuthSnapshotForTests(auth());
@@ -56,7 +78,7 @@ beforeEach(() => {
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: writeClipboard } });
 });
 afterEach(() => {
-  cleanup(); __resetWebAuthStoreForTests();
+  cleanup(); vi.unstubAllGlobals(); __resetWebAuthStoreForTests();
   if (originalClipboard) Object.defineProperty(navigator, "clipboard", originalClipboard);
   else Reflect.deleteProperty(navigator, "clipboard");
   expect(saveBookWorkspace).not.toHaveBeenCalled();
@@ -251,7 +273,7 @@ describe("book web research sidebar", () => {
     const value = answer(); value.draft.content += "[W99]";
     vi.mocked(generateBookWebResearch).mockResolvedValueOnce(value);
     await mount(); await search();
-    expect(screen.getByRole("alert").textContent).toContain("来源核对未完成");
+    expect(screen.getByRole("alert").textContent).toContain("返回的研究资料未通过核对");
     expect(screen.queryByRole("region", { name: "联网研究结果" })).toBeNull();
     expect(writeClipboard).not.toHaveBeenCalled();
   });
@@ -317,10 +339,215 @@ describe("book web research sidebar", () => {
     }
     vi.mocked(generateBookWebResearch).mockResolvedValueOnce(value);
     await mount(); await search();
-    expect(screen.getByRole("alert").textContent).toContain("来源核对未完成");
+    expect(screen.getByRole("alert").textContent).toContain("返回的研究资料未通过核对");
     expect(screen.queryByRole("region", { name: "联网研究结果" })).toBeNull();
     expect(document.querySelector("[data-web-source-id]")).toBeNull();
     expect(writeClipboard).not.toHaveBeenCalled();
+  });
+
+
+  it.each([undefined, false, true])("shows the search limit notice only for limited=%s while retaining source cards", async limited => {
+    const value = answer();
+    if (limited !== undefined) value.search.limited = limited;
+    vi.mocked(generateBookWebResearch).mockResolvedValueOnce(value);
+    render(<>{privateEditors()}{view()}</>);
+    await click("联网研究"); await search();
+    if (limited === true) expect(screen.getByText(LIMITED).getAttribute("role")).toBe("status");
+    else expect(screen.queryByText(LIMITED)).toBeNull();
+    expect(result().querySelector('[data-web-excerpt-source-id="W1"] blockquote')?.textContent).toBe(value.sources[0].excerpt);
+    expect(field("联网研究问题").value).toBe(QUESTION);
+    expect(field("个人介绍草稿").value).toBe("尚未保存的个人介绍");
+    expect(field("个人笔记草稿").value).toBe("尚未保存的个人笔记");
+    await click("复制结果与来源");
+    if (limited === true) expect(writeClipboard.mock.calls[0][0]).toContain(LIMITED);
+    else expect(writeClipboard.mock.calls[0][0]).not.toContain(LIMITED);
+    expect(generateBookWebResearch).toHaveBeenCalledOnce();
+    change("新的问题");
+    expect(screen.queryByText(LIMITED)).toBeNull();
+    expect(screen.queryByRole("region", { name: "联网研究结果" })).toBeNull();
+    expect(generateBookWebResearch).toHaveBeenCalledOnce();
+  });
+
+  it("shows a limited but genuinely insufficient result without a failure or invented card", async () => {
+    vi.mocked(generateBookWebResearch).mockResolvedValueOnce(answer({
+      source: "insufficient_sources", sources: [], citedSourceIds: [],
+      draft: { title: "查到的相关资料", content: INSUFFICIENT },
+      search: { performed: true, queries: ["已完成的实际查询"], calls: 1, limited: true },
+    }));
+    await mount(); await search();
+    expect(screen.getByText(LIMITED)).toBeTruthy();
+    expect(screen.getByText(INSUFFICIENT)).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("region", { name: "联网研究结果" })).toBeNull();
+    expect(generateBookWebResearch).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a malformed limit flag before rendering any cards or limit notice", async () => {
+    const value = answer(); Object.assign(value.search, { limited: "true" });
+    vi.mocked(generateBookWebResearch).mockResolvedValueOnce(value);
+    await mount(); await search();
+    expect(screen.getByRole("alert").textContent).toBe("返回的研究资料未通过核对，请重新查询。");
+    expect(screen.queryByText(LIMITED)).toBeNull();
+    expect(screen.queryByRole("region", { name: "联网研究结果" })).toBeNull();
+    expect(generateBookWebResearch).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["BOOK_RESEARCH_SEARCH_FAILED", "本次网页搜索未完成，请稍后重试。"],
+    ["BOOK_RESEARCH_SELECTION_FAILED", "网页搜索已完成，但来源挑选未完成，请重试。"],
+    ["BOOK_RESEARCH_UNKNOWN", "本次搜索或来源核对未完成，请重试。"],
+  ])("preserves the question and private drafts through %s and an explicit retry", async (code, message) => {
+    const transport = await useHttpResearch(new Response(JSON.stringify({
+      error: { code, message: "private upstream detail must never be rendered" },
+    }), { status: 502 }));
+    render(<>{privateEditors()}{view()}</>);
+    await click("联网研究"); await search();
+    expect(screen.getByRole("alert").textContent).toBe(message);
+    expect(document.body.textContent).not.toContain("private upstream detail");
+    expect(field("联网研究问题").value).toBe(QUESTION);
+    expect(field("个人介绍草稿").value).toBe("尚未保存的个人介绍");
+    expect(field("个人笔记草稿").value).toBe("尚未保存的个人笔记");
+    expect(screen.getByRole("button", { name: "联网查资料" }).matches(":disabled")).toBe(false);
+    expect(transport).toHaveBeenCalledOnce();
+    expect(generateBookWebResearch).toHaveBeenCalledOnce();
+    await click("联网查资料");
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(result()).toBeTruthy();
+    expect(transport).toHaveBeenCalledTimes(2);
+    expect(field("联网研究问题").value).toBe(QUESTION);
+    expect(field("个人介绍草稿").value).toBe("尚未保存的个人介绍");
+    expect(field("个人笔记草稿").value).toBe("尚未保存的个人笔记");
+  });
+
+  it("reports malformed HTTP 200 as a response problem, preserving the question until explicit retry", async () => {
+    const transport = await useHttpResearch(new Response("<html>private response detail</html>", { status: 200 }));
+    await mount(); await search();
+    expect(screen.getByRole("alert").textContent).toBe("返回的研究资料未通过核对，请重新查询。");
+    expect(document.body.textContent).not.toContain("private response detail");
+    expect(field("联网研究问题").value).toBe(QUESTION);
+    expect(transport).toHaveBeenCalledOnce();
+    await click("联网查资料");
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(result()).toBeTruthy();
+    expect(transport).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["cancel", "question", "session"])("discards a late typed HTTP failure after %s without changing private drafts", async next => {
+    const pending = deferred<Response>();
+    const transport = await useHttpResearch(pending.promise);
+    render(<>{privateEditors()}{view()}</>);
+    await click("联网研究"); await search();
+    const signal = transport.mock.calls[0][1]?.signal as AbortSignal;
+    if (next === "cancel") await click("取消研究");
+    else if (next === "question") change("改后的问题");
+    else act(() => __setWebAuthSnapshotForTests(auth("changed-csrf")));
+    expect(signal.aborted).toBe(true);
+    await act(async () => pending.resolve(new Response(JSON.stringify({
+      error: { code: "BOOK_RESEARCH_SEARCH_FAILED", message: "late private payload" },
+    }), { status: 502 })));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("region", { name: "联网研究结果" })).toBeNull();
+    expect(field("个人介绍草稿").value).toBe("尚未保存的个人介绍");
+    expect(field("个人笔记草稿").value).toBe("尚未保存的个人笔记");
+    if (next === "question") expect(field("联网研究问题").value).toBe("改后的问题");
+    expect(transport).toHaveBeenCalledOnce();
+  });
+
+
+  it("shows every unselected source directly, copies all original snippets and still permits an explicit webpage read", async () => {
+    const value = unselectedAnswer();
+    vi.mocked(generateBookWebResearch).mockResolvedValueOnce(value);
+    const source = value.sources[1];
+    const readBody = {
+      bookId: A, sourceId: source.id, requestedUrl: source.url, finalUrl: source.url,
+      title: source.title, text: "第二个来源中实际读取的完整网页正文。",
+      contentType: "text/plain", extraction: "plain_text", truncated: false,
+      fetchedAt: "2026-11-13T08:00:00.000Z", snapshotToken: "C".repeat(32),
+    };
+    const transport = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(readBody)));
+    vi.stubGlobal("fetch", transport);
+    render(<>{privateEditors()}{view()}</>);
+    await click("联网研究"); await search();
+    const available = screen.getByRole("region", { name: "待核对的网页资料", exact: true });
+    expect(screen.getByRole("heading", { name: "待核对的网页资料", exact: true })).toBeTruthy();
+    expect(screen.getByText("未自动挑选")).toBeTruthy();
+    expect(screen.getByText(UNSELECTED)).toBeTruthy();
+    expect(screen.getByText(LIMITED)).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "本次搜索资料不足" })).toBeNull();
+    expect(screen.queryByLabelText("AI 选中的网页资料")).toBeNull();
+    expect(screen.queryByText("已选中")).toBeNull();
+    expect(screen.queryByText(NOTICE)).toBeNull();
+    const cards = Array.from(available.querySelectorAll("[data-web-source-id]"));
+    expect(cards.map(card => card.getAttribute("data-web-source-id"))).toEqual(["W1", "W2"]);
+    expect(document.querySelectorAll("[data-web-source-id]")).toHaveLength(2);
+    for (const [index, card] of cards.entries()) {
+      expect(card.closest("details")).toBeNull();
+      expect(card.querySelector("blockquote")?.textContent).toBe(value.sources[index].excerpt);
+      expect(within(card as HTMLElement).getByRole("link", { name: "[" + value.sources[index].id + "] " + value.sources[index].title }).getAttribute("href")).toBe(value.sources[index].url);
+      expect(within(card as HTMLElement).getByRole("button", { name: "读取网页正文 " + value.sources[index].id }).matches(":disabled")).toBe(false);
+    }
+    expect(transport).not.toHaveBeenCalled();
+    expect(generateBookWebResearch).toHaveBeenCalledOnce();
+    await click("复制结果与来源");
+    const copied = writeClipboard.mock.calls[0][0];
+    expect(copied).toContain(UNSELECTED); expect(copied).toContain(LIMITED);
+    for (const item of value.sources) {
+      expect(copied).toContain(item.title); expect(copied).toContain(item.url); expect(copied).toContain(item.excerpt);
+      expect(copied).not.toContain(item.readToken);
+    }
+    expect(copied).not.toContain("建议先查看");
+    expect(screen.getByText("已复制待核对的网页资料与出处。")).toBeTruthy();
+    await click("读取网页正文 W2");
+    expect(screen.getByRole("region", { name: "网页可读文字 W2" }).textContent).toContain(readBody.text);
+    expect(screen.getByRole("checkbox", { name: "选择来源 W2" })).toBeTruthy();
+    expect(transport).toHaveBeenCalledOnce();
+    expect(transport.mock.calls[0][0]).toBe("/api/ai/books/" + A + "/research/source");
+    expect(JSON.parse(String(transport.mock.calls[0][1]?.body))).toEqual({ sourceToken: source.readToken });
+    expect(generateBookWebResearch).toHaveBeenCalledOnce();
+    expect(field("联网研究问题").value).toBe(QUESTION);
+    expect(field("个人介绍草稿").value).toBe("尚未保存的个人介绍");
+    expect(field("个人笔记草稿").value).toBe("尚未保存的个人笔记");
+  });
+
+  it("offers all unselected source text for manual copying without auto-retrying selection", async () => {
+    const value = unselectedAnswer(false);
+    vi.mocked(generateBookWebResearch).mockResolvedValueOnce(value);
+    writeClipboard.mockRejectedValue(new Error("clipboard denied"));
+    await mount(); await search(); await click("复制结果与来源");
+    const copied = field("可复制的研究结果");
+    expect(copied.readOnly).toBe(true);
+    expect(copied.value).toContain(UNSELECTED);
+    expect(copied.value).not.toContain(LIMITED);
+    for (const source of value.sources) expect(copied.value).toContain(source.excerpt);
+    expect(generateBookWebResearch).toHaveBeenCalledOnce();
+  });
+
+  it.each(["empty", "ids", "title", "content"])("rejects a malformed unselected result (%s) without exposing usable fallback cards", async bad => {
+    const value = unselectedAnswer();
+    if (bad === "empty") value.sources = [];
+    else if (bad === "ids") value.citedSourceIds = ["W3", "W6"];
+    else if (bad === "title") value.draft.title = "查到的相关资料";
+    else value.draft.content = "模型自写的结论。";
+    vi.mocked(generateBookWebResearch).mockResolvedValueOnce(value);
+    await mount(); await search();
+    expect(screen.getByRole("alert").textContent).toBe("返回的研究资料未通过核对，请重新查询。");
+    expect(screen.queryByRole("region", { name: "待核对的网页资料" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "复制结果与来源" })).toBeNull();
+    expect(document.querySelector("[data-web-source-id]")).toBeNull();
+    expect(generateBookWebResearch).toHaveBeenCalledOnce();
+  });
+
+  it("clears unselected cards and a late clipboard fallback when the question changes", async () => {
+    const pending = deferred<void>();
+    vi.mocked(generateBookWebResearch).mockResolvedValueOnce(unselectedAnswer());
+    writeClipboard.mockReturnValueOnce(pending.promise);
+    await mount(); await search(); await click("复制结果与来源");
+    change("另一个问题");
+    await act(async () => pending.reject(new Error("late clipboard")));
+    expect(screen.queryByRole("region", { name: "待核对的网页资料" })).toBeNull();
+    expect(screen.queryByLabelText("可复制的研究结果")).toBeNull();
+    expect(screen.queryByText(LIMITED)).toBeNull();
+    expect(generateBookWebResearch).toHaveBeenCalledOnce();
   });
 
   it("shows a bounded error and allows an explicit fresh request", async () => {

@@ -99,6 +99,52 @@ describe("MiniMax hosted search evidence", () => {
     });
   });
 
+  it("keeps only the ten completed pairs from a paused turn with two trailing search requests", async () => {
+    const queries = Array.from({ length: 10 }, (_, index) => index < 2 ? "repeated query" : `completed query ${index + 1}`);
+    const pairs = queries.flatMap((query, index) => [
+      tool(`search-${index + 1}`, query),
+      toolResult([resultEntry({ url: `https://library.example.test/books/${index + 1}`,
+        content: `Observed result ${index + 1}` })], `search-${index + 1}`),
+    ]);
+    const request = call(completed([
+      { type: "thinking", text: "UNTRUSTED_THINKING" },
+      { type: "text", text: "UNTRUSTED_GENERATED_SOURCE https://invented.example.test/" },
+      ...pairs, tool("search-11", "UNEXECUTED_QUERY_11"), tool("search-12", "UNEXECUTED_QUERY_12"),
+    ], { stop_reason: "pause_turn" }));
+    const response = await request.result;
+    expect(response).toEqual({
+      ok: true, queries, searchCalls: 10, limited: true,
+      results: queries.map((_, index) => ({
+        title: "某图书馆书目记录", url: `https://library.example.test/books/${index + 1}`,
+        excerpt: `Observed result ${index + 1}`, pageAge: "2026-10-11",
+      })),
+    });
+    expect(JSON.stringify(response)).not.toMatch(/UNTRUSTED|UNEXECUTED|invented/);
+    expect(request.fetchImpl).toHaveBeenCalledExactlyOnceWith(expect.any(String), expect.any(Object));
+  });
+
+  it.each([false, true])("accepts a completed empty search in a paused turn, with a pending tail: %s", async pending => {
+    const request = call(completed([
+      tool(), toolResult([]), ...(pending ? [tool("search-2", "not executed")] : []),
+    ], { stop_reason: "pause_turn" }));
+    expect(await request.result).toEqual({
+      ok: true, queries: ["中国古代旅行之研究 江绍原 相关研究"], searchCalls: 1, results: [], limited: true,
+    });
+    expect(request.fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it("rejects unfinished searches at end_turn and gaps before later completed searches at pause_turn", async () => {
+    expect(await call(completed([tool(), toolResult(), tool("search-2", "unfinished")])).result)
+      .toMatchObject({ ok: false, status: 502 });
+    for (const content of [
+      [tool(), tool("search-2", "later"), toolResult([], "search-2")],
+      [tool(), toolResult(), tool("search-2", "gap"), tool("search-3", "later"), toolResult([], "search-3")],
+      [tool(), tool("search-2", "both unexecuted")],
+    ]) {
+      expect(await call(completed(content, { stop_reason: "pause_turn" })).result).toMatchObject({ ok: false, status: 502 });
+    }
+  });
+
   it("accepts an evidenced, completed search with no results", async () => {
     expect(await call(completed([tool(), toolResult([])])).result).toEqual({
       ok: true, queries: ["中国古代旅行之研究 江绍原 相关研究"], searchCalls: 1, results: [],
@@ -115,13 +161,14 @@ describe("MiniMax hosted search evidence", () => {
     [toolResult(), tool()],
     [tool(), tool(), toolResult()],
     [tool(), toolResult(), toolResult()],
-    [tool(), toolResult(), tool("search-2", "unfinished second search")],
-  ].map(content => ({ content })))("rejects fabricated, absent, unpaired or duplicate tool evidence %#", async ({ content }) => {
-    expect(await call(completed(content)).result).toMatchObject({ ok: false, status: 502 });
-  });
+  ].flatMap(content => ["end_turn", "pause_turn"].map(stop_reason => ({ content, stop_reason }))))(
+    "rejects fabricated, absent, unpaired or duplicate tool evidence at $stop_reason %#", async ({ content, stop_reason }) => {
+      expect(await call(completed(content, { stop_reason })).result).toMatchObject({ ok: false, status: 502 });
+    },
+  );
 
-  it.each(["max_tokens", "tool_use", "pause_turn", "stop_sequence", null, undefined])(
-    "rejects nonfinal stop reason %s even if it contains valid sources", async stop_reason => {
+  it.each(["max_tokens", "tool_use", "stop_sequence", null, undefined])(
+    "rejects unsupported stop reason %s even if it contains valid sources", async stop_reason => {
       expect(await call(completed(undefined, { stop_reason })).result).toMatchObject({ ok: false, status: 502 });
     },
   );
@@ -133,8 +180,9 @@ describe("MiniMax hosted search evidence", () => {
     { base_resp: { status_code: 1008, status_msg: config.apiKey } },
     { base_resp: null },
     { error: { message: config.apiKey } },
-  ])("rejects failed or malformed top-level replies without echoing provider content %#", async extra => {
-    const response = await call(completed(undefined, extra)).result;
+  ].flatMap(extra => ["end_turn", "pause_turn"].map(stop_reason => ({ extra, stop_reason }))))(
+    "rejects failed or malformed top-level replies at $stop_reason without echoing provider content %#", async ({ extra, stop_reason }) => {
+    const response = await call(completed(undefined, { ...extra, stop_reason })).result;
     expect(response).toMatchObject({ ok: false, status: 502 });
     expect(JSON.stringify(response)).not.toContain(config.apiKey);
   });
@@ -145,8 +193,17 @@ describe("MiniMax hosted search evidence", () => {
     [resultEntry(), { type: "error", message: config.apiKey }],
     [resultEntry({ is_error: true })],
     [resultEntry({ content: 42 })],
-  ].map(content => ({ content })))("rejects tool failure or malformed snapshots instead of claiming an empty successful search %#", async ({ content }) => {
-    expect(await call(completed([tool(), toolResult(content)])).result).toMatchObject({ ok: false, status: 502 });
+  ].flatMap(content => ["end_turn", "pause_turn"].map(stop_reason => ({ content, stop_reason }))))(
+    "rejects tool failure or malformed snapshots at $stop_reason instead of claiming an empty successful search %#", async ({ content, stop_reason }) => {
+      expect(await call(completed([tool(), toolResult(content)], { stop_reason })).result).toMatchObject({ ok: false, status: 502 });
+    },
+  );
+
+  it.each(["end_turn", "pause_turn"])("rejects an error on the result wrapper at %s even after valid pairs", async stop_reason => {
+    for (const extra of [{ is_error: true }, { error: { type: "unavailable" } }]) {
+      expect(await call(completed([tool(), toolResult(), tool("search-2", "query"),
+        { ...toolResult([], "search-2"), ...extra }], { stop_reason })).result).toMatchObject({ ok: false, status: 502 });
+    }
   });
 
   it("discards non-result blocks, unsafe URLs and empty snippets", async () => {
@@ -173,9 +230,13 @@ describe("MiniMax hosted search evidence", () => {
     [tool("search-1", "q".repeat(1001)), toolResult()],
     Array.from({ length: 13 }, (_, index) => [tool(`search-${index}`, "query"), toolResult([], `search-${index}`)]).flat(),
     [tool(), toolResult(Array.from({ length: 257 }, () => resultEntry()))],
-  ].map(content => ({ content })))("rejects excessive or missing evidence fields without silently truncating the trace %#", async ({ content }) => {
-    expect(await call(completed(content)).result).toMatchObject({ ok: false, status: 502 });
-  });
+    [tool(), toolResult(), ...Array.from({ length: 12 }, (_, index) => tool(`pending-${index}`, "query"))],
+    [...Array.from({ length: 127 }, () => ({ type: "text", text: "" })), tool(), toolResult()],
+  ].flatMap(content => ["end_turn", "pause_turn"].map(stop_reason => ({ content, stop_reason }))))(
+    "rejects excessive or missing evidence fields at $stop_reason without silently truncating the trace %#", async ({ content, stop_reason }) => {
+      expect(await call(completed(content, { stop_reason })).result).toMatchObject({ ok: false, status: 502 });
+    },
+  );
 });
 
 describe("MiniMax search transport boundaries", () => {

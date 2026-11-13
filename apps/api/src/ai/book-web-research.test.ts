@@ -6,6 +6,8 @@ import type { searchMiniMaxWeb, MiniMaxWebSearchResponse } from "./minimax-web-s
 const A = "10000001_000000000001", B = "10000002_000000000002";
 const date = "2026-10-11T12:00:00.000Z";
 const question = "这本书的研究背景和相关资料是什么？";
+const unselectedDraft = { title: "待核对的网页资料",
+  content: "已完成网页搜索，但本次自动挑选未完成。下方保留搜索返回的资料，可以打开原链接核对或读取网页正文。" };
 const catalog = { id: A, title: "运河田野调查", author: "合成作者", publisher: "测试出版社", year: 2020, pages: 300, isbn: "test-isbn",
   rawInfo: "RAW_INFO_EXCLUDED", introduction: "PERSONAL_INTRODUCTION_EXCLUDED", notes: ["PERSONAL_NOTE_EXCLUDED"],
   resources: [{ url: "https://private-resource.example.test/book.pdf" }], privateMetadata: "PRIVATE_METADATA_EXCLUDED" };
@@ -46,6 +48,7 @@ describe("book internet research evidence and read-only scope", () => {
       ({ id, title, site: new URL(url).hostname, excerpt, pageAge, truncated })));
     expect(JSON.stringify([s.search.mock.calls, s.provider.mock.calls, result])).not.toMatch(/RAW_INFO|PERSONAL_|PRIVATE_METADATA|private-resource|UNTRUSTED_SEARCH_STAGE_PROSE/);
     expect(s.provider.mock.calls[0][0][0].content).toContain("没有读取网页全文或整本书");
+    expect(s.search.mock.calls[0][1]).toMatchObject({ timeoutMs: 90_000 });
     expect(s.provider.mock.calls[0][1]).toMatchObject({ temperature: 0.2, maxTokens: 1024, timeoutMs: 60_000, requireCompleted: true });
     // The service has only a catalog reader and model calls: it has no
     // workspace, note, resource, WeRead, persistence or page-fetch adapter.
@@ -57,6 +60,36 @@ describe("book internet research evidence and read-only scope", () => {
     const result = await s.service.research(A, { question });
     expect(result.search).toEqual({ performed: true, queries: ["运河田野调查", "运河田野调查"], calls: 2 });
     expect(s.search).toHaveBeenCalledOnce();
+  });
+
+  it.each([true, false, undefined])("preserves completed search counts and only exposes limited when true: %s", async limited => {
+    const s = setup(), queries = ["completed query", "completed query"];
+    s.search.mockResolvedValueOnce({ ...searchResult(), queries, searchCalls: 2, limited });
+    const result = await s.service.research(A, { question });
+    expect(result.search).toEqual({ performed: true, queries, calls: 2, ...(limited === true ? { limited: true } : {}) });
+    expect(result.source).toBe("web_research");
+    expect(result.sources).toHaveLength(2);
+    expect(s.search).toHaveBeenCalledOnce(); expect(s.provider).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the limited notice for a completed empty search without spending a selection call", async () => {
+    const s = setup();
+    s.search.mockResolvedValueOnce({ ...searchResult(), results: [], limited: true });
+    const result = await s.service.research(A, { question });
+    expect(result).toMatchObject({ source: "insufficient_sources", sources: [], citedSourceIds: [],
+      search: { performed: true, calls: 1, limited: true } });
+    expect(s.search).toHaveBeenCalledOnce(); expect(s.provider).not.toHaveBeenCalled();
+  });
+
+  it("keeps the limited notice when completed sources do not support a selection", async () => {
+    const s = setup();
+    s.search.mockResolvedValueOnce({ ...searchResult(), limited: true });
+    s.provider.mockResolvedValueOnce({ ok: true, model: "fixture", content: JSON.stringify({ sourceIds: [], insufficientEvidence: true }) });
+    const result = await s.service.research(A, { question });
+    expect(result).toMatchObject({ source: "insufficient_sources", citedSourceIds: [],
+      search: { performed: true, calls: 1, limited: true } });
+    expect(result.sources).toHaveLength(2);
+    expect(s.search).toHaveBeenCalledOnce(); expect(s.provider).toHaveBeenCalledOnce();
   });
 
   it("returns honest insufficiency after a completed empty search and does not spend a selection call", async () => {
@@ -76,6 +109,31 @@ describe("book internet research evidence and read-only scope", () => {
     expect(result.sources).toHaveLength(2);
     expect(result.draft).toEqual({ title: "查到的相关资料",
       content: "本次已执行联网搜索，但没有选出与问题充分相关的资料。下方如有搜索结果，可以打开原链接核对，或调整问题后再查。" });
+  });
+
+  it("retains all original sources, read tokens and search evidence when valid IDs contradict insufficientEvidence", async () => {
+    const s = setup();
+    const results = Array.from({ length: 6 }, (_, index) => ({
+      title: `原始资料 ${index + 1}`, url: `https://library.example.test/${index + 1}`,
+      excerpt: `来源 ${index + 1} 的搜索原文。`, pageAge: null,
+    }));
+    s.search.mockResolvedValueOnce({ ...searchResult(), results, limited: true });
+    s.provider.mockResolvedValueOnce({ ok: true, model: "fixture",
+      content: JSON.stringify({ sourceIds: ["W3", "W6"], insufficientEvidence: true }) });
+    const issueSourceReadToken = vi.fn((_bookId: string, source: Pick<BookWebResearchSource, "id" | "title" | "url">) => `read-token-${source.id}`);
+    const service = createBookWebResearchService({ getCatalogDocument: s.getCatalogDocument, search: s.search,
+      provider: s.provider, isEnabled: () => true, now: () => new Date(date), issueSourceReadToken });
+    const result = await service.research(A, { question });
+    expect(result).toEqual({
+      bookId: A, question, mode: "source_excerpts", source: "unselected_sources", draft: unselectedDraft,
+      citedSourceIds: [], generatedAt: date,
+      search: { performed: true, queries: searchResult().queries, calls: 1, limited: true },
+      sources: results.map((source, index) => ({ ...source, id: `W${index + 1}`, kind: "web",
+        truncated: false, readToken: `read-token-W${index + 1}` })),
+    });
+    expect(issueSourceReadToken).toHaveBeenCalledTimes(6);
+    expect(s.search).toHaveBeenCalledOnce(); expect(s.provider).toHaveBeenCalledOnce();
+    expect(JSON.stringify(s.provider.mock.calls)).not.toContain("read-token-");
   });
 
   it("limits source snapshots exactly as sent to selection and records truncation without splitting Unicode", async () => {
@@ -141,7 +199,10 @@ describe("book internet research evidence and read-only scope", () => {
     expect(result.draft.content.match(/\[W\d+\]/g)).toEqual(["[W7]", "[W10]", "[W1]", "[W12]"]);
     s.search.mockResolvedValueOnce({ ...searchResult(), results });
     s.provider.mockResolvedValueOnce({ ok: true, model: "fixture", content: JSON.stringify(selectionObject(["W1", "W2", "W3", "W4", "W5"])) });
-    await expect(s.service.research(A, { question })).rejects.toMatchObject({ code: "BOOK_RESEARCH_INVALID_RESPONSE", status: 502 });
+    const unselected = await s.service.research(A, { question });
+    expect(unselected).toMatchObject({ source: "unselected_sources", citedSourceIds: [], draft: unselectedDraft });
+    expect(unselected.sources).toEqual(result.sources);
+    expect(unselected.search).toEqual(result.search);
   });
 });
 
@@ -186,6 +247,13 @@ describe("book internet research request, response and failure boundaries", () =
     expect(s.provider).not.toHaveBeenCalled();
   });
 
+  it.each([null, 0, 1, "true", "false", [], {}])("rejects a non-boolean limited flag before selecting sources: %j", async limited => {
+    const s = setup();
+    s.search.mockResolvedValueOnce({ ...searchResult(), limited } as unknown as MiniMaxWebSearchResponse);
+    await expect(s.service.research(A, { question })).rejects.toMatchObject({ code: "BOOK_RESEARCH_SEARCH_FAILED", status: 502 });
+    expect(s.search).toHaveBeenCalledOnce(); expect(s.provider).not.toHaveBeenCalled();
+  });
+
   it.each([
     "not json", "```json\n{}\n```", JSON.stringify({}),
     JSON.stringify({ ...selectionObject(), conclusion: "1935年初版，1937年再版。" }),
@@ -200,20 +268,41 @@ describe("book internet research request, response and failure boundaries", () =
     JSON.stringify({ ...selectionObject(), insufficientEvidence: true }),
     JSON.stringify({ sourceIds: [], insufficientEvidence: true, explanation: "自由解释不得进入响应" }),
     JSON.stringify({ sourceIds: ["W".repeat(2100)], insufficientEvidence: false }),
-  ])("rejects arbitrary prose, unknown/duplicate IDs, false insufficiency or malformed selection %#", async content => {
+  ])("retains unselected sources without accepting arbitrary prose, unknown/duplicate IDs, false insufficiency or malformed selection %#", async content => {
     const s = setup(); s.provider.mockResolvedValueOnce({ ok: true, model: "fixture", content });
-    await expect(s.service.research(A, { question })).rejects.toMatchObject({ code: "BOOK_RESEARCH_INVALID_RESPONSE", status: 502 });
+    const result = await s.service.research(A, { question });
+    expect(result).toMatchObject({ source: "unselected_sources", citedSourceIds: [], draft: unselectedDraft,
+      search: { performed: true, calls: 1 } });
+    expect(result.sources.map(source => source.id)).toEqual(["W1", "W2"]);
+    expect(result.sources.map(source => source.excerpt)).toEqual(searchResult().results.map(source => source.excerpt));
+    expect(JSON.stringify(result)).not.toMatch(/W999|fabricated\.example|自由解释|版本事实|1937年再版/);
     expect(s.search).toHaveBeenCalledOnce(); expect(s.provider).toHaveBeenCalledOnce();
   });
 
-  it.each([503, 401, 429, 502, 504])("maps provider status %s to a fixed safe error and never retries", async status => {
+  it.each([
+    [503, "UNAVAILABLE", 503], [401, "FAILED", 502], [403, "FAILED", 502],
+    [429, "RATE_LIMITED", 429], [502, "FAILED", 502], [504, "TIMEOUT", 504],
+  ] as const)("maps search upstream %s to %s / HTTP %s without retries or user-auth errors", async (upstreamStatus, reason, status) => {
     const s = setup();
-    s.search.mockResolvedValueOnce({ ok: false, status, error: "provider body secret / request prompt" });
-    await expect(s.service.research(A, { question })).rejects.toMatchObject({
-      code: status === 503 ? "BOOK_RESEARCH_UNAVAILABLE" : "BOOK_RESEARCH_SEARCH_FAILED",
-      message: status === 503 ? "联网研究暂不可用，请稍后重试。" : "联网研究暂未完成，请稍后重试。",
-    });
+    s.search.mockResolvedValueOnce({ ok: false, status: upstreamStatus, error: "PRIVATE_PROVIDER_BODY secret / request prompt" });
+    const code = reason === "UNAVAILABLE" ? "BOOK_RESEARCH_UNAVAILABLE" : `BOOK_RESEARCH_SEARCH_${reason}`;
+    const error = await s.service.research(A, { question }).catch((value: unknown) => value);
+    expect(error).toMatchObject({ code, status });
+    expect(error).toBeInstanceOf(Error);
+    expect(String(error)).not.toMatch(/PRIVATE_PROVIDER_BODY|secret|request prompt|AUTH/);
     expect(s.search).toHaveBeenCalledOnce(); expect(s.provider).not.toHaveBeenCalled();
+  });
+
+  it.each([401, 403, 429, 502, 503, 504])("retains searched sources after selection HTTP %s without retries or leaking provider errors", async status => {
+    const s = setup();
+    s.search.mockResolvedValueOnce({ ...searchResult(), limited: true });
+    s.provider.mockResolvedValueOnce({ ok: false, status, error: "PRIVATE_PROVIDER_BODY secret / request prompt" });
+    const result = await s.service.research(A, { question });
+    expect(result).toMatchObject({ source: "unselected_sources", citedSourceIds: [], draft: unselectedDraft,
+      search: { performed: true, queries: searchResult().queries, calls: 1, limited: true } });
+    expect(result.sources.map(source => source.excerpt)).toEqual(searchResult().results.map(source => source.excerpt));
+    expect(JSON.stringify(result)).not.toMatch(/PRIVATE_PROVIDER_BODY|secret|request prompt|AUTH/);
+    expect(s.search).toHaveBeenCalledOnce(); expect(s.provider).toHaveBeenCalledOnce();
   });
 
   it("stops before a first request when cancelled, and never selects sources after a cancelled search even if its provider resolves late", async () => {
@@ -233,9 +322,25 @@ describe("book internet research request, response and failure boundaries", () =
     s.search.mockRejectedValueOnce(new Error("private upstream body and credentials"));
     await expect(s.service.research(A, { question })).rejects.toMatchObject({ code: "BOOK_RESEARCH_SEARCH_FAILED", message: "联网研究暂未完成，请稍后重试。" });
     expect(s.provider).not.toHaveBeenCalled();
-    s.provider.mockResolvedValueOnce({ ok: false, status: 504, error: "private provider response" });
-    await expect(s.service.research(A, { question })).rejects.toMatchObject({ code: "BOOK_RESEARCH_SEARCH_FAILED", status: 502 });
+    s.provider.mockRejectedValueOnce(new Error("private provider body and credentials"));
+    const result = await s.service.research(A, { question });
+    expect(result).toMatchObject({ source: "unselected_sources", citedSourceIds: [], draft: unselectedDraft });
+    expect(result.sources.map(source => source.excerpt)).toEqual(searchResult().results.map(source => source.excerpt));
+    expect(JSON.stringify(result)).not.toMatch(/private provider|credentials/);
     expect(s.search).toHaveBeenCalledTimes(2); expect(s.provider).toHaveBeenCalledOnce();
+  });
+
+  it.each(["throw", "failure", "invalid response"] as const)("never returns a fallback after a cancelled selection %s", async outcome => {
+    const s = setup(), controller = new AbortController();
+    s.provider.mockImplementationOnce(async (_messages, options) => {
+      expect(options?.signal).toBe(controller.signal);
+      controller.abort();
+      if (outcome === "throw") throw new Error("private provider error after cancellation");
+      if (outcome === "failure") return { ok: false, status: 504, error: "private late timeout" };
+      return { ok: true, model: "fixture", content: JSON.stringify({ sourceIds: ["W1"], insufficientEvidence: true }) };
+    });
+    await expect(s.service.research(A, { question }, { signal: controller.signal })).rejects.toMatchObject({ name: "AbortError" });
+    expect(s.search).toHaveBeenCalledOnce(); expect(s.provider).toHaveBeenCalledOnce();
   });
 
   it("propagates cancellation to selection and does not return a late result", async () => {
