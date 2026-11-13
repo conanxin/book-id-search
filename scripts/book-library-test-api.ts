@@ -30,6 +30,7 @@ import { createBookAssistantRouter } from "../apps/api/src/ai/book-assistant-rou
 import { createBookWebResearchService } from "../apps/api/src/ai/book-web-research.js";
 import { createBookWebResearchRouter } from "../apps/api/src/ai/book-web-research-routes.js";
 import { createBookWebSourceReader } from "../apps/api/src/ai/book-web-source.js";
+import { createBookWebSourceEvidenceService } from "../apps/api/src/ai/book-web-source-evidence.js";
 import { searchMiniMaxWeb } from "../apps/api/src/ai/minimax-web-search.js";
 import type { ChatMessage, ChatCompletionResponse } from "../apps/api/src/ai/minimax.js";
 import { collectRelatedBooks } from "../apps/api/src/search/related-books.js";
@@ -155,8 +156,25 @@ const webSourceReader = createBookWebSourceReader({
     if (new URL(url).pathname !== "/catalog/research-book") throw new Error("UNEXPECTED_SYNTHETIC_SOURCE");
     return {
       finalUrl: `${url}?view=full`, contentType: "text/html", charset: "utf-8",
-      body: Buffer.from(`<html><head><title>合成馆藏正文</title></head><body><nav>不应提取的导航文字</nav><main><h1>已读取的合成馆藏正文</h1><p>这段正文只存在于网页读取响应，不在搜索节选中。</p><p>字面文字 &lt;img src=x&gt; 保持纯文本。</p><p>${"公开网页段落：馆藏记录列出了版本线索，仍需查阅原始出版物。".repeat(1500)}</p></main><script>不应提取的脚本文字</script></body></html>`),
+      body: Buffer.from(`<html><head><title>合成馆藏正文</title></head><body><nav>不应提取的导航文字</nav><main><h1>已读取的合成馆藏正文</h1><p>这段正文只存在于网页读取响应，不在搜索节选中。</p><p>字面文字 &lt;img src=x&gt; 保持纯文本。</p><p>版本记录甲：馆藏原文写道：“1935年初版”。</p><p>${"用于保留原文邻接上下文的说明。".repeat(100)}</p><p>版本记录乙：书评原文写道：“最早于1937年出版”。该记录没有说明初版与再版的关系。</p><p>${"公开网页段落：馆藏记录列出了版本线索，仍需查阅原始出版物。".repeat(1500)}</p></main><script>不应提取的脚本文字</script></body></html>`),
     };
+  },
+});
+// The real snapshot/segmentation/parser path runs; the model chooses fixture IDs only.
+const webSourceEvidence = createBookWebSourceEvidenceService({
+  getSnapshot: webSourceReader.getSnapshot, isEnabled: () => true,
+  provider: async messages => {
+    const input = JSON.parse(messages.find(message => message.role === "user")!.content);
+    const prompt = JSON.stringify(messages);
+    for (const privateText of ["我的原始介绍：这是个人保存的文字", "我的原始笔记：山口与旧驿站的位置", "尚未保存：下次核对版本", "尚未保存：先读完附录"]) {
+      if (prompt.includes(privateText)) throw new Error("PERSONAL_CONTENT_ENTERED_SOURCE_EVIDENCE_PROMPT");
+    }
+    const selected = input.question.includes("ISBN") ? [] : input.passages
+      .filter((passage: { text: string }) => /1935年初版|最早于1937年出版/.test(passage.text));
+    return { ok: true, model: "synthetic-source-evidence-no-network", content: JSON.stringify({
+      passageIds: selected.map((passage: { id: string }) => passage.id),
+      insufficientEvidence: selected.length === 0,
+    }) };
   },
 });
 const webResearch = createBookWebResearchService({
@@ -205,7 +223,7 @@ app.use("/api/auth", createAuthRouter({ config: google }));
 app.use("/api/private", privateMiddleware);
 app.use("/api/books", privateMiddleware);
 app.use("/api/ai", privateMiddleware);
-app.use("/api/ai/books/:bookId/research", createBookWebResearchRouter({ service: webResearch, sourceReader: webSourceReader, requestAuthorizer: authorize }));
+app.use("/api/ai/books/:bookId/research", createBookWebResearchRouter({ service: webResearch, sourceReader: webSourceReader, sourceEvidence: webSourceEvidence, requestAuthorizer: authorize }));
 app.use("/api/ai/books", createBookAssistantRouter({ service: bookAssistant, requestAuthorizer: authorize }));
 app.use("/api/private/weread/bindings", createWereadBindingsRouter({ service: wereadBindings, requestAuthorizer: authorize }));
 if (config) app.use("/api/private/s32/library", createBookLibraryBodyParser(config, authorize));
