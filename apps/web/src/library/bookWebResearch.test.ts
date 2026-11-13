@@ -4,6 +4,7 @@ import { bookWebResearchContent, generateBookWebResearch, type BookWebResearchIn
 
 const A = "14000000_000000000001", B = "14000001_000000000002", QUESTION = "这本书有哪些相关研究？";
 const NOTICE = "已根据本次问题选出相关网页，以下保留搜索工具返回的来源节选。节选不等于网页或原书全文；来源之间可能有不同说法。";
+const UNSELECTED = "已完成网页搜索，但本次自动挑选未完成。下方保留搜索返回的资料，可以打开原链接核对或读取网页正文。";
 const INSUFFICIENT = "本次已执行联网搜索，但没有选出与问题充分相关的资料。下方如有搜索结果，可以打开原链接核对，或调整问题后再查。";
 const draftFor = (ids = ["W1"]) => ({ title: "查到的相关资料", content: `${NOTICE}\n\n建议先查看：${ids.map(id => `[${id}]`).join(" ")}` });
 const fetchMock = vi.fn<typeof fetch>();
@@ -20,6 +21,14 @@ function result(): BookWebResearchResponse {
     ],
     citedSourceIds: ["W1"], search: { performed: true, queries: ["古道 旅行史 相关研究"], calls: 1 },
   };
+}
+function unselected(limited?: boolean): BookWebResearchResponse {
+  const value = result();
+  value.source = "unselected_sources"; value.citedSourceIds = [];
+  value.draft = { title: "待核对的网页资料", content: UNSELECTED };
+  value.sources.forEach((source, index) => { source.readToken = (index ? "B" : "A").repeat(32); });
+  if (limited !== undefined) value.search.limited = limited;
+  return value;
 }
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });
 function deferred<T>() {
@@ -224,6 +233,54 @@ describe("book web research client", () => {
       status: 502, code: "BOOK_RESEARCH_CLIENT_INVALID_RESPONSE", message: "返回的研究资料未通过核对，请重新查询。",
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+
+  it.each([undefined, false, true])("accepts unselected original sources and copies every source without invented recommendations (limited=%s)", async limited => {
+    const value = unselected(limited);
+    fetchMock.mockResolvedValue(json(value));
+    expect(await generateBookWebResearch(A, { question: QUESTION })).toEqual(value);
+    const copied = bookWebResearchContent(value);
+    expect(copied).toContain("# 待核对的网页资料");
+    expect(copied).toContain(UNSELECTED);
+    expect(copied).toContain(QUESTION);
+    expect(copied).toContain(value.generatedAt);
+    expect(copied).not.toContain("建议先查看");
+    for (const source of value.sources) {
+      expect(copied).toContain(source.title);
+      expect(copied).toContain(source.url);
+      expect(copied).toContain(source.excerpt);
+      expect(copied).not.toContain(source.readToken);
+    }
+    expect(copied.indexOf(value.sources[0].url)).toBeLessThan(copied.indexOf(value.sources[1].url));
+    const notice = "本次搜索已达到上限，已保留返回的资料。可以调整问题后再查。";
+    if (limited) expect(copied).toContain(notice);
+    else expect(copied).not.toContain(notice);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["no sources", (value: BookWebResearchResponse) => { value.sources = []; }],
+    ["claimed selected ID", (value: BookWebResearchResponse) => { value.citedSourceIds = ["W1"]; }],
+    ["invented selected ID", (value: BookWebResearchResponse) => { value.citedSourceIds = ["W99"]; }],
+    ["old selected title", (value: BookWebResearchResponse) => { value.draft.title = "查到的相关资料"; }],
+    ["generated title", (value: BookWebResearchResponse) => { value.draft.title = "AI 已推荐的资料"; }],
+    ["insufficient text", (value: BookWebResearchResponse) => { value.draft.content = INSUFFICIENT; }],
+    ["invented fallback text", (value: BookWebResearchResponse) => { value.draft.content = "AI 已确认本书版本相同。"; }],
+    ["unsupported source", (value: BookWebResearchResponse) => { Object.assign(value, { source: "partial_answer" }); }],
+    ["unselected text labelled selected", (value: BookWebResearchResponse) => { value.source = "web_research"; }],
+    ["unselected text labelled insufficient", (value: BookWebResearchResponse) => { value.source = "insufficient_sources"; }],
+    ["duplicate URL", (value: BookWebResearchResponse) => { value.sources[1].url = value.sources[0].url; }],
+    ["malformed limit", (value: BookWebResearchResponse) => { Object.assign(value.search, { limited: "true" }); }],
+    ["missing completed trace", (value: BookWebResearchResponse) => { value.search.queries = []; value.search.calls = 0; }],
+  ] as const)("rejects unselected results with %s before rendering or copying", async (_label, change) => {
+    const value = unselected(true); change(value);
+    fetchMock.mockResolvedValue(json(value));
+    await expect(generateBookWebResearch(A, { question: QUESTION })).rejects.toMatchObject({
+      status: 502, code: "BOOK_RESEARCH_CLIENT_INVALID_RESPONSE",
+    });
+    expect(() => bookWebResearchContent(value)).toThrow("返回的研究资料未通过核对");
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 
   it("does not fetch an already cancelled request", async () => {

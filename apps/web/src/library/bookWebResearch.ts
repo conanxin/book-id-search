@@ -14,7 +14,7 @@ export interface BookWebResearchResponse {
   bookId: string;
   question: string;
   mode: "source_excerpts";
-  source: "web_research" | "insufficient_sources";
+  source: "web_research" | "insufficient_sources" | "unselected_sources";
   draft: { title: string; content: string };
   sources: BookWebResearchSource[];
   citedSourceIds: string[];
@@ -33,6 +33,8 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
 export const BOOK_WEB_RESEARCH_EXCERPTS_NOTICE = "已根据本次问题选出相关网页，以下保留搜索工具返回的来源节选。节选不等于网页或原书全文；来源之间可能有不同说法。";
 export const BOOK_WEB_RESEARCH_LIMITED_NOTICE = "本次搜索已达到上限，已保留返回的资料。可以调整问题后再查。";
 const RESULT_TITLE = "查到的相关资料";
+const UNSELECTED_TITLE = "待核对的网页资料";
+const UNSELECTED_CONTENT = "已完成网页搜索，但本次自动挑选未完成。下方保留搜索返回的资料，可以打开原链接核对或读取网页正文。";
 const INVALID_RESULT = "返回的研究资料未通过核对，请重新查询。";
 const INSUFFICIENT_CONTENT = "本次已执行联网搜索，但没有选出与问题充分相关的资料。下方如有搜索结果，可以打开原链接核对，或调整问题后再查。";
 const ERRORS: Record<number, string> = {
@@ -90,11 +92,12 @@ function validSource(value: unknown, index: number): value is BookWebResearchSou
 }
 function validResponse(value: unknown, bookId: string, question: string): value is BookWebResearchResponse {
   if (!record(value) || value.bookId !== bookId || value.question !== question || !record(value.draft)
-    || value.mode !== "source_excerpts" || value.draft.title !== RESULT_TITLE || !text(value.draft.content, 12000)
+    || value.mode !== "source_excerpts"
+    || value.draft.title !== (value.source === "unselected_sources" ? UNSELECTED_TITLE : RESULT_TITLE) || !text(value.draft.content, 12000)
     || !Array.isArray(value.sources) || value.sources.length > 12 || !value.sources.every(validSource)
     || !Array.isArray(value.citedSourceIds) || value.citedSourceIds.length > 4 || !value.citedSourceIds.every(id => typeof id === "string")
     || new Set(value.citedSourceIds).size !== value.citedSourceIds.length
-    || (value.source !== "web_research" && value.source !== "insufficient_sources")
+    || (value.source !== "web_research" && value.source !== "insufficient_sources" && value.source !== "unselected_sources")
     || !text(value.generatedAt, 40) || !/^\d{4}-\d\d-\d\dT/.test(value.generatedAt)
     || !Number.isFinite(Date.parse(value.generatedAt)) || !record(value.search)
     || value.search.performed !== true || (value.search.limited !== undefined && typeof value.search.limited !== "boolean")
@@ -110,6 +113,7 @@ function validResponse(value: unknown, bookId: string, question: string): value 
   const markers = new Set(Array.from(value.draft.content.matchAll(/\[((?:W|S)\d+)\]/g), match => match[1]));
   if (Array.from(cited).some(id => !known.has(id)) || markers.size !== cited.size
     || Array.from(markers).some(id => !cited.has(id))) return false;
+  if (value.source === "unselected_sources") return sources.length > 0 && cited.size === 0 && value.draft.content === UNSELECTED_CONTENT;
   return value.source === "web_research"
     ? cited.size > 0 && value.draft.content === `${BOOK_WEB_RESEARCH_EXCERPTS_NOTICE}\n\n建议先查看：${value.citedSourceIds.map(id => `[${id}]`).join(" ")}`
     : cited.size === 0 && value.draft.content === INSUFFICIENT_CONTENT;
@@ -169,11 +173,13 @@ export async function generateBookWebResearch(bookId: string, value: BookWebRese
 
 function oneLine(value: string): string { return value.replace(/\s+/g, " ").replace(/[\\`*_\[\]<>]/g, "\\$&"); }
 
-/** Copy only validated results, together with the actual cited search snapshots. */
+/** Copy validated source excerpts, retaining all search snapshots when selection was incomplete. */
 export function bookWebResearchContent(result: BookWebResearchResponse): string {
   assertBookWebResearchResponse(result, result.bookId, result.question);
-  if (result.source !== "web_research") throw new BookWebResearchError(400, "本次资料不足，请调整问题后继续查找。");
-  const references = result.citedSourceIds.map(id => result.sources.find(source => source.id === id)!).map(source =>
+  if (result.source === "insufficient_sources") throw new BookWebResearchError(400, "本次资料不足，请调整问题后继续查找。");
+  const sources = result.source === "unselected_sources" ? result.sources
+    : result.citedSourceIds.map(id => result.sources.find(source => source.id === id)!);
+  const references = sources.map(source =>
     `[${source.id}] ${oneLine(source.title)}\n${source.url}\n${source.pageAge ? `页面时间：${oneLine(source.pageAge)}\n` : ""}\n搜索结果节选：\n${source.excerpt}${source.truncated ? "\n\n（本条搜索节选已截短）" : ""}`,
   ).join("\n\n");
   const limitedNotice = result.search.limited === true ? `${BOOK_WEB_RESEARCH_LIMITED_NOTICE}\n\n` : "";
