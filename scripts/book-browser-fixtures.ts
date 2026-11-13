@@ -29,6 +29,11 @@ export function getBookWebResearchBrowserFixtureKey(runId: string): string {
   return `web-${createHash("sha256").update(runId).digest("hex").slice(0, 32)}`;
 }
 
+export function getBookWebSourceComparisonBrowserFixtureKey(runId: string): string {
+  getBookBrowserCatalogIds(runId);
+  return `comparison-${createHash("sha256").update(runId).digest("hex").slice(0, 32)}`;
+}
+
 export function createBookWereadFixture(runId: string, now = Date.now()) {
   const ids = getBookBrowserCatalogIds(runId);
   const directory = mkdtempSync(join(tmpdir(), "book-weread-browser-synthetic-"));

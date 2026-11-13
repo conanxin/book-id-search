@@ -17,7 +17,7 @@ import { createS32Router } from "../apps/api/src/s32/register.js";
 import { readS32Config } from "../apps/api/src/s32/config.js";
 import { createBookLibraryBodyParser } from "../apps/api/src/s32/routes/book-library-routes.js";
 import type { CatalogBookSnapshot } from "../apps/api/src/s32/domain/catalog-promotion.js";
-import { createBookWereadFixture, getBookAiBrowserFixtureKey, getBookWebResearchBrowserFixtureKey, getBookBrowserCatalogIds } from "./book-browser-fixtures.js";
+import { createBookWereadFixture, getBookAiBrowserFixtureKey, getBookWebResearchBrowserFixtureKey, getBookWebSourceComparisonBrowserFixtureKey, getBookBrowserCatalogIds } from "./book-browser-fixtures.js";
 import { normalizeNotesQuery, queryPrivateNotes, type WereadNotesQuery } from "../apps/api/src/weread/private-notes.js";
 import { buildNotesTrend, getWereadStatusByCatalogId, getWereadStatusesByCatalogIds,
   getWereadSummary, getWereadConfirmedMatches } from "../apps/api/src/weread/private-overlay.js";
@@ -31,6 +31,7 @@ import { createBookWebResearchService } from "../apps/api/src/ai/book-web-resear
 import { createBookWebResearchRouter } from "../apps/api/src/ai/book-web-research-routes.js";
 import { createBookWebSourceReader } from "../apps/api/src/ai/book-web-source.js";
 import { createBookWebSourceEvidenceService } from "../apps/api/src/ai/book-web-source-evidence.js";
+import { createBookWebSourceComparisonService } from "../apps/api/src/ai/book-web-source-comparison.js";
 import { searchMiniMaxWeb } from "../apps/api/src/ai/minimax-web-search.js";
 import type { ChatMessage, ChatCompletionResponse } from "../apps/api/src/ai/minimax.js";
 import { collectRelatedBooks } from "../apps/api/src/search/related-books.js";
@@ -63,6 +64,8 @@ const aiFixtureKey = getBookAiBrowserFixtureKey(fixtureKey);
 const aiCatalogIds = getBookBrowserCatalogIds(aiFixtureKey);
 const webResearchKey = getBookWebResearchBrowserFixtureKey(fixtureKey);
 const webResearchIds = getBookBrowserCatalogIds(webResearchKey);
+const comparisonKey = getBookWebSourceComparisonBrowserFixtureKey(fixtureKey);
+const comparisonIds = getBookBrowserCatalogIds(comparisonKey);
 const makeBook = (id: string, title: string): CatalogBookSnapshot => ({
   id, ssid: id.split("_")[0], dxid: id.split("_")[1],
   title, author: "合成测试作者", publisher: "合成测试出版社",
@@ -72,7 +75,9 @@ const makeBook = (id: string, title: string): CatalogBookSnapshot => ({
 const libraryBooks = [makeBook(catalogIds.A, `古道阅读验证甲 ${fixtureKey}`), makeBook(catalogIds.B, `古道阅读验证乙 ${fixtureKey}`)];
 const aiBooks = [makeBook(aiCatalogIds.A, `AI 阅读验证甲 ${aiFixtureKey}`), makeBook(aiCatalogIds.B, `AI 阅读验证乙 ${aiFixtureKey}`)];
 const webResearchBooks = [makeBook(webResearchIds.A, `联网研究验证甲 ${webResearchKey}`), makeBook(webResearchIds.B, `联网研究验证乙 ${webResearchKey}`)];
-const books = [...libraryBooks, ...aiBooks, ...webResearchBooks];
+const comparisonBooks = [makeBook(comparisonIds.A, `多来源对照验证甲 ${comparisonKey}`), makeBook(comparisonIds.B, `多来源对照验证乙 ${comparisonKey}`)];
+const books = [...libraryBooks, ...aiBooks, ...webResearchBooks, ...comparisonBooks];
+if (new Set(books.map(item => item.id)).size !== books.length) throw new Error("SYNTHETIC_BOOK_GROUPS_MUST_BE_DISJOINT");
 const isAiBook = (id: string) => id === aiCatalogIds.A || id === aiCatalogIds.B;
 const book = (id: string) => books.find(item => item.id === id);
 const getCatalogDocument = async (id: string) => {
@@ -152,8 +157,17 @@ async function deterministicBookAssistantChat(messages: ChatMessage[]): Promise<
 const webSourceReader = createBookWebSourceReader({
   fetchPage: async (url, { signal }) => {
     if (signal?.aborted) throw new Error("SYNTHETIC_SOURCE_ABORTED");
-    if (new URL(url).pathname === "/research/ancient-routes") throw new Error("SYNTHETIC_SOURCE_UNAVAILABLE");
-    if (new URL(url).pathname !== "/catalog/research-book") throw new Error("UNEXPECTED_SYNTHETIC_SOURCE");
+    const pathname = new URL(url).pathname;
+    if (pathname === "/research/ancient-routes" || pathname === "/comparison/unavailable") throw new Error("SYNTHETIC_SOURCE_UNAVAILABLE");
+    const comparisonPages: Record<string, string> = {
+      "/comparison/catalog": `<html><head><title>合成馆藏版本记录</title></head><body><main><h1>馆藏版本记录</h1><p>馆藏原文写道：“1935年初版”。目录号：CAT-1935。</p><p>这是独立馆藏条目的合成正文，不在搜索节选中。它没有解释另一条记录的不同年份。</p><p>阅读上下文保留 🧭 和字面文字 &lt;img src=x&gt;，原句与出处应保持一致。</p><p>${"馆藏上下文：应查阅原始出版物后再作研究判断。".repeat(12)}</p></main></body></html>`,
+      "/comparison/review": `<html><head><title>合成书评版本记录</title></head><body><main><h1>书评版本记录</h1><p>书评原文写道：“最早于1937年出版”。这条记录没有提供目录号，也没有说明与馆藏初版记载的版本关系。</p><p>这是独立书评的合成正文，不在搜索节选中。原文不应被改写成确定的初版与再版关系。</p><p>${"书评上下文：不同来源的记载需要保留各自的说法。".repeat(12)}</p></main></body></html>`,
+    };
+    if (comparisonPages[pathname]) return {
+      finalUrl: `${url}?view=full`, contentType: "text/html", charset: "utf-8",
+      body: Buffer.from(comparisonPages[pathname]),
+    };
+    if (pathname !== "/catalog/research-book") throw new Error("UNEXPECTED_SYNTHETIC_SOURCE");
     return {
       finalUrl: `${url}?view=full`, contentType: "text/html", charset: "utf-8",
       body: Buffer.from(`<html><head><title>合成馆藏正文</title></head><body><nav>不应提取的导航文字</nav><main><h1>已读取的合成馆藏正文</h1><p>这段正文只存在于网页读取响应，不在搜索节选中。</p><p>字面文字 &lt;img src=x&gt; 保持纯文本。</p><p>版本记录甲：馆藏原文写道：“1935年初版”。</p><p>${"用于保留原文邻接上下文的说明。".repeat(100)}</p><p>版本记录乙：书评原文写道：“最早于1937年出版”。该记录没有说明初版与再版的关系。</p><p>${"公开网页段落：馆藏记录列出了版本线索，仍需查阅原始出版物。".repeat(1500)}</p></main><script>不应提取的脚本文字</script></body></html>`),
@@ -177,6 +191,26 @@ const webSourceEvidence = createBookWebSourceEvidenceService({
     }) };
   },
 });
+let comparisonProviderCalls = 0;
+const webSourceComparison = createBookWebSourceComparisonService({
+  getSnapshot: webSourceReader.getSnapshot, isEnabled: () => true,
+  provider: async messages => {
+    comparisonProviderCalls++;
+    const input = JSON.parse(messages.find(message => message.role === "user")!.content);
+    const prompt = JSON.stringify(messages);
+    for (const privateText of ["我的原始介绍：这是个人保存的文字", "我的原始笔记：山口与旧驿站的位置", "尚未保存：下次核对版本", "尚未保存：先读完附录"]) {
+      if (prompt.includes(privateText)) throw new Error("PERSONAL_CONTENT_ENTERED_SOURCE_COMPARISON_PROMPT");
+    }
+    return { ok: true, model: "synthetic-source-comparison-no-network", content: JSON.stringify({
+      // Deliberately reverse provider groups. Production must restore request order.
+      sources: input.sources.map((source: { sourceKey: string; passages: Array<{ id: string; text: string }> }) => {
+        const selected = input.question.includes("ISBN") ? [] : source.passages.filter(passage =>
+          input.question.includes("目录号") ? passage.text.includes("目录号：CAT-1935") : /1935年初版|最早于1937年出版/.test(passage.text)).slice(0, 2);
+        return { sourceKey: source.sourceKey, passageIds: selected.map(passage => passage.id), insufficientEvidence: selected.length === 0 };
+      }).reverse(),
+    }) };
+  },
+});
 const webResearch = createBookWebResearchService({
   getCatalogDocument, isEnabled: () => true,
   issueSourceReadToken: webSourceReader.issueToken,
@@ -190,13 +224,19 @@ const webResearch = createBookWebResearchService({
       const publicBook = input.book ?? input.catalog;
       const title = String(publicBook?.title ?? "合成书目");
       const query = `${title} ${input.question}`.slice(0, 1000);
+      const comparison = comparisonBooks.some(item => item.title === title);
+      const results = comparison ? [
+        { type: "web_search_result", title: `${title} · 馆藏版本记录`, url: "https://example.org/comparison/catalog", content: "合成馆藏的公开搜索节选，需读取正文核对版本原句。", page_age: "2026-10-01" },
+        { type: "web_search_result", title: "不可读取的合成网页", url: "https://example.org/comparison/unavailable", content: "正文读取失败时仍需保留的合成搜索节选。", page_age: null },
+        { type: "web_search_result", title: "书评版本记录", url: "https://example.org/comparison/review", content: "合成书评的公开搜索节选，需读取正文核对另一条版本记载。", page_age: null },
+      ] : [
+        { type: "web_search_result", title: `${title} · 公开馆藏条目`, url: "https://example.org/catalog/research-book", content: `${title}：合成馆藏节选记载：1935年初版。这条模拟资料只用于验证来源文字不被改写。`, page_age: "2026-10-01" },
+        { type: "web_search_result", title: "古道研究方法 · 公开文献线索", url: "https://example.org/research/ancient-routes", content: "合成书评节选记载：最早于1937年出版。本条与馆藏节选的年份不同，片段没有说明初版与再版的关系。", page_age: null },
+      ];
       return Response.json({ type: "message", role: "assistant", stop_reason: "end_turn", base_resp: { status_code: 0 }, content: [
         { type: "text", text: "这段生成文字不是来源，也没有真的读过全文。" },
         { type: "server_tool_use", id: "synthetic-search-1", name: "web_search", input: { query } },
-        { type: "web_search_tool_result", tool_use_id: "synthetic-search-1", content: [
-          { type: "web_search_result", title: `${title} · 公开馆藏条目`, url: "https://example.org/catalog/research-book", content: `${title}：合成馆藏节选记载：1935年初版。这条模拟资料只用于验证来源文字不被改写。`, page_age: "2026-10-01" },
-          { type: "web_search_result", title: "古道研究方法 · 公开文献线索", url: "https://example.org/research/ancient-routes", content: "合成书评节选记载：最早于1937年出版。本条与馆藏节选的年份不同，片段没有说明初版与再版的关系。", page_age: null },
-        ] },
+        { type: "web_search_tool_result", tool_use_id: "synthetic-search-1", content: results },
       ] });
     },
   }),
@@ -223,7 +263,7 @@ app.use("/api/auth", createAuthRouter({ config: google }));
 app.use("/api/private", privateMiddleware);
 app.use("/api/books", privateMiddleware);
 app.use("/api/ai", privateMiddleware);
-app.use("/api/ai/books/:bookId/research", createBookWebResearchRouter({ service: webResearch, sourceReader: webSourceReader, sourceEvidence: webSourceEvidence, requestAuthorizer: authorize }));
+app.use("/api/ai/books/:bookId/research", createBookWebResearchRouter({ service: webResearch, sourceReader: webSourceReader, sourceEvidence: webSourceEvidence, sourceComparison: webSourceComparison, requestAuthorizer: authorize }));
 app.use("/api/ai/books", createBookAssistantRouter({ service: bookAssistant, requestAuthorizer: authorize }));
 app.use("/api/private/weread/bindings", createWereadBindingsRouter({ service: wereadBindings, requestAuthorizer: authorize }));
 if (config) app.use("/api/private/s32/library", createBookLibraryBodyParser(config, authorize));
@@ -255,7 +295,7 @@ app.get("/api/books/:id/related", async (req: TestRequest, res: TestResponse) =>
   const id = String(req.params.id);
   const source = book(id);
   if (!source) return void res.status(404).json({ error: { message: "Synthetic book not found" } });
-  const group = webResearchBooks.some(item => item.id === id) ? webResearchBooks : isAiBook(id) ? aiBooks : libraryBooks;
+  const group = comparisonBooks.some(item => item.id === id) ? comparisonBooks : webResearchBooks.some(item => item.id === id) ? webResearchBooks : isAiBook(id) ? aiBooks : libraryBooks;
   // Keep the original isolated catalog groups. This field-only in-memory
   // adapter replaces Meili transport while collection/ranking/reasons are real.
   const normalize = (value: string) => value.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
@@ -314,8 +354,9 @@ app.get("/api/private/weread/notes", async (req: TestRequest, res: TestResponse)
 app.get("/api/health", (_req: TestRequest, res: TestResponse) => res.json({ ok: true, syntheticCatalog: true,
   persistence: wereadOnly ? "NOT_EXERCISED" : "postgresql", wereadBindingsPersistence: wereadOnly ? "NOT_EXERCISED" : "postgresql", runtimeRole,
   bookAssistant: { sources: "production_collector", provider: "deterministic_injected", externalMiniMax: "NOT_EXERCISED" },
-  bookWebResearch: { search: "production_adapter_injected_http", selection: "deterministic_ids_only", excerptText: "production_snapshots_unchanged", externalMiniMax: "NOT_EXERCISED" } }));
+  bookWebResearch: { search: "production_adapter_injected_http", selection: "deterministic_ids_only", excerptText: "production_snapshots_unchanged", externalMiniMax: "NOT_EXERCISED" },
+  bookWebSourceComparison: { providerCalls: comparisonProviderCalls, provider: "deterministic_ids_only", externalMiniMax: "NOT_EXERCISED" } }));
 
 app.listen(3001, "127.0.0.1", () => {
-  console.log(`BOOK_LIBRARY_TEST_API_READY=YES CATALOG=SYNTHETIC_TWO_PAIRS WEREAD=SYNTHETIC_SNAPSHOTS_REAL_QUERY BOOK_AI=DETERMINISTIC_PROVIDER_REAL_COLLECTOR PERSISTENCE=${wereadOnly ? "NOT_EXERCISED" : "POSTGRESQL"} ROLE=${runtimeRole} OAUTH=NOT_EXERCISED`);
+  console.log(`BOOK_LIBRARY_TEST_API_READY=YES CATALOG=SYNTHETIC_ISOLATED_GROUPS WEREAD=SYNTHETIC_SNAPSHOTS_REAL_QUERY BOOK_AI=DETERMINISTIC_PROVIDER_REAL_COLLECTOR PERSISTENCE=${wereadOnly ? "NOT_EXERCISED" : "POSTGRESQL"} ROLE=${runtimeRole} OAUTH=NOT_EXERCISED`);
 });
