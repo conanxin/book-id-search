@@ -1,12 +1,21 @@
 # BOOK-ID-SEARCH status
 
-## Current — 2026-11-13 — Compare original passages across read webpages
+## Current — 2026-11-13 — Recover paused book web searches
+
+- `task_id=BOOK_AI_WEB_RESEARCH_RECOVERY_V1`; branch `fix/book-web-research-recovery`, based on deployed PR #81 merge `5305e28571f697ddd1a0bd46d690c90521ce3186`.
+- Reproduced the reported 《梁思成》 question through deployed research modules: the provider returned ten completed searches and two pending calls with `pause_turn`; the old parser rejected all results before source selection.
+- Preserve only paired, completed results from a limited search, disclose the limit in the sidebar, and distinguish search/selection failures and timeouts. The model still selects existing source IDs; requests do not automatically continue or retry.
+- Focused parser/service/client checks and browser journeys cover this real response shape and explicit retry while retaining personal drafts. Actual-provider and deployed-version evidence are recorded separately in the PR.
+- API + Web change; no new dependency, migration, service, credential or model/deadline setting. Production remains PR #81 until this repair is separately merged and published.
+- Contract: [Paused web-search recovery](development/BOOK_AI_WEB_RESEARCH_RECOVERY_V1.md).
+
+## 2026-11-13 — Compare original passages across read webpages (merged and deployed as PR #81)
 
 - `task_id=BOOK_AI_WEB_SOURCE_COMPARISON_V1`; branch `feat/book-web-source-comparison`, based on deployed PR #80 merge `2dba28930a9c142e21baef1eeb9451eeb2bfea06`.
 - Select two or three already-read webpages, ask one explicit question and inspect up to two exact passages per source. One model call selects IDs; the server restores each source's original wording, provenance and the user's source order. Sources with insufficient passages remain visible.
 - Locate passages within their captured text and copy the question, grouped original passages and source/read-time metadata. New questions, selection changes, rereads, clearing and book/session changes discard stale results; personal introductions, notes and unfinished editors stay independent.
 - Reuses the current reader snapshots and Google Owner/CSRF. Combined source text is bounded at 60,000 UTF-16 characters; no new dependency, service, migration or credential is required.
-- Native focused tests/builds, the real-browser/disposable-PostgreSQL fixture journey and the bounded real-provider content review are recorded separately in the PR. Development candidate only: merging and Tencent deployment are separate actions; current production remains PR #80.
+- PR #81 was merged as `5305e28571f697ddd1a0bd46d690c90521ce3186` and its API/Web deployed on 2026-11-13. Native/CI, real-browser/disposable-PostgreSQL and actual deployed reader/comparison evidence remain in [PR #81](https://github.com/conanxin/book-id-search/pull/81); those component trials did not exercise initial hosted web search.
 - Contract: [Multi-source original passages](development/BOOK_AI_WEB_SOURCE_COMPARISON_V1.md).
 
 ## 2026-11-13 — Locate original passages in a read webpage (merged and deployed as PR #80)

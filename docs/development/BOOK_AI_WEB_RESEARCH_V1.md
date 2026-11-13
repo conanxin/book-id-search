@@ -46,6 +46,10 @@ AI 结果留在侧栏。查看来源、复制及清除结果均不保存或修�
 
 因此，本版把第二次模型调用限定为选择来源 ID，事实文字直接来自搜索快照，不让模型重新改写。相异的原文可并列查看，产品不替它们补出解释。两次自由综合审阅保留 `REQUIRES_REVISION`，不能覆盖为 PASS；来源选择、逐字展示和真人内容审阅分别记录。未来的综合判断需要另行改善与验收，不靠不断抽样获得一次好答案。
 
+## 2026-11-13 搜索暂停恢复
+
+[联网研究暂停结果恢复](BOOK_AI_WEB_RESEARCH_RECOVERY_V1.md) 扩展本合同：提供方以 `pause_turn` 暂停时，保留已经配对完成的搜索来源，尾部待执行调用不计作完成；响应通过 `search.limited=true` 披露单次搜索上限。正常 `end_turn` 仍须全部配对，错误与不完整来源仍拒绝。此变化不引入自动续跑或自由答案。
+
 ## 官方接口依据
 
 - [MiniMax 服务端工具](https://platform.minimax.cn/docs/guides/server-tools)：Anthropic Messages 可声明 `tools: [{type: "web_search_20250305", name: "web_search"}]`；返回搜索调用和搜索结果内容块。能力当前为 Beta。
