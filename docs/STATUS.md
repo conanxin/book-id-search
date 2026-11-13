@@ -1,12 +1,20 @@
 # BOOK-ID-SEARCH status
 
-## Current — 2026-11-13 — Locate original passages in a read webpage
+## Current — 2026-11-13 — Compare original passages across read webpages
 
-- `task_id=BOOK_AI_WEB_SOURCE_EVIDENCE_V1`; branch `feat/book-web-source-evidence`, based on deployed PR #79 merge `74fa3677dbb829f5a48abe20b363d600a574cd27`.
-- After reading one public webpage, explicitly ask a question, inspect AI-selected original passages, locate their surrounding text and copy the passages with source/read-time metadata. The model selects IDs; the server returns exact slices of that immutable read snapshot.
-- Question edits, new searches, rereads, clearing and book/session changes discard old results. Personal introductions, notes and unsaved editors remain independent. No migration, service, dependency or new credential is required.
-- Native API and Web focused tests (130 + 174) and integrated API/Web builds passed. Real-browser/PG CI and one bounded live-provider content review are recorded in the PR; fixture evidence is distinct from actual provider evidence.
-- Development candidate only: not merged or deployed. Current production remains PR #79. The earlier free-synthesis content-review failures remain historical failures; this feature returns selected source wording, not a synthesized factual answer.
+- `task_id=BOOK_AI_WEB_SOURCE_COMPARISON_V1`; branch `feat/book-web-source-comparison`, based on deployed PR #80 merge `2dba28930a9c142e21baef1eeb9451eeb2bfea06`.
+- Select two or three already-read webpages, ask one explicit question and inspect up to two exact passages per source. One model call selects IDs; the server restores each source's original wording, provenance and the user's source order. Sources with insufficient passages remain visible.
+- Locate passages within their captured text and copy the question, grouped original passages and source/read-time metadata. New questions, selection changes, rereads, clearing and book/session changes discard stale results; personal introductions, notes and unfinished editors stay independent.
+- Reuses the current reader snapshots and Google Owner/CSRF. Combined source text is bounded at 60,000 UTF-16 characters; no new dependency, service, migration or credential is required.
+- Native focused tests/builds, the real-browser/disposable-PostgreSQL fixture journey and the bounded real-provider content review are recorded separately in the PR. Development candidate only: merging and Tencent deployment are separate actions; current production remains PR #80.
+- Contract: [Multi-source original passages](development/BOOK_AI_WEB_SOURCE_COMPARISON_V1.md).
+
+## 2026-11-13 — Locate original passages in a read webpage (merged and deployed as PR #80)
+
+- `task_id=BOOK_AI_WEB_SOURCE_EVIDENCE_V1`; branch `feat/book-web-source-evidence`, based on PR #79 merge `74fa3677dbb829f5a48abe20b363d600a574cd27`.
+- After reading a public webpage, explicitly ask a question, inspect AI-selected original passages, locate surrounding text and copy the original wording with provenance. The model selects IDs; the server returns exact slices of an immutable read snapshot.
+- PR #80 was approved, merged as `2dba28930a9c142e21baef1eeb9451eeb2bfea06`, and its API/Web deployed to Tencent Cloud on 2026-11-13. Detailed validation, real-provider content review and deployment evidence remain in [PR #80](https://github.com/conanxin/book-id-search/pull/80).
+- The earlier free-synthesis review failures remain historical failures. This feature returns selected source wording; personal content and unfinished editors stay independent.
 - Contract: [Original webpage passages](development/BOOK_AI_WEB_SOURCE_EVIDENCE_V1.md).
 
 ## 2026-11-12 — Read public webpage text (merged and deployed as PR #79)
