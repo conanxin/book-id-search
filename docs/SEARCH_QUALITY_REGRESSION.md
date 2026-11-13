@@ -17,6 +17,7 @@ endpoints; search quality is its cheap companion.
 
 - **17 cases** as of v0.6.1 (`S25A — search quality WARN cleanup`).
 - **Baseline**: 17 PASS / 0 WARN / 0 FAIL.
+- **Exact identifier oracle**: `topId` means the expected record must rank **first**. A match elsewhere in the top-K list is a FAIL, not a PASS.
 
 Cases include:
 

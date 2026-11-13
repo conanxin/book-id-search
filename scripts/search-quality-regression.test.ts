@@ -175,6 +175,40 @@ describe("search-quality-regression CLI (S25B)", () => {
       expect(r.status).toBe("PASS");
     });
 
+    it("topId must match rank 1, even when expected id appears at rank 2", () => {
+      const c: SearchQualityCase = {
+        id: "top-rank",
+        description: "",
+        q: "x",
+        expectations: { topId: "canonical" },
+      };
+      const r = evalCase(c, {
+        status: 200,
+        body: {
+          query: "x",
+          queryInfo: {
+            original: "x",
+            normalized: "x",
+            cleaned: "x",
+            detectedType: "text",
+            cleanupApplied: false,
+            removedPhrases: [],
+            intentType: "general",
+            intentLabel: "通用",
+          },
+          page: 1,
+          limit: 10,
+          total: 2,
+          items: [
+            { id: "wrong", title: "Wrong first result" },
+            { id: "canonical", title: "Correct but second" },
+          ],
+        },
+      });
+      expect(r.status).toBe("FAIL");
+      expect(r.notes.some((note) => note.includes("rank 1"))).toBe(true);
+    });
+
     it("missing topId -> FAIL", () => {
       const c: SearchQualityCase = {
         id: "t",
