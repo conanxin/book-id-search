@@ -1,6 +1,6 @@
 import { chatCompletion, isAiEnabled, type ChatMessage } from "./minimax.js";
 import { checkSourceCancelled } from "./book-web-source-contract.js";
-import { splitBookWebSourcePassages } from "./book-web-source-evidence.js";
+import { splitBookWebSourceComparisonPassages } from "./book-web-source-comparison-passages.js";
 import { BookWebSourceEvidenceError, type BookWebSourceEvidenceResponse, type BookWebSourcePassage,
   type BookWebSourceSnapshot } from "./book-web-source-evidence-contract.js";
 import { BOOK_WEB_SOURCE_COMPARISON_LIMITS as LIMITS, BookWebSourceComparisonError,
@@ -122,7 +122,7 @@ export function createBookWebSourceComparisonService(deps: {
       if (textCharacters > LIMITS.TOTAL_TEXT_CHARS) throw new BookWebSourceComparisonError("BOOK_COMPARISON_TEXT_LIMIT");
       const sources: SourceMaterial[] = snapshots.map((snapshot, index) => {
         let passages: BookWebSourcePassage[];
-        try { passages = splitBookWebSourcePassages(snapshot.text); }
+        try { passages = splitBookWebSourceComparisonPassages(snapshot.text); }
         catch (error) {
           if (error instanceof BookWebSourceEvidenceError && error.code === "BOOK_EVIDENCE_INVALID_OUTPUT") throw invalidOutput();
           throw unavailable();

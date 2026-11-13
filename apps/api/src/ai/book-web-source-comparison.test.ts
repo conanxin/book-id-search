@@ -84,6 +84,35 @@ describe("multiple source evidence uses one complete selection operation", () =>
     expect(result.sources.every(source => !("answer" in source) && !("comparison" in source))).toBe(true);
   });
 
+  it("lets one provider select short prose without adjoining unrelated product material", async () => {
+    const paragraphs = [
+      ["技术工作：来源甲描述团队协作与反复试验。\n\n", "行业环境：来源甲记录变化中的竞争条件。\n\n", "其它商品：另一本书，售价 20 元。"],
+      ["技术工作：来源乙描述工程师的日常工作。\n\n", "行业环境：来源乙记录技术持续更新。\n\n", "其它商品：第三本书，售价 30 元。"],
+    ];
+    const s = await setup(paragraphs.map(parts => ({ text: parts.join("") })));
+    s.provider.mockImplementationOnce(async messages => {
+      const payload = JSON.parse(messages.find(message => message.role === "user")!.content);
+      return completed({ sources: payload.sources.map((source: {
+        sourceKey: string; passages: { id: string; text: string }[];
+      }) => {
+        expect(source.passages).toHaveLength(3);
+        return group(source.sourceKey, source.passages.filter(passage => /技术工作|行业环境/.test(passage.text)).map(passage => passage.id));
+      }) });
+    });
+    const result = await s.service.compare(BOOK, s.body);
+    result.sources.forEach((source, index) => {
+      expect(source.passages.map(passage => passage.text)).toEqual(paragraphs[index].slice(0, 2));
+      expect(source.passages.every(passage => !/其它商品|售价/.test(passage.text))).toBe(true);
+      for (const passage of source.passages) expect(passage.text).toBe(s.reads[index].text.slice(passage.start, passage.end));
+    });
+    const payload = JSON.parse(s.provider.mock.calls[0][0][1].content);
+    payload.sources.forEach((source: { passages: { text: string }[] }, index: number) => {
+      expect(source.passages.map(passage => passage.text).join("")).toBe(s.reads[index].text);
+    });
+    expect(s.provider).toHaveBeenCalledOnce();
+    expect(s.fetchPage).toHaveBeenCalledTimes(2);
+  });
+
   it("keeps explicit token order rather than sorting source IDs and supports six passages across three sources", async () => {
     const s = await setup(texts.map(text => ({ text })));
     const tokens = [s.body.snapshotTokens[2], s.body.snapshotTokens[0], s.body.snapshotTokens[1]];
