@@ -6,7 +6,9 @@ import { BookWebSourceComparison } from "./BookWebSourceComparison";
 import { BookWebSourceComparisonProvider } from "./BookWebSourceComparisonScope";
 import {
   assertBookWebResearchResponse, BOOK_WEB_RESEARCH_EXCERPTS_NOTICE, BOOK_WEB_RESEARCH_LIMITED_NOTICE,
-  bookWebResearchContent, bookWebResearchErrorMessage, generateBookWebResearch, isBookWebResearchAbort,
+  BOOK_WEB_RESEARCH_BOOK_CLUES_NOTICE, BOOK_WEB_RESEARCH_SELECTED_ISBN_NOTICE,
+  bookWebResearchContent, bookWebResearchErrorMessage, bookWebResearchNeedsIsbnReview, bookWebSourceCluesText,
+  generateBookWebResearch, isBookWebResearchAbort,
   type BookWebResearchResponse, type BookWebResearchSource,
 } from "./bookWebResearch";
 
@@ -16,10 +18,15 @@ const EXAMPLES = [
   { label: "延伸阅读", question: "查找介绍相关图书或延伸阅读书目的网页资料。" },
 ];
 
+function SourceBookClues({ source }: { source: BookWebResearchSource }) {
+  return <p className="library-meta" aria-label={`本书书目线索 ${source.id}`}>{bookWebSourceCluesText(source)}</p>;
+}
+
 function SelectedSourceExcerpt({ source, bookId, generation, researchQuestion }: { source: BookWebResearchSource; bookId: string; generation: number; researchQuestion: string }) {
   const [expanded, setExpanded] = useState(false);
   const excerptId = useId();
-  return <li className="book-ai-source book-web-selected-source" data-web-excerpt-source-id={source.id}>
+  return <li className="book-ai-source book-web-selected-source" data-web-excerpt-source-id={source.id}
+    data-book-clues={source.bookClues?.isbn ?? "legacy"}>
     <div className="book-ai-source-heading">
       <a href={source.url} target="_blank" rel="noopener noreferrer" aria-label={`打开所选网页 [${source.id}] ${source.title}`}>
         [{source.id}] {source.title} <ExternalLink size={12} aria-hidden="true" />
@@ -27,6 +34,7 @@ function SelectedSourceExcerpt({ source, bookId, generation, researchQuestion }:
     </div>
     <p className="book-web-source-url">{source.url}</p>
     {source.pageAge && <p className="library-meta">页面时间：{source.pageAge}</p>}
+    <SourceBookClues source={source} />
     <p className="book-web-excerpt-label">搜索结果节选</p>
     <blockquote id={excerptId} className={expanded ? "book-web-excerpt is-expanded" : "book-web-excerpt"}>{source.excerpt}</blockquote>
     <button type="button" className="library-text-button book-web-excerpt-toggle" aria-expanded={expanded} aria-controls={excerptId}
@@ -106,7 +114,7 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
     }
   }
   async function copyResult() {
-    if (!response || response.source === "insufficient_sources" || copying || !current()) return;
+    if (!response || response.sources.length === 0 || copying || !current()) return;
     let content: string;
     try { content = bookWebResearchContent(response); }
     catch (e) { setError(bookWebResearchErrorMessage(e)); return; }
@@ -117,7 +125,8 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
       if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
       await navigator.clipboard.writeText(content);
       if (stillCurrent()) setMessage(response.source === "unselected_sources"
-        ? "已复制待核对的网页资料与出处。" : "已复制所选节选与网页来源。");
+        ? "已复制待核对的网页资料与出处。" : response.source === "insufficient_sources"
+          ? "已复制现有网页来源与资料不足说明。" : "已复制所选节选与网页来源。");
     } catch {
       if (stillCurrent()) {
         setCopyFallback(content); setMessage("无法自动复制，请在下方选择文字并手动复制。");
@@ -131,13 +140,14 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
 
   const allSourceCards = response ? <ol className="book-ai-source-list">
     {response.sources.map(source => <li key={source.id} className="book-ai-source" data-web-source-id={source.id}
-      tabIndex={-1} ref={element => { sourceElements.current[source.id] = element; }}>
+      data-book-clues={source.bookClues?.isbn ?? "legacy"} tabIndex={-1} ref={element => { sourceElements.current[source.id] = element; }}>
       <div className="book-ai-source-heading">
         <a href={source.url} target="_blank" rel="noopener noreferrer">[{source.id}] {source.title} <ExternalLink size={12} aria-hidden="true" /></a>
         {response.citedSourceIds.includes(source.id) && <span className="library-tag">已选中</span>}
       </div>
       <p className="book-web-source-url">{source.url}</p>
       {source.pageAge && <p className="library-meta">页面时间：{source.pageAge}</p>}
+      <SourceBookClues source={source} />
       <p className="book-web-excerpt-label">搜索结果节选</p>
       <blockquote>{source.excerpt}</blockquote>
       {source.truncated && <p className="library-meta">本条搜索节选已截短，可打开网页进一步核对。</p>}
@@ -180,6 +190,8 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
         <span className="library-tag">{response.source === "unselected_sources" ? "未自动挑选" : response.source === "web_research" ? "请核对网页来源" : "资料不足"}</span>
       </div>
       <p className="book-ai-question-note">本次问题：{response.question}</p>
+      <p className="book-web-selection-notice" aria-label="书目线索核对范围">{BOOK_WEB_RESEARCH_BOOK_CLUES_NOTICE}</p>
+      {bookWebResearchNeedsIsbnReview(response) && <p className="library-status" role="status">{BOOK_WEB_RESEARCH_SELECTED_ISBN_NOTICE}</p>}
       {response.search.limited === true && <p className="library-status" role="status">{BOOK_WEB_RESEARCH_LIMITED_NOTICE}</p>}
       <details className="book-ai-sources book-web-queries">
         <summary>本次实际搜索词（{response.search.queries.length}）</summary>
@@ -201,8 +213,8 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
         </div>
       </>}
       <div className="library-actions">
-        {response.source !== "insufficient_sources" && <button type="button" className="library-button" disabled={copying} onClick={() => void copyResult()}>
-          <Copy size={16} aria-hidden="true" />复制结果与来源
+        {response.sources.length > 0 && <button type="button" className="library-button" disabled={copying} onClick={() => void copyResult()}>
+          <Copy size={16} aria-hidden="true" />{response.source === "insufficient_sources" ? "复制现有来源" : "复制结果与来源"}
         </button>}
         <button type="button" className="library-button library-button--quiet" onClick={clear}>清除结果</button>
       </div>

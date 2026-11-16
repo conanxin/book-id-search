@@ -17,6 +17,8 @@ vi.mock("./bookWebResearch", async original => ({ ...await original<typeof impor
 const A = "10000001_100000000001", B = "10000002_100000000002", QUESTION = "这本书有哪些相关研究？";
 const NOTICE = "已根据本次问题选出相关网页，以下保留搜索工具返回的来源节选。节选不等于网页或原书全文；来源之间可能有不同说法。";
 const LIMITED = "本次搜索已达到上限，已保留返回的资料。可以调整问题后再查。";
+const CLUES_NOTICE = "书目线索只核对当前标题和搜索节选中的文字，不代表已读全文、内容可信或属于本书书评。";
+const SELECTED_ISBN_NOTICE = "所选资料尚缺可对应本书的 ISBN 线索；与本书的直接关联仍需核对。";
 const UNSELECTED = "已完成网页搜索，但本次自动挑选未完成。下方保留搜索返回的资料，可以打开原链接核对或读取网页正文。";
 const INSUFFICIENT = "本次已执行联网搜索，但没有选出与问题充分相关的资料。下方如有搜索结果，可以打开原链接核对，或调整问题后再查。";
 const draftFor = (ids = ["W1"]) => ({ title: "查到的相关资料", content: `${NOTICE}\n\n建议先查看：${ids.map(id => `[${id}]`).join(" ")}` });
@@ -111,6 +113,10 @@ describe("book web research sidebar", () => {
     expect(generateBookWebResearch).toHaveBeenCalledWith(A, { question: QUESTION }, expect.any(AbortSignal));
     const chosen = result().querySelector('[data-web-excerpt-source-id="W1"]')!;
     expect(chosen.querySelector("blockquote")?.textContent).toBe(answer().sources[0].excerpt);
+    expect(chosen.getAttribute("data-book-clues")).toBe("legacy");
+    expect(within(chosen as HTMLElement).getByLabelText("本书书目线索 W1").textContent).toBe("书目线索未核对");
+    expect(screen.getByLabelText("书目线索核对范围").textContent).toBe(CLUES_NOTICE);
+    expect(screen.queryByText(SELECTED_ISBN_NOTICE)).toBeNull();
     expect(result().textContent).toContain(NOTICE);
     expect(result().querySelector(".book-prose")).toBeNull();
     expect(within(result()).getByRole("link", { name: "打开所选网页 [W1] 旅行史目录", exact: true }).getAttribute("href")).toBe(answer().sources[0].url);
@@ -145,6 +151,8 @@ describe("book web research sidebar", () => {
     await click("联网研究"); await search(); await click("复制结果与来源");
     expect(writeClipboard).toHaveBeenCalledWith(bookWebResearchContent(answer()));
     expect(field("我的手工编辑").value).toBe("我的原文保持不变");
+    expect(writeClipboard.mock.calls[0][0]).toContain(CLUES_NOTICE);
+    expect(writeClipboard.mock.calls[0][0]).toContain("书目线索未核对");
     expect(screen.getByText("已复制所选节选与网页来源。")).toBeTruthy();
     expect(generateBookWebResearch).toHaveBeenCalledOnce();
   });
@@ -257,13 +265,24 @@ describe("book web research sidebar", () => {
     expect(generateBookWebResearch).not.toHaveBeenCalled();
   });
 
-  it("shows insufficient evidence with search terms and available excerpts, without a copyable answer", async () => {
+  it("shows insufficient evidence and lets the user copy available original sources", async () => {
     vi.mocked(generateBookWebResearch).mockResolvedValueOnce(answer({ source: "insufficient_sources", citedSourceIds: [], draft: { title: "查到的相关资料", content: INSUFFICIENT } }));
     await mount(); await search();
     expect(screen.getByText(INSUFFICIENT)).toBeTruthy();
     expect(screen.getByLabelText("本次实际搜索词")).toBeTruthy();
     expect(document.querySelectorAll("[data-web-source-id]")).toHaveLength(2);
     expect(screen.queryByRole("button", { name: "复制结果与来源" })).toBeNull();
+    await click("复制现有来源");
+    const copied = writeClipboard.mock.calls[0][0];
+    expect(copied).toContain("# 本次搜索资料不足");
+    expect(copied).toContain(INSUFFICIENT);
+    expect(copied).toContain(CLUES_NOTICE);
+    for (const source of answer().sources) {
+      expect(copied).toContain(source.title); expect(copied).toContain(source.url); expect(copied).toContain(source.excerpt);
+    }
+    expect(copied).not.toContain("建议先查看");
+    expect(screen.getByText("已复制现有网页来源与资料不足说明。")).toBeTruthy();
+    expect(generateBookWebResearch).toHaveBeenCalledOnce();
     await click("清除结果");
     expect(screen.queryByLabelText("本次实际搜索词")).toBeNull();
     expect(document.querySelector("[data-web-source-id]")).toBeNull();
@@ -377,6 +396,9 @@ describe("book web research sidebar", () => {
     await mount(); await search();
     expect(screen.getByText(LIMITED)).toBeTruthy();
     expect(screen.getByText(INSUFFICIENT)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "复制现有来源" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "复制结果与来源" })).toBeNull();
+    expect(screen.queryByText(SELECTED_ISBN_NOTICE)).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByRole("region", { name: "联网研究结果" })).toBeNull();
     expect(generateBookWebResearch).toHaveBeenCalledOnce();
@@ -456,6 +478,8 @@ describe("book web research sidebar", () => {
 
   it("shows every unselected source directly, copies all original snippets and still permits an explicit webpage read", async () => {
     const value = unselectedAnswer();
+    value.sources[0].bookClues = { isbn: "not_seen", text: ["title"] };
+    value.sources[1].bookClues = { isbn: "other_only", text: ["author"] };
     vi.mocked(generateBookWebResearch).mockResolvedValueOnce(value);
     const source = value.sources[1];
     const readBody = {
@@ -473,6 +497,8 @@ describe("book web research sidebar", () => {
     expect(screen.getByText("未自动挑选")).toBeTruthy();
     expect(screen.getByText(UNSELECTED)).toBeTruthy();
     expect(screen.getByText(LIMITED)).toBeTruthy();
+    expect(screen.getByLabelText("书目线索核对范围").textContent).toBe(CLUES_NOTICE);
+    expect(screen.queryByText(SELECTED_ISBN_NOTICE)).toBeNull();
     expect(screen.queryByRole("heading", { name: "本次搜索资料不足" })).toBeNull();
     expect(screen.queryByLabelText("AI 选中的网页资料")).toBeNull();
     expect(screen.queryByText("已选中")).toBeNull();
@@ -482,6 +508,7 @@ describe("book web research sidebar", () => {
     expect(document.querySelectorAll("[data-web-source-id]")).toHaveLength(2);
     for (const [index, card] of cards.entries()) {
       expect(card.closest("details")).toBeNull();
+      expect(card.getAttribute("data-book-clues")).toBe(value.sources[index].bookClues!.isbn);
       expect(card.querySelector("blockquote")?.textContent).toBe(value.sources[index].excerpt);
       expect(within(card as HTMLElement).getByRole("link", { name: "[" + value.sources[index].id + "] " + value.sources[index].title }).getAttribute("href")).toBe(value.sources[index].url);
       expect(within(card as HTMLElement).getByRole("button", { name: "读取网页正文 " + value.sources[index].id }).matches(":disabled")).toBe(false);
@@ -491,6 +518,9 @@ describe("book web research sidebar", () => {
     await click("复制结果与来源");
     const copied = writeClipboard.mock.calls[0][0];
     expect(copied).toContain(UNSELECTED); expect(copied).toContain(LIMITED);
+    expect(copied).toContain(CLUES_NOTICE);
+    expect(copied).toContain("未见本书 ISBN；出现书名文字");
+    expect(copied).toContain("只看到其他 ISBN；出现作者文字");
     for (const item of value.sources) {
       expect(copied).toContain(item.title); expect(copied).toContain(item.url); expect(copied).toContain(item.excerpt);
       expect(copied).not.toContain(item.readToken);
@@ -557,4 +587,131 @@ describe("book web research sidebar", () => {
     await click("联网查资料"); expect(screen.queryByRole("alert")).toBeNull();
     expect(result()).toBeTruthy(); expect(generateBookWebResearch).toHaveBeenCalledTimes(2);
   });
+
+  it.each([
+    ["matched", ["title", "author"], "出现本书 ISBN；出现书名文字；出现作者文字"],
+    ["mixed", [], "本书与其他 ISBN 同时出现"],
+    ["other_only", ["title"], "只看到其他 ISBN；出现书名文字"],
+    ["not_seen", ["author"], "未见本书 ISBN；出现作者文字"],
+    ["unavailable", [], "本书 ISBN 无法用于比对"],
+  ] as const)("shows the same %s clues in selected and all-source cards without changing the excerpt", async (isbn, text, label) => {
+    const value = answer();
+    value.sources[0].bookClues = { isbn, text: [...text] };
+    value.sources[0].excerpt = "这是一段原始搜索节选。\n不能由书目文字推断全文内容。";
+    vi.mocked(generateBookWebResearch).mockResolvedValueOnce(value);
+    await mount(); await search();
+    const chosen = result().querySelector('[data-web-excerpt-source-id="W1"]') as HTMLElement;
+    expect(chosen.getAttribute("data-book-clues")).toBe(isbn);
+    expect(within(chosen).getByLabelText("本书书目线索 W1").textContent).toBe("书目线索：" + label);
+    expect(chosen.querySelector("blockquote")?.textContent).toBe(value.sources[0].excerpt);
+    expect(screen.getByLabelText("书目线索核对范围").textContent).toBe(CLUES_NOTICE);
+    await click("查看网页依据 W1");
+    const complete = document.querySelector('[data-web-source-id="W1"]') as HTMLElement;
+    expect(complete.getAttribute("data-book-clues")).toBe(isbn);
+    expect(within(complete).getByLabelText("本书书目线索 W1").textContent).toBe("书目线索：" + label);
+    expect(complete.querySelector("blockquote")?.textContent).toBe(value.sources[0].excerpt);
+    expect(document.activeElement).toBe(complete);
+    expect(document.querySelector('[data-web-source-id="W2"]')?.getAttribute("data-book-clues")).toBe("legacy");
+    await click("复制结果与来源");
+    expect(writeClipboard.mock.calls[0][0]).toContain("书目线索：" + label);
+    expect(writeClipboard.mock.calls[0][0]).toContain(CLUES_NOTICE);
+    expect(writeClipboard.mock.calls[0][0]).toContain(value.sources[0].excerpt);
+    expect(generateBookWebResearch).toHaveBeenCalledOnce();
+  });
+
+  it("keeps selected sources and their order while clearly showing their missing ISBN clues", async () => {
+    const value = answer({ citedSourceIds: ["W2", "W1"], draft: draftFor(["W2", "W1"]) });
+    value.sources[0].bookClues = { isbn: "not_seen", text: ["title", "author"] };
+    value.sources[1].bookClues = { isbn: "other_only", text: ["author"] };
+    vi.mocked(generateBookWebResearch).mockResolvedValueOnce(value);
+    render(<>{privateEditors()}{view()}</>);
+    await click("联网研究"); await search();
+    expect(screen.getByText(SELECTED_ISBN_NOTICE).getAttribute("role")).toBe("status");
+    expect(screen.getByRole("heading", { name: "查到的相关资料" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "本次搜索资料不足" })).toBeNull();
+    const cards = Array.from(result().querySelectorAll("[data-web-excerpt-source-id]"));
+    expect(cards.map(card => card.getAttribute("data-web-excerpt-source-id"))).toEqual(["W2", "W1"]);
+    expect(cards.map(card => card.querySelector("blockquote")?.textContent)).toEqual([value.sources[1].excerpt, value.sources[0].excerpt]);
+    await click("复制结果与来源");
+    expect(writeClipboard.mock.calls[0][0]).toContain(SELECTED_ISBN_NOTICE);
+    expect(field("个人介绍草稿").value).toBe("尚未保存的个人介绍");
+    expect(field("个人笔记草稿").value).toBe("尚未保存的个人笔记");
+    change("新的问题");
+    expect(screen.queryByText(SELECTED_ISBN_NOTICE)).toBeNull();
+    expect(screen.queryByLabelText("书目线索核对范围")).toBeNull();
+    expect(document.querySelector("[data-book-clues]")).toBeNull();
+    expect(generateBookWebResearch).toHaveBeenCalledOnce();
+  });
+
+  it.each([undefined, "matched", "mixed"] as const)("does not claim missing selected ISBN clues when one source is %s", async isbn => {
+    const value = answer({ citedSourceIds: ["W2", "W1"], draft: draftFor(["W2", "W1"]) });
+    if (isbn) value.sources[0].bookClues = { isbn, text: [] };
+    value.sources[1].bookClues = { isbn: "not_seen", text: [] };
+    vi.mocked(generateBookWebResearch).mockResolvedValueOnce(value);
+    await mount(); await search();
+    expect(screen.queryByText(SELECTED_ISBN_NOTICE)).toBeNull();
+    expect(result().querySelectorAll("[data-web-excerpt-source-id]")).toHaveLength(2);
+    await click("复制结果与来源");
+    expect(writeClipboard.mock.calls[0][0]).not.toContain(SELECTED_ISBN_NOTICE);
+    if (!isbn) expect(writeClipboard.mock.calls[0][0]).toContain("书目线索未核对");
+  });
+
+  it.each([
+    { isbn: "matched", text: ["author", "title"] },
+    { isbn: "matched", text: [], contentVerified: true },
+  ])("rejects malformed book-clue metadata before exposing cards or a copy action %#", async bookClues => {
+    const value = answer();
+    Object.assign(value.sources[0], { bookClues });
+    vi.mocked(generateBookWebResearch).mockResolvedValueOnce(value);
+    await mount(); await search();
+    expect(screen.getByRole("alert").textContent).toBe("返回的研究资料未通过核对，请重新查询。");
+    expect(document.querySelector("[data-book-clues]")).toBeNull();
+    expect(screen.queryByLabelText("书目线索核对范围")).toBeNull();
+    expect(screen.queryByRole("button", { name: "复制结果与来源" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "复制现有来源" })).toBeNull();
+    expect(generateBookWebResearch).toHaveBeenCalledOnce();
+  });
+
+  it("retains read and comparison registration for insufficient sources and offers manual source copying", async () => {
+    const value = unselectedAnswer();
+    value.source = "insufficient_sources";
+    value.draft = { title: "查到的相关资料", content: INSUFFICIENT };
+    value.sources[0].bookClues = { isbn: "not_seen", text: ["author"] };
+    vi.mocked(generateBookWebResearch).mockResolvedValueOnce(value);
+    const source = value.sources[0];
+    const readBody = {
+      bookId: A, sourceId: source.id, requestedUrl: source.url, finalUrl: source.url,
+      title: source.title, text: "这段可读网页正文仍然可以人工核对。",
+      contentType: "text/plain", extraction: "plain_text", truncated: false,
+      fetchedAt: "2026-11-16T08:00:00.000Z", snapshotToken: "C".repeat(32),
+    };
+    const transport = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(readBody)));
+    vi.stubGlobal("fetch", transport);
+    writeClipboard.mockRejectedValueOnce(new Error("clipboard denied"));
+    render(<>{privateEditors()}{view()}</>);
+    await click("联网研究"); await search();
+    expect(screen.getByRole("heading", { name: "本次搜索资料不足" })).toBeTruthy();
+    expect(screen.queryByText(SELECTED_ISBN_NOTICE)).toBeNull();
+    expect(transport).not.toHaveBeenCalled();
+    await click("复制现有来源");
+    const copied = field("可复制的研究结果");
+    expect(copied.readOnly).toBe(true);
+    expect(copied.value).toContain(INSUFFICIENT);
+    expect(copied.value).toContain(CLUES_NOTICE);
+    expect(copied.value).toContain(LIMITED);
+    expect(copied.value).toContain("未见本书 ISBN；出现作者文字");
+    expect(copied.value).toContain("书目线索未核对");
+    for (const item of value.sources) expect(copied.value).toContain(item.excerpt);
+    await act(async () => { fireEvent.click(screen.getByText("查看本次网页来源（2）")); });
+    await click("读取网页正文 W1");
+    expect(screen.getByRole("region", { name: "网页可读文字 W1" }).textContent).toContain(readBody.text);
+    expect(screen.getByRole("checkbox", { name: "选择来源 W1" })).toBeTruthy();
+    expect(transport).toHaveBeenCalledOnce();
+    expect(JSON.parse(String(transport.mock.calls[0][1]?.body))).toEqual({ sourceToken: source.readToken });
+    expect(field("个人介绍草稿").value).toBe("尚未保存的个人介绍");
+    expect(field("个人笔记草稿").value).toBe("尚未保存的个人笔记");
+    expect(field("联网研究问题").value).toBe(QUESTION);
+    expect(generateBookWebResearch).toHaveBeenCalledOnce();
+  });
+
 });
