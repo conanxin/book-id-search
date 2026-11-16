@@ -1,5 +1,9 @@
 import { ensureAuthSessionLoaded, getWebAuthAuthGeneration, getWebAuthSnapshot } from "../auth/session";
 
+export interface BookWebResearchBookClues {
+  isbn: "matched" | "mixed" | "other_only" | "not_seen" | "unavailable";
+  text: ("title" | "author")[];
+}
 export interface BookWebResearchSource {
   id: string;
   kind: "web";
@@ -9,6 +13,7 @@ export interface BookWebResearchSource {
   pageAge: string | null;
   truncated: boolean;
   readToken?: string;
+  bookClues?: BookWebResearchBookClues;
 }
 export interface BookWebResearchResponse {
   bookId: string;
@@ -32,6 +37,15 @@ export class BookWebResearchError extends Error {
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
 export const BOOK_WEB_RESEARCH_EXCERPTS_NOTICE = "已根据本次问题选出相关网页，以下保留搜索工具返回的来源节选。节选不等于网页或原书全文；来源之间可能有不同说法。";
 export const BOOK_WEB_RESEARCH_LIMITED_NOTICE = "本次搜索已达到上限，已保留返回的资料。可以调整问题后再查。";
+export const BOOK_WEB_RESEARCH_BOOK_CLUES_NOTICE = "书目线索只核对当前标题和搜索节选中的文字，不代表已读全文、内容可信或属于本书书评。";
+export const BOOK_WEB_RESEARCH_SELECTED_ISBN_NOTICE = "所选资料尚缺可对应本书的 ISBN 线索；与本书的直接关联仍需核对。";
+const BOOK_CLUE_LABELS: Record<BookWebResearchBookClues["isbn"], string> = {
+  matched: "出现本书 ISBN",
+  mixed: "本书与其他 ISBN 同时出现",
+  other_only: "只看到其他 ISBN",
+  not_seen: "未见本书 ISBN",
+  unavailable: "本书 ISBN 无法用于比对",
+};
 const RESULT_TITLE = "查到的相关资料";
 const UNSELECTED_TITLE = "待核对的网页资料";
 const UNSELECTED_CONTENT = "已完成网页搜索，但本次自动挑选未完成。下方保留搜索返回的资料，可以打开原链接核对或读取网页正文。";
@@ -84,11 +98,21 @@ function webUrl(value: unknown): string | null {
     return (url.protocol === "http:" || url.protocol === "https:") && !url.username && !url.password ? url.href : null;
   } catch { return null; }
 }
+function validBookClues(value: unknown): value is BookWebResearchBookClues {
+  return record(value) && Object.keys(value).length === 2
+    && Object.keys(value).every(key => key === "isbn" || key === "text")
+    && typeof value.isbn === "string" && Object.hasOwn(BOOK_CLUE_LABELS, value.isbn)
+    && Array.isArray(value.text) && value.text.length <= 2
+    && value.text.every(clue => clue === "title" || clue === "author")
+    && new Set(value.text).size === value.text.length
+    && (value.text.length < 2 || value.text[0] === "title");
+}
 function validSource(value: unknown, index: number): value is BookWebResearchSource {
   return record(value) && value.id === `W${index + 1}` && value.kind === "web"
     && text(value.title, 300) && webUrl(value.url) !== null && text(value.excerpt, 3000)
     && (value.pageAge === null || text(value.pageAge, 100)) && typeof value.truncated === "boolean"
-    && (value.readToken === undefined || (typeof value.readToken === "string" && /^[A-Za-z0-9_-]{32}$/.test(value.readToken)));
+    && (value.readToken === undefined || (typeof value.readToken === "string" && /^[A-Za-z0-9_-]{32}$/.test(value.readToken)))
+    && (value.bookClues === undefined || validBookClues(value.bookClues));
 }
 function validResponse(value: unknown, bookId: string, question: string): value is BookWebResearchResponse {
   if (!record(value) || value.bookId !== bookId || value.question !== question || !record(value.draft)
@@ -171,17 +195,35 @@ export async function generateBookWebResearch(bookId: string, value: BookWebRese
   return result;
 }
 
+/** Describe visible bibliographic text without claiming that the source or its content is verified. */
+export function bookWebSourceCluesText(source: BookWebResearchSource): string {
+  if (!source.bookClues) return "书目线索未核对";
+  return "书目线索：" + [
+    BOOK_CLUE_LABELS[source.bookClues.isbn],
+    ...source.bookClues.text.map(clue => clue === "title" ? "出现书名文字" : "出现作者文字"),
+  ].join("；");
+}
+
+export function bookWebResearchNeedsIsbnReview(result: BookWebResearchResponse): boolean {
+  return result.citedSourceIds.length > 0 && result.citedSourceIds.every(id => {
+    const isbn = result.sources.find(source => source.id === id)?.bookClues?.isbn;
+    return isbn !== undefined && isbn !== "matched" && isbn !== "mixed";
+  });
+}
+
 function oneLine(value: string): string { return value.replace(/\s+/g, " ").replace(/[\\`*_\[\]<>]/g, "\\$&"); }
 
-/** Copy validated source excerpts, retaining all search snapshots when selection was incomplete. */
+/** Copy validated source excerpts, retaining available snapshots when selection is incomplete or insufficient. */
 export function bookWebResearchContent(result: BookWebResearchResponse): string {
   assertBookWebResearchResponse(result, result.bookId, result.question);
-  if (result.source === "insufficient_sources") throw new BookWebResearchError(400, "本次资料不足，请调整问题后继续查找。");
-  const sources = result.source === "unselected_sources" ? result.sources
-    : result.citedSourceIds.map(id => result.sources.find(source => source.id === id)!);
+  if (result.source === "insufficient_sources" && result.sources.length === 0) throw new BookWebResearchError(400, "本次资料不足，请调整问题后继续查找。");
+  const sources = result.source === "web_research"
+    ? result.citedSourceIds.map(id => result.sources.find(source => source.id === id)!) : result.sources;
   const references = sources.map(source =>
-    `[${source.id}] ${oneLine(source.title)}\n${source.url}\n${source.pageAge ? `页面时间：${oneLine(source.pageAge)}\n` : ""}\n搜索结果节选：\n${source.excerpt}${source.truncated ? "\n\n（本条搜索节选已截短）" : ""}`,
+    `[${source.id}] ${oneLine(source.title)}\n${source.url}\n${source.pageAge ? `页面时间：${oneLine(source.pageAge)}\n` : ""}\n${bookWebSourceCluesText(source)}\n\n搜索结果节选：\n${source.excerpt}${source.truncated ? "\n\n（本条搜索节选已截短）" : ""}`,
   ).join("\n\n");
   const limitedNotice = result.search.limited === true ? `${BOOK_WEB_RESEARCH_LIMITED_NOTICE}\n\n` : "";
-  return `# ${oneLine(result.draft.title)}\n\n问题：${result.question}\n\n${result.draft.content}\n\n---\n\n### 联网研究来源（搜索时摘录）\n\n生成时间：${result.generatedAt}\n\n${limitedNotice}本次搜索：\n${result.search.queries.map(query => `- ${oneLine(query)}`).join("\n")}\n\n${references}`;
+  const title = result.source === "insufficient_sources" ? "本次搜索资料不足" : result.draft.title;
+  const selectedNotice = bookWebResearchNeedsIsbnReview(result) ? `\n\n${BOOK_WEB_RESEARCH_SELECTED_ISBN_NOTICE}` : "";
+  return `# ${oneLine(title)}\n\n问题：${result.question}\n\n${result.draft.content}\n\n${BOOK_WEB_RESEARCH_BOOK_CLUES_NOTICE}${selectedNotice}\n\n---\n\n### 联网研究来源（搜索时摘录）\n\n生成时间：${result.generatedAt}\n\n${limitedNotice}本次搜索：\n${result.search.queries.map(query => `- ${oneLine(query)}`).join("\n")}\n\n${references}`;
 }

@@ -1,12 +1,21 @@
 # BOOK-ID-SEARCH status
 
-## Current — 2026-11-13 — Recover paused book web searches
+## Current — 2026-11-16 — Show bibliographic clues in web sources
+
+- `task_id=BOOK_AI_WEB_SOURCE_CONTEXT_V1`; branch `feat/book-web-source-context`, based on deployed PR #82 merge `d913ca1917526382c03bbec58ccd778cb1a26439`.
+- Add deterministic clues for the target ISBN and complete title/author text visible in returned source titles/excerpts. Distinguish mixed or other ISBNs, missing catalog ISBN and legacy responses without claiming verified book identity or scholarly quality.
+- Keep source selection separate from these clues; preserve original snippets, reading, comparison and private drafts. Copy existing sources even when selection reports insufficient material.
+- API focused regressions (205) and Web client/component regressions (182) passed; two captured 12-source real-response replays preserved the original excerpts. Integrated API/Web builds, exact-commit browser/PG CI and the new provider trial are recorded separately in the phase PR. Prompt refinements do not themselves establish retrieval-quality improvement.
+- Development candidate only; main and production remain PR #82. No dependency, migration, additional provider request or model/deadline change.
+- Contract: [Source bibliographic clues](development/BOOK_AI_WEB_SOURCE_CONTEXT_V1.md).
+
+## 2026-11-13 — Recover paused book web searches (merged and deployed as PR #82)
 
 - `task_id=BOOK_AI_WEB_RESEARCH_RECOVERY_V1`; branch `fix/book-web-research-recovery`, based on deployed PR #81 merge `5305e28571f697ddd1a0bd46d690c90521ce3186`.
 - Reproduced the reported 《梁思成》 question through deployed research modules: the provider returned ten completed searches and two pending calls with `pause_turn`; the old parser rejected all results before source selection.
 - Preserve paired, completed results from a limited search and disclose the limit. If automatic source selection fails, keep the actual source cards visible as unselected so they can still be opened, read and copied. Invalid model IDs are discarded; requests do not automatically continue or retry.
 - Focused parser/service/client checks and browser journeys cover this real response shape and explicit retry while retaining personal drafts. Actual-provider and deployed-version evidence are recorded separately in the PR.
-- API + Web change; no new dependency, migration, service, credential or model/deadline setting. Production remains PR #81 until this repair is separately merged and published.
+- PR #82 was merged as `d913ca1917526382c03bbec58ccd778cb1a26439` and API/Web deployed on 2026-11-13. Public checks passed; the first provider HTTP 500 and a successful explicit same-question confirmation remain in the PR. Source provenance passed, while the selected reviews concerned other thematically related works.
 - Contract: [Paused web-search recovery](development/BOOK_AI_WEB_RESEARCH_RECOVERY_V1.md).
 
 ## 2026-11-13 — Compare original passages across read webpages (merged and deployed as PR #81)

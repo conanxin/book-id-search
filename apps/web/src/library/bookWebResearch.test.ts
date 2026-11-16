@@ -4,6 +4,8 @@ import { bookWebResearchContent, generateBookWebResearch, type BookWebResearchIn
 
 const A = "14000000_000000000001", B = "14000001_000000000002", QUESTION = "这本书有哪些相关研究？";
 const NOTICE = "已根据本次问题选出相关网页，以下保留搜索工具返回的来源节选。节选不等于网页或原书全文；来源之间可能有不同说法。";
+const CLUES_NOTICE = "书目线索只核对当前标题和搜索节选中的文字，不代表已读全文、内容可信或属于本书书评。";
+const SELECTED_ISBN_NOTICE = "所选资料尚缺可对应本书的 ISBN 线索；与本书的直接关联仍需核对。";
 const UNSELECTED = "已完成网页搜索，但本次自动挑选未完成。下方保留搜索返回的资料，可以打开原链接核对或读取网页正文。";
 const INSUFFICIENT = "本次已执行联网搜索，但没有选出与问题充分相关的资料。下方如有搜索结果，可以打开原链接核对，或调整问题后再查。";
 const draftFor = (ids = ["W1"]) => ({ title: "查到的相关资料", content: `${NOTICE}\n\n建议先查看：${ids.map(id => `[${id}]`).join(" ")}` });
@@ -303,4 +305,121 @@ describe("book web research client", () => {
     const rejected = expect(request).rejects.toMatchObject({ name: "AbortError" });
     await decoding.promise; login("replacement-csrf"); pending.resolve(result()); await rejected;
   });
+
+  it.each([
+    ["matched", ["title", "author"], "出现本书 ISBN；出现书名文字；出现作者文字"],
+    ["mixed", [], "本书与其他 ISBN 同时出现"],
+    ["other_only", ["title"], "只看到其他 ISBN；出现书名文字"],
+    ["not_seen", ["author"], "未见本书 ISBN；出现作者文字"],
+    ["unavailable", [], "本书 ISBN 无法用于比对"],
+  ] as const)("accepts and copies the bounded visible book clues for %s", async (isbn, text, label) => {
+    const value = result();
+    value.sources[0].bookClues = { isbn, text: [...text] };
+    value.sources[0].readToken = "A".repeat(32);
+    fetchMock.mockResolvedValue(json(value));
+    expect(await generateBookWebResearch(A, { question: QUESTION })).toEqual(value);
+    const copied = bookWebResearchContent(value);
+    expect(copied).toContain("书目线索：" + label);
+    expect(copied).toContain(CLUES_NOTICE);
+    expect(copied).toContain(value.sources[0].excerpt);
+    expect(copied).not.toContain(value.sources[0].readToken);
+    expect(copied).not.toContain("已核实本书");
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["null", null],
+    ["array", []],
+    ["missing isbn", { text: [] }],
+    ["missing text", { isbn: "matched" }],
+    ["unknown isbn", { isbn: "verified", text: [] }],
+    ["non-string isbn", { isbn: true, text: [] }],
+    ["inherited label name", { isbn: "toString", text: [] }],
+    ["text string", { isbn: "matched", text: "title" }],
+    ["unknown text", { isbn: "matched", text: ["publisher"] }],
+    ["duplicate title", { isbn: "matched", text: ["title", "title"] }],
+    ["duplicate author", { isbn: "matched", text: ["author", "author"] }],
+    ["reversed text", { isbn: "matched", text: ["author", "title"] }],
+    ["too much text", { isbn: "matched", text: ["title", "author", "title"] }],
+    ["extra judgement", { isbn: "matched", text: [], review: "This content is verified." }],
+  ])("rejects malformed book clues (%s) before rendering or copying", async (_label, bookClues) => {
+    const value = result();
+    Object.assign(value.sources[0], { bookClues });
+    fetchMock.mockResolvedValue(json(value));
+    await expect(generateBookWebResearch(A, { question: QUESTION })).rejects.toMatchObject({
+      status: 502, code: "BOOK_RESEARCH_CLIENT_INVALID_RESPONSE",
+    });
+    expect(() => bookWebResearchContent(value)).toThrow("返回的研究资料未通过核对");
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("keeps old responses explicitly unchecked even when an excerpt contains an ISBN", async () => {
+    const value = result();
+    value.sources[0].excerpt = "ISBN 9787112124534 出现在原始搜索节选中。";
+    fetchMock.mockResolvedValue(json(value));
+    expect(await generateBookWebResearch(A, { question: QUESTION })).toEqual(value);
+    const copied = bookWebResearchContent(value);
+    expect(copied).toContain("书目线索未核对");
+    expect(copied).toContain(CLUES_NOTICE);
+    expect(copied).toContain(value.sources[0].excerpt);
+    expect(copied).not.toContain("出现本书 ISBN");
+    expect(copied).not.toContain(SELECTED_ISBN_NOTICE);
+  });
+
+  it.each([
+    ["known missing clues", "not_seen", "other_only", ["W2", "W1"], true],
+    ["matched among selected", "matched", "not_seen", ["W2", "W1"], false],
+    ["mixed among selected", "mixed", "not_seen", ["W2", "W1"], false],
+    ["legacy among selected", undefined, "not_seen", ["W2", "W1"], false],
+    ["unavailable among selected", "unavailable", "not_seen", ["W2", "W1"], true],
+    ["unselected match", "matched", "not_seen", ["W2"], true],
+    ["unselected legacy", undefined, "not_seen", ["W2"], true],
+  ] as const)("copies the selected ISBN notice only when justified by %s", (_name, first, second, ids, expected) => {
+    const value = result();
+    if (first) value.sources[0].bookClues = { isbn: first, text: [] };
+    value.sources[1].bookClues = { isbn: second, text: [] };
+    value.citedSourceIds = [...ids]; value.draft = draftFor(value.citedSourceIds);
+    const copied = bookWebResearchContent(value);
+    expect(copied.includes(SELECTED_ISBN_NOTICE)).toBe(expected);
+    expect(copied).toContain(CLUES_NOTICE);
+    if (ids.length === 2) expect(copied.indexOf(value.sources[1].url)).toBeLessThan(copied.indexOf(value.sources[0].url));
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("copies all available insufficient sources with their uncertainty and the fixed insufficient notice", async () => {
+    const value = unselected(true);
+    value.source = "insufficient_sources";
+    value.draft = { title: "查到的相关资料", content: INSUFFICIENT };
+    value.sources[0].bookClues = { isbn: "other_only", text: ["author"] };
+    fetchMock.mockResolvedValue(json(value));
+    expect(await generateBookWebResearch(A, { question: QUESTION })).toEqual(value);
+    const copied = bookWebResearchContent(value);
+    expect(copied).toContain("# 本次搜索资料不足");
+    expect(copied).toContain(INSUFFICIENT);
+    expect(copied).toContain(CLUES_NOTICE);
+    expect(copied).toContain("只看到其他 ISBN；出现作者文字");
+    expect(copied).toContain("书目线索未核对");
+    expect(copied).toContain("本次搜索已达到上限，已保留返回的资料。可以调整问题后再查。");
+    expect(copied).not.toContain("建议先查看");
+    expect(copied).not.toContain(SELECTED_ISBN_NOTICE);
+    for (const source of value.sources) {
+      expect(copied).toContain(source.title);
+      expect(copied).toContain(source.url);
+      expect(copied).toContain(source.excerpt);
+      expect(copied).not.toContain(source.readToken);
+    }
+    expect(copied.indexOf(value.sources[0].url)).toBeLessThan(copied.indexOf(value.sources[1].url));
+  });
+
+  it("copies unselected clues without implying that any sources were selected", () => {
+    const value = unselected();
+    value.sources.forEach(source => { source.bookClues = { isbn: "not_seen", text: [] }; });
+    const copied = bookWebResearchContent(value);
+    expect(copied).toContain(UNSELECTED);
+    expect(copied).toContain(CLUES_NOTICE);
+    expect(copied.match(/书目线索：未见本书 ISBN/g)).toHaveLength(2);
+    expect(copied).not.toContain(SELECTED_ISBN_NOTICE);
+    expect(copied).not.toContain("建议先查看");
+  });
+
 });

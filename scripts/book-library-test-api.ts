@@ -69,6 +69,8 @@ const comparisonIds = getBookBrowserCatalogIds(comparisonKey);
 const recoveryKey = "recovery-" + webResearchKey;
 const recoveryIds = getBookBrowserCatalogIds(recoveryKey);
 const unselectedRecoveryId = getBookBrowserCatalogIds("unselected-" + webResearchKey).A;
+const sourceContextKey = "context-" + webResearchKey;
+const sourceContextIds = getBookBrowserCatalogIds(sourceContextKey);
 const makeBook = (id: string, title: string): CatalogBookSnapshot => ({
   id, ssid: id.split("_")[0], dxid: id.split("_")[1],
   title, author: "合成测试作者", publisher: "合成测试出版社",
@@ -81,7 +83,9 @@ const webResearchBooks = [makeBook(webResearchIds.A, `联网研究验证甲 ${we
 const comparisonBooks = [makeBook(comparisonIds.A, `多来源对照验证甲 ${comparisonKey}`), makeBook(comparisonIds.B, `多来源对照验证乙 ${comparisonKey}`)];
 const recoveryBooks = [makeBook(recoveryIds.A, "联网研究上限验证 " + recoveryKey), makeBook(recoveryIds.B, "联网研究重试验证 " + recoveryKey),
   makeBook(unselectedRecoveryId, "联网研究未挑选验证 " + recoveryKey)];
-const books = [...libraryBooks, ...aiBooks, ...webResearchBooks, ...comparisonBooks, ...recoveryBooks];
+const sourceContextBooks = [makeBook(sourceContextIds.A, "书目线索混合验证 " + sourceContextKey),
+  makeBook(sourceContextIds.B, "书目线索兼容验证 " + sourceContextKey)];
+const books = [...libraryBooks, ...aiBooks, ...webResearchBooks, ...comparisonBooks, ...recoveryBooks, ...sourceContextBooks];
 if (new Set(books.map(item => item.id)).size !== books.length) throw new Error("SYNTHETIC_BOOK_GROUPS_MUST_BE_DISJOINT");
 const isAiBook = (id: string) => id === aiCatalogIds.A || id === aiCatalogIds.B;
 const book = (id: string) => books.find(item => item.id === id);
@@ -100,6 +104,32 @@ function assertRecoveryPromptSafe(value: unknown): void {
   for (const privateText of ["我的原始介绍：这是个人保存的文字", "我的原始笔记：山口与旧驿站的位置", "尚未保存：下次核对版本", "尚未保存：先读完附录"]) {
     if (prompt.includes(privateText)) throw new Error("PERSONAL_CONTENT_ENTERED_RESEARCH_RECOVERY_PROMPT");
   }
+}
+type SourceContextCase = "mixed" | "compat";
+const sourceContextCalls: Record<SourceContextCase, {
+  searchRequests: number; selectionCalls: number; readerCalls: number; comparisonCalls: number; legacyResponses: number;
+}> = {
+  mixed: { searchRequests: 0, selectionCalls: 0, readerCalls: 0, comparisonCalls: 0, legacyResponses: 0 },
+  compat: { searchRequests: 0, selectionCalls: 0, readerCalls: 0, comparisonCalls: 0, legacyResponses: 0 },
+};
+const sourceContextCaseById = (id: unknown): SourceContextCase | undefined =>
+  id === sourceContextIds.A ? "mixed" : id === sourceContextIds.B ? "compat" : undefined;
+const sourceContextCaseByTitle = (title: unknown): SourceContextCase | undefined =>
+  sourceContextCaseById(sourceContextBooks.find(item => item.title === title)?.id);
+function sourceContextResults(kind: SourceContextCase) {
+  // Deliberately omit the target book title/author from every source. The real
+  // service derives bookClues from returned title/excerpt text, not fixture flags.
+  const entries = kind === "mixed" ? [
+    { title: "目录摘录甲", content: "目录摘录原句：ISBN 978-7-5384-5525-0；这里记录了一个版本条目。" },
+    { title: "异题目录乙", content: "另一主题条目原句：ISBN 9787111128069；本文讨论与当前查询不同的研究材料。" },
+    { title: "并列目录丙", content: "并列目录原句：ISBN 9787538455250 与 ISBN 9787111128069 同页列出，片段未说明两书关系。" },
+    { title: "主题方法丁", content: "主题资料原句：这里讨论通用的田野记录方法，没有给出具体图书的出版信息。" },
+  ] : [
+    { title: "通用方法资料甲", content: "通用方法原句：目录比对需要记录出处、页码与时间。" },
+    { title: "其他版本资料乙", content: "他书目录原句：ISBN 9787111128069；片段只陈列另一目录项，未说明与查询图书的关系。" },
+  ];
+  return entries.map((entry, index) => ({ type: "web_search_result", ...entry,
+    url: "https://example.org/source-context/" + kind + "/" + (index + 1), page_age: null }));
 }
 const getCatalogDocument = async (id: string) => {
   const found = book(id);
@@ -184,6 +214,23 @@ const webSourceReader = createBookWebSourceReader({
       finalUrl: `${url}?view=full`, contentType: "text/html", charset: "utf-8",
       body: Buffer.from(`<html><head><title>合成待核对网页正文</title></head><body><main><h1>待核对资料的公开网页</h1><p>这是未自动挑选资料的合成网页正文，只在用户显式读取后展示。</p><p>${"公开来源的内容仍需核对，自动挑选失败不代表这些资料不存在。".repeat(12)}</p></main></body></html>`),
     };
+    const contextPage = pathname.match(/^\/source-context\/(mixed|compat)\/([1-4])$/);
+    if (contextPage) {
+      const [, kind, number] = contextPage;
+      const quotations: Record<string, string> = {
+        "1": "正文原句：此目录项记载 ISBN 9787538455250，并未提供整部图书正文。",
+        "2": "正文原句：另一目录项记载 ISBN 9787111128069，尚未说明与查询图书的关系。",
+        "3": "正文原句：目录同时列出 ISBN 9787538455250 和 ISBN 9787111128069，仍须分别核对。",
+        "4": "正文原句：这段文字讨论一般方法，没有给出具体书目。",
+      };
+      const quotation = kind === "mixed" ? quotations[number]
+        : "正文原句：这份网页只提供通用资料，尚未核对查询图书身份。";
+      const html = "<html><head><title>书目线索合成网页 " + kind + " " + number
+        + "</title></head><body><main><h1>独立网页文字</h1><p>" + quotation
+        + "</p><p>" + "这段上下文仅用于验证显式读取和逐字对照，不赋予网页可信性。".repeat(12)
+        + "</p></main></body></html>";
+      return { finalUrl: url + "?view=full", contentType: "text/html", charset: "utf-8", body: Buffer.from(html) };
+    }
     const comparisonPages: Record<string, string> = {
       "/comparison/catalog": `<html><head><title>合成馆藏版本记录</title></head><body><main><h1>馆藏版本记录</h1><p>馆藏原文写道：“1935年初版”。目录号：CAT-1935。</p><p>这是独立馆藏条目的合成正文，不在搜索节选中。它没有解释另一条记录的不同年份。</p><p>阅读上下文保留 🧭 和字面文字 &lt;img src=x&gt;，原句与出处应保持一致。</p><p>${"馆藏上下文：应查阅原始出版物后再作研究判断。".repeat(12)}</p></main></body></html>`,
       "/comparison/review": `<html><head><title>合成书评版本记录</title></head><body><main><h1>书评版本记录</h1><p>书评原文写道：“最早于1937年出版”。这条记录没有提供目录号，也没有说明与馆藏初版记载的版本关系。</p><p>这是独立书评的合成正文，不在搜索节选中。原文不应被改写成确定的初版与再版关系。</p><p>${"书评上下文：不同来源的记载需要保留各自的说法。".repeat(12)}</p></main></body></html>`,
@@ -205,6 +252,8 @@ const countedWebSourceReader = {
   read: async (...args: Parameters<typeof webSourceReader.read>) => {
     const recovery = recoveryCaseById(args[0]);
     if (recovery) recoveryCalls[recovery].readerCalls++;
+    const context = sourceContextCaseById(args[0]);
+    if (context) sourceContextCalls[context].readerCalls++;
     return webSourceReader.read(...args);
   },
 };
@@ -229,8 +278,9 @@ let comparisonProviderCalls = 0;
 const webSourceComparison = createBookWebSourceComparisonService({
   getSnapshot: webSourceReader.getSnapshot, isEnabled: () => true,
   provider: async messages => {
-    comparisonProviderCalls++;
     const input = JSON.parse(messages.find(message => message.role === "user")!.content);
+    const context = input.question === "对照两条目录的正文原句。";
+    if (context) sourceContextCalls.mixed.comparisonCalls++; else comparisonProviderCalls++;
     const prompt = JSON.stringify(messages);
     for (const privateText of ["我的原始介绍：这是个人保存的文字", "我的原始笔记：山口与旧驿站的位置", "尚未保存：下次核对版本", "尚未保存：先读完附录"]) {
       if (prompt.includes(privateText)) throw new Error("PERSONAL_CONTENT_ENTERED_SOURCE_COMPARISON_PROMPT");
@@ -238,7 +288,8 @@ const webSourceComparison = createBookWebSourceComparisonService({
     return { ok: true, model: "synthetic-source-comparison-no-network", content: JSON.stringify({
       // Deliberately reverse provider groups. Production must restore request order.
       sources: input.sources.map((source: { sourceKey: string; passages: Array<{ id: string; text: string }> }) => {
-        const selected = input.question.includes("ISBN") ? [] : source.passages.filter(passage =>
+        const selected = context ? source.passages.filter(passage => passage.text.includes("正文原句：")).slice(0, 1)
+          : input.question.includes("ISBN") ? [] : source.passages.filter(passage =>
           input.question.includes("目录号") ? passage.text.includes("目录号：CAT-1935") : /1935年初版|最早于1937年出版/.test(passage.text)).slice(0, 2);
         return { sourceKey: source.sourceKey, passageIds: selected.map(passage => passage.id), insufficientEvidence: selected.length === 0 };
       }).reverse(),
@@ -258,6 +309,16 @@ const webResearch = createBookWebResearchService({
       const publicBook = input.book ?? input.catalog;
       const title = String(publicBook?.title ?? "合成书目");
       const query = `${title} ${input.question}`.slice(0, 1000);
+      const context = sourceContextCaseByTitle(title);
+      if (context) {
+        assertRecoveryPromptSafe(body);
+        sourceContextCalls[context].searchRequests++;
+        return Response.json({ type: "message", role: "assistant", stop_reason: "end_turn", base_resp: { status_code: 0 }, content: [
+          { type: "text", text: "合成生成文字不是原始网页片段。" },
+          { type: "server_tool_use", id: "synthetic-source-context", name: "web_search", input: { query } },
+          { type: "web_search_tool_result", tool_use_id: "synthetic-source-context", content: sourceContextResults(context) },
+        ] });
+      }
       const recovery = recoveryCaseByTitle(title);
       if (recovery) {
         assertRecoveryPromptSafe(body);
@@ -310,6 +371,16 @@ const webResearch = createBookWebResearchService({
   }),
   provider: async messages => {
     const input = JSON.parse(messages.find(message => message.role === "user")!.content);
+    const context = sourceContextCaseByTitle(input.book?.title ?? input.catalog?.title);
+    if (context) {
+      assertRecoveryPromptSafe(messages);
+      sourceContextCalls[context].selectionCalls++;
+      const insufficient = input.question.includes("资料不足"), unselected = input.question.includes("未完成自动挑选");
+      return { ok: true, model: "synthetic-source-context-no-network", content: JSON.stringify({
+        sourceIds: insufficient ? [] : unselected ? ["W2"] : input.sources.map((source: { id: string }) => source.id),
+        insufficientEvidence: insufficient || unselected,
+      }) };
+    }
     const recovery = recoveryCaseByTitle(input.book?.title ?? input.catalog?.title);
     if (recovery) {
       assertRecoveryPromptSafe(messages);
@@ -324,6 +395,23 @@ const webResearch = createBookWebResearchService({
     }) };
   },
 });
+// Legacy-wire compatibility still executes the production service and keeps
+// its source snapshots/read tokens. Only the new optional field is removed.
+const browserWebResearch = {
+  ...webResearch,
+  research: async (...args: Parameters<typeof webResearch.research>) => {
+    const value = await webResearch.research(...args);
+    if (sourceContextCaseById(args[0]) === "compat" && value.question.includes("旧格式")) {
+      sourceContextCalls.compat.legacyResponses++;
+      return { ...value, sources: value.sources.map(source => {
+        const legacy = { ...source };
+        delete (legacy as { bookClues?: unknown }).bookClues;
+        return legacy;
+      }) };
+    }
+    return value;
+  },
+};
 let runtimeRole = "NOT_EXERCISED";
 if (!wereadOnly) {
   const probe = new Pool({ connectionString: databaseUrl });
@@ -339,7 +427,7 @@ app.use("/api/auth", createAuthRouter({ config: google }));
 app.use("/api/private", privateMiddleware);
 app.use("/api/books", privateMiddleware);
 app.use("/api/ai", privateMiddleware);
-app.use("/api/ai/books/:bookId/research", createBookWebResearchRouter({ service: webResearch, sourceReader: countedWebSourceReader, sourceEvidence: webSourceEvidence, sourceComparison: webSourceComparison, requestAuthorizer: authorize }));
+app.use("/api/ai/books/:bookId/research", createBookWebResearchRouter({ service: browserWebResearch, sourceReader: countedWebSourceReader, sourceEvidence: webSourceEvidence, sourceComparison: webSourceComparison, requestAuthorizer: authorize }));
 app.use("/api/ai/books", createBookAssistantRouter({ service: bookAssistant, requestAuthorizer: authorize }));
 app.use("/api/private/weread/bindings", createWereadBindingsRouter({ service: wereadBindings, requestAuthorizer: authorize }));
 if (config) app.use("/api/private/s32/library", createBookLibraryBodyParser(config, authorize));
@@ -371,7 +459,7 @@ app.get("/api/books/:id/related", async (req: TestRequest, res: TestResponse) =>
   const id = String(req.params.id);
   const source = book(id);
   if (!source) return void res.status(404).json({ error: { message: "Synthetic book not found" } });
-  const group = recoveryBooks.some(item => item.id === id) ? recoveryBooks : comparisonBooks.some(item => item.id === id) ? comparisonBooks : webResearchBooks.some(item => item.id === id) ? webResearchBooks : isAiBook(id) ? aiBooks : libraryBooks;
+  const group = sourceContextBooks.some(item => item.id === id) ? sourceContextBooks : recoveryBooks.some(item => item.id === id) ? recoveryBooks : comparisonBooks.some(item => item.id === id) ? comparisonBooks : webResearchBooks.some(item => item.id === id) ? webResearchBooks : isAiBook(id) ? aiBooks : libraryBooks;
   // Keep the original isolated catalog groups. This field-only in-memory
   // adapter replaces Meili transport while collection/ranking/reasons are real.
   const normalize = (value: string) => value.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
@@ -432,6 +520,8 @@ app.get("/api/health", (_req: TestRequest, res: TestResponse) => res.json({ ok: 
   bookAssistant: { sources: "production_collector", provider: "deterministic_injected", externalMiniMax: "NOT_EXERCISED" },
   bookWebResearch: { search: "production_adapter_injected_http", selection: "deterministic_ids_only", excerptText: "production_snapshots_unchanged", externalMiniMax: "NOT_EXERCISED" },
   bookWebSourceComparison: { providerCalls: comparisonProviderCalls, provider: "deterministic_ids_only", externalMiniMax: "NOT_EXERCISED" },
+  bookWebSourceContext: { cases: sourceContextCalls, search: "production_adapter_injected_http",
+    clues: "production_title_excerpt_rules", legacy: "new_optional_field_removed_after_production_service", externalMiniMax: "NOT_EXERCISED" },
   bookWebResearchRecovery: { cases: recoveryCalls, search: "production_adapter_injected_http",
     selection: "deterministic_ids_only", externalMiniMax: "NOT_EXERCISED" } }));
 
