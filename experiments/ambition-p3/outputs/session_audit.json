@@ -1,0 +1,64 @@
+{
+  "status": "VERIFIED_SESSIONS",
+  "sessions": [
+    {
+      "key": "batch1_A",
+      "session_id": "20261014_132005_0be251",
+      "provider": "minimax-cn",
+      "model": "MiniMax-M3",
+      "tool_call_count": 0,
+      "message_count": 2,
+      "input_tokens": 2777,
+      "output_tokens": 9241,
+      "reasoning_effort": "low",
+      "elapsed_seconds": 69.79
+    },
+    {
+      "key": "batch1_B",
+      "session_id": "20261014_132016_26ae64",
+      "provider": "minimax-cn",
+      "model": "MiniMax-M3",
+      "tool_call_count": 0,
+      "message_count": 2,
+      "input_tokens": 2906,
+      "output_tokens": 5111,
+      "reasoning_effort": "low",
+      "elapsed_seconds": 70.28
+    },
+    {
+      "key": "batch2_B",
+      "session_id": "20261014_132212_fde047",
+      "provider": "minimax-cn",
+      "model": "MiniMax-M3",
+      "tool_call_count": 0,
+      "message_count": 2,
+      "input_tokens": 2926,
+      "output_tokens": 10157,
+      "reasoning_effort": "low",
+      "elapsed_seconds": 76.06
+    },
+    {
+      "key": "batch2_A",
+      "session_id": "20261014_132218_8c4d06",
+      "provider": "minimax-cn",
+      "model": "MiniMax-M3",
+      "tool_call_count": 0,
+      "message_count": 2,
+      "input_tokens": 2797,
+      "output_tokens": 4125,
+      "reasoning_effort": "low",
+      "elapsed_seconds": 61.296
+    }
+  ],
+  "all_zero_tool_calls": true,
+  "A": {
+    "input_tokens": 5574,
+    "output_tokens": 13366,
+    "elapsed_seconds": 131.086
+  },
+  "B": {
+    "input_tokens": 5832,
+    "output_tokens": 15268,
+    "elapsed_seconds": 146.34
+  }
+}
