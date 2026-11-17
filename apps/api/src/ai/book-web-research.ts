@@ -20,7 +20,10 @@ export interface BookWebResearchSource {
   bookClues?: BookWebSourceClues;
   textContexts?: BookWebSourceTextContexts;
 }
+export type BookWebResearchScope = "direct_book_review";
+
 export interface BookWebResearchResponse {
+  scope?: BookWebResearchScope;
   bookId: string;
   question: string;
   mode: "source_excerpts";
@@ -79,10 +82,12 @@ function validText(value: unknown): value is string {
 }
 function readInput(id: unknown, body: unknown) {
   if (typeof id !== "string" || id.length > 128 || !/^[0-9]+_[0-9]{12}$/.test(id)
-    || !isRecord(body) || Object.keys(body).some(key => key !== "question")
+    || !isRecord(body) || Object.keys(body).some(key => key !== "question" && key !== "scope")
+    || (body.scope !== undefined && body.scope !== "direct_book_review")
     || !validText(body.question) || !body.question.trim()
     || body.question.trim().length > BOOK_WEB_RESEARCH_LIMITS.QUESTION_CHARS) throw invalid();
-  return { bookId: id, question: body.question.trim() };
+  return { bookId: id, question: body.question.trim(),
+    ...(body.scope === "direct_book_review" ? { scope: "direct_book_review" as const } : {}) };
 }
 function prefix(value: string, max: number): string {
   let end = Math.min(value.length, max);
@@ -161,6 +166,24 @@ const SELECTION_PROMPT = [
   "没有充分相关的来源时，返回 {\"sourceIds\":[],\"insufficientEvidence\":true}。不要返回标题、说明、结论、摘录、其他字段或 Markdown 代码块。",
 ].join("\n");
 
+// Direct-review mode favors precision: a catalog record, sales page or a
+// different-book review is never enough to become an automatic recommendation.
+// The returned original source list is still available for manual inspection.
+// This is a candidate check, NOT certification that the article reviewed the book.
+export function isDirectBookReviewCandidate(source: BookWebResearchSource, bookTitle: string): boolean {
+  const reviewTitle = /书评|读后感|评介|评述|读《|评《/u.test(source.title);
+  const isbn = source.bookClues?.isbn;
+  const hasTargetIsbn = isbn === "matched" || isbn === "mixed";
+  const hasQuotedBookAndAuthor = source.title.includes(`《${bookTitle.trim()}》`)
+    && source.bookClues?.text.includes("author");
+  return reviewTitle && (hasTargetIsbn || !!hasQuotedBookAndAuthor);
+}
+
+const DIRECT_REVIEW_SEARCH_NOTICE =
+  "本次严格查找可辨识为指定版次图书的书评、读后感或针对该书的研究评论。不要用人物生平、其他著作书评、商品详情或多书出版汇总替代本书书评；无法确认时保留原网页资料，不编造直接书评。";
+const DIRECT_REVIEW_SELECTION_NOTICE =
+  "本次只推荐有目标书线索、且标题表现为书评或评论的候选文章。目录、商品页、其他著作的书评、采访与出版汇总不得充当本书书评；资料不充分请返回 insufficientEvidence=true。即使选中也不代表已阅读全文或确认内容可信。";
+
 // The model may select existing IDs only. Source titles, URLs and complete
 // server snapshots remain authoritative; no model-written factual prose is
 // copied into the response, even when it accompanies an otherwise valid list.
@@ -230,7 +253,8 @@ export function createBookWebResearchService(deps: {
         throw unavailable();
       }
       checkCancelled(signal);
-      const searchMessages: ChatMessage[] = [{ role: "system", content: SEARCH_PROMPT },
+      const searchMessages: ChatMessage[] = [{ role: "system", content: SEARCH_PROMPT
+        + (input.scope === "direct_book_review" ? "\n" + DIRECT_REVIEW_SEARCH_NOTICE : "") },
         { role: "user", content: JSON.stringify({ book, question: input.question }) }];
       let searched: MiniMaxWebSearchResponse;
       try { searched = await (deps.search ?? searchMiniMaxWeb)(searchMessages, { signal, timeoutMs: 90_000 }); }
@@ -253,7 +277,8 @@ export function createBookWebResearchService(deps: {
           citedSourceIds: [], generatedAt: completedAt() };
       };
       if (!sources.length) return insufficient();
-      const messages: ChatMessage[] = [{ role: "system", content: SELECTION_PROMPT },
+      const messages: ChatMessage[] = [{ role: "system", content: SELECTION_PROMPT
+        + (input.scope === "direct_book_review" ? "\n" + DIRECT_REVIEW_SELECTION_NOTICE : "") },
         { role: "user", content: JSON.stringify({ book, question: input.question,
           sources: sources.map(({ id: sourceId, title, url, excerpt, pageAge, truncated, bookClues }) =>
             ({ id: sourceId, title, site: new URL(url).hostname, excerpt, pageAge, truncated, bookClues })) }) }];
@@ -269,6 +294,15 @@ export function createBookWebResearchService(deps: {
         checkCancelled(signal);
         if (error instanceof BookWebResearchError && error.code === "BOOK_RESEARCH_INVALID_RESPONSE") return unselected();
         throw error;
+      }
+      // Hard stop for the known failure mode: the model cannot turn an
+      // unrelated publication roundup into a direct review recommendation.
+      if (selected && input.scope === "direct_book_review") {
+        selected = selected.filter(id => {
+          const source = sources.find(source => source.id === id);
+          return source ? isDirectBookReviewCandidate(source, clueBook.title) : false;
+        });
+        if (!selected.length) return insufficient();
       }
       return selected ? { ...base, draft: selectedDraft(selected), citedSourceIds: selected,
         source: "web_research", generatedAt: completedAt() } : insufficient();

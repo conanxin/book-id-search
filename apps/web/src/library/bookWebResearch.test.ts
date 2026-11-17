@@ -612,3 +612,17 @@ describe("book web research client", () => {
   });
 
 });
+
+describe("strict direct-book-review transport", () => {
+  it("posts explicit scope only when requested and rejects a mismatched response", async () => {
+    const scoped = { ...result(), scope: "direct_book_review" as const };
+    fetchMock.mockResolvedValueOnce(json(scoped));
+    const output = await generateBookWebResearch(A, { question: QUESTION, scope: "direct_book_review" });
+    expect(output.scope).toBe("direct_book_review");
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({ question: QUESTION, scope: "direct_book_review" });
+    fetchMock.mockResolvedValueOnce(json(result()));
+    await expect(generateBookWebResearch(A, { question: QUESTION, scope: "direct_book_review" }))
+      .rejects.toMatchObject({ status: 502, code: "BOOK_RESEARCH_CLIENT_INVALID_RESPONSE" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});

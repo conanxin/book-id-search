@@ -92,7 +92,8 @@ const privateEditors = () => <>
 
 beforeEach(() => {
   vi.clearAllMocks(); __resetWebAuthStoreForTests(); __setWebAuthSnapshotForTests(auth());
-  vi.mocked(generateBookWebResearch).mockReset().mockImplementation(async (bookId, input) => answer({ bookId, question: input.question.trim() }));
+  vi.mocked(generateBookWebResearch).mockReset().mockImplementation(async (bookId, input) => answer({ bookId, question: input.question.trim(),
+    ...(input.scope ? { scope: input.scope } : {}) }));
   vi.mocked(generateBookAi).mockReset();
   writeClipboard.mockReset().mockResolvedValue(undefined);
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: writeClipboard } });
@@ -897,7 +898,25 @@ describe("book web research sidebar", () => {
     expect(generateBookWebResearch).not.toHaveBeenCalled();
     await click("联网查资料");
     expect(generateBookWebResearch).toHaveBeenCalledOnce();
-    expect(vi.mocked(generateBookWebResearch).mock.calls[0][1]).toEqual({ question });
+    expect(vi.mocked(generateBookWebResearch).mock.calls[0][1]).toEqual({ question, scope: "direct_book_review" });
   });
 
+});
+
+describe("explicit strict direct-book-review UI mode", () => {
+  it("marks only the selected strict preset, sends one scoped request, and clears the mode when manually edited", async () => {
+    await mount();
+    await click("本书书评");
+    expect(field("联网研究问题").value).toContain("直接评论这本书");
+    expect(screen.getByText(/严格本书书评：仅推荐能在搜索节选中/)).toBeTruthy();
+    expect(generateBookWebResearch).not.toHaveBeenCalled();
+    await click("联网查资料");
+    expect(generateBookWebResearch).toHaveBeenCalledExactlyOnceWith(A,
+      { question: "查找直接评论这本书的书评或研究，并提供可核对的网页来源。", scope: "direct_book_review" },
+      expect.any(AbortSignal));
+    expect(screen.getAllByText(/严格本书书评：仅推荐能在搜索节选中/).length).toBeGreaterThan(0);
+    change("改为研究作者生平");
+    expect(screen.queryByText(/严格本书书评：仅推荐能在搜索节选中/)).toBeNull();
+    expect(generateBookWebResearch).toHaveBeenCalledOnce();
+  });
 });
