@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import { deriveBookWebSourceClues } from "../../apps/api/src/ai/book-web-source-clues.js";
-import { isDirectBookReviewCandidate } from "../../apps/api/src/ai/book-web-research.js";
+import { isDirectBookReviewCandidate } from "./baseline-guard.js";
 
 export type Decision = { label: "yes" | "no" | "uncertain"; admitted: boolean };
 export function summarize(rows: Decision[]) {
@@ -83,7 +83,7 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
     const raw = readFileSync(input);
     const result = { ...evaluateCasebook(JSON.parse(raw.toString("utf8"))),
       datasetSha256: createHash("sha256").update(raw).digest("hex"),
-      gateSourceSha256: createHash("sha256").update(readFileSync(new URL("../../apps/api/src/ai/book-web-research.ts", root))).digest("hex"),
+      gateSourceSha256: createHash("sha256").update(readFileSync(new URL("baseline-guard.ts", root))).digest("hex"),
       clueSourceSha256: createHash("sha256").update(readFileSync(new URL("../../apps/api/src/ai/book-web-source-clues.ts", root))).digest("hex") };
     writeFileSync(output, JSON.stringify(result, null, 2) + "\n");
     console.log(JSON.stringify({ observed: result.observed, synthetic: result.synthetic, byOrigin: result.byOrigin, output }));

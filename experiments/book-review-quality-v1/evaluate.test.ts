@@ -20,7 +20,7 @@ describe("review benchmark metrics", () => {
 import { readFileSync } from "node:fs";
 import { evaluateCasebook, validateCasebook } from "./evaluate";
 const read = () => JSON.parse(readFileSync(new URL("./cases.json", import.meta.url), "utf8"));
-it("evaluates unchanged application helpers and keeps observed and constructed evidence apart", () => {
+it("evaluates the frozen PR85 policy with unchanged clue extraction and keeps observed and constructed evidence apart", () => {
   const data = read(), before = JSON.stringify(data), result = evaluateCasebook(data);
   expect(result.observed.total).toBe(16);
   expect(result.synthetic.total).toBe(10);

@@ -68,3 +68,9 @@ The next research step is independent human review of labels and a larger **held
 - The evaluator, API guard, client and new UI tests passed in both the focused and root runs. Passing selected checks is not a fully green repository claim.
 - An initial baseline-only command exceeded its 30-second command budget before producing a final test summary; it is not counted as a passed baseline. The retained final focused run has a complete exit-0 receipt.
 - No API selection code, frozen SQL, dependencies, deployment configuration, source prompts or production service changed.
+
+## P3 provenance and frozen-comparator note — 2026-11-18
+
+The original cases.json and results.json are retained byte-for-byte. P3 changes the application gate, so this P2 evaluator now imports baseline-guard.ts, a verbatim copy of the PR85 function, instead of silently measuring a changed policy while labelling it P2. The literal clue extractor is unchanged. New comparisons belong to ../book-review-quality-v2/; do not overwrite this historical report.
+
+A separate assistant actually reopened all 13 page URLs on 2026-11-18 and recorded inspectable renderings in ../book-review-quality-v2/source-audit.json. This provides provenance for that date; it does not retroactively prove browsing on 2026-11-17. Four inputs join nonadjacent metadata fields, so they are selected excerpt segments, not single contiguous quotations. Page-level positive labels may have no genre evidence in the tiny evaluator input; absence of a cue is not a finding that the whole page is not a review. All annotations remain human-review-pending.

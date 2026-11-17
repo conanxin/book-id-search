@@ -44,7 +44,7 @@ export interface BookWebResearchResponse {
   generatedAt: string;
 }
 export interface BookWebResearchInput { question: string; scope?: "direct_book_review" }
-export const BOOK_WEB_DIRECT_REVIEW_NOTICE = "严格本书书评：仅推荐能在搜索节选中同时找到目标书身份与书评性质线索的候选；不代表已确认书评全文，未入选来源仍可查看。";
+export const BOOK_WEB_DIRECT_REVIEW_NOTICE = "严格本书书评：按作品身份与评论性质线索挑选候选；不代表已核实书评全文。具体版本需另行核对，即使出现本书 ISBN 也不等于版本已确认；未入选来源仍可查看。";
 
 export class BookWebResearchError extends Error {
   constructor(public status: number, message: string, public code?: string) {

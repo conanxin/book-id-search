@@ -908,15 +908,15 @@ describe("explicit strict direct-book-review UI mode", () => {
     await mount();
     await click("本书书评");
     expect(field("联网研究问题").value).toContain("直接评论这本书");
-    expect(screen.getByText(/严格本书书评：仅推荐能在搜索节选中/)).toBeTruthy();
+    expect(screen.getByText(/严格本书书评：按作品身份与评论性质线索/)).toBeTruthy();
     expect(generateBookWebResearch).not.toHaveBeenCalled();
     await click("联网查资料");
     expect(generateBookWebResearch).toHaveBeenCalledExactlyOnceWith(A,
       { question: "查找直接评论这本书的书评或研究，并提供可核对的网页来源。", scope: "direct_book_review" },
       expect.any(AbortSignal));
-    expect(screen.getAllByText(/严格本书书评：仅推荐能在搜索节选中/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/严格本书书评：按作品身份与评论性质线索/).length).toBeGreaterThan(0);
     change("改为研究作者生平");
-    expect(screen.queryByText(/严格本书书评：仅推荐能在搜索节选中/)).toBeNull();
+    expect(screen.queryByText(/严格本书书评：按作品身份与评论性质线索/)).toBeNull();
     expect(generateBookWebResearch).toHaveBeenCalledOnce();
   });
 });
@@ -925,6 +925,7 @@ describe("strict review sidebar copying", () => {
   it.each(["web_research", "insufficient_sources", "unselected_sources"] as const)(
     "copies %s in strict mode without clearing sources or private drafts", async kind => {
       const value = answer({ scope: "direct_book_review", question: "查找直接评论这本书的书评或研究，并提供可核对的网页来源。" });
+      value.sources[0].bookClues = { isbn: "mixed", text: ["title", "author"] };
       if (kind === "insufficient_sources") Object.assign(value, { source: kind, citedSourceIds: [], draft: { title: "查到的相关资料", content: INSUFFICIENT } });
       if (kind === "unselected_sources") Object.assign(value, { source: kind, citedSourceIds: [], draft: { title: "待核对的网页资料", content: UNSELECTED } });
       vi.mocked(generateBookWebResearch).mockResolvedValueOnce(value);
@@ -933,6 +934,8 @@ describe("strict review sidebar copying", () => {
       await click(kind === "insufficient_sources" ? "复制现有来源" : "复制结果与来源");
       expect(writeClipboard).toHaveBeenCalledOnce();
       expect(writeClipboard.mock.calls[0][0]).toContain("严格本书书评");
+      expect(writeClipboard.mock.calls[0][0]).toContain("具体版本需另行核对，即使出现本书 ISBN 也不等于版本已确认");
+      expect(screen.getAllByText(/具体版本需另行核对/).length).toBeGreaterThan(0);
       expect(writeClipboard.mock.calls[0][0]).toContain(value.sources[0].excerpt);
       expect(field("个人介绍草稿").value).toBe("尚未保存的个人介绍");
       expect(field("个人笔记草稿").value).toBe("尚未保存的个人笔记");

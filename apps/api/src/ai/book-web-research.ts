@@ -2,6 +2,7 @@ import { createMeiliCatalogBookReader, type GetDocument } from "../s32/catalog/m
 import type { CatalogBookSnapshot } from "../s32/domain/catalog-promotion.js";
 import { chatCompletion, isAiEnabled, type ChatMessage } from "./minimax.js";
 import { searchMiniMaxWeb, type MiniMaxWebResult, type MiniMaxWebSearchResponse } from "./minimax-web-search.js";
+import { assessBookReviewCandidate } from "./book-web-review-candidate.js";
 import { deriveBookWebSourceClues, type BookWebSourceClues } from "./book-web-source-clues.js";
 import { deriveBookWebSourceTextContexts, type BookWebSourceTextContexts } from "./book-web-source-text-context.js";
 
@@ -123,8 +124,8 @@ function safeUrl(value: unknown): string | null {
   } catch { return null; }
 }
 
-function snapshotSources(results: MiniMaxWebResult[], book: Pick<CatalogBookSnapshot, "title" | "author" | "isbn">): BookWebResearchSource[] {
-  const sources: BookWebResearchSource[] = [], seen = new Set<string>();
+function snapshotSources(results: MiniMaxWebResult[], book: Pick<CatalogBookSnapshot, "title" | "author" | "isbn">) {
+  const sources: BookWebResearchSource[] = [], seen = new Set<string>(), reviewCandidates = new Set<string>();
   let remaining = BOOK_WEB_RESEARCH_LIMITS.TOTAL_SOURCE_CHARS as number;
   for (const result of results) {
     if (sources.length >= BOOK_WEB_RESEARCH_LIMITS.SOURCES || remaining <= 0) break;
@@ -142,10 +143,14 @@ function snapshotSources(results: MiniMaxWebResult[], book: Pick<CatalogBookSnap
       truncated: excerpt.length < text.length || title.length < rawTitle.length || (pageAge?.length ?? 0) < rawAge.length,
       bookClues: deriveBookWebSourceClues(book, { title, excerpt }, { title: title.length < rawTitle.length, excerpt: excerpt.length < text.length }),
       textContexts: deriveBookWebSourceTextContexts({ title, excerpt }, { title: title.length < rawTitle.length, excerpt: excerpt.length < text.length }) });
+    if (assessBookReviewCandidate(sources[sources.length - 1], book,
+      { title: title.length < rawTitle.length, excerpt: excerpt.length < text.length }).eligible) {
+      reviewCandidates.add(sources[sources.length - 1].id);
+    }
     remaining -= excerpt.length;
     seen.add(url);
   }
-  return sources;
+  return { sources, reviewCandidates };
 }
 
 const SEARCH_PROMPT = [
@@ -166,23 +171,10 @@ const SELECTION_PROMPT = [
   "没有充分相关的来源时，返回 {\"sourceIds\":[],\"insufficientEvidence\":true}。不要返回标题、说明、结论、摘录、其他字段或 Markdown 代码块。",
 ].join("\n");
 
-// Direct-review mode favors precision: a catalog record, sales page or a
-// different-book review is never enough to become an automatic recommendation.
-// The returned original source list is still available for manual inspection.
-// This is a candidate check, NOT certification that the article reviewed the book.
-export function isDirectBookReviewCandidate(source: BookWebResearchSource, bookTitle: string): boolean {
-  const reviewTitle = /书评|读后感|评介|评述|读《|评《/u.test(source.title);
-  const isbn = source.bookClues?.isbn;
-  const hasTargetIsbn = isbn === "matched" || isbn === "mixed";
-  const hasQuotedBookAndAuthor = source.title.includes(`《${bookTitle.trim()}》`)
-    && source.bookClues?.text.includes("author");
-  return reviewTitle && (hasTargetIsbn || !!hasQuotedBookAndAuthor);
-}
-
 const DIRECT_REVIEW_SEARCH_NOTICE =
-  "本次严格查找可辨识为指定版次图书的书评、读后感或针对该书的研究评论。不要用人物生平、其他著作书评、商品详情或多书出版汇总替代本书书评；无法确认时保留原网页资料，不编造直接书评。";
+  "本次严格查找针对这部作品的书评、读后感或研究评论；作品身份、文章文体、具体版本分别核对。ISBN 或出版时间不同不等于另一部作品，出现目标 ISBN 也不代表版本已确认。不要用人物生平、其他著作书评、商品详情或多书出版汇总替代本书书评；无法确认时保留原网页资料，不编造直接书评。";
 const DIRECT_REVIEW_SELECTION_NOTICE =
-  "本次只推荐有目标书线索、且标题表现为书评或评论的候选文章。目录、商品页、其他著作的书评、采访与出版汇总不得充当本书书评；资料不充分请返回 insufficientEvidence=true。即使选中也不代表已阅读全文或确认内容可信。";
+  "本次只推荐标题有目标作品线索、且标题或节选有评论性质线索的候选文章；先分别判断作品、文体、版本，不把 ISBN 混列当作版本确认。目录、商品页、其他著作的书评、采访与出版汇总不得充当本书书评；资料不充分请返回 insufficientEvidence=true。即使选中也不代表已阅读全文或确认内容可信。";
 
 // The model may select existing IDs only. Source titles, URLs and complete
 // server snapshots remain authoritative; no model-written factual prose is
@@ -261,7 +253,8 @@ export function createBookWebResearchService(deps: {
       catch { checkCancelled(signal); throw searchFailed(); }
       checkCancelled(signal);
       if (!searched?.ok) throw upstreamFailure("SEARCH", searched?.status);
-      const search = searchEvidence(searched), sources = snapshotSources(searched.results, clueBook);
+      const search = searchEvidence(searched);
+      const { sources, reviewCandidates } = snapshotSources(searched.results, clueBook);
       if (deps.issueSourceReadToken) for (const source of sources) {
         const token = deps.issueSourceReadToken(input.bookId, source);
         if (token) source.readToken = token;
@@ -298,10 +291,7 @@ export function createBookWebResearchService(deps: {
       // Hard stop for the known failure mode: the model cannot turn an
       // unrelated publication roundup into a direct review recommendation.
       if (selected && input.scope === "direct_book_review") {
-        selected = selected.filter(id => {
-          const source = sources.find(source => source.id === id);
-          return source ? isDirectBookReviewCandidate(source, clueBook.title) : false;
-        });
+        selected = selected.filter(id => reviewCandidates.has(id));
         if (!selected.length) return insufficient();
       }
       return selected ? { ...base, draft: selectedDraft(selected), citedSourceIds: selected,

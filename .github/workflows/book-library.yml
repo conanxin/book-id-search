@@ -66,6 +66,9 @@ jobs:
           apps/api/src/ai/minimax.test.ts
           apps/api/src/ai/minimax-web-search.test.ts
           apps/api/src/ai/book-web-research.test.ts
+          apps/api/src/ai/book-web-review-candidate.test.ts
+          experiments/book-review-quality-v1/evaluate.test.ts
+          experiments/book-review-quality-v2/evaluate.test.ts
           apps/api/src/ai/book-web-source-clues.test.ts
           apps/api/src/ai/book-web-source-text-context.test.ts
           apps/api/src/ai/book-web-research-routes.test.ts

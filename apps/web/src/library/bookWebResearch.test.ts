@@ -632,12 +632,14 @@ describe("strict review clipboard regression", () => {
     "copies a valid strict response for %s with its scope notice", source => {
       const value = source === "unselected_sources" ? unselected() : result();
       value.scope = "direct_book_review";
+      value.sources[0].bookClues = { isbn: "matched", text: ["title", "author"] };
       if (source === "insufficient_sources") {
         value.source = source; value.citedSourceIds = [];
         value.draft = { title: "查到的相关资料", content: INSUFFICIENT };
       }
       const copied = bookWebResearchContent(value);
       expect(copied).toContain("严格本书书评");
+      expect(copied).toContain("具体版本需另行核对，即使出现本书 ISBN 也不等于版本已确认");
       expect(copied).toContain(value.sources[0].excerpt);
       expect(copied).toContain(value.sources[0].url);
       expect(copied).not.toContain("readToken");
