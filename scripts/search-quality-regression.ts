@@ -4,8 +4,8 @@
 // ------------------------------------------------------------------
 // For each case in search-quality-cases.ts, call /api/search against
 // the live site and check the expectations. Outputs a markdown
-// report and a structured JSON summary. Exits 0 on PASS/WARN, 1
-// on FAIL.
+// report and a structured JSON summary. Exit codes: 0 PASS,
+// 1 WARN, 2 FAIL, 3 runtime error.
 //
 // Usage:
 //   tsx scripts/search-quality-regression.ts [--public-url URL]
@@ -14,6 +14,7 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   SEARCH_QUALITY_CASES,
   type SearchQualityCase,
@@ -165,9 +166,10 @@ function evalCase(c: SearchQualityCase, r: { status: number; body: ApiSearchResp
     }
   }
   if (e.topId !== undefined) {
-    if (!result.topIds.includes(e.topId)) {
+    // Exact-identifier expectations require rank 1, not just a top-K appearance.
+    if (result.topIds[0] !== e.topId) {
       result.status = bump(result.status, "FAIL");
-      result.notes.push(`topIds missing expected id "${e.topId}"`);
+      result.notes.push(`topIds missing expected id "${e.topId}" at rank 1 (got "${result.topIds[0] ?? "none"}")`);
     }
   }
   if (e.topResultsShouldNotInclude) {
@@ -308,7 +310,10 @@ async function main(): Promise<void> {
   if (overall === "WARN") process.exit(1);
 }
 
-main().catch((e) => {
-  console.error("[search-quality] unhandled error:", e);
-  process.exit(3);
-});
+// Importing evalCase in unit tests must not trigger live HTTP checks or file writes.
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  main().catch((e) => {
+    console.error("[search-quality] unhandled error:", e);
+    process.exit(3);
+  });
+}
