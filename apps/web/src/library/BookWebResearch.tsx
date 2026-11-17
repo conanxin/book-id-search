@@ -6,15 +6,16 @@ import { BookWebSourceComparison } from "./BookWebSourceComparison";
 import { BookWebSourceComparisonProvider } from "./BookWebSourceComparisonScope";
 import {
   assertBookWebResearchResponse, BOOK_WEB_RESEARCH_EXCERPTS_NOTICE, BOOK_WEB_RESEARCH_LIMITED_NOTICE,
-  BOOK_WEB_RESEARCH_BOOK_CLUES_NOTICE, BOOK_WEB_RESEARCH_SELECTED_ISBN_NOTICE, BOOK_WEB_RESEARCH_ASSESSMENTS_NOTICE,
-  bookWebResearchContent, bookWebResearchErrorMessage, bookWebResearchNeedsIsbnReview, bookWebSourceCluesText, bookWebSourceAssessmentText,
-  generateBookWebResearch, isBookWebResearchAbort,
-  type BookWebResearchResponse, type BookWebResearchSource, type BookWebResearchAssessment,
+  BOOK_WEB_RESEARCH_BOOK_CLUES_NOTICE, BOOK_WEB_RESEARCH_SELECTED_ISBN_NOTICE,
+  bookWebResearchContent, bookWebResearchErrorMessage, bookWebResearchNeedsIsbnReview, bookWebSourceCluesText,
+  generateBookWebResearch, isBookWebResearchAbort, bookWebSourceTextContexts, bookWebTextContextHeading,
+  BOOK_WEB_TEXT_CONTEXTS_UNAVAILABLE, BOOK_WEB_TEXT_CONTEXTS_EMPTY, BOOK_WEB_TEXT_CONTEXTS_LIMITED,
+  type BookWebResearchResponse, type BookWebResearchSource,
 } from "./bookWebResearch";
 
 const EXAMPLES = [
   { label: "内容与背景", question: "查找关于这本书内容、作者背景与出版信息的网页资料。" },
-  { label: "本书书评", question: "查找直接评论这本书的书评或研究，并区分其他著作、版本信息与相关背景资料。" },
+  { label: "本书书评", question: "查找直接评论这本书的书评或研究，并提供可核对的网页来源。" },
   { label: "相关研究", question: "查找与这本书主题有关的研究文章和书评资料。" },
   { label: "延伸阅读", question: "查找介绍相关图书或延伸阅读书目的网页资料。" },
 ];
@@ -23,28 +24,28 @@ function SourceBookClues({ source }: { source: BookWebResearchSource }) {
   return <p className="library-meta" aria-label={`本书书目线索 ${source.id}`}>{bookWebSourceCluesText(source)}</p>;
 }
 
-function SourceAssessment({ source, assessment, selected }: {
-  source: BookWebResearchSource; assessment?: BookWebResearchAssessment; selected: boolean;
-}) {
-  if (!assessment) return <p className="library-meta" aria-label={"AI 资料判断 " + source.id} data-source-assessment="legacy">
-    {selected ? "本次未提供资料判断" : "尚未判断"}
-  </p>;
-  return <section aria-label={"AI 资料判断 " + source.id} data-source-assessment={assessment.relationship}>
-    <p className="book-web-excerpt-label">AI 资料判断（待核对）</p>
-    <p className="library-meta">{bookWebSourceAssessmentText(assessment)}</p>
-    <details className="book-ai-scope book-web-assessment-evidence">
-      <summary>查看判断依据 {source.id}</summary>
-      <ol>
-        {assessment.evidence.map(item => <li key={item.id} data-assessment-evidence-id={item.id}>
-          <p className="library-meta">{item.field === "title" ? "标题原句" : "搜索节选原句"}</p>
-          <blockquote className="book-web-excerpt is-expanded">{item.text}</blockquote>
-        </li>)}
-      </ol>
-    </details>
+function SourceTextContexts({ source }: { source: BookWebResearchSource }) {
+  const contexts = bookWebSourceTextContexts(source);
+  return <section aria-label={"书目文字上下文 " + source.id}
+    data-source-text-contexts={!contexts ? "unavailable" : contexts.items.length > 0 ? "available" : "empty"}>
+    {!contexts ? <p className="library-meta">{BOOK_WEB_TEXT_CONTEXTS_UNAVAILABLE}</p>
+      : contexts.items.length === 0 ? <p className="library-meta">{BOOK_WEB_TEXT_CONTEXTS_EMPTY}</p>
+        : <details className="book-ai-scope">
+          <summary>查看书目文字上下文 {source.id}</summary>
+          <ol>
+            {contexts.items.map(item => <li key={item.field + ":" + item.matchStart + ":" + item.matchEnd + ":" + item.kind}
+              data-text-context-id={source.id + ":" + item.field + ":" + item.matchStart + ":" + item.matchEnd + ":" + item.kind}
+              data-text-context-kind={item.kind}>
+              <p className="library-meta">{bookWebTextContextHeading(item)}</p>
+              <blockquote className="book-web-excerpt is-expanded">{item.text}</blockquote>
+            </li>)}
+          </ol>
+        </details>}
+    {contexts?.limited && <p className="library-meta">{BOOK_WEB_TEXT_CONTEXTS_LIMITED}</p>}
   </section>;
 }
 
-function SelectedSourceExcerpt({ source, assessment, bookId, generation, researchQuestion }: { source: BookWebResearchSource; assessment?: BookWebResearchAssessment; bookId: string; generation: number; researchQuestion: string }) {
+function SelectedSourceExcerpt({ source, bookId, generation, researchQuestion }: { source: BookWebResearchSource; bookId: string; generation: number; researchQuestion: string }) {
   const [expanded, setExpanded] = useState(false);
   const excerptId = useId();
   return <li className="book-ai-source book-web-selected-source" data-web-excerpt-source-id={source.id}
@@ -62,7 +63,7 @@ function SelectedSourceExcerpt({ source, assessment, bookId, generation, researc
     <button type="button" className="library-text-button book-web-excerpt-toggle" aria-expanded={expanded} aria-controls={excerptId}
       onClick={() => setExpanded(value => !value)}>{expanded ? "收起搜索节选" : "展开完整搜索节选"}</button>
     {source.truncated && <p className="library-meta">本条搜索节选已截短，可打开网页进一步核对。</p>}
-    <SourceAssessment source={source} assessment={assessment} selected />
+    <SourceTextContexts source={source} />
     <BookWebSourceReader bookId={bookId} generation={generation} source={source} researchQuestion={researchQuestion} />
   </li>;
 }
@@ -161,7 +162,6 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
     if (sourcesOpen) sourceElements.current[id]?.focus();
   }
 
-  const sourceAssessments = new Map(response?.assessments?.map(item => [item.sourceId, item] as const));
   const allSourceCards = response ? <ol className="book-ai-source-list">
     {response.sources.map(source => <li key={source.id} className="book-ai-source" data-web-source-id={source.id}
       data-book-clues={source.bookClues?.isbn ?? "legacy"} tabIndex={-1} ref={element => { sourceElements.current[source.id] = element; }}>
@@ -175,7 +175,7 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
       <p className="book-web-excerpt-label">搜索结果节选</p>
       <blockquote>{source.excerpt}</blockquote>
       {source.truncated && <p className="library-meta">本条搜索节选已截短，可打开网页进一步核对。</p>}
-      <SourceAssessment source={source} assessment={sourceAssessments.get(source.id)} selected={response.citedSourceIds.includes(source.id)} />
+      <SourceTextContexts source={source} />
       {!response.citedSourceIds.includes(source.id) && <BookWebSourceReader bookId={bookId} generation={generation} source={source} researchQuestion={response.question} />}
     </li>)}
   </ol> : null;
@@ -216,7 +216,6 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
       </div>
       <p className="book-ai-question-note">本次问题：{response.question}</p>
       <p className="book-web-selection-notice" aria-label="书目线索核对范围">{BOOK_WEB_RESEARCH_BOOK_CLUES_NOTICE}</p>
-      {!!response.assessments?.length && <p className="book-web-selection-notice" aria-label="AI资料判断范围">{BOOK_WEB_RESEARCH_ASSESSMENTS_NOTICE}</p>}
       {bookWebResearchNeedsIsbnReview(response) && <p className="library-status" role="status">{BOOK_WEB_RESEARCH_SELECTED_ISBN_NOTICE}</p>}
       {response.search.limited === true && <p className="library-status" role="status">{BOOK_WEB_RESEARCH_LIMITED_NOTICE}</p>}
       <details className="book-ai-sources book-web-queries">
@@ -231,7 +230,7 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
         <div role="region" aria-label="联网研究结果">
           <p className="book-web-selection-notice">{BOOK_WEB_RESEARCH_EXCERPTS_NOTICE}</p>
           <ol className="book-ai-source-list">
-            {response.citedSourceIds.map(id => <SelectedSourceExcerpt key={id} bookId={bookId} generation={generation} researchQuestion={response.question} source={response.sources.find(source => source.id === id)!} assessment={sourceAssessments.get(id)} />)}
+            {response.citedSourceIds.map(id => <SelectedSourceExcerpt key={id} bookId={bookId} generation={generation} researchQuestion={response.question} source={response.sources.find(source => source.id === id)!} />)}
           </ol>
         </div>
         <div className="book-ai-citations" aria-label="AI 选中的网页资料">

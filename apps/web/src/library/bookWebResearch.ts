@@ -4,14 +4,19 @@ export interface BookWebResearchBookClues {
   isbn: "matched" | "mixed" | "other_only" | "not_seen" | "unavailable";
   text: ("title" | "author")[];
 }
-export interface BookWebResearchAssessmentEvidence {
-  id: string; field: "title" | "excerpt"; start: number; end: number; text: string;
+export interface BookWebResearchTextContext {
+  kind: "quoted_title" | "edition_text";
+  field: "title" | "excerpt";
+  value: string;
+  matchStart: number;
+  matchEnd: number;
+  start: number;
+  end: number;
+  text: string;
 }
-export interface BookWebResearchAssessment {
-  sourceId: string;
-  relationship: "book_candidate" | "other_book" | "related_background" | "unclear";
-  materialType: "bibliographic" | "review" | "research" | "discussion" | "other";
-  evidence: BookWebResearchAssessmentEvidence[];
+export interface BookWebResearchTextContexts {
+  items: BookWebResearchTextContext[];
+  limited: boolean;
 }
 export interface BookWebResearchSource {
   id: string;
@@ -23,6 +28,8 @@ export interface BookWebResearchSource {
   truncated: boolean;
   readToken?: string;
   bookClues?: BookWebResearchBookClues;
+  /** Optional metadata stays untrusted until the shared getter validates its original text ranges. */
+  textContexts?: unknown;
 }
 export interface BookWebResearchResponse {
   bookId: string;
@@ -32,7 +39,6 @@ export interface BookWebResearchResponse {
   draft: { title: string; content: string };
   sources: BookWebResearchSource[];
   citedSourceIds: string[];
-  assessments?: BookWebResearchAssessment[];
   search: { performed: true; queries: string[]; calls: number; limited?: boolean };
   generatedAt: string;
 }
@@ -47,22 +53,8 @@ export class BookWebResearchError extends Error {
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
 export const BOOK_WEB_RESEARCH_EXCERPTS_NOTICE = "已根据本次问题选出相关网页，以下保留搜索工具返回的来源节选。节选不等于网页或原书全文；来源之间可能有不同说法。";
 export const BOOK_WEB_RESEARCH_LIMITED_NOTICE = "本次搜索已达到上限，已保留返回的资料。可以调整问题后再查。";
-export const BOOK_WEB_RESEARCH_BOOK_CLUES_NOTICE = "书目线索只核对当前标题和搜索节选中的文字，不代表已读全文、内容可信或属于本书书评。";
+export const BOOK_WEB_RESEARCH_BOOK_CLUES_NOTICE = "这里只展示当前标题和搜索节选中的文字线索，不确认同书、版本或资料类型，也不代表已读全文或内容可信。";
 export const BOOK_WEB_RESEARCH_SELECTED_ISBN_NOTICE = "所选资料尚缺可对应本书的 ISBN 线索；与本书的直接关联仍需核对。";
-export const BOOK_WEB_RESEARCH_ASSESSMENTS_NOTICE = "AI 根据当前标题和搜索节选作初步判断；原句可核对，判断和资料内容仍需核实。";
-const RELATIONSHIP_LABELS: Record<BookWebResearchAssessment["relationship"], string> = {
-  book_candidate: "可能直接涉及本书",
-  other_book: "其他著作",
-  related_background: "相关主题背景",
-  unclear: "与本书关系待核对",
-};
-const MATERIAL_TYPE_LABELS: Record<BookWebResearchAssessment["materialType"], string> = {
-  bibliographic: "书目或商品信息",
-  review: "书评或读后感",
-  research: "研究性文章",
-  discussion: "讨论资料",
-  other: "其他资料",
-};
 const BOOK_CLUE_LABELS: Record<BookWebResearchBookClues["isbn"], string> = {
   matched: "出现本书 ISBN",
   mixed: "本书与其他 ISBN 同时出现",
@@ -70,6 +62,9 @@ const BOOK_CLUE_LABELS: Record<BookWebResearchBookClues["isbn"], string> = {
   not_seen: "未见本书 ISBN",
   unavailable: "本书 ISBN 无法用于比对",
 };
+export const BOOK_WEB_TEXT_CONTEXTS_UNAVAILABLE = "本次未提供可用的文字上下文。";
+export const BOOK_WEB_TEXT_CONTEXTS_EMPTY = "当前没有可展示的书名号或版本字样上下文。";
+export const BOOK_WEB_TEXT_CONTEXTS_LIMITED = "部分字样未列出，请结合标题和完整节选核对。";
 const RESULT_TITLE = "查到的相关资料";
 const UNSELECTED_TITLE = "待核对的网页资料";
 const UNSELECTED_CONTENT = "已完成网页搜索，但本次自动挑选未完成。下方保留搜索返回的资料，可以打开原链接核对或读取网页正文。";
@@ -131,45 +126,66 @@ function validBookClues(value: unknown): value is BookWebResearchBookClues {
     && new Set(value.text).size === value.text.length
     && (value.text.length < 2 || value.text[0] === "title");
 }
-function safeBoundary(value: string, offset: number): boolean {
-  const code = value.charCodeAt(offset);
-  return !(code >= 0xdc00 && code <= 0xdfff);
+function utf16Boundary(value: string, position: number): boolean {
+  return position === 0 || position === value.length
+    || !(value.charCodeAt(position - 1) >= 0xd800 && value.charCodeAt(position - 1) <= 0xdbff
+      && value.charCodeAt(position) >= 0xdc00 && value.charCodeAt(position) <= 0xdfff);
 }
-function validAssessment(value: unknown, source: BookWebResearchSource): value is BookWebResearchAssessment {
-  if (!record(value) || Object.keys(value).length !== 4
-    || Object.keys(value).some(key => !["sourceId", "relationship", "materialType", "evidence"].includes(key))
-    || value.sourceId !== source.id
-    || typeof value.relationship !== "string" || !Object.hasOwn(RELATIONSHIP_LABELS, value.relationship)
-    || typeof value.materialType !== "string" || !Object.hasOwn(MATERIAL_TYPE_LABELS, value.materialType)
-    || !Array.isArray(value.evidence) || value.evidence.length < 1 || value.evidence.length > 2) return false;
-  let previousField = -1, previousEnd = 0, previousExcerptId = 0;
-  let hasExcerpt = false;
-  const seen = new Set<string>();
-  for (const item of value.evidence) {
-    if (!record(item) || Object.keys(item).length !== 5
-      || Object.keys(item).some(key => !["id", "field", "start", "end", "text"].includes(key))
-      || typeof item.id !== "string" || seen.has(item.id)
+
+function validTextContexts(value: unknown, source: BookWebResearchSource): value is BookWebResearchTextContexts {
+  if (!record(value) || Object.keys(value).length !== 2
+    || !Object.keys(value).every(key => key === "items" || key === "limited")
+    || typeof value.limited !== "boolean" || !Array.isArray(value.items) || value.items.length > 8) return false;
+  let quotedTitles = 0, editions = 0, previousField = -1, previousStart = -1;
+  for (const item of value.items) {
+    if (!record(item) || Object.keys(item).length !== 8
+      || !Object.keys(item).every(key => ["kind", "field", "value", "matchStart", "matchEnd", "start", "end", "text"].includes(key))
+      || (item.kind !== "quoted_title" && item.kind !== "edition_text")
       || (item.field !== "title" && item.field !== "excerpt")
+      || !text(item.value, item.kind === "quoted_title" ? 120 : 40) || !text(item.text, 400)
       || typeof item.start !== "number" || typeof item.end !== "number"
-      || !Number.isSafeInteger(item.start) || !Number.isSafeInteger(item.end)) return false;
-    const field = item.field === "title" ? 0 : 1, original = source[item.field];
-    if (field < previousField || (field === previousField && item.start < previousEnd)
-      || item.start < 0 || item.end <= item.start || item.end > original.length
-      || !safeBoundary(original, item.start) || !safeBoundary(original, item.end)
-      || !text(item.text, field === 0 ? 300 : 400)
-      || item.text !== original.slice(item.start, item.end)) return false;
-    if (field === 0) {
-      if (item.id !== source.id + ":T" || item.start !== 0 || item.end !== original.length) return false;
+      || typeof item.matchStart !== "number" || typeof item.matchEnd !== "number"
+      || ![item.start, item.end, item.matchStart, item.matchEnd].every(Number.isSafeInteger)) return false;
+    const original = source[item.field], fieldOrder = item.field === "title" ? 0 : 1;
+    if (typeof original !== "string" || item.start < 0 || item.start > item.matchStart
+      || item.matchStart >= item.matchEnd || item.matchEnd > item.end || item.end > original.length
+      || item.text !== original.slice(item.start, item.end) || item.value !== original.slice(item.matchStart, item.matchEnd)
+      || ![item.start, item.end, item.matchStart, item.matchEnd].every(position => utf16Boundary(original, position))
+      || fieldOrder < previousField || (fieldOrder === previousField && item.matchStart <= previousStart)) return false;
+    if (item.kind === "quoted_title") {
+      if (++quotedTitles > 4 || !/^《[^《》\r\n\u0085\u2028\u2029]+》$/u.test(item.value) || !item.value.slice(1, -1).trim()) return false;
+      let depth = 0;
+      for (let index = 0; index < item.matchStart; index++) {
+        if (original[index] === "《") depth++;
+        else if (original[index] === "》" && depth > 0) depth--;
+      }
+      if (depth !== 0) return false;
     } else {
-      const prefix = source.id + ":E", ordinalText = item.id.slice(prefix.length), ordinal = Number(ordinalText);
-      if (!item.id.startsWith(prefix) || !/^[1-9][0-9]*$/.test(ordinalText)
-        || !Number.isSafeInteger(ordinal) || ordinal <= previousExcerptId) return false;
-      hasExcerpt = true; previousExcerptId = ordinal;
+      if (++editions > 4 || !/^(?:第[ \t]*[0-9０-９一二三四五六七八九十百千零〇两兩]+[ \t]*版|初版|再版|重版|修订版|修訂版|增订版|增訂版|版本|版次)$/u.test(item.value)) return false;
     }
-    seen.add(item.id); previousField = field; previousEnd = item.end;
+    previousField = fieldOrder; previousStart = item.matchStart;
   }
-  return hasExcerpt;
+  return true;
 }
+
+/** An invalid optional block must not discard a source or expose unvalidated text in the view or clipboard. */
+export function bookWebSourceTextContexts(source: BookWebResearchSource): BookWebResearchTextContexts | undefined {
+  return validTextContexts(source.textContexts, source) ? source.textContexts : undefined;
+}
+
+export function bookWebTextContextHeading(item: BookWebResearchTextContext): string {
+  return (item.kind === "quoted_title" ? "书名号中的文字" : "版本字样")
+    + "（" + (item.field === "title" ? "标题中的文字" : "搜索节选中的文字") + "）：" + item.value;
+}
+
+function bookWebSourceTextContextsContent(source: BookWebResearchSource): string {
+  const contexts = bookWebSourceTextContexts(source);
+  const content = !contexts ? BOOK_WEB_TEXT_CONTEXTS_UNAVAILABLE
+    : contexts.items.length === 0 ? BOOK_WEB_TEXT_CONTEXTS_EMPTY
+      : contexts.items.map(item => bookWebTextContextHeading(item) + "\n" + item.text).join("\n\n");
+  return "书目文字上下文：\n" + content + (contexts?.limited ? "\n\n" + BOOK_WEB_TEXT_CONTEXTS_LIMITED : "");
+}
+
 function validSource(value: unknown, index: number): value is BookWebResearchSource {
   return record(value) && value.id === `W${index + 1}` && value.kind === "web"
     && text(value.title, 300) && webUrl(value.url) !== null && text(value.excerpt, 3000)
@@ -200,12 +216,6 @@ function validResponse(value: unknown, bookId: string, question: string): value 
   const markers = new Set(Array.from(value.draft.content.matchAll(/\[((?:W|S)\d+)\]/g), match => match[1]));
   if (Array.from(cited).some(id => !known.has(id)) || markers.size !== cited.size
     || Array.from(markers).some(id => !cited.has(id))) return false;
-  if (value.assessments !== undefined && (!Array.isArray(value.assessments)
-    || value.assessments.length !== value.citedSourceIds.length
-    || !value.assessments.every((assessment, index) => {
-      const source = sources.find(item => item.id === (value.citedSourceIds as string[])[index]);
-      return source !== undefined && validAssessment(assessment, source);
-    }))) return false;
   if (value.source === "unselected_sources") return sources.length > 0 && cited.size === 0 && value.draft.content === UNSELECTED_CONTENT;
   return value.source === "web_research"
     ? cited.size > 0 && value.draft.content === `${BOOK_WEB_RESEARCH_EXCERPTS_NOTICE}\n\n建议先查看：${value.citedSourceIds.map(id => `[${id}]`).join(" ")}`
@@ -280,18 +290,6 @@ export function bookWebResearchNeedsIsbnReview(result: BookWebResearchResponse):
   });
 }
 
-/** Controlled labels describe an initial model judgement, never a verified source. */
-export function bookWebSourceAssessmentText(assessment: BookWebResearchAssessment): string {
-  return "与本书关系：" + RELATIONSHIP_LABELS[assessment.relationship] + "；资料性质：" + MATERIAL_TYPE_LABELS[assessment.materialType];
-}
-function assessmentContent(result: BookWebResearchResponse, source: BookWebResearchSource): string {
-  const assessment = result.assessments?.find(item => item.sourceId === source.id);
-  if (!assessment) return result.citedSourceIds.includes(source.id) ? "本次未提供资料判断" : "尚未判断";
-  return "AI 资料判断（待核对）\n" + bookWebSourceAssessmentText(assessment) + "\n\n"
-    + assessment.evidence.map(item => "判断依据 [" + item.id + "]（" + (item.field === "title" ? "标题原句" : "搜索节选原句")
-      + "）：\n" + item.text).join("\n\n");
-}
-
 function oneLine(value: string): string { return value.replace(/\s+/g, " ").replace(/[\\`*_\[\]<>]/g, "\\$&"); }
 
 /** Copy validated source excerpts, retaining available snapshots when selection is incomplete or insufficient. */
@@ -301,11 +299,14 @@ export function bookWebResearchContent(result: BookWebResearchResponse): string 
   const sources = result.source === "web_research"
     ? result.citedSourceIds.map(id => result.sources.find(source => source.id === id)!) : result.sources;
   const references = sources.map(source =>
-    `[${source.id}] ${oneLine(source.title)}\n${source.url}\n${source.pageAge ? `页面时间：${oneLine(source.pageAge)}\n` : ""}\n${bookWebSourceCluesText(source)}\n\n${assessmentContent(result, source)}\n\n搜索结果节选：\n${source.excerpt}${source.truncated ? "\n\n（本条搜索节选已截短）" : ""}`,
+    "[" + source.id + "] " + oneLine(source.title) + "\n" + source.url
+    + (source.pageAge ? "\n页面时间：" + oneLine(source.pageAge) : "")
+    + "\n\n" + bookWebSourceCluesText(source) + "\n\n搜索结果节选：\n" + source.excerpt
+    + (source.truncated ? "\n\n（本条搜索节选已截短）" : "")
+    + "\n\n" + bookWebSourceTextContextsContent(source),
   ).join("\n\n");
   const limitedNotice = result.search.limited === true ? `${BOOK_WEB_RESEARCH_LIMITED_NOTICE}\n\n` : "";
   const title = result.source === "insufficient_sources" ? "本次搜索资料不足" : result.draft.title;
-  const assessmentsNotice = result.assessments?.length ? `\n\n${BOOK_WEB_RESEARCH_ASSESSMENTS_NOTICE}` : "";
   const selectedNotice = bookWebResearchNeedsIsbnReview(result) ? `\n\n${BOOK_WEB_RESEARCH_SELECTED_ISBN_NOTICE}` : "";
-  return `# ${oneLine(title)}\n\n问题：${result.question}\n\n${result.draft.content}\n\n${BOOK_WEB_RESEARCH_BOOK_CLUES_NOTICE}${selectedNotice}${assessmentsNotice}\n\n---\n\n### 联网研究来源（搜索时摘录）\n\n生成时间：${result.generatedAt}\n\n${limitedNotice}本次搜索：\n${result.search.queries.map(query => `- ${oneLine(query)}`).join("\n")}\n\n${references}`;
+  return `# ${oneLine(title)}\n\n问题：${result.question}\n\n${result.draft.content}\n\n${BOOK_WEB_RESEARCH_BOOK_CLUES_NOTICE}${selectedNotice}\n\n---\n\n### 联网研究来源（搜索时摘录）\n\n生成时间：${result.generatedAt}\n\n${limitedNotice}本次搜索：\n${result.search.queries.map(query => `- ${oneLine(query)}`).join("\n")}\n\n${references}`;
 }
