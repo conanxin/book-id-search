@@ -1,12 +1,12 @@
 # BOOK-ID-SEARCH status
 
-## Current — 2026-11-17 — Assess selected web materials with exact source passages
+## Current — 2026-11-17 — Show exact title and edition wording in web sources
 
-- `task_id=BOOK_AI_WEB_SOURCE_RELEVANCE_V1`; branch `feat/book-web-source-relevance`, based on deployed PR #83 merge `7cf7297f5c2f29936fe3b6f6f515134c44f5b1cb`.
-- Distinguish tentative relationship to the selected book from material type. The existing selector may identify up to four sources and choose existing passage IDs; the server restores exact visible wording. Bibliographic matches are not treated as direct book reviews or verification.
-- Preserve legacy responses, raw sources, reading/comparison and private drafts. Invalid annotations keep the original unselected-source fallback; no extra model request, dependency, migration, retry or budget increase.
-- Native targeted checks, integrated builds, exact-commit CI and the actual-provider content review are recorded separately in the phase PR. Synthetic fixtures do not establish model quality; existing first-twelve source selection is unchanged.
-- Development candidate; merging and production release are recorded separately. Contract: [Source relationship and material type](development/BOOK_AI_WEB_SOURCE_RELEVANCE_V1.md).
+- `task_id=BOOK_AI_WEB_SOURCE_TEXT_EVIDENCE_V1`; continues draft PR #84 on branch `feat/book-web-source-relevance`, based on deployed PR #83 `7cf7297f5c2f29936fe3b6f6f515134c44f5b1cb`.
+- The previous classification candidate passed engineering checks but failed three real semantic reviews. Those failures remain recorded in PR #84; model relationship/material labels are removed from this revised scope.
+- Keep existing ISBN/title/author clues and PR #83 source selection. Add bounded original contexts for literal book-title brackets and edition wording; these do not establish book identity, edition relationships or review/research status.
+- Selected/all source cards and copy share exact slices; legacy responses, raw excerpts, explicit reading/comparison and private drafts remain supported. No additional model call, dependency, migration or deployment configuration.
+- Native tests/builds, captured-public-source replay and exact-commit browser/PG CI are tracked separately in the PR. Development candidate; merge and production release are separate. Contract: [Literal source wording](development/BOOK_AI_WEB_SOURCE_TEXT_EVIDENCE_V1.md).
 
 ## 2026-11-16 — Show bibliographic clues in web sources (merged and deployed as PR #83)
 
