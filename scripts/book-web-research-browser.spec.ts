@@ -972,3 +972,316 @@ for (const scenario of contextScenarios) {
     await testInfo.attach("web-source-context-" + scenario.kind + "-evidence.json", { contentType: "application/json", path });
   });
 }
+
+
+// Relation and material kind are model judgments backed by server-owned snippets.
+// The fixtures deliberately keep target-book bibliography separate from reviews.
+const sourceRelevanceFixtureKey = "relevance-" + fixtureKey;
+const sourceRelevanceCatalogIds = getBookBrowserCatalogIds(sourceRelevanceFixtureKey);
+const relevanceRelationshipLabels = {
+  book_candidate: "可能直接涉及本书", other_book: "其他著作",
+  related_background: "相关主题背景", unclear: "与本书关系待核对",
+} as const;
+const relevanceMaterialLabels = {
+  bibliographic: "书目或商品信息", review: "书评或读后感", research: "研究性文章",
+  discussion: "讨论资料", other: "其他资料",
+} as const;
+const RELEVANCE_NOTICE = "AI 根据当前标题和搜索节选作初步判断；原句可核对，判断和资料内容仍需核实。";
+const BOOK_REVIEW_PRESET = "查找直接评论这本书的书评或研究，并区分其他著作、版本信息与相关背景资料。";
+type RelevanceAssessment = {
+  sourceId: string;
+  relationship: keyof typeof relevanceRelationshipLabels;
+  materialType: keyof typeof relevanceMaterialLabels;
+  evidence: Array<{ id: string; field: "title" | "excerpt"; start: number; end: number; text: string }>;
+};
+type RelevanceResearchResponse = BookWebResearchResponse & { assessments?: RelevanceAssessment[] };
+type RelevanceCounters = RecoveryCounters & { comparisonCalls: number; legacySelections: number; invalidAssessments: number };
+const relevanceScenarios = [
+  { kind: "classified", bookId: sourceRelevanceCatalogIds.A, title: "资料判断分类验证 " + sourceRelevanceFixtureKey },
+  { kind: "compat", bookId: sourceRelevanceCatalogIds.B, title: "资料判断兼容验证 " + sourceRelevanceFixtureKey },
+] as const;
+
+for (const scenario of relevanceScenarios) {
+  test("web source relevance " + scenario.kind + " preserves judgment scope, original text and private edits", async ({ page, context }, testInfo) => {
+    const researchUrl = "/api/ai/books/" + scenario.bookId + "/research";
+    const readUrl = researchUrl + "/source", compareUrl = researchUrl + "/sources/evidence";
+    const workspace = "/api/private/s32/library/books/" + scenario.bookId;
+    const { token } = issueWebSession({ sub: "book-library-test-owner", name: "合成验证账号", email: "library-test@example.test" }, {
+      secret: "book-library-synthetic-session-secret-for-local-ci-only",
+    });
+    await context.addCookies([{ name: "book_id_search_session_dev", value: token, url: WEB, httpOnly: true, sameSite: "Lax" }]);
+    await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: WEB });
+    expect(await persisted(scenario.bookId)).toBeNull();
+    const session = await (await page.request.get("/api/auth/session")).json();
+    const headers = { Origin: WEB, "X-CSRF-Token": session.csrfToken };
+    expect((await page.request.put(workspace, { headers, data: { introduction: INTRO, baseVersion: 0 } })).ok()).toBe(true);
+    expect((await page.request.post(workspace + "/notes", { headers, data: { title: "私人阅读笔记", content: NOTE } })).ok()).toBe(true);
+    const before = await persisted(scenario.bookId);
+    const writes: string[] = [], pageErrors: string[] = [], externalRequests: string[] = [], unexpectedResearch: string[] = [];
+    const researchRequests: unknown[] = [], readRequests: unknown[] = [], comparisonRequests: unknown[] = [];
+    page.on("pageerror", error => pageErrors.push(error.message));
+    page.on("request", request => {
+      const url = new URL(request.url());
+      if (url.hostname === "example.org") externalRequests.push(request.url());
+      if (url.pathname.startsWith("/api/private/s32/library/") && ["POST", "PUT", "PATCH", "DELETE"].includes(request.method())) {
+        writes.push(request.method() + " " + url.pathname);
+      }
+      if (request.method() !== "POST") return;
+      if (url.pathname === researchUrl) researchRequests.push(request.postDataJSON());
+      else if (url.pathname === readUrl) readRequests.push(request.postDataJSON());
+      else if (url.pathname === compareUrl) comparisonRequests.push(request.postDataJSON());
+      else if (url.pathname.startsWith(researchUrl + "/")) unexpectedResearch.push(url.pathname);
+    });
+    async function counters(): Promise<RelevanceCounters> {
+      const response = await page.request.get("/api/health");
+      expect(response.ok()).toBe(true);
+      return (await response.json()).bookWebSourceRelevance.cases[scenario.kind];
+    }
+    const expected: RelevanceCounters = {
+      searchRequests: 0, selectionCalls: 0, readerCalls: 0, comparisonCalls: 0, legacySelections: 0, invalidAssessments: 0,
+    };
+    expect(await counters()).toEqual(expected);
+    await page.goto("/books/" + scenario.bookId);
+    await expect(page.getByRole("heading", { name: scenario.title, exact: true })).toBeVisible();
+    const introRegion = page.getByRole("region", { name: "我的补充介绍", exact: true });
+    await introRegion.getByRole("button", { name: "编辑介绍", exact: true }).click();
+    const introEditor = introRegion.getByRole("textbox", { name: "书籍介绍", exact: true });
+    const pendingIntro = INTRO + "\n尚未保存：下次核对版本。";
+    await introEditor.fill(pendingIntro);
+    await page.getByRole("article", { name: "笔记：私人阅读笔记", exact: true }).getByRole("button", { name: "编辑笔记", exact: true }).click();
+    const noteEditor = page.getByRole("form", { name: "编辑笔记", exact: true }).getByRole("textbox", { name: "笔记正文", exact: true });
+    const pendingNote = NOTE + "\n尚未保存：先读完附录。";
+    await noteEditor.fill(pendingNote);
+    await page.setViewportSize({ width: scenario.kind === "classified" ? 1440 : 390, height: 900 });
+    if (scenario.kind === "compat") await page.getByRole("button", { name: "打开 AI 助手", exact: true }).click();
+    const pane = page.getByRole("complementary", { name: "本书 AI 助手", exact: true });
+    await pane.getByRole("button", { name: "联网研究", exact: true }).click();
+    const questionInput = pane.getByRole("textbox", { name: "联网研究问题", exact: true });
+    if (scenario.kind === "classified") {
+      await pane.getByRole("button", { name: "本书书评", exact: true }).click();
+      await expect(questionInput).toHaveValue(BOOK_REVIEW_PRESET);
+      expect(await counters()).toEqual(expected);
+    }
+    const rows = scenario.kind === "classified" ? [
+      { title: "本书馆藏条目", excerpt: "书目原句：《" + scenario.title + "》，合成测试作者，合成测试出版社，2001年，ISBN 9787538455250。本条只提供书目和馆藏信息，没有评论或研究论证。", relationship: "book_candidate", materialType: "bibliographic" },
+      { title: "本书的合成书评", excerpt: "书评原句：本文评介《" + scenario.title + "》（合成测试作者，2001年，ISBN 9787538455250），讨论其论证方法与章节安排。这是明确标记的合成书评材料。", relationship: "book_candidate", materialType: "review" },
+      { title: "另一部著作《远山札记》的读后感", excerpt: "他书原句：本文评论《远山札记》，ISBN 9787111128069，讨论山地旅行的写法；它不是查询图书的书评。阅读依据包含 🧭 与字面文字 <img src=x>，均须按纯文本保留。", relationship: "other_book", materialType: "review" },
+      { title: "版本讨论与混杂的预览", excerpt: "讨论原句：这段帖子先列 ISBN 9787538455250 和多个出版版本，随后转入杨廷宝幼年求学故事，片段没有说明这些段落与查询图书的关系。这里只保留讨论线索。", relationship: "unclear", materialType: "discussion" },
+    ] : [
+      { title: "一般研究方法文章", excerpt: "背景原句：这篇合成文章分析田野记录和目录比对方法，未直接讨论查询图书的版本或内容。", relationship: "related_background", materialType: "research" },
+      { title: "归属暂不明确的摘录", excerpt: "待核对原句：多个标题与人物材料并列出现，当前节选不足以确定与查询图书的关系，也不足以判断资料类型。", relationship: "unclear", materialType: "other" },
+    ];
+    const ids = rows.map((_, index) => "W" + (index + 1));
+    const selectedIds = scenario.kind === "classified" ? ["W2", "W1", "W3", "W4"] : ["W2", "W1"];
+    const phases: Array<{ kind: string; question: string; source: BookWebResearchResponse["source"]; assessments: boolean }> =
+      scenario.kind === "classified" ? [{ kind: "classified", question: BOOK_REVIEW_PRESET, source: "web_research", assessments: true }] : [
+        { kind: "classified", question: "查看相关背景和待核对资料。", source: "web_research", assessments: true },
+        { kind: "legacy", question: "查看旧格式的资料选择。", source: "web_research", assessments: false },
+        { kind: "invalid", question: "核对跨源依据不应冒充本条判断。", source: "unselected_sources", assessments: false },
+        { kind: "insufficient", question: "资料不足时保留已找到的来源。", source: "insufficient_sources", assessments: false },
+      ];
+    const evidencePhases: unknown[] = [];
+    for (const phase of phases) {
+      await questionInput.fill(phase.question);
+      const pending = page.waitForResponse(response => new URL(response.url()).pathname === researchUrl && response.request().method() === "POST");
+      await pane.getByRole("button", { name: "联网查资料", exact: true }).click();
+      const response = await pending;
+      expect(response.status()).toBe(200);
+      expect(response.request().postDataJSON()).toEqual({ question: phase.question });
+      const value = await response.json() as RelevanceResearchResponse;
+      expected.searchRequests++; expected.selectionCalls++;
+      if (phase.kind === "legacy") expected.legacySelections++;
+      if (phase.kind === "invalid") expected.invalidAssessments++;
+      expect(await counters()).toEqual(expected);
+      expect(value).toMatchObject({ bookId: scenario.bookId, question: phase.question, source: phase.source, mode: "source_excerpts" });
+      expect(value.search).toEqual({ performed: true, calls: 1, queries: [scenario.title + " " + phase.question] });
+      expect(value.sources.map(source => source.id)).toEqual(ids);
+      expect(value.sources.map(source => source.title)).toEqual(rows.map(row => row.title));
+      expect(value.sources.map(source => source.excerpt)).toEqual(rows.map(row => row.excerpt));
+      const selected = phase.source === "web_research";
+      expect(value.citedSourceIds).toEqual(selected ? selectedIds : []);
+      if (phase.assessments) {
+        expect(value.assessments?.map(item => item.sourceId)).toEqual(selectedIds);
+        for (const item of value.assessments!) {
+          const source = value.sources.find(row => row.id === item.sourceId)!;
+          const row = rows[ids.indexOf(item.sourceId)];
+          expect(item).toMatchObject({ relationship: row.relationship, materialType: row.materialType });
+          expect(item.evidence.map(part => part.id)).toEqual(scenario.kind === "classified" && item.sourceId === "W3"
+            ? ["W3:T", "W3:E1"] : [item.sourceId + ":E1"]);
+          expect(item.evidence.some(part => part.field === "excerpt")).toBe(true);
+          for (const part of item.evidence) {
+            expect(part.id.startsWith(item.sourceId + ":")).toBe(true);
+            expect(part.start).toBeGreaterThanOrEqual(0);
+            expect(part.end).toBeLessThanOrEqual(source[part.field].length);
+            expect(part.end - part.start).toBeGreaterThan(0);
+            expect(part.end - part.start).toBeLessThanOrEqual(400);
+            expect(part.text).toBe(source[part.field].slice(part.start, part.end));
+          }
+        }
+        await expect(pane.getByLabel("AI资料判断范围", { exact: true })).toHaveText(RELEVANCE_NOTICE);
+      } else {
+        expect(value.assessments ?? []).toEqual([]);
+        await expect(pane.getByLabel("AI资料判断范围", { exact: true })).toHaveCount(0);
+      }
+      if (scenario.kind === "classified") {
+        expect(value.sources[0].bookClues?.isbn).toBe("matched");
+        expect(value.sources[1].bookClues?.isbn).toBe("matched");
+        expect(value.sources[3].bookClues?.isbn).toBe("matched");
+        expect(value.assessments!.find(item => item.sourceId === "W1")!.materialType).toBe("bibliographic");
+        expect(value.assessments!.find(item => item.sourceId === "W2")!.materialType).toBe("review");
+        expect(value.assessments!.find(item => item.sourceId === "W4")!.relationship).toBe("unclear");
+      }
+      if (phase.source !== "unselected_sources") await pane.getByText("查看本次网页来源（" + rows.length + "）", { exact: true }).click();
+      for (let index = 0; index < rows.length; index++) {
+        const source = value.sources[index];
+        const allCard = pane.locator('[data-web-source-id="' + source.id + '"]');
+        const cards = selected ? [allCard, pane.locator('[data-web-excerpt-source-id="' + source.id + '"]')] : [allCard];
+        const item = value.assessments?.find(assessment => assessment.sourceId === source.id);
+        for (const card of cards) {
+          await expect(card).toBeVisible();
+          expect(await card.locator("blockquote").first().textContent()).toBe(rows[index].excerpt);
+          const judgment = card.getByLabel("AI 资料判断 " + source.id, { exact: true });
+          await expect(judgment).toHaveAttribute("data-source-assessment", item?.relationship ?? "legacy");
+          if (item) {
+            await expect(judgment).toContainText("AI 资料判断（待核对）");
+            await expect(judgment).toContainText(relevanceRelationshipLabels[item.relationship]);
+            await expect(judgment).toContainText(relevanceMaterialLabels[item.materialType]);
+            await judgment.getByRole("button", { name: "查看判断依据 " + source.id, exact: true }).click();
+            for (const part of item.evidence) {
+              const quote = judgment.locator('[data-assessment-evidence-id="' + part.id + '"]');
+              await expect(quote).toBeVisible();
+              await expect(quote).toContainText(part.field === "title" ? "标题原句" : "搜索节选原句");
+              expect(await quote.locator("blockquote").textContent()).toBe(part.text);
+              await expect(quote.locator("img")).toHaveCount(0);
+            }
+          } else await expect(judgment).toHaveText(selected ? "本次未提供资料判断" : "尚未判断");
+        }
+        expect(source.readToken).toEqual(expect.any(String));
+        await expect(pane.getByRole("button", { name: "读取网页正文 " + source.id, exact: true })).toBeEnabled();
+      }
+      await expect(pane.locator("[data-web-excerpt-source-id]")).toHaveCount(selected ? rows.length : 0);
+      await expect(pane.locator(".book-web-page-text")).toHaveCount(0);
+      expect(await counters()).toEqual(expected);
+      if (phase.kind === "classified") {
+        const first = pane.locator('[data-web-excerpt-source-id="' + selectedIds[0] + '"]');
+        await first.getByLabel("AI 资料判断 " + selectedIds[0], { exact: true }).scrollIntoViewIfNeeded();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+        expect(await pane.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+        await page.screenshot({ path: testInfo.outputPath("web-source-relevance-" + scenario.kind + ".png"), fullPage: true });
+        if (scenario.kind === "compat") {
+          await page.getByRole("button", { name: "关闭 AI 助手", exact: true }).click();
+          await expect(introEditor).toHaveValue(pendingIntro);
+          await expect(noteEditor).toHaveValue(pendingNote);
+          await page.getByRole("button", { name: "打开 AI 助手", exact: true }).click();
+          await expect(first.getByLabel("AI 资料判断 " + selectedIds[0], { exact: true })).toHaveAttribute("data-source-assessment", "unclear");
+          expect(await counters()).toEqual(expected);
+        }
+      }
+      const copyLabel = phase.source === "insufficient_sources" ? "复制现有来源" : "复制结果与来源";
+      await pane.getByRole("button", { name: copyLabel, exact: true }).click();
+      await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain(phase.question);
+      const copied = await page.evaluate(() => navigator.clipboard.readText());
+      if (phase.assessments) {
+        expect(copied).toContain(RELEVANCE_NOTICE);
+        for (const item of value.assessments!) {
+          expect(copied).toContain(relevanceRelationshipLabels[item.relationship]);
+          expect(copied).toContain(relevanceMaterialLabels[item.materialType]);
+          for (const part of item.evidence) expect(copied).toContain(part.text);
+        }
+      } else {
+        expect(copied).not.toContain(RELEVANCE_NOTICE);
+        expect(copied).toContain(selected ? "本次未提供资料判断" : "尚未判断");
+      }
+      for (const source of value.sources) {
+        for (const original of [source.title, source.url, source.excerpt]) expect(copied).toContain(original);
+        expect(copied).not.toContain(source.readToken!);
+      }
+      for (const privateText of [INTRO, NOTE, pendingIntro, pendingNote]) expect(copied).not.toContain(privateText);
+      async function readSource(sourceId: string): Promise<BookWebSourceResponse> {
+        const source = value.sources.find(item => item.id === sourceId)!;
+        const pendingRead = page.waitForResponse(item => new URL(item.url()).pathname === readUrl && item.request().method() === "POST");
+        await pane.getByRole("button", { name: "读取网页正文 " + sourceId, exact: true }).click();
+        const readResponse = await pendingRead;
+        expect(readResponse.status()).toBe(200);
+        expect(readResponse.request().postDataJSON()).toEqual({ sourceToken: source.readToken });
+        const read = await readResponse.json() as BookWebSourceResponse;
+        expect(read).toMatchObject({ bookId: scenario.bookId, sourceId, requestedUrl: source.url });
+        expect(read.text).toContain("正文原句：");
+        const reader = pane.getByRole("region", { name: "网页可读文字 " + sourceId, exact: true });
+        expect(await reader.locator(".book-web-page-text").textContent()).toBe(read.text);
+        expected.readerCalls++;
+        expect(await counters()).toEqual(expected);
+        return read;
+      }
+      const firstRead = await readSource("W1");
+      if (scenario.kind === "classified") {
+        const otherRead = await readSource("W3");
+        const comparison = pane.getByRole("region", { name: "多来源原文对照", exact: true });
+        await comparison.getByRole("checkbox", { name: "选择来源 W1", exact: true }).check();
+        await comparison.getByRole("checkbox", { name: "选择来源 W3", exact: true }).check();
+        const question = "对照资料判断后的两篇网页原句。";
+        await comparison.getByRole("textbox", { name: "多来源对照问题", exact: true }).fill(question);
+        const pendingCompare = page.waitForResponse(item => new URL(item.url()).pathname === compareUrl && item.request().method() === "POST");
+        await comparison.getByRole("button", { name: "查找多来源原文依据", exact: true }).click();
+        const compared = await pendingCompare;
+        expect(compared.status()).toBe(200);
+        expect(compared.request().postDataJSON()).toEqual({ snapshotTokens: [firstRead.snapshotToken, otherRead.snapshotToken], question });
+        const comparisonValue = await compared.json() as BookWebSourceComparisonResponse;
+        expect(comparisonValue.sources.map(source => source.sourceId)).toEqual(["W1", "W3"]);
+        expected.comparisonCalls++;
+        expect(await counters()).toEqual(expected);
+        for (let index = 0; index < 2; index++) {
+          const snapshot = [firstRead, otherRead][index], group = comparisonValue.sources[index];
+          expect(group.status).toBe("selected");
+          expect(group.passages).toHaveLength(1);
+          const passage = group.passages[0];
+          expect(passage.text).toBe(snapshot.text.slice(passage.start, passage.end));
+          const results = comparison.getByRole("region", { name: "多来源原文依据", exact: true });
+          const card = results.getByRole("region", { name: "对照来源 " + snapshot.sourceId, exact: true });
+          expect(await card.locator('[data-comparison-passage-id="' + passage.id + '"] blockquote').textContent()).toBe(passage.text);
+        }
+      }
+      // Explicit reading does not upgrade or rewrite the search-time judgments.
+      for (const source of value.sources) {
+        const card = pane.locator('[data-web-source-id="' + source.id + '"]');
+        expect(await card.locator("blockquote").first().textContent()).toBe(source.excerpt);
+        const item = value.assessments?.find(assessment => assessment.sourceId === source.id);
+        await expect(card.getByLabel("AI 资料判断 " + source.id, { exact: true }))
+          .toHaveAttribute("data-source-assessment", item?.relationship ?? "legacy");
+      }
+      await expect(questionInput).toHaveValue(phase.question);
+      await expect(introEditor).toHaveValue(pendingIntro);
+      await expect(noteEditor).toHaveValue(pendingNote);
+      evidencePhases.push({ kind: phase.kind, source: value.source, source_ids: ids, selected_ids: value.citedSourceIds,
+        assessments: value.assessments ?? null, counts: { ...expected }, originals_preserved: true,
+        copies_include_judgment_scope: true, explicit_read_succeeded: true });
+    }
+    expect(researchRequests).toEqual(phases.map(phase => ({ question: phase.question })));
+    expect(readRequests).toHaveLength(scenario.kind === "classified" ? 2 : 4);
+    expect(comparisonRequests).toHaveLength(scenario.kind === "classified" ? 1 : 0);
+    expect(await counters()).toEqual(expected);
+    expect(unexpectedResearch).toEqual([]);
+    expect(writes).toEqual([]);
+    expect(await persisted(scenario.bookId)).toEqual(before);
+    expect(externalRequests).toEqual([]);
+    expect(pageErrors).toEqual([]);
+    const evidence = {
+      task_id: "BOOK_AI_WEB_SOURCE_RELEVANCE_V1", scenario: scenario.kind, phases: evidencePhases,
+      transport: "REAL_HTTP_CSRF_OWNER_AND_PRODUCTION_SEARCH_SERVICE",
+      assessment: "CONTROLLED_PROVIDER_ENUMS_AND_IDS_THROUGH_PRODUCTION_PARSER",
+      quoted_basis: "EXACT_SERVER_OWNED_TITLE_EXCERPT_SLICES",
+      bibliography_is_not_review: scenario.kind === "classified" ? "VERIFIED_DISTINCT_MATERIAL_TYPES" : "NOT_EXERCISED",
+      legacy_compatibility: scenario.kind === "compat" ? "SELECTOR_OPTIONAL_FIELD_ABSENT" : "NOT_EXERCISED",
+      invalid_assessment: scenario.kind === "compat" ? "CROSS_SOURCE_BASIS_PRESERVES_UNSELECTED_ORIGINALS" : "NOT_EXERCISED",
+      source_reading: "REAL_ROUTER_TOKEN_AND_EXTRACTOR_SYNTHETIC_PAGE_TRANSPORT",
+      comparison: scenario.kind === "classified" ? "EXACT_SNAPSHOT_SLICES" : "NOT_EXERCISED",
+      no_automatic_requests: true, personal_writes: writes.length, persistence: "REAL_POSTGRESQL_UNCHANGED",
+      unsaved_editors: "PRESERVED", page_errors: pageErrors.length, external_source_requests: externalRequests.length,
+      viewport_width: scenario.kind === "classified" ? 1440 : 390,
+      real_google_oauth: "NOT_EXERCISED", real_minimax: "NOT_EXERCISED", semantic_classification_quality: "SYNTHETIC_FIXTURES_ONLY",
+    };
+    const path = testInfo.outputPath("web-source-relevance-" + scenario.kind + "-evidence.json");
+    writeFileSync(path, JSON.stringify(evidence, null, 2));
+    await testInfo.attach("web-source-relevance-" + scenario.kind + "-evidence.json", { contentType: "application/json", path });
+  });
+}
