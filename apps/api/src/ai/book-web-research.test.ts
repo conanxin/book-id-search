@@ -58,6 +58,14 @@ describe("book internet research evidence and read-only scope", () => {
     expect(s.search.mock.calls[0][0][0].content).toContain("ISBN 配合书名、作者");
     expect(s.provider.mock.calls[0][0][0].content).toContain("人物姓名出现不能确认本书");
     expect(s.provider.mock.calls[0][0][0].content).toContain("商品页只有 ISBN 也不能冒充研究文章或书评");
+    // These assertions preserve the requested guidance, not model-quality claims.
+    const selectionPrompt = s.provider.mock.calls[0][0][0].content;
+    expect(selectionPrompt).toContain("优先用 other_book");
+    expect(selectionPrompt).toContain("当前原句无法把具体讨论定位到目标书或目标版本时，用 unclear");
+    expect(selectionPrompt).toContain("只有当前原句能将具体讨论或书目条目定位到 book 对应的这本书");
+    expect(selectionPrompt).toContain("不能因标题提到书、谈及作者或引用书中话就默认 review 或 research");
+    expect(selectionPrompt).toContain("可以只选一个节选，也可以选两个节选");
+    expect(selectionPrompt).toContain("不必固定选 T + E1");
     expect(s.search.mock.calls[0][1]).toMatchObject({ timeoutMs: 90_000 });
     expect(s.provider.mock.calls[0][1]).toMatchObject({ temperature: 0.2, maxTokens: 1024, timeoutMs: 60_000, requireCompleted: true });
     // The service has only a catalog reader and model calls: it has no
