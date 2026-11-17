@@ -1146,7 +1146,10 @@ for (const scenario of relevanceScenarios) {
             await expect(judgment).toContainText("AI 资料判断（待核对）");
             await expect(judgment).toContainText(relevanceRelationshipLabels[item.relationship]);
             await expect(judgment).toContainText(relevanceMaterialLabels[item.materialType]);
-            await judgment.getByRole("button", { name: "查看判断依据 " + source.id, exact: true }).click();
+            const evidenceSummary = judgment.locator("summary");
+            await expect(evidenceSummary).toHaveText("查看判断依据 " + source.id);
+            await expect(evidenceSummary).toBeVisible();
+            await evidenceSummary.click();
             for (const part of item.evidence) {
               const quote = judgment.locator('[data-assessment-evidence-id="' + part.id + '"]');
               await expect(quote).toBeVisible();
