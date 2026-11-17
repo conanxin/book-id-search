@@ -27,9 +27,6 @@ function setup(enabled = true) {
   return { getCatalogDocument, search, provider, service };
 }
 function userPayload(messages: ChatMessage[]) { return JSON.parse(messages.find(message => message.role === "user")!.content); }
-interface ProviderSource { evidence: Array<{ id: string; field: "title" | "excerpt"; text: string }> }
-const visibleText = (source: ProviderSource, field: "title" | "excerpt") => source.evidence
-  .filter(item => item.field === field).map(item => item.text).join("");
 
 describe("book internet research evidence and read-only scope", () => {
   it("searches the selected public book once, selects real source IDs, and returns fixed copy plus unchanged source snapshots", async () => {
@@ -42,36 +39,51 @@ describe("book internet research evidence and read-only scope", () => {
       content: "已根据本次问题选出相关网页，以下保留搜索工具返回的来源节选。节选不等于网页或原书全文；来源之间可能有不同说法。\n\n建议先查看：[W1] [W2]" });
     expect(result.sources.map(source => source.id)).toEqual(["W1", "W2"]);
     expect(result.sources[0]).toEqual({ id: "W1", kind: "web", title: "出版社介绍", url: "https://publisher.example.test/book",
-      excerpt: searchResult().results[0].excerpt, pageAge: "2026-09-01", truncated: false, bookClues: unavailableClues });
+      excerpt: searchResult().results[0].excerpt, pageAge: "2026-09-01", truncated: false, bookClues: unavailableClues, textContexts: { items: [], limited: false } });
     expect(s.getCatalogDocument).toHaveBeenCalledExactlyOnceWith(A);
     expect(s.search).toHaveBeenCalledOnce(); expect(s.provider).toHaveBeenCalledOnce();
     expect(userPayload(s.search.mock.calls[0][0])).toEqual({ book: { title: catalog.title, author: catalog.author,
       publisher: catalog.publisher, year: 2020, pages: 300, isbn: "test-isbn" }, question });
     const sent = userPayload(s.provider.mock.calls[0][0]);
     expect(sent.sources).toEqual(result.sources.map(({ id, title, url, excerpt, pageAge, truncated, bookClues }) =>
-      ({ id, site: new URL(url).hostname, pageAge, truncated, bookClues, evidence: [
-        { id: id + ":T", field: "title", text: title }, { id: id + ":E1", field: "excerpt", text: excerpt },
-      ] })));
-    expect(result).not.toHaveProperty("assessments"); // legacy selector remains usable and unclassified
+      ({ id, title, site: new URL(url).hostname, excerpt, pageAge, truncated, bookClues })));
     expect(JSON.stringify([s.search.mock.calls, s.provider.mock.calls, result])).not.toMatch(/RAW_INFO|PERSONAL_|PRIVATE_METADATA|private-resource|UNTRUSTED_SEARCH_STAGE_PROSE/);
     expect(s.provider.mock.calls[0][0][0].content).toContain("没有读取网页全文或整本书");
     expect(s.search.mock.calls[0][0][0].content).toContain("ISBN 配合书名、作者");
     expect(s.provider.mock.calls[0][0][0].content).toContain("人物姓名出现不能确认本书");
     expect(s.provider.mock.calls[0][0][0].content).toContain("商品页只有 ISBN 也不能冒充研究文章或书评");
-    // These assertions preserve the requested guidance, not model-quality claims.
-    const selectionPrompt = s.provider.mock.calls[0][0][0].content;
-    expect(selectionPrompt).toContain("优先用 other_book");
-    expect(selectionPrompt).toContain("整体关系用 unclear；即使列表中包含目标书年份、出版社或 ISBN 条目");
-    expect(selectionPrompt).toContain("只有当前原句能将主要讨论对象定位到 book 对应的这本书");
-    expect(selectionPrompt).toContain("不能仅凭汇总列表中的一行条目");
-    expect(selectionPrompt).toContain("不能因标题提到书、谈及作者或引用书中话就默认 review 或 research");
-    expect(selectionPrompt).toContain("可以只选一个节选，也可以选两个节选");
-    expect(selectionPrompt).toContain("不必固定选 T + E1");
     expect(s.search.mock.calls[0][1]).toMatchObject({ timeoutMs: 90_000 });
     expect(s.provider.mock.calls[0][1]).toMatchObject({ temperature: 0.2, maxTokens: 1024, timeoutMs: 60_000, requireCompleted: true });
     // The service has only a catalog reader and model calls: it has no
     // workspace, note, resource, WeRead, persistence or page-fetch adapter.
   });
+
+  it.each(["selected", "insufficient", "obsolete assessment", "selection failure"] as const)(
+    "retains literal contexts on every source with PR83 selection behavior: %s", async outcome => {
+      const s = setup();
+      const results = [
+        { title: "《甲》资料", url: "https://example.test/a", excerpt: "原文另列《乙》修订版，关系未知。", pageAge: null },
+        { title: "普通资料", url: "https://example.test/b", excerpt: "此处没有可展示字样。", pageAge: null },
+      ];
+      s.search.mockResolvedValueOnce({ ...searchResult(), results });
+      const content = outcome === "insufficient" ? { sourceIds: [], insufficientEvidence: true }
+        : outcome === "obsolete assessment" ? { sourceIds: ["W1"], insufficientEvidence: false, assessments: [] }
+        : { sourceIds: ["W1"], insufficientEvidence: false };
+      s.provider.mockResolvedValueOnce(outcome === "selection failure" ? { ok: false, status: 504, error: "fixture failure" }
+        : { ok: true, model: "fixture", content: JSON.stringify(content) });
+      const result = await s.service.research(A, { question });
+      expect(result.source).toBe(outcome === "selected" ? "web_research" : outcome === "insufficient" ? "insufficient_sources" : "unselected_sources");
+      expect(result.sources.map(source => source.excerpt)).toEqual(results.map(source => source.excerpt));
+      expect(result.sources[0].textContexts?.items.map(item => item.value)).toEqual(["《甲》", "《乙》", "修订版"]);
+      expect(result.sources[1].textContexts).toEqual({ items: [], limited: false });
+      expect(result).not.toHaveProperty("assessments");
+      const sent = userPayload(s.provider.mock.calls[0][0]);
+      expect(sent.sources).toEqual(result.sources.map(({ id, title, url, excerpt, pageAge, truncated, bookClues }) =>
+        ({ id, title, site: new URL(url).hostname, excerpt, pageAge, truncated, bookClues })));
+      expect(JSON.stringify(s.provider.mock.calls)).not.toMatch(/textContexts|matchStart|matchEnd|assessments|evidenceIds|materialType|relationship/);
+      expect(s.search).toHaveBeenCalledOnce();
+      expect(s.provider).toHaveBeenCalledOnce();
+    });
 
   it("preserves actual repeated search queries instead of implying one query per webpage", async () => {
     const s = setup();
@@ -148,7 +160,7 @@ describe("book internet research evidence and read-only scope", () => {
       citedSourceIds: [], generatedAt: date,
       search: { performed: true, queries: searchResult().queries, calls: 1, limited: true },
       sources: results.map((source, index) => ({ ...source, id: `W${index + 1}`, kind: "web",
-        truncated: false, readToken: `read-token-W${index + 1}`, bookClues: unavailableClues })),
+        truncated: false, readToken: `read-token-W${index + 1}`, bookClues: unavailableClues, textContexts: { items: [], limited: false } })),
     });
     expect(issueSourceReadToken).toHaveBeenCalledTimes(6);
     expect(s.search).toHaveBeenCalledOnce(); expect(s.provider).toHaveBeenCalledOnce();
@@ -166,9 +178,8 @@ describe("book internet research evidence and read-only scope", () => {
     expect(result.sources.every(source => source.title.length <= 300 && source.excerpt.length <= 3000 && (source.pageAge?.length ?? 0) <= 100 && source.truncated)).toBe(true);
     expect(result.sources.map(source => source.id)).toEqual(result.sources.map((_, i) => `W${i + 1}`));
     for (const source of result.sources) expect(source.excerpt + source.title).not.toMatch(/[\ud800-\udbff]$/);
-    const sent = userPayload(s.provider.mock.calls[0][0]).sources as ProviderSource[];
-    expect(sent.map(source => visibleText(source, "excerpt"))).toEqual(result.sources.map(source => source.excerpt));
-    expect(sent.map(source => visibleText(source, "title"))).toEqual(result.sources.map(source => source.title));
+    const sent = userPayload(s.provider.mock.calls[0][0]).sources as BookWebResearchSource[];
+    expect(sent.map(source => source.excerpt)).toEqual(result.sources.map(source => source.excerpt));
     expect(JSON.stringify(sent)).not.toContain("RESULT_19_");
   });
 
@@ -202,7 +213,7 @@ describe("book internet research evidence and read-only scope", () => {
     expect(result.sources.map(source => source.title)).toEqual(results.map(source => source.title));
     expect(result.sources).toHaveLength(3); // unselected evidence is still inspectable
     const sent = userPayload(s.provider.mock.calls[0][0]).sources;
-    expect(sent.map((source: ProviderSource) => visibleText(source, "excerpt"))).toEqual(results.map(source => source.excerpt));
+    expect(sent.map((source: BookWebResearchSource) => source.excerpt)).toEqual(results.map(source => source.excerpt));
     expect(JSON.stringify(result)).not.toContain("1937年再版");
   });
 
