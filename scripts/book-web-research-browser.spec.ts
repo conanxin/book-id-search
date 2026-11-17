@@ -725,7 +725,7 @@ type BookCluesFixture = {
 type ContextSource = BookWebResearchResponse["sources"][number] & { bookClues?: BookCluesFixture };
 type ContextResearchResponse = Omit<BookWebResearchResponse, "sources"> & { sources: ContextSource[] };
 type ContextCounters = RecoveryCounters & { comparisonCalls: number; legacyResponses: number };
-const BOOK_CLUES_NOTICE = "书目线索只核对当前标题和搜索节选中的文字，不代表已读全文、内容可信或属于本书书评。";
+const BOOK_CLUES_NOTICE = "这里只展示当前标题和搜索节选中的文字线索，不确认同书、版本或资料类型，也不代表已读全文或内容可信。";
 const MISSING_SELECTED_ISBN_NOTICE = "所选资料尚缺可对应本书的 ISBN 线索；与本书的直接关联仍需核对。";
 const clueLabels = {
   matched: "出现本书 ISBN", mixed: "本书与其他 ISBN 同时出现", other_only: "只看到其他 ISBN",
@@ -970,5 +970,446 @@ for (const scenario of contextScenarios) {
     const path = testInfo.outputPath("web-source-context-" + scenario.kind + "-evidence.json");
     writeFileSync(path, JSON.stringify(evidence, null, 2));
     await testInfo.attach("web-source-context-" + scenario.kind + "-evidence.json", { contentType: "application/json", path });
+  });
+}
+
+
+// Relation and material kind are model judgments backed by server-owned snippets.
+// The fixtures deliberately keep target-book bibliography separate from reviews.
+const sourceTextEvidenceFixtureKey = "text-evidence-" + fixtureKey;
+const sourceTextEvidenceCatalogIds = getBookBrowserCatalogIds(sourceTextEvidenceFixtureKey);
+const TEXT_CONTEXT_UNAVAILABLE = "本次未提供可用的文字上下文。";
+const TEXT_CONTEXT_EMPTY = "当前没有可展示的书名号或版本字样上下文。";
+const TEXT_CONTEXT_LIMITED = "部分字样未列出，请结合标题和完整节选核对。";
+const TEXT_BOOK_REVIEW_PRESET = "查找直接评论这本书的书评或研究，并提供可核对的网页来源。";
+type SourceTextContextItem = {
+  kind: "quoted_title" | "edition_text"; field: "title" | "excerpt"; value: string;
+  matchStart: number; matchEnd: number; start: number; end: number; text: string;
+};
+type SourceTextContexts = { items: SourceTextContextItem[]; limited: boolean };
+type TextContextResearchResponse = BookWebResearchResponse & {
+  sources: Array<BookWebResearchResponse["sources"][number] & { textContexts?: SourceTextContexts }>;
+};
+type TextContextCounters = RecoveryCounters & {
+  comparisonCalls: number; legacyResponses: number; failedSelections: number; invalidContextResponses: number;
+};
+type ExpectedTextOccurrence = Pick<SourceTextContextItem, "kind" | "field" | "value"> & { occurrence?: number };
+const textContextScenarios = [
+  { kind: "visible", bookId: sourceTextEvidenceCatalogIds.A, title: "书目文字上下文验证 " + sourceTextEvidenceFixtureKey },
+  { kind: "compat", bookId: sourceTextEvidenceCatalogIds.B, title: "书目文字上下文兼容验证 " + sourceTextEvidenceFixtureKey },
+] as const;
+
+for (const scenario of textContextScenarios) {
+  test("web source text contexts " + scenario.kind + " preserve literal evidence and private edits", async ({ page, context }, testInfo) => {
+    const researchUrl = "/api/ai/books/" + scenario.bookId + "/research";
+    const readUrl = researchUrl + "/source", compareUrl = researchUrl + "/sources/evidence";
+    const workspace = "/api/private/s32/library/books/" + scenario.bookId;
+    const { token } = issueWebSession({ sub: "book-library-test-owner", name: "合成验证账号", email: "library-test@example.test" }, {
+      secret: "book-library-synthetic-session-secret-for-local-ci-only",
+    });
+    await context.addCookies([{ name: "book_id_search_session_dev", value: token, url: WEB, httpOnly: true, sameSite: "Lax" }]);
+    await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: WEB });
+    expect(await persisted(scenario.bookId)).toBeNull();
+    const session = await (await page.request.get("/api/auth/session")).json();
+    const headers = { Origin: WEB, "X-CSRF-Token": session.csrfToken };
+    expect((await page.request.put(workspace, { headers, data: { introduction: INTRO, baseVersion: 0 } })).ok()).toBe(true);
+    expect((await page.request.post(workspace + "/notes", { headers, data: { title: "私人阅读笔记", content: NOTE } })).ok()).toBe(true);
+    const before = await persisted(scenario.bookId);
+    const writes: string[] = [], pageErrors: string[] = [], externalRequests: string[] = [], unexpectedResearch: string[] = [];
+    const researchRequests: unknown[] = [], readRequests: unknown[] = [], comparisonRequests: unknown[] = [];
+    page.on("pageerror", error => pageErrors.push(error.message));
+    page.on("request", request => {
+      const url = new URL(request.url());
+      if (url.hostname === "example.org") externalRequests.push(request.url());
+      if (url.pathname.startsWith("/api/private/s32/library/") && ["POST", "PUT", "PATCH", "DELETE"].includes(request.method())) {
+        writes.push(request.method() + " " + url.pathname);
+      }
+      if (request.method() !== "POST") return;
+      if (url.pathname === researchUrl) researchRequests.push(request.postDataJSON());
+      else if (url.pathname === readUrl) readRequests.push(request.postDataJSON());
+      else if (url.pathname === compareUrl) comparisonRequests.push(request.postDataJSON());
+      else if (url.pathname.startsWith(researchUrl + "/")) unexpectedResearch.push(url.pathname);
+    });
+    async function counters(): Promise<TextContextCounters> {
+      const response = await page.request.get("/api/health");
+      expect(response.ok()).toBe(true);
+      return (await response.json()).bookWebSourceTextEvidence.cases[scenario.kind];
+    }
+    const expected: TextContextCounters = {
+      searchRequests: 0, selectionCalls: 0, readerCalls: 0, comparisonCalls: 0,
+      legacyResponses: 0, failedSelections: 0, invalidContextResponses: 0,
+    };
+    expect(await counters()).toEqual(expected);
+    await page.goto("/books/" + scenario.bookId);
+    await expect(page.getByRole("heading", { name: scenario.title, exact: true })).toBeVisible();
+    const introRegion = page.getByRole("region", { name: "我的补充介绍", exact: true });
+    await introRegion.getByRole("button", { name: "编辑介绍", exact: true }).click();
+    const introEditor = introRegion.getByRole("textbox", { name: "书籍介绍", exact: true });
+    const pendingIntro = INTRO + "\n尚未保存：下次核对版本。";
+    await introEditor.fill(pendingIntro);
+    await page.getByRole("article", { name: "笔记：私人阅读笔记", exact: true }).getByRole("button", { name: "编辑笔记", exact: true }).click();
+    const noteEditor = page.getByRole("form", { name: "编辑笔记", exact: true }).getByRole("textbox", { name: "笔记正文", exact: true });
+    const pendingNote = NOTE + "\n尚未保存：先读完附录。";
+    await noteEditor.fill(pendingNote);
+    await page.setViewportSize({ width: scenario.kind === "visible" ? 1440 : 390, height: 900 });
+    if (scenario.kind === "compat") await page.getByRole("button", { name: "打开 AI 助手", exact: true }).click();
+    const pane = page.getByRole("complementary", { name: "本书 AI 助手", exact: true });
+    await pane.getByRole("button", { name: "联网研究", exact: true }).click();
+    const questionInput = pane.getByRole("textbox", { name: "联网研究问题", exact: true });
+    if (scenario.kind === "visible") {
+      await pane.getByRole("button", { name: "本书书评", exact: true }).click();
+      await expect(questionInput).toHaveValue(TEXT_BOOK_REVIEW_PRESET);
+      expect(await counters()).toEqual(expected);
+    }
+    const cancellationQuestion = "取消这一轮文字上下文查询。";
+    if (scenario.kind === "compat") {
+      // The real fixture HTTP request completes, but delivery is held until
+      // after cancellation. The browser must discard the late result.
+      let release!: () => void, fetched!: () => void, finished!: () => void;
+      let upstreamFailure: unknown;
+      const hold = new Promise<void>(resolve => { release = resolve; });
+      const upstreamReady = new Promise<void>(resolve => { fetched = resolve; });
+      const routeFinished = new Promise<void>(resolve => { finished = resolve; });
+      await page.route("**" + researchUrl, async route => {
+        try {
+          const upstream = await route.fetch();
+          expect(upstream.status()).toBe(200);
+          fetched();
+          await hold;
+          await route.fulfill({ response: upstream }).catch(() => {});
+        } catch (error) { upstreamFailure = error; fetched(); }
+        finally { finished(); }
+      });
+      try {
+        await questionInput.fill(cancellationQuestion);
+        await pane.getByRole("button", { name: "联网查资料", exact: true }).click();
+        await upstreamReady;
+        expect(upstreamFailure).toBeUndefined();
+        expected.searchRequests++; expected.selectionCalls++;
+        expect(await counters()).toEqual(expected);
+        await pane.getByRole("button", { name: "取消研究", exact: true }).click();
+        release();
+        await routeFinished;
+        await expect(pane.getByRole("button", { name: "联网查资料", exact: true })).toBeEnabled();
+        await expect(pane.locator("[data-web-source-id], [data-web-excerpt-source-id], [data-source-text-contexts]")).toHaveCount(0);
+        await expect(introEditor).toHaveValue(pendingIntro);
+        await expect(noteEditor).toHaveValue(pendingNote);
+        expect(await counters()).toEqual(expected);
+      } finally {
+        release();
+        await page.unroute("**" + researchUrl);
+      }
+    }
+    const rows: Array<{ title: string; excerpt: string; limited: boolean; occurrences: ExpectedTextOccurrence[] }> = scenario.kind === "visible" ? [
+      {
+        title: "🧭 目录《古道行记》",
+        excerpt: "🧭 目录原句：《古道行记》，合成测试作者，2001年，第1版，ISBN 9787538455250。这里只列出书目文字，不能据此确认同书或书评。",
+        limited: false, occurrences: [
+          { kind: "quoted_title", field: "title", value: "《古道行记》" },
+          { kind: "quoted_title", field: "excerpt", value: "《古道行记》" },
+          { kind: "edition_text", field: "excerpt", value: "第1版" },
+        ],
+      },
+      {
+        title: "人物资料与《远山札记》的摘录",
+        excerpt: "阅读原句：本文讨论《远山札记》，修订版，ISBN 9787111128069。作者文字为合成测试作者，片段未说明作品关系。字面文字 <img src=x> 与 🧭 均须按纯文本保留。",
+        limited: false, occurrences: [
+          { kind: "quoted_title", field: "title", value: "《远山札记》" },
+          { kind: "quoted_title", field: "excerpt", value: "《远山札记》" },
+          { kind: "edition_text", field: "excerpt", value: "修订版" },
+        ],
+      },
+      {
+        title: "并列题名与版次记录",
+        excerpt: "并列原句：《古道行记》与《远山札记》被同一页面并列；末尾再次写《古道行记》。ISBN 9787538455250 与 ISBN 9787111128069 同时出现。2001年第1版与2012年再版字样并列，随后转入杨廷宝幼年求学故事，没有说明这些文字之间的关系。",
+        limited: false, occurrences: [
+          { kind: "edition_text", field: "title", value: "版次" },
+          { kind: "quoted_title", field: "excerpt", value: "《古道行记》" },
+          { kind: "quoted_title", field: "excerpt", value: "《远山札记》" },
+          { kind: "quoted_title", field: "excerpt", value: "《古道行记》", occurrence: 2 },
+          { kind: "edition_text", field: "excerpt", value: "第1版" },
+          { kind: "edition_text", field: "excerpt", value: "再版" },
+        ],
+      },
+      {
+        title: "题名排列的摘录",
+        excerpt: "题名原句：《甲卷》《乙卷》《丙卷》《丁卷》《戊卷》；另外保留未闭合书名号《尾部未完成",
+        limited: true, occurrences: ["《甲卷》", "《乙卷》", "《丙卷》", "《丁卷》"]
+          .map(value => ({ kind: "quoted_title" as const, field: "excerpt" as const, value })),
+      },
+      {
+        title: "一般田野资料",
+        excerpt: "背景原句：🧭 这段内容介绍观察与记录方法。字面字符串 <img src=x> 不是网页元素。",
+        limited: false, occurrences: [],
+      },
+    ] : [
+      {
+        title: "旧资料《平原笔记》",
+        excerpt: "原句甲：《平原笔记》列第2版，ISBN 9787538455250；这些只是页面出现的文字。",
+        limited: false, occurrences: [
+          { kind: "quoted_title", field: "title", value: "《平原笔记》" },
+          { kind: "quoted_title", field: "excerpt", value: "《平原笔记》" },
+          { kind: "edition_text", field: "excerpt", value: "第2版" },
+        ],
+      },
+      {
+        title: "普通资料乙", excerpt: "原句乙：这里只是一般观察记录，🧭 与 <img src=x> 都是字面文字。",
+        limited: false, occurrences: [],
+      },
+    ];
+    const ids = rows.map((_, index) => "W" + (index + 1));
+    const selectedIds = scenario.kind === "visible" ? ["W2", "W1", "W3", "W4"] : ["W2", "W1"];
+    const phases: Array<{ kind: string; question: string; source: BookWebResearchResponse["source"] }> =
+      scenario.kind === "visible" ? [{ kind: "visible", question: TEXT_BOOK_REVIEW_PRESET, source: "web_research" }] : [
+        { kind: "visible", question: "查看资料中的题名与版本字样。", source: "web_research" },
+        { kind: "legacy", question: "查看旧格式的网页资料。", source: "web_research" },
+        { kind: "invalid-context", question: "错误的文字上下文不应隐藏原始资料。", source: "web_research" },
+        { kind: "unselected", question: "自动挑选失败时仍保留原文线索。", source: "unselected_sources" },
+        { kind: "insufficient", question: "资料不足时保留已找到的文字线索。", source: "insufficient_sources" },
+      ];
+    const evidencePhases: unknown[] = [];
+    for (const phase of phases) {
+      await questionInput.fill(phase.question);
+      const pending = page.waitForResponse(response => new URL(response.url()).pathname === researchUrl && response.request().method() === "POST");
+      await pane.getByRole("button", { name: "联网查资料", exact: true }).click();
+      const response = await pending;
+      expect(response.status()).toBe(200);
+      expect(response.request().postDataJSON()).toEqual({ question: phase.question });
+      const value = await response.json() as TextContextResearchResponse;
+      expected.searchRequests++; expected.selectionCalls++;
+      if (phase.kind === "legacy") expected.legacyResponses++;
+      if (phase.kind === "unselected") expected.failedSelections++;
+      if (phase.kind === "invalid-context") expected.invalidContextResponses++;
+      expect(await counters()).toEqual(expected);
+      expect(value).toMatchObject({ bookId: scenario.bookId, question: phase.question, source: phase.source, mode: "source_excerpts" });
+      expect(value).not.toHaveProperty("assessments");
+      expect(value.search).toEqual({ performed: true, calls: 1, queries: [scenario.title + " " + phase.question] });
+      expect(value.sources.map(source => source.id)).toEqual(ids);
+      expect(value.sources.map(source => source.title)).toEqual(rows.map(row => row.title));
+      expect(value.sources.map(source => source.excerpt)).toEqual(rows.map(row => row.excerpt));
+      const selected = phase.source === "web_research";
+      expect(value.citedSourceIds).toEqual(selected ? selectedIds : []);
+      await expect(pane.getByLabel("书目线索核对范围", { exact: true })).toHaveText(BOOK_CLUES_NOTICE);
+      await expect(pane.locator("[data-source-assessment]")).toHaveCount(0);
+      await expect(pane.getByLabel("AI资料判断范围", { exact: true })).toHaveCount(0);
+      const contextsUsable = (sourceId: string) => phase.kind !== "legacy" && !(phase.kind === "invalid-context" && sourceId === "W1");
+      const contextStatus = (sourceId: string) => !contextsUsable(sourceId) ? "unavailable"
+        : value.sources.find(source => source.id === sourceId)!.textContexts!.items.length ? "available" : "empty";
+      for (let index = 0; index < rows.length; index++) {
+        const source = value.sources[index], block = source.textContexts;
+        if (phase.kind === "legacy") {
+          expect(block).toBeUndefined();
+          continue;
+        }
+        expect(block).toBeDefined();
+        if (!contextsUsable(source.id)) {
+          expect(block!.items[0].end).toBeGreaterThan(source[block!.items[0].field].length);
+          continue;
+        }
+        expect(block!.limited).toBe(rows[index].limited);
+        expect(block!.items.map(item => ({ kind: item.kind, field: item.field, value: item.value })))
+          .toEqual(rows[index].occurrences.map(({ kind, field, value }) => ({ kind, field, value })));
+        for (let j = 0; j < block!.items.length; j++) {
+          const item = block!.items[j], expectedItem = rows[index].occurrences[j], original = source[item.field];
+          let occurrenceStart = -1;
+          for (let n = 0; n < (expectedItem.occurrence ?? 1); n++) occurrenceStart = original.indexOf(item.value, occurrenceStart + 1);
+          expect(item.matchStart).toBe(occurrenceStart);
+          expect(item.matchEnd).toBe(occurrenceStart + item.value.length);
+          expect(item.value).toBe(original.slice(item.matchStart, item.matchEnd));
+          expect(item.start).toBeGreaterThanOrEqual(0);
+          expect(item.start).toBeLessThanOrEqual(item.matchStart);
+          expect(item.end).toBeGreaterThanOrEqual(item.matchEnd);
+          expect(item.end).toBeLessThanOrEqual(original.length);
+          expect(item.end - item.start).toBeLessThanOrEqual(400);
+          expect(item.text).toBe(original.slice(item.start, item.end));
+        }
+      }
+      if (scenario.kind === "visible") {
+        expect(value.sources.map(source => source.bookClues?.isbn)).toEqual(["matched", "other_only", "mixed", "not_seen", "not_seen"]);
+        expect(value.sources[2].textContexts!.items.filter(item => item.value === "《古道行记》")).toHaveLength(2);
+        expect(value.sources[3].textContexts!.items.map(item => item.value)).not.toContain("《戊卷》");
+        expect(value.sources[3].excerpt).toContain("《戊卷》");
+      }
+      if (phase.source !== "unselected_sources") await pane.getByText("查看本次网页来源（" + rows.length + "）", { exact: true }).click();
+      for (let index = 0; index < rows.length; index++) {
+        const source = value.sources[index], block = contextsUsable(source.id) ? source.textContexts : undefined;
+        const allCard = pane.locator('[data-web-source-id="' + source.id + '"]');
+        const cards = value.citedSourceIds.includes(source.id)
+          ? [allCard, pane.locator('[data-web-excerpt-source-id="' + source.id + '"]')] : [allCard];
+        for (const card of cards) {
+          await expect(card).toBeVisible();
+          expect(await card.locator("blockquote").first().textContent()).toBe(source.excerpt);
+          await expect(card.locator("blockquote img")).toHaveCount(0);
+          const contexts = card.getByLabel("书目文字上下文 " + source.id, { exact: true });
+          await expect(contexts).toHaveAttribute("data-source-text-contexts", contextStatus(source.id));
+          if (!block) {
+            await expect(contexts).toContainText(TEXT_CONTEXT_UNAVAILABLE);
+          } else if (!block.items.length) {
+            await expect(contexts).toContainText(TEXT_CONTEXT_EMPTY);
+          } else {
+            const summary = contexts.locator("summary");
+            await expect(summary).toHaveText("查看书目文字上下文 " + source.id);
+            await summary.click();
+            for (const item of block.items) {
+              const id = source.id + ":" + item.field + ":" + item.matchStart + ":" + item.matchEnd + ":" + item.kind;
+              const part = contexts.locator('[data-text-context-id="' + id + '"]');
+              await expect(part).toHaveAttribute("data-text-context-kind", item.kind);
+              await expect(part).toBeVisible();
+              await expect(part).toContainText(item.kind === "quoted_title" ? "书名号中的文字" : "版本字样");
+              await expect(part).toContainText(item.field === "title" ? "标题中的文字" : "搜索节选中的文字");
+              await expect(part).toContainText(item.value);
+              expect(await part.locator("blockquote").textContent()).toBe(item.text);
+              await expect(part.locator("img")).toHaveCount(0);
+            }
+            if (block.limited) await expect(contexts).toContainText(TEXT_CONTEXT_LIMITED);
+          }
+        }
+        expect(source.readToken).toEqual(expect.any(String));
+        await expect(pane.getByRole("button", { name: "读取网页正文 " + source.id, exact: true })).toBeEnabled();
+      }
+      await expect(pane.locator("[data-web-excerpt-source-id]")).toHaveCount(value.citedSourceIds.length);
+      await expect(pane.locator(".book-web-page-text")).toHaveCount(0);
+      expect(await counters()).toEqual(expected);
+      if (phase.kind === "visible") {
+        const first = pane.locator('[data-web-excerpt-source-id="W1"]');
+        await first.getByLabel("书目文字上下文 W1", { exact: true }).scrollIntoViewIfNeeded();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+        expect(await pane.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+        await page.screenshot({ path: testInfo.outputPath("web-source-text-contexts-" + scenario.kind + ".png"), fullPage: true });
+        await first.screenshot({ path: testInfo.outputPath("web-source-text-contexts-" + scenario.kind + "-card.png") });
+        if (scenario.kind === "compat") {
+          await page.getByRole("button", { name: "关闭 AI 助手", exact: true }).click();
+          await expect(introEditor).toHaveValue(pendingIntro);
+          await expect(noteEditor).toHaveValue(pendingNote);
+          await page.getByRole("button", { name: "打开 AI 助手", exact: true }).click();
+          await expect(first.getByLabel("书目文字上下文 W1", { exact: true })).toHaveAttribute("data-source-text-contexts", "available");
+          expect(await counters()).toEqual(expected);
+        }
+      }
+      const copyLabel = phase.source === "insufficient_sources" ? "复制现有来源" : "复制结果与来源";
+      await pane.getByRole("button", { name: copyLabel, exact: true }).click();
+      await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain(phase.question);
+      const copied = await page.evaluate(() => navigator.clipboard.readText());
+      expect(copied).toContain(BOOK_CLUES_NOTICE);
+      expect(copied).toContain("书目文字上下文：");
+      for (const retiredLabel of ["AI 资料判断（待核对）", "与本书关系：", "资料性质："]) expect(copied).not.toContain(retiredLabel);
+      const copiedSources = selected ? value.citedSourceIds.map(id => value.sources.find(source => source.id === id)!) : value.sources;
+      for (const source of copiedSources) {
+        for (const original of [source.title, source.url, source.excerpt]) expect(copied).toContain(original);
+        expect(copied).not.toContain(source.readToken!);
+        if (!contextsUsable(source.id)) {
+          expect(copied).toContain(TEXT_CONTEXT_UNAVAILABLE);
+        } else if (!source.textContexts!.items.length) {
+          expect(copied).toContain(TEXT_CONTEXT_EMPTY);
+        } else {
+          for (const item of source.textContexts!.items) {
+            expect(copied).toContain(item.kind === "quoted_title" ? "书名号中的文字" : "版本字样");
+            expect(copied).toContain(item.value);
+            expect(copied).toContain(item.text);
+          }
+          if (source.textContexts!.limited) expect(copied).toContain(TEXT_CONTEXT_LIMITED);
+        }
+      }
+      if (scenario.kind === "visible") expect(copied).not.toContain(value.sources[4].url);
+      for (const privateText of [INTRO, NOTE, pendingIntro, pendingNote]) expect(copied).not.toContain(privateText);
+      async function readSource(sourceId: string): Promise<BookWebSourceResponse> {
+        const source = value.sources.find(item => item.id === sourceId)!;
+        const pendingRead = page.waitForResponse(item => new URL(item.url()).pathname === readUrl && item.request().method() === "POST");
+        await pane.getByRole("button", { name: "读取网页正文 " + sourceId, exact: true }).click();
+        const readResponse = await pendingRead;
+        expect(readResponse.status()).toBe(200);
+        expect(readResponse.request().postDataJSON()).toEqual({ sourceToken: source.readToken });
+        const read = await readResponse.json() as BookWebSourceResponse;
+        expect(read).toMatchObject({ bookId: scenario.bookId, sourceId, requestedUrl: source.url });
+        expect(read.text).toContain("正文原句：");
+        expect(read.text).toContain("《独立正文题名》第9版");
+        const reader = pane.getByRole("region", { name: "网页可读文字 " + sourceId, exact: true });
+        expect(await reader.locator(".book-web-page-text").textContent()).toBe(read.text);
+        expected.readerCalls++;
+        expect(await counters()).toEqual(expected);
+        return read;
+      }
+      const firstRead = await readSource("W1");
+      if (scenario.kind === "visible") {
+        const otherRead = await readSource("W3");
+        const comparison = pane.getByRole("region", { name: "多来源原文对照", exact: true });
+        await comparison.getByRole("checkbox", { name: "选择来源 W1", exact: true }).check();
+        await comparison.getByRole("checkbox", { name: "选择来源 W3", exact: true }).check();
+        const question = "对照这两篇网页的原文。";
+        await comparison.getByRole("textbox", { name: "多来源对照问题", exact: true }).fill(question);
+        const pendingCompare = page.waitForResponse(item => new URL(item.url()).pathname === compareUrl && item.request().method() === "POST");
+        await comparison.getByRole("button", { name: "查找多来源原文依据", exact: true }).click();
+        const compared = await pendingCompare;
+        expect(compared.status()).toBe(200);
+        expect(compared.request().postDataJSON()).toEqual({ snapshotTokens: [firstRead.snapshotToken, otherRead.snapshotToken], question });
+        const comparisonValue = await compared.json() as BookWebSourceComparisonResponse;
+        expect(comparisonValue.sources.map(source => source.sourceId)).toEqual(["W1", "W3"]);
+        expected.comparisonCalls++;
+        expect(await counters()).toEqual(expected);
+        for (let index = 0; index < 2; index++) {
+          const snapshot = [firstRead, otherRead][index], group = comparisonValue.sources[index];
+          expect(group.status).toBe("selected");
+          expect(group.passages).toHaveLength(1);
+          const passage = group.passages[0];
+          expect(passage.text).toBe(snapshot.text.slice(passage.start, passage.end));
+          const results = comparison.getByRole("region", { name: "多来源原文依据", exact: true });
+          const card = results.getByRole("region", { name: "对照来源 " + snapshot.sourceId, exact: true });
+          expect(await card.locator('[data-comparison-passage-id="' + passage.id + '"] blockquote').textContent()).toBe(passage.text);
+        }
+      }
+      // Full-page text may contain new marked titles. Search-time literal
+      // contexts stay attached to their original title/excerpt snapshots.
+      for (const source of value.sources) {
+        const card = pane.locator('[data-web-source-id="' + source.id + '"]');
+        expect(await card.locator("blockquote").first().textContent()).toBe(source.excerpt);
+        const contexts = card.getByLabel("书目文字上下文 " + source.id, { exact: true });
+        await expect(contexts).toHaveAttribute("data-source-text-contexts", contextStatus(source.id));
+        await expect(contexts.locator("[data-text-context-id]")).toHaveCount(contextsUsable(source.id) ? source.textContexts!.items.length : 0);
+        await expect(contexts).not.toContainText("《独立正文题名》");
+      }
+      await expect(questionInput).toHaveValue(phase.question);
+      await expect(introEditor).toHaveValue(pendingIntro);
+      await expect(noteEditor).toHaveValue(pendingNote);
+      evidencePhases.push({
+        kind: phase.kind, source: value.source, source_ids: ids, selected_ids: value.citedSourceIds,
+        contexts: value.sources.map(source => ({ sourceId: source.id, ui_state: contextStatus(source.id), textContexts: source.textContexts ?? null })),
+        counts: { ...expected }, originals_preserved: true, copies_include_literal_scope: true,
+        retired_ai_labels_absent: true, explicit_read_succeeded: true,
+      });
+    }
+    expect(researchRequests).toEqual([
+      ...(scenario.kind === "compat" ? [{ question: cancellationQuestion }] : []),
+      ...phases.map(phase => ({ question: phase.question })),
+    ]);
+    expect(readRequests).toHaveLength(scenario.kind === "visible" ? 2 : phases.length);
+    expect(comparisonRequests).toHaveLength(scenario.kind === "visible" ? 1 : 0);
+    expect(await counters()).toEqual(expected);
+    expect(unexpectedResearch).toEqual([]);
+    expect(writes).toEqual([]);
+    expect(await persisted(scenario.bookId)).toEqual(before);
+    expect(externalRequests).toEqual([]);
+    expect(pageErrors).toEqual([]);
+    const evidence = {
+      task_id: "BOOK_AI_WEB_SOURCE_TEXT_EVIDENCE_V1", scenario: scenario.kind, phases: evidencePhases,
+      transport: "REAL_HTTP_CSRF_OWNER_AND_PRODUCTION_SEARCH_SERVICE",
+      text_contexts: "DETERMINISTIC_TITLE_EXCERPT_RULES_WITH_EXACT_UTF16_RANGES",
+      selection: "PR83_TWO_KEY_IDS_ONLY_CONTRACT",
+      quoted_titles: "LITERAL_MARKED_TEXT_NOT_BOOK_OR_VERSION_CERTIFICATION",
+      duplicate_occurrences_and_limit: scenario.kind === "visible" ? "PRESERVED_WITH_ORIGINAL_EXCERPTS" : "NOT_EXERCISED",
+      legacy_compatibility: scenario.kind === "compat" ? "TEXT_CONTEXTS_REMOVED_AFTER_REAL_SERVICE" : "NOT_EXERCISED",
+      invalid_optional_block: scenario.kind === "compat" ? "ONE_BLOCK_UNAVAILABLE_ORIGINAL_SOURCE_AND_SELECTION_RETAINED" : "NOT_EXERCISED",
+      failed_selection_and_insufficient: scenario.kind === "compat" ? "ORIGINAL_SOURCES_CONTEXTS_COPY_AND_READING_RETAINED" : "NOT_EXERCISED",
+      cancelled_late_http_result: scenario.kind === "compat" ? "DISCARDED_PRIVATE_EDITORS_PRESERVED" : "NOT_EXERCISED",
+      source_reading: "REAL_ROUTER_TOKEN_AND_EXTRACTOR_SYNTHETIC_PAGE_TRANSPORT",
+      comparison: scenario.kind === "visible" ? "EXACT_SNAPSHOT_SLICES" : "NOT_EXERCISED",
+      read_text_does_not_replace_search_contexts: true, retired_ai_labels_absent: true,
+      no_automatic_requests: true, personal_writes: writes.length, persistence: "REAL_POSTGRESQL_UNCHANGED",
+      unsaved_editors: "PRESERVED", page_errors: pageErrors.length, external_source_requests: externalRequests.length,
+      viewport_width: scenario.kind === "visible" ? 1440 : 390,
+      real_google_oauth: "NOT_EXERCISED", real_minimax: "NOT_EXERCISED",
+    };
+    const path = testInfo.outputPath("web-source-text-contexts-" + scenario.kind + "-evidence.json");
+    writeFileSync(path, JSON.stringify(evidence, null, 2));
+    await testInfo.attach("web-source-text-contexts-" + scenario.kind + "-evidence.json", { contentType: "application/json", path });
   });
 }

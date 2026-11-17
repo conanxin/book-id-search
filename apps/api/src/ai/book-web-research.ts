@@ -3,8 +3,10 @@ import type { CatalogBookSnapshot } from "../s32/domain/catalog-promotion.js";
 import { chatCompletion, isAiEnabled, type ChatMessage } from "./minimax.js";
 import { searchMiniMaxWeb, type MiniMaxWebResult, type MiniMaxWebSearchResponse } from "./minimax-web-search.js";
 import { deriveBookWebSourceClues, type BookWebSourceClues } from "./book-web-source-clues.js";
+import { deriveBookWebSourceTextContexts, type BookWebSourceTextContexts } from "./book-web-source-text-context.js";
 
 export type { BookWebSourceClues } from "./book-web-source-clues.js";
+export type { BookWebSourceTextContext, BookWebSourceTextContexts } from "./book-web-source-text-context.js";
 
 export interface BookWebResearchSource {
   id: string;
@@ -16,6 +18,7 @@ export interface BookWebResearchSource {
   truncated: boolean;
   readToken?: string;
   bookClues?: BookWebSourceClues;
+  textContexts?: BookWebSourceTextContexts;
 }
 export interface BookWebResearchResponse {
   bookId: string;
@@ -132,7 +135,8 @@ function snapshotSources(results: MiniMaxWebResult[], book: Pick<CatalogBookSnap
     const pageAge = rawAge ? prefix(rawAge, BOOK_WEB_RESEARCH_LIMITS.PAGE_AGE_CHARS) : null;
     sources.push({ id: `W${sources.length + 1}`, kind: "web", title, url, excerpt, pageAge,
       truncated: excerpt.length < text.length || title.length < rawTitle.length || (pageAge?.length ?? 0) < rawAge.length,
-      bookClues: deriveBookWebSourceClues(book, { title, excerpt }, { title: title.length < rawTitle.length, excerpt: excerpt.length < text.length }) });
+      bookClues: deriveBookWebSourceClues(book, { title, excerpt }, { title: title.length < rawTitle.length, excerpt: excerpt.length < text.length }),
+      textContexts: deriveBookWebSourceTextContexts({ title, excerpt }, { title: title.length < rawTitle.length, excerpt: excerpt.length < text.length }) });
     remaining -= excerpt.length;
     seen.add(url);
   }

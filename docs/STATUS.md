@@ -1,12 +1,20 @@
 # BOOK-ID-SEARCH status
 
-## Current — 2026-11-16 — Show bibliographic clues in web sources
+## Current — 2026-11-17 — Show exact title and edition wording in web sources
+
+- `task_id=BOOK_AI_WEB_SOURCE_TEXT_EVIDENCE_V1`; continues draft PR #84 on branch `feat/book-web-source-relevance`, based on deployed PR #83 `7cf7297f5c2f29936fe3b6f6f515134c44f5b1cb`.
+- The previous classification candidate passed engineering checks but failed three real semantic reviews. Those failures remain recorded in PR #84; model relationship/material labels are removed from this revised scope.
+- Keep existing ISBN/title/author clues and PR #83 source selection. Add bounded original contexts for literal book-title brackets and edition wording; these do not establish book identity, edition relationships or review/research status.
+- Selected/all source cards and copy share exact slices; legacy responses, raw excerpts, explicit reading/comparison and private drafts remain supported. No additional model call, dependency, migration or deployment configuration.
+- Native tests/builds, captured-public-source replay and exact-commit browser/PG CI are tracked separately in the PR. Development candidate; merge and production release are separate. Contract: [Literal source wording](development/BOOK_AI_WEB_SOURCE_TEXT_EVIDENCE_V1.md).
+
+## 2026-11-16 — Show bibliographic clues in web sources (merged and deployed as PR #83)
 
 - `task_id=BOOK_AI_WEB_SOURCE_CONTEXT_V1`; branch `feat/book-web-source-context`, based on deployed PR #82 merge `d913ca1917526382c03bbec58ccd778cb1a26439`.
 - Add deterministic clues for the target ISBN and complete title/author text visible in returned source titles/excerpts. Distinguish mixed or other ISBNs, missing catalog ISBN and legacy responses without claiming verified book identity or scholarly quality.
 - Keep source selection separate from these clues; preserve original snippets, reading, comparison and private drafts. Copy existing sources even when selection reports insufficient material.
 - API focused regressions (205) and Web client/component regressions (182) passed; two captured 12-source real-response replays preserved the original excerpts. Integrated API/Web builds, exact-commit browser/PG CI and the new provider trial are recorded separately in the phase PR. Prompt refinements do not themselves establish retrieval-quality improvement.
-- Development candidate only; main and production remain PR #82. No dependency, migration, additional provider request or model/deadline change.
+- PR #83 was merged as `7cf7297f5c2f29936fe3b6f6f515134c44f5b1cb` and API/Web deployed on 2026-11-16. Public and actual deployed-component checks passed; source clues remained distinct from content quality. No migration or additional provider request was introduced.
 - Contract: [Source bibliographic clues](development/BOOK_AI_WEB_SOURCE_CONTEXT_V1.md).
 
 ## 2026-11-13 — Recover paused book web searches (merged and deployed as PR #82)

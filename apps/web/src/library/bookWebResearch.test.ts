@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __resetWebAuthStoreForTests, __setWebAuthSnapshotForTests } from "../auth/session";
-import { bookWebResearchContent, generateBookWebResearch, type BookWebResearchInput, type BookWebResearchResponse } from "./bookWebResearch";
+import { bookWebResearchContent, bookWebSourceTextContexts, generateBookWebResearch, type BookWebResearchInput, type BookWebResearchResponse, type BookWebResearchSource, type BookWebResearchTextContext, type BookWebResearchTextContexts } from "./bookWebResearch";
 
 const A = "14000000_000000000001", B = "14000001_000000000002", QUESTION = "这本书有哪些相关研究？";
 const NOTICE = "已根据本次问题选出相关网页，以下保留搜索工具返回的来源节选。节选不等于网页或原书全文；来源之间可能有不同说法。";
-const CLUES_NOTICE = "书目线索只核对当前标题和搜索节选中的文字，不代表已读全文、内容可信或属于本书书评。";
+const CLUES_NOTICE = "这里只展示当前标题和搜索节选中的文字线索，不确认同书、版本或资料类型，也不代表已读全文或内容可信。";
 const SELECTED_ISBN_NOTICE = "所选资料尚缺可对应本书的 ISBN 线索；与本书的直接关联仍需核对。";
 const UNSELECTED = "已完成网页搜索，但本次自动挑选未完成。下方保留搜索返回的资料，可以打开原链接核对或读取网页正文。";
 const INSUFFICIENT = "本次已执行联网搜索，但没有选出与问题充分相关的资料。下方如有搜索结果，可以打开原链接核对，或调整问题后再查。";
@@ -32,6 +32,33 @@ function unselected(limited?: boolean): BookWebResearchResponse {
   if (limited !== undefined) value.search.limited = limited;
   return value;
 }
+function textContext(source: BookWebResearchSource, field: "title" | "excerpt", value: string,
+  kind: BookWebResearchTextContext["kind"], from = 0): BookWebResearchTextContext {
+  const original = source[field], matchStart = original.indexOf(value, from);
+  return { kind, field, value, matchStart, matchEnd: matchStart + value.length, start: 0, end: original.length, text: original };
+}
+function contextualResult(): BookWebResearchResponse {
+  const value = result(), [first, second] = value.sources;
+  first.title = "《旅行史》 第２版";
+  first.excerpt = "另见《书名相同》与《另一本》，其中写着修訂版。\n  <script>保留原文与空白 😀</script>";
+  first.bookClues = { isbn: "not_seen", text: ["title"] };
+  first.textContexts = { items: [
+    textContext(first, "title", "《旅行史》", "quoted_title"),
+    textContext(first, "title", "第２版", "edition_text"),
+    textContext(first, "excerpt", "《书名相同》", "quoted_title"),
+    textContext(first, "excerpt", "《另一本》", "quoted_title"),
+    textContext(first, "excerpt", "修訂版", "edition_text"),
+  ], limited: false };
+  second.title = "《未选书名》";
+  second.excerpt = "这里写着再版，来源仍需人工核对。";
+  second.textContexts = { items: [
+    textContext(second, "title", "《未选书名》", "quoted_title"),
+    textContext(second, "excerpt", "再版", "edition_text"),
+  ], limited: false };
+  value.sources.forEach((source, index) => { source.readToken = (index ? "B" : "A").repeat(32); });
+  return value;
+}
+const contextsOf = (source: BookWebResearchSource) => source.textContexts as BookWebResearchTextContexts;
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -420,6 +447,168 @@ describe("book web research client", () => {
     expect(copied.match(/书目线索：未见本书 ISBN/g)).toHaveLength(2);
     expect(copied).not.toContain(SELECTED_ISBN_NOTICE);
     expect(copied).not.toContain("建议先查看");
+  });
+
+
+  it("copies only selected literal contexts, preserving field order, original whitespace and provenance", async () => {
+    const value = contextualResult(), before = JSON.stringify(value), source = value.sources[0];
+    fetchMock.mockResolvedValue(json(value));
+    expect(await generateBookWebResearch(A, { question: QUESTION })).toEqual(value);
+    const contexts = bookWebSourceTextContexts(source)!;
+    expect(contexts.items.map(item => [item.field, item.value])).toEqual([
+      ["title", "《旅行史》"], ["title", "第２版"], ["excerpt", "《书名相同》"],
+      ["excerpt", "《另一本》"], ["excerpt", "修訂版"],
+    ]);
+    const copied = bookWebResearchContent(value);
+    for (const item of contexts.items) expect(copied).toContain(item.text);
+    expect(copied).toContain("书名号中的文字（标题中的文字）：《旅行史》");
+    expect(copied).toContain("版本字样（搜索节选中的文字）：修訂版");
+    expect(copied).toContain(source.excerpt); expect(copied).toContain(source.url);
+    expect(copied).toContain(CLUES_NOTICE);
+    expect(copied).not.toContain(value.sources[1].url);
+    expect(copied).not.toContain("《未选书名》");
+    expect(copied).not.toContain(source.readToken);
+    expect(copied).not.toContain("AI 资料判断");
+    expect(copied).not.toContain("与本书关系：");
+    expect(JSON.stringify(value)).toBe(before);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("retains repeated top-level occurrences after a closed nested span and editions inside quoted titles", () => {
+    const value = contextualResult(), source = value.sources[0];
+    source.title = "《第2版》";
+    source.excerpt = "《外《内》外》；《同名》之后又出现《同名》，只能按原文核对。";
+    source.textContexts = { items: [
+      textContext(source, "title", "《第2版》", "quoted_title"),
+      textContext(source, "title", "第2版", "edition_text"),
+      textContext(source, "excerpt", "《同名》", "quoted_title"),
+      textContext(source, "excerpt", "《同名》", "quoted_title", source.excerpt.indexOf("《同名》") + 1),
+    ], limited: false };
+    const contexts = bookWebSourceTextContexts(source)!;
+    expect(contexts.items).toHaveLength(4);
+    expect(contexts.items[2].value).toBe(contexts.items[3].value);
+    expect(contexts.items[2].matchStart).toBeLessThan(contexts.items[3].matchStart);
+    expect(bookWebResearchContent(value).match(/书名号中的文字（搜索节选中的文字）：《同名》/g)).toHaveLength(2);
+  });
+
+  it.each(["第 ２ 版", "第\t十二\t版", "第两百版", "第兩百版", "初版", "再版", "重版", "修订版", "修訂版", "增订版", "增訂版", "版本", "版次"])("keeps the exact edition spelling %s", edition => {
+    const value = contextualResult(), source = value.sources[0];
+    source.excerpt = "原文：" + edition + "，文字本身不确认版本。";
+    source.textContexts = { items: [textContext(source, "excerpt", edition, "edition_text")], limited: false };
+    expect(bookWebSourceTextContexts(source)?.items[0].value).toBe(edition);
+    expect(bookWebResearchContent(value)).toContain("版本字样（搜索节选中的文字）：" + edition);
+  });
+
+  it.each([false, true])("distinguishes an empty literal-context block (limited=%s) from an older response", limited => {
+    const value = result(), source = value.sources[0];
+    expect(bookWebSourceTextContexts(source)).toBeUndefined();
+    expect(bookWebResearchContent(value)).toContain("本次未提供可用的文字上下文。");
+    source.textContexts = { items: [], limited };
+    expect(bookWebSourceTextContexts(source)).toEqual({ items: [], limited });
+    const copied = bookWebResearchContent(value);
+    expect(copied).toContain("当前没有可展示的书名号或版本字样上下文。");
+    expect(copied).not.toContain("本次未提供可用的文字上下文。");
+    expect(copied.includes("部分字样未列出，请结合标题和完整节选核对。")).toBe(limited);
+  });
+
+  it.each(["unselected_sources", "insufficient_sources"] as const)("retains literal contexts for every available %s source", sourceKind => {
+    const value = contextualResult();
+    value.source = sourceKind; value.citedSourceIds = [];
+    value.draft = sourceKind === "unselected_sources"
+      ? { title: "待核对的网页资料", content: UNSELECTED } : { title: "查到的相关资料", content: INSUFFICIENT };
+    contextsOf(value.sources[1]).limited = true;
+    const copied = bookWebResearchContent(value);
+    for (const source of value.sources) {
+      expect(copied).toContain(source.url); expect(copied).toContain(source.excerpt);
+      expect(copied).not.toContain(source.readToken);
+    }
+    expect(copied).toContain("书名号中的文字（标题中的文字）：《未选书名》");
+    expect(copied).toContain("部分字样未列出，请结合标题和完整节选核对。");
+    expect(copied).not.toContain("建议先查看");
+  });
+
+  it.each([
+    ["null block", (source: BookWebResearchSource) => { source.textContexts = null; }],
+    ["array block", (source: BookWebResearchSource) => { source.textContexts = []; }],
+    ["missing limited", (source: BookWebResearchSource) => { source.textContexts = { items: contextsOf(source).items }; }],
+    ["non-boolean limited", (source: BookWebResearchSource) => { Object.assign(contextsOf(source), { limited: 1 }); }],
+    ["free-form block claim", (source: BookWebResearchSource) => { Object.assign(contextsOf(source), { interpretation: "FORGED_JUDGEMENT" }); }],
+    ["non-array items", (source: BookWebResearchSource) => { Object.assign(contextsOf(source), { items: {} }); }],
+    ["unknown kind", (source: BookWebResearchSource) => { Object.assign(contextsOf(source).items[0], { kind: "same_book" }); }],
+    ["unknown field", (source: BookWebResearchSource) => { Object.assign(contextsOf(source).items[0], { field: "url" }); }],
+    ["free-form item claim", (source: BookWebResearchSource) => { Object.assign(contextsOf(source).items[0], { relationship: "same_book" }); }],
+    ["forged original text", (source: BookWebResearchSource) => { contextsOf(source).items[0].text = "FORGED_JUDGEMENT"; }],
+    ["forged literal", (source: BookWebResearchSource) => { contextsOf(source).items[0].value = "《FORGED_JUDGEMENT》"; }],
+    ["cross-source context", (source: BookWebResearchSource) => { contextsOf(source).items[0] = textContext(contextualResult().sources[1], "title", "《未选书名》", "quoted_title"); }],
+    ["fractional position", (source: BookWebResearchSource) => { contextsOf(source).items[0].matchStart = 0.5; }],
+    ["negative context", (source: BookWebResearchSource) => { contextsOf(source).items[0].start = -1; }],
+    ["out-of-range context", (source: BookWebResearchSource) => { contextsOf(source).items[0].end = source.title.length + 1; }],
+    ["empty match", (source: BookWebResearchSource) => { contextsOf(source).items[0].matchEnd = 0; }],
+    ["match outside context", (source: BookWebResearchSource) => { contextsOf(source).items[0].start = 1; contextsOf(source).items[0].text = source.title.slice(1); }],
+    ["duplicate occurrence", (source: BookWebResearchSource) => { contextsOf(source).items.splice(1, 0, { ...contextsOf(source).items[0] }); }],
+    ["reversed fields", (source: BookWebResearchSource) => { contextsOf(source).items.reverse(); }],
+    ["reversed positions", (source: BookWebResearchSource) => { const items = contextsOf(source).items; [items[2], items[3]] = [items[3], items[2]]; }],
+    ["more than four quoted titles", (source: BookWebResearchSource) => {
+      source.title = "《一》《二》《三》《四》《五》";
+      source.textContexts = { items: ["《一》", "《二》", "《三》", "《四》", "《五》"].map(value => textContext(source, "title", value, "quoted_title")), limited: true };
+    }],
+    ["context over 400 UTF-16 units", (source: BookWebResearchSource) => {
+      source.excerpt = "《书名》" + "字".repeat(400);
+      source.textContexts = { items: [textContext(source, "excerpt", "《书名》", "quoted_title")], limited: false };
+    }],
+    ["inner title inside a nested source span", (source: BookWebResearchSource) => {
+      source.excerpt = "《外《内》外》";
+      source.textContexts = { items: [{ kind: "quoted_title", field: "excerpt", value: "《内》",
+        matchStart: 2, matchEnd: 5, start: 0, end: 7, text: source.excerpt }], limited: false };
+    }],
+    ["split surrogate context", (source: BookWebResearchSource) => {
+      source.excerpt = "😀《书名》";
+      const item = textContext(source, "excerpt", "《书名》", "quoted_title"); item.start = 1; item.text = source.excerpt.slice(1);
+      source.textContexts = { items: [item], limited: false };
+    }],
+    ["normalized but not original edition", (source: BookWebResearchSource) => { contextsOf(source).items[1].value = "第2版"; }],
+  ] as const)("drops only a malformed text-context block (%s), preserving source selection and input", async (_label, corrupt) => {
+    const value = contextualResult(), source = value.sources[0];
+    corrupt(source); const before = JSON.stringify(value);
+    expect(bookWebSourceTextContexts(source)).toBeUndefined();
+    fetchMock.mockResolvedValue(json(value));
+    const received = await generateBookWebResearch(A, { question: QUESTION });
+    expect(received.source).toBe("web_research"); expect(received.citedSourceIds).toEqual(["W1"]);
+    expect(received.sources[0].excerpt).toBe(source.excerpt); expect(received.sources[0].readToken).toBe(source.readToken);
+    expect(bookWebSourceTextContexts(received.sources[0])).toBeUndefined();
+    const copied = bookWebResearchContent(value);
+    expect(copied).toContain("本次未提供可用的文字上下文。");
+    expect(copied).toContain(source.excerpt); expect(copied).toContain(source.url);
+    expect(copied).not.toContain("书名号中的文字");
+    expect(copied).not.toContain("FORGED_JUDGEMENT");
+    expect(JSON.stringify(value)).toBe(before);
+  });
+
+  it.each([
+    ["quoted_title", "《》"], ["quoted_title", "《 \t 》"], ["quoted_title", "《跨\n行》"],
+    ["quoted_title", "《跨\u0085行》"], ["quoted_title", "《跨\u2028行》"], ["quoted_title", "《外《内》层》"], ["quoted_title", "《未闭合"],
+    ["quoted_title", "《" + "长".repeat(119) + "》"],
+    ["edition_text", "全新版本"], ["edition_text", "第2\n版"],
+    ["edition_text", "第" + "2".repeat(39) + "版"],
+  ] as const)("does not promote unsupported %s text into a literal clue", (kind, literal) => {
+    const value = contextualResult(), source = value.sources[0];
+    source.excerpt = "原文中出现：" + literal + "，仍保留原始节选。";
+    source.textContexts = { items: [textContext(source, "excerpt", literal, kind)], limited: true };
+    expect(bookWebSourceTextContexts(source)).toBeUndefined();
+    const copied = bookWebResearchContent(value);
+    expect(copied).toContain(source.excerpt);
+    expect(copied).not.toContain("书名号中的文字");
+    expect(copied).not.toContain("版本字样（搜索节选中的文字）：");
+  });
+
+  it("never consumes obsolete model relationship metadata in a source snapshot", () => {
+    const value = result();
+    Object.assign(value, { assessments: [{ sourceId: "W1", relationship: "other_book", materialType: "review", explanation: "FORGED_JUDGEMENT" }] });
+    const copied = bookWebResearchContent(value);
+    expect(copied).toContain(value.sources[0].excerpt);
+    expect(copied).not.toContain("FORGED_JUDGEMENT");
+    expect(copied).not.toContain("AI 资料判断");
+    expect(copied).not.toContain("与本书关系：");
   });
 
 });

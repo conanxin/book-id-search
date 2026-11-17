@@ -8,18 +8,41 @@ import {
   assertBookWebResearchResponse, BOOK_WEB_RESEARCH_EXCERPTS_NOTICE, BOOK_WEB_RESEARCH_LIMITED_NOTICE,
   BOOK_WEB_RESEARCH_BOOK_CLUES_NOTICE, BOOK_WEB_RESEARCH_SELECTED_ISBN_NOTICE,
   bookWebResearchContent, bookWebResearchErrorMessage, bookWebResearchNeedsIsbnReview, bookWebSourceCluesText,
-  generateBookWebResearch, isBookWebResearchAbort,
+  generateBookWebResearch, isBookWebResearchAbort, bookWebSourceTextContexts, bookWebTextContextHeading,
+  BOOK_WEB_TEXT_CONTEXTS_UNAVAILABLE, BOOK_WEB_TEXT_CONTEXTS_EMPTY, BOOK_WEB_TEXT_CONTEXTS_LIMITED,
   type BookWebResearchResponse, type BookWebResearchSource,
 } from "./bookWebResearch";
 
 const EXAMPLES = [
   { label: "内容与背景", question: "查找关于这本书内容、作者背景与出版信息的网页资料。" },
+  { label: "本书书评", question: "查找直接评论这本书的书评或研究，并提供可核对的网页来源。" },
   { label: "相关研究", question: "查找与这本书主题有关的研究文章和书评资料。" },
   { label: "延伸阅读", question: "查找介绍相关图书或延伸阅读书目的网页资料。" },
 ];
 
 function SourceBookClues({ source }: { source: BookWebResearchSource }) {
   return <p className="library-meta" aria-label={`本书书目线索 ${source.id}`}>{bookWebSourceCluesText(source)}</p>;
+}
+
+function SourceTextContexts({ source }: { source: BookWebResearchSource }) {
+  const contexts = bookWebSourceTextContexts(source);
+  return <section aria-label={"书目文字上下文 " + source.id}
+    data-source-text-contexts={!contexts ? "unavailable" : contexts.items.length > 0 ? "available" : "empty"}>
+    {!contexts ? <p className="library-meta">{BOOK_WEB_TEXT_CONTEXTS_UNAVAILABLE}</p>
+      : contexts.items.length === 0 ? <p className="library-meta">{BOOK_WEB_TEXT_CONTEXTS_EMPTY}</p>
+        : <details className="book-ai-scope">
+          <summary>查看书目文字上下文 {source.id}</summary>
+          <ol>
+            {contexts.items.map(item => <li key={item.field + ":" + item.matchStart + ":" + item.matchEnd + ":" + item.kind}
+              data-text-context-id={source.id + ":" + item.field + ":" + item.matchStart + ":" + item.matchEnd + ":" + item.kind}
+              data-text-context-kind={item.kind}>
+              <p className="library-meta">{bookWebTextContextHeading(item)}</p>
+              <blockquote className="book-web-excerpt is-expanded">{item.text}</blockquote>
+            </li>)}
+          </ol>
+        </details>}
+    {contexts?.limited && <p className="library-meta">{BOOK_WEB_TEXT_CONTEXTS_LIMITED}</p>}
+  </section>;
 }
 
 function SelectedSourceExcerpt({ source, bookId, generation, researchQuestion }: { source: BookWebResearchSource; bookId: string; generation: number; researchQuestion: string }) {
@@ -40,6 +63,7 @@ function SelectedSourceExcerpt({ source, bookId, generation, researchQuestion }:
     <button type="button" className="library-text-button book-web-excerpt-toggle" aria-expanded={expanded} aria-controls={excerptId}
       onClick={() => setExpanded(value => !value)}>{expanded ? "收起搜索节选" : "展开完整搜索节选"}</button>
     {source.truncated && <p className="library-meta">本条搜索节选已截短，可打开网页进一步核对。</p>}
+    <SourceTextContexts source={source} />
     <BookWebSourceReader bookId={bookId} generation={generation} source={source} researchQuestion={researchQuestion} />
   </li>;
 }
@@ -151,6 +175,7 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
       <p className="book-web-excerpt-label">搜索结果节选</p>
       <blockquote>{source.excerpt}</blockquote>
       {source.truncated && <p className="library-meta">本条搜索节选已截短，可打开网页进一步核对。</p>}
+      <SourceTextContexts source={source} />
       {!response.citedSourceIds.includes(source.id) && <BookWebSourceReader bookId={bookId} generation={generation} source={source} researchQuestion={response.question} />}
     </li>)}
   </ol> : null;

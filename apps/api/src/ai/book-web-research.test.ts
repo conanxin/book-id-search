@@ -39,7 +39,7 @@ describe("book internet research evidence and read-only scope", () => {
       content: "已根据本次问题选出相关网页，以下保留搜索工具返回的来源节选。节选不等于网页或原书全文；来源之间可能有不同说法。\n\n建议先查看：[W1] [W2]" });
     expect(result.sources.map(source => source.id)).toEqual(["W1", "W2"]);
     expect(result.sources[0]).toEqual({ id: "W1", kind: "web", title: "出版社介绍", url: "https://publisher.example.test/book",
-      excerpt: searchResult().results[0].excerpt, pageAge: "2026-09-01", truncated: false, bookClues: unavailableClues });
+      excerpt: searchResult().results[0].excerpt, pageAge: "2026-09-01", truncated: false, bookClues: unavailableClues, textContexts: { items: [], limited: false } });
     expect(s.getCatalogDocument).toHaveBeenCalledExactlyOnceWith(A);
     expect(s.search).toHaveBeenCalledOnce(); expect(s.provider).toHaveBeenCalledOnce();
     expect(userPayload(s.search.mock.calls[0][0])).toEqual({ book: { title: catalog.title, author: catalog.author,
@@ -57,6 +57,33 @@ describe("book internet research evidence and read-only scope", () => {
     // The service has only a catalog reader and model calls: it has no
     // workspace, note, resource, WeRead, persistence or page-fetch adapter.
   });
+
+  it.each(["selected", "insufficient", "obsolete assessment", "selection failure"] as const)(
+    "retains literal contexts on every source with PR83 selection behavior: %s", async outcome => {
+      const s = setup();
+      const results = [
+        { title: "《甲》资料", url: "https://example.test/a", excerpt: "原文另列《乙》修订版，关系未知。", pageAge: null },
+        { title: "普通资料", url: "https://example.test/b", excerpt: "此处没有可展示字样。", pageAge: null },
+      ];
+      s.search.mockResolvedValueOnce({ ...searchResult(), results });
+      const content = outcome === "insufficient" ? { sourceIds: [], insufficientEvidence: true }
+        : outcome === "obsolete assessment" ? { sourceIds: ["W1"], insufficientEvidence: false, assessments: [] }
+        : { sourceIds: ["W1"], insufficientEvidence: false };
+      s.provider.mockResolvedValueOnce(outcome === "selection failure" ? { ok: false, status: 504, error: "fixture failure" }
+        : { ok: true, model: "fixture", content: JSON.stringify(content) });
+      const result = await s.service.research(A, { question });
+      expect(result.source).toBe(outcome === "selected" ? "web_research" : outcome === "insufficient" ? "insufficient_sources" : "unselected_sources");
+      expect(result.sources.map(source => source.excerpt)).toEqual(results.map(source => source.excerpt));
+      expect(result.sources[0].textContexts?.items.map(item => item.value)).toEqual(["《甲》", "《乙》", "修订版"]);
+      expect(result.sources[1].textContexts).toEqual({ items: [], limited: false });
+      expect(result).not.toHaveProperty("assessments");
+      const sent = userPayload(s.provider.mock.calls[0][0]);
+      expect(sent.sources).toEqual(result.sources.map(({ id, title, url, excerpt, pageAge, truncated, bookClues }) =>
+        ({ id, title, site: new URL(url).hostname, excerpt, pageAge, truncated, bookClues })));
+      expect(JSON.stringify(s.provider.mock.calls)).not.toMatch(/textContexts|matchStart|matchEnd|assessments|evidenceIds|materialType|relationship/);
+      expect(s.search).toHaveBeenCalledOnce();
+      expect(s.provider).toHaveBeenCalledOnce();
+    });
 
   it("preserves actual repeated search queries instead of implying one query per webpage", async () => {
     const s = setup();
@@ -133,7 +160,7 @@ describe("book internet research evidence and read-only scope", () => {
       citedSourceIds: [], generatedAt: date,
       search: { performed: true, queries: searchResult().queries, calls: 1, limited: true },
       sources: results.map((source, index) => ({ ...source, id: `W${index + 1}`, kind: "web",
-        truncated: false, readToken: `read-token-W${index + 1}`, bookClues: unavailableClues })),
+        truncated: false, readToken: `read-token-W${index + 1}`, bookClues: unavailableClues, textContexts: { items: [], limited: false } })),
     });
     expect(issueSourceReadToken).toHaveBeenCalledTimes(6);
     expect(s.search).toHaveBeenCalledOnce(); expect(s.provider).toHaveBeenCalledOnce();
