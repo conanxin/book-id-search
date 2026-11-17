@@ -61,8 +61,9 @@ describe("book internet research evidence and read-only scope", () => {
     // These assertions preserve the requested guidance, not model-quality claims.
     const selectionPrompt = s.provider.mock.calls[0][0][0].content;
     expect(selectionPrompt).toContain("优先用 other_book");
-    expect(selectionPrompt).toContain("当前原句无法把具体讨论定位到目标书或目标版本时，用 unclear");
-    expect(selectionPrompt).toContain("只有当前原句能将具体讨论或书目条目定位到 book 对应的这本书");
+    expect(selectionPrompt).toContain("整体关系用 unclear；即使列表中包含目标书年份、出版社或 ISBN 条目");
+    expect(selectionPrompt).toContain("只有当前原句能将主要讨论对象定位到 book 对应的这本书");
+    expect(selectionPrompt).toContain("不能仅凭汇总列表中的一行条目");
     expect(selectionPrompt).toContain("不能因标题提到书、谈及作者或引用书中话就默认 review 或 research");
     expect(selectionPrompt).toContain("可以只选一个节选，也可以选两个节选");
     expect(selectionPrompt).toContain("不必固定选 T + E1");
