@@ -32,6 +32,27 @@ function unselected(limited?: boolean): BookWebResearchResponse {
   if (limited !== undefined) value.search.limited = limited;
   return value;
 }
+function assessedResult(): BookWebResearchResponse {
+  const value = result();
+  value.citedSourceIds = ["W2", "W1"]; value.draft = draftFor(value.citedSourceIds);
+  value.sources[0].excerpt = "本书 ISBN 9787112124534，以下是目录与出版信息。";
+  value.sources[0].bookClues = { isbn: "matched", text: ["title"] };
+  value.sources[1].title = "《另一部书》的读后感";
+  value.sources[1].excerpt = "这篇读后感讨论另一部著作。\n人物姓名相同，评论对象仍需分清。";
+  value.sources[1].bookClues = { isbn: "not_seen", text: ["title"] };
+  value.sources.forEach((source, index) => { source.readToken = (index ? "B" : "A").repeat(32); });
+  const other = value.sources[1], catalog = value.sources[0];
+  value.assessments = [
+    { sourceId: other.id, relationship: "other_book", materialType: "review", evidence: [
+      { id: "W2:T", field: "title", start: 0, end: other.title.length, text: other.title },
+      { id: "W2:E1", field: "excerpt", start: 0, end: other.excerpt.length, text: other.excerpt },
+    ] },
+    { sourceId: catalog.id, relationship: "book_candidate", materialType: "bibliographic", evidence: [
+      { id: "W1:E1", field: "excerpt", start: 0, end: catalog.excerpt.length, text: catalog.excerpt },
+    ] },
+  ];
+  return value;
+}
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -420,6 +441,116 @@ describe("book web research client", () => {
     expect(copied.match(/书目线索：未见本书 ISBN/g)).toHaveLength(2);
     expect(copied).not.toContain(SELECTED_ISBN_NOTICE);
     expect(copied).not.toContain("建议先查看");
+  });
+
+
+  it("copies controlled assessments and exact supporting text in selected order without treating ISBN matches as reviews", async () => {
+    const value = assessedResult(); fetchMock.mockResolvedValue(json(value));
+    expect(await generateBookWebResearch(A, { question: QUESTION })).toEqual(value);
+    const copied = bookWebResearchContent(value);
+    expect(copied).toContain("AI 根据当前标题和搜索节选作初步判断；原句可核对，判断和资料内容仍需核实。");
+    expect(copied).toContain("与本书关系：其他著作；资料性质：书评或读后感");
+    expect(copied).toContain("与本书关系：可能直接涉及本书；资料性质：书目或商品信息");
+    expect(copied).toContain("判断依据 [W2:T]（标题原句）：\n" + value.sources[1].title);
+    expect(copied).toContain("判断依据 [W2:E1]（搜索节选原句）：\n" + value.sources[1].excerpt);
+    expect(copied.indexOf(value.sources[1].url)).toBeLessThan(copied.indexOf(value.sources[0].url));
+    for (const source of value.sources) {
+      expect(copied).toContain("搜索结果节选：\n" + source.excerpt);
+      expect(copied).not.toContain(source.readToken);
+    }
+    expect(copied).not.toContain("已确认");
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["book_candidate", "bibliographic", "可能直接涉及本书；资料性质：书目或商品信息"],
+    ["other_book", "review", "其他著作；资料性质：书评或读后感"],
+    ["related_background", "research", "相关主题背景；资料性质：研究性文章"],
+    ["unclear", "discussion", "与本书关系待核对；资料性质：讨论资料"],
+    ["unclear", "other", "与本书关系待核对；资料性质：其他资料"],
+  ] as const)("keeps the %s/%s assessment as a bounded initial judgement", (relationship, materialType, label) => {
+    const value = assessedResult(); Object.assign(value.assessments![0], { relationship, materialType });
+    expect(bookWebResearchContent(value)).toContain("与本书关系：" + label);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps missing assessment metadata explicit for legacy sources even when ISBN clues exist", () => {
+    const value = assessedResult(); delete value.assessments;
+    const copied = bookWebResearchContent(value);
+    expect(copied.match(/本次未提供资料判断/g)).toHaveLength(2);
+    expect(copied).not.toContain("AI 根据当前标题");
+    expect(copied).not.toContain("可能直接涉及本书");
+    expect(copied).toContain("出现本书 ISBN");
+  });
+
+  it.each(["unselected_sources", "insufficient_sources"] as const)("accepts empty assessments only for %s with no selection", async source => {
+    const value = unselected(); value.source = source; value.assessments = [];
+    if (source === "insufficient_sources") value.draft = { title: "查到的相关资料", content: INSUFFICIENT };
+    fetchMock.mockResolvedValue(json(value));
+    expect(await generateBookWebResearch(A, { question: QUESTION })).toEqual(value);
+    const copied = bookWebResearchContent(value);
+    expect(copied.match(/尚未判断/g)).toHaveLength(2);
+    expect(copied).not.toContain("AI 根据当前标题");
+    for (const item of value.sources) expect(copied).toContain(item.excerpt);
+  });
+
+  it.each([
+    ["null array", (v: BookWebResearchResponse) => { Object.assign(v, { assessments: null }); }],
+    ["non-array", (v: BookWebResearchResponse) => { Object.assign(v, { assessments: {} }); }],
+    ["empty selected assessment", (v: BookWebResearchResponse) => { v.assessments = []; }],
+    ["missing selected source", (v: BookWebResearchResponse) => { v.assessments!.pop(); }],
+    ["extra assessment", (v: BookWebResearchResponse) => { v.assessments!.push(v.assessments![0]); }],
+    ["wrong assessment order", (v: BookWebResearchResponse) => { v.assessments!.reverse(); }],
+    ["duplicate assessment source", (v: BookWebResearchResponse) => { v.assessments![0].sourceId = "W1"; }],
+    ["unknown source", (v: BookWebResearchResponse) => { v.assessments![0].sourceId = "W99"; }],
+    ["unknown relationship", (v: BookWebResearchResponse) => { Object.assign(v.assessments![0], { relationship: "verified" }); }],
+    ["inherited relationship", (v: BookWebResearchResponse) => { Object.assign(v.assessments![0], { relationship: "toString" }); }],
+    ["unknown material", (v: BookWebResearchResponse) => { Object.assign(v.assessments![0], { materialType: "trusted" }); }],
+    ["missing material", (v: BookWebResearchResponse) => { Reflect.deleteProperty(v.assessments![0], "materialType"); }],
+    ["free explanation", (v: BookWebResearchResponse) => { Object.assign(v.assessments![0], { explanation: "The book has been verified." }); }],
+    ["no evidence", (v: BookWebResearchResponse) => { v.assessments![0].evidence = []; }],
+    ["null evidence", (v: BookWebResearchResponse) => { Object.assign(v.assessments![0], { evidence: null }); }],
+    ["too many evidence items", (v: BookWebResearchResponse) => { v.assessments![0].evidence.push(v.assessments![0].evidence[1]); }],
+    ["title only", (v: BookWebResearchResponse) => { v.assessments![0].evidence.pop(); }],
+    ["unknown field", (v: BookWebResearchResponse) => { Object.assign(v.assessments![0].evidence[1], { field: "url" }); }],
+    ["extra evidence explanation", (v: BookWebResearchResponse) => { Object.assign(v.assessments![0].evidence[1], { reason: "verified" }); }],
+    ["foreign source evidence", (v: BookWebResearchResponse) => { v.assessments![0].evidence[1].id = "W1:E1"; }],
+    ["field and ID mismatch", (v: BookWebResearchResponse) => { v.assessments![0].evidence[1].id = "W2:T"; }],
+    ["leading-zero evidence ID", (v: BookWebResearchResponse) => { v.assessments![0].evidence[1].id = "W2:E01"; }],
+    ["unsafe ordinal", (v: BookWebResearchResponse) => { v.assessments![0].evidence[1].id = "W2:E9007199254740992"; }],
+    ["invented quote", (v: BookWebResearchResponse) => { v.assessments![0].evidence[1].text = "未出现在原文中的书评判断。"; }],
+    ["cross-field quote", (v: BookWebResearchResponse) => { v.assessments![0].evidence[1].text = v.sources[1].title + v.sources[1].excerpt; }],
+    ["negative start", (v: BookWebResearchResponse) => { v.assessments![0].evidence[1].start = -1; }],
+    ["fractional start", (v: BookWebResearchResponse) => { v.assessments![0].evidence[1].start = 0.5; }],
+    ["unsafe end", (v: BookWebResearchResponse) => { v.assessments![0].evidence[1].end = Number.MAX_SAFE_INTEGER + 1; }],
+    ["outside original", (v: BookWebResearchResponse) => { v.assessments![0].evidence[1].end = v.sources[1].excerpt.length + 1; }],
+    ["empty slice", (v: BookWebResearchResponse) => { v.assessments![0].evidence[1].end = 0; v.assessments![0].evidence[1].text = ""; }],
+    ["partial title", (v: BookWebResearchResponse) => { const e = v.assessments![0].evidence[0]; e.end -= 1; e.text = v.sources[1].title.slice(0, e.end); }],
+    ["reversed fields", (v: BookWebResearchResponse) => { v.assessments![0].evidence.reverse(); }],
+    ["overlapping excerpt slices", (v: BookWebResearchResponse) => { const s = v.sources[1].excerpt; v.assessments![0].evidence = [
+      { id: "W2:E1", field: "excerpt", start: 0, end: 10, text: s.slice(0, 10) },
+      { id: "W2:E2", field: "excerpt", start: 5, end: 15, text: s.slice(5, 15) },
+    ]; }],
+    ["duplicate evidence IDs", (v: BookWebResearchResponse) => { v.assessments![0].evidence = [v.assessments![0].evidence[1], v.assessments![0].evidence[1]]; }],
+    ["decreasing evidence ordinal", (v: BookWebResearchResponse) => { const s = v.sources[1].excerpt; v.assessments![0].evidence = [
+      { id: "W2:E2", field: "excerpt", start: 0, end: 10, text: s.slice(0, 10) },
+      { id: "W2:E1", field: "excerpt", start: 10, end: s.length, text: s.slice(10) },
+    ]; }],
+    ["oversized quote", (v: BookWebResearchResponse) => { v.sources[1].excerpt = "文".repeat(401); Object.assign(v.assessments![0].evidence[1], { end: 401, text: v.sources[1].excerpt }); }],
+    ["cut surrogate start", (v: BookWebResearchResponse) => { v.sources[1].excerpt = "前😀后"; Object.assign(v.assessments![0].evidence[1], { start: 2, end: 4, text: v.sources[1].excerpt.slice(2) }); }],
+    ["cut surrogate end", (v: BookWebResearchResponse) => { v.sources[1].excerpt = "前😀后"; Object.assign(v.assessments![0].evidence[1], { start: 0, end: 2, text: v.sources[1].excerpt.slice(0, 2) }); }],
+  ] as const)("rejects malformed assessment metadata (%s) before render or copy", async (_label, change) => {
+    const value = assessedResult(); change(value); fetchMock.mockResolvedValue(json(value));
+    await expect(generateBookWebResearch(A, { question: QUESTION })).rejects.toMatchObject({ code: "BOOK_RESEARCH_CLIENT_INVALID_RESPONSE" });
+    expect(() => bookWebResearchContent(value)).toThrow("返回的研究资料未通过核对");
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("accepts complete surrogate pairs and the 400-character quote limit without trimming literal text", () => {
+    const value = assessedResult();
+    value.sources[1].excerpt = "😀" + "文".repeat(398);
+    Object.assign(value.assessments![0].evidence[1], { start: 0, end: 400, text: value.sources[1].excerpt });
+    expect(bookWebResearchContent(value)).toContain(value.sources[1].excerpt);
   });
 
 });
