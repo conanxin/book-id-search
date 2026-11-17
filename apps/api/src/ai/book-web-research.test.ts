@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createBookWebResearchService, type BookWebResearchSource } from "./book-web-research.js";
+import { createBookWebResearchService, isDirectBookReviewCandidate, type BookWebResearchSource } from "./book-web-research.js";
 import type { chatCompletion, ChatMessage } from "./minimax.js";
 import type { searchMiniMaxWeb, MiniMaxWebSearchResponse } from "./minimax-web-search.js";
 
@@ -482,5 +482,61 @@ describe("book internet research request, response and failure boundaries", () =
     });
     await expect(s.service.research(A, { question }, { signal: controller.signal })).rejects.toMatchObject({ name: "AbortError" });
     expect(s.search).toHaveBeenCalledOnce(); expect(s.provider).toHaveBeenCalledOnce();
+  });
+});
+
+describe("strict direct-book-review candidate guard", () => {
+  const book = { ...catalog, title: "梁思成", author: "林洙", publisher: "中国建筑工业出版社", year: 2012, isbn: "9787112124534" };
+  const results = [
+    { title: "“笔耕不辍”的真相——林洙书籍出版汇总", url: "https://example.test/roundup",
+      excerpt: "介绍《大匠的困惑》《困惑的大匠 梁思成》等多部著作及再版。", pageAge: null },
+    { title: "梁思成", url: "https://example.test/catalog",
+      excerpt: "林洙著 中国建筑工业出版社 2012 ISBN:9787112124534 定价和页数。", pageAge: null },
+    { title: "《大拙至美》读后感", url: "https://example.test/other-book",
+      excerpt: "读《大拙至美》，作者林洙，谈梁思成的建筑理论。", pageAge: null },
+    { title: "读林洙《梁思成》：书评", url: "https://example.test/direct-review",
+      excerpt: "读林洙《梁思成》后，我认为这一册仍需要与原始学术材料对照。", pageAge: null },
+  ];
+
+  it("does not promote a publication roundup, ISBN catalog, or other-book review into a direct review", async () => {
+    const s = setup();
+    s.getCatalogDocument.mockResolvedValueOnce(book);
+    s.search.mockResolvedValueOnce({ ...searchResult(), results });
+    s.provider.mockResolvedValueOnce({ ok: true, model: "fixture",
+      content: JSON.stringify({ sourceIds: ["W1", "W2", "W3"], insufficientEvidence: false }) });
+    const output = await s.service.research(A, { question: "查找直接评论这本书的书评", scope: "direct_book_review" });
+    expect(output).toMatchObject({ scope: "direct_book_review", source: "insufficient_sources", citedSourceIds: [] });
+    expect(output.sources).toHaveLength(4);
+    expect(output.sources.map(x => x.title)).toEqual(results.map(x => x.title));
+    expect(output.sources[1].bookClues?.isbn).toBe("matched");
+    expect(s.search).toHaveBeenCalledOnce();
+    expect(s.provider).toHaveBeenCalledOnce();
+    expect(s.search.mock.calls[0][0][0].content).toContain("不要用人物生平");
+  });
+
+  it("retains only review-like candidates with visible target-book evidence, without certifying full content", async () => {
+    const s = setup();
+    s.getCatalogDocument.mockResolvedValueOnce(book);
+    s.search.mockResolvedValueOnce({ ...searchResult(), results });
+    s.provider.mockResolvedValueOnce({ ok: true, model: "fixture",
+      content: JSON.stringify({ sourceIds: ["W1", "W4", "W2"], insufficientEvidence: false }) });
+    const output = await s.service.research(A, { question, scope: "direct_book_review" });
+    expect(output.source).toBe("web_research");
+    expect(output.citedSourceIds).toEqual(["W4"]);
+    expect(output.draft.content).toContain("建议先查看：[W4]");
+    expect(isDirectBookReviewCandidate(output.sources[3], book.title)).toBe(true);
+    expect(isDirectBookReviewCandidate(output.sources[0], book.title)).toBe(false);
+    expect(isDirectBookReviewCandidate(output.sources[1], book.title)).toBe(false);
+    expect(isDirectBookReviewCandidate(output.sources[2], book.title)).toBe(false);
+    expect(s.search).toHaveBeenCalledOnce();
+    expect(s.provider).toHaveBeenCalledOnce();
+  });
+
+  it("rejects unsupported modes before reading the catalog or calling the model", async () => {
+    const s = setup();
+    await expect(s.service.research(A, { question, scope: "delete_notes" })).rejects.toMatchObject({ status: 400 });
+    expect(s.getCatalogDocument).not.toHaveBeenCalled();
+    expect(s.search).not.toHaveBeenCalled();
+    expect(s.provider).not.toHaveBeenCalled();
   });
 });

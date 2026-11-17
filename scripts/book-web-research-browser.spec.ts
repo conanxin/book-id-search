@@ -1060,6 +1060,9 @@ for (const scenario of textContextScenarios) {
       await pane.getByRole("button", { name: "本书书评", exact: true }).click();
       await expect(questionInput).toHaveValue(TEXT_BOOK_REVIEW_PRESET);
       expect(await counters()).toEqual(expected);
+      // This legacy literal-context journey exercises ordinary retrieval.
+      // Editing the preset explicitly resets the new direct-review scope.
+      await questionInput.fill("本轮仍使用普通来源挑选");
     }
     const cancellationQuestion = "取消这一轮文字上下文查询。";
     if (scenario.kind === "compat") {

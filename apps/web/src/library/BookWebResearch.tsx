@@ -9,15 +9,15 @@ import {
   BOOK_WEB_RESEARCH_BOOK_CLUES_NOTICE, BOOK_WEB_RESEARCH_SELECTED_ISBN_NOTICE,
   bookWebResearchContent, bookWebResearchErrorMessage, bookWebResearchNeedsIsbnReview, bookWebSourceCluesText,
   generateBookWebResearch, isBookWebResearchAbort, bookWebSourceTextContexts, bookWebTextContextHeading,
-  BOOK_WEB_TEXT_CONTEXTS_UNAVAILABLE, BOOK_WEB_TEXT_CONTEXTS_EMPTY, BOOK_WEB_TEXT_CONTEXTS_LIMITED,
+  BOOK_WEB_DIRECT_REVIEW_NOTICE, BOOK_WEB_TEXT_CONTEXTS_UNAVAILABLE, BOOK_WEB_TEXT_CONTEXTS_EMPTY, BOOK_WEB_TEXT_CONTEXTS_LIMITED,
   type BookWebResearchResponse, type BookWebResearchSource,
 } from "./bookWebResearch";
 
 const EXAMPLES = [
-  { label: "内容与背景", question: "查找关于这本书内容、作者背景与出版信息的网页资料。" },
-  { label: "本书书评", question: "查找直接评论这本书的书评或研究，并提供可核对的网页来源。" },
-  { label: "相关研究", question: "查找与这本书主题有关的研究文章和书评资料。" },
-  { label: "延伸阅读", question: "查找介绍相关图书或延伸阅读书目的网页资料。" },
+  { label: "内容与背景", scope: "general" as const, question: "查找关于这本书内容、作者背景与出版信息的网页资料。" },
+  { label: "本书书评", scope: "direct_book_review" as const, question: "查找直接评论这本书的书评或研究，并提供可核对的网页来源。" },
+  { label: "相关研究", scope: "general" as const, question: "查找与这本书主题有关的研究文章和书评资料。" },
+  { label: "延伸阅读", scope: "general" as const, question: "查找介绍相关图书或延伸阅读书目的网页资料。" },
 ];
 
 function SourceBookClues({ source }: { source: BookWebResearchSource }) {
@@ -72,6 +72,7 @@ function SelectedSourceExcerpt({ source, bookId, generation, researchQuestion }:
 export function BookWebResearch({ bookId, generation }: { bookId: string; generation: number }) {
   const { run, current } = useLibraryScope(generation);
   const [question, setQuestion] = useState("");
+  const [researchScope, setResearchScope] = useState<"general" | "direct_book_review">("general");
   const [response, setResponse] = useState<BookWebResearchResponse | null>(null);
   const [resultRevision, setResultRevision] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -112,7 +113,7 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
     sequence.current += 1; active.current?.abort(); active.current = null; setLoading(false);
   }
   function clear() { cancel(); clearResult(); setError(null); }
-  function changeQuestion(value: string) { clear(); setQuestion(value); }
+  function changeQuestion(value: string) { clear(); setQuestion(value); setResearchScope("general"); }
   async function research(event: FormEvent) {
     event.preventDefault();
     if (active.current) return;
@@ -125,11 +126,13 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
       const value = await run(signal => {
         const abort = () => controller.abort();
         signal.addEventListener("abort", abort, { once: true });
-        return generateBookWebResearch(bookId, { question: asked }, controller.signal)
+        return generateBookWebResearch(bookId, { question: asked,
+          ...(researchScope === "direct_book_review" ? { scope: researchScope } : {}) }, controller.signal)
           .finally(() => signal.removeEventListener("abort", abort));
       });
       if (request !== sequence.current || controller.signal.aborted || !current()) return;
-      assertBookWebResearchResponse(value, bookId, asked);
+      assertBookWebResearchResponse(value, bookId, asked,
+        researchScope === "direct_book_review" ? researchScope : undefined);
       setResponse(value);
     } catch (e) {
       if (request === sequence.current && current() && !controller.signal.aborted && !isBookWebResearchAbort(e)) setError(bookWebResearchErrorMessage(e));
@@ -196,8 +199,9 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
       </label>
       <div className="book-web-examples" role="group" aria-label="研究问题示例">
         {EXAMPLES.map(example => <button key={example.label} type="button" className="library-text-button"
-          onClick={() => { changeQuestion(example.question); questionField.current?.focus(); }}>{example.label}</button>)}
+          onClick={() => { changeQuestion(example.question); setResearchScope(example.scope); questionField.current?.focus(); }}>{example.label}</button>)}
       </div>
+      {researchScope === "direct_book_review" && <p className="library-field-hint" role="status">{BOOK_WEB_DIRECT_REVIEW_NOTICE}</p>}
       <div className="library-actions">
         <button type="submit" className="library-button library-button--primary" disabled={loading}>
           <Globe size={16} aria-hidden="true" />{loading ? "正在搜索与挑选…" : "联网查资料"}
@@ -215,6 +219,7 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
         <span className="library-tag">{response.source === "unselected_sources" ? "未自动挑选" : response.source === "web_research" ? "请核对网页来源" : "资料不足"}</span>
       </div>
       <p className="book-ai-question-note">本次问题：{response.question}</p>
+      {response.scope === "direct_book_review" && <p className="book-web-selection-notice">{BOOK_WEB_DIRECT_REVIEW_NOTICE}</p>}
       <p className="book-web-selection-notice" aria-label="书目线索核对范围">{BOOK_WEB_RESEARCH_BOOK_CLUES_NOTICE}</p>
       {bookWebResearchNeedsIsbnReview(response) && <p className="library-status" role="status">{BOOK_WEB_RESEARCH_SELECTED_ISBN_NOTICE}</p>}
       {response.search.limited === true && <p className="library-status" role="status">{BOOK_WEB_RESEARCH_LIMITED_NOTICE}</p>}
