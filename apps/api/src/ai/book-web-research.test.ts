@@ -27,6 +27,9 @@ function setup(enabled = true) {
   return { getCatalogDocument, search, provider, service };
 }
 function userPayload(messages: ChatMessage[]) { return JSON.parse(messages.find(message => message.role === "user")!.content); }
+interface ProviderSource { evidence: Array<{ id: string; field: "title" | "excerpt"; text: string }> }
+const visibleText = (source: ProviderSource, field: "title" | "excerpt") => source.evidence
+  .filter(item => item.field === field).map(item => item.text).join("");
 
 describe("book internet research evidence and read-only scope", () => {
   it("searches the selected public book once, selects real source IDs, and returns fixed copy plus unchanged source snapshots", async () => {
@@ -46,7 +49,10 @@ describe("book internet research evidence and read-only scope", () => {
       publisher: catalog.publisher, year: 2020, pages: 300, isbn: "test-isbn" }, question });
     const sent = userPayload(s.provider.mock.calls[0][0]);
     expect(sent.sources).toEqual(result.sources.map(({ id, title, url, excerpt, pageAge, truncated, bookClues }) =>
-      ({ id, title, site: new URL(url).hostname, excerpt, pageAge, truncated, bookClues })));
+      ({ id, site: new URL(url).hostname, pageAge, truncated, bookClues, evidence: [
+        { id: id + ":T", field: "title", text: title }, { id: id + ":E1", field: "excerpt", text: excerpt },
+      ] })));
+    expect(result).not.toHaveProperty("assessments"); // legacy selector remains usable and unclassified
     expect(JSON.stringify([s.search.mock.calls, s.provider.mock.calls, result])).not.toMatch(/RAW_INFO|PERSONAL_|PRIVATE_METADATA|private-resource|UNTRUSTED_SEARCH_STAGE_PROSE/);
     expect(s.provider.mock.calls[0][0][0].content).toContain("没有读取网页全文或整本书");
     expect(s.search.mock.calls[0][0][0].content).toContain("ISBN 配合书名、作者");
@@ -151,8 +157,9 @@ describe("book internet research evidence and read-only scope", () => {
     expect(result.sources.every(source => source.title.length <= 300 && source.excerpt.length <= 3000 && (source.pageAge?.length ?? 0) <= 100 && source.truncated)).toBe(true);
     expect(result.sources.map(source => source.id)).toEqual(result.sources.map((_, i) => `W${i + 1}`));
     for (const source of result.sources) expect(source.excerpt + source.title).not.toMatch(/[\ud800-\udbff]$/);
-    const sent = userPayload(s.provider.mock.calls[0][0]).sources as BookWebResearchSource[];
-    expect(sent.map(source => source.excerpt)).toEqual(result.sources.map(source => source.excerpt));
+    const sent = userPayload(s.provider.mock.calls[0][0]).sources as ProviderSource[];
+    expect(sent.map(source => visibleText(source, "excerpt"))).toEqual(result.sources.map(source => source.excerpt));
+    expect(sent.map(source => visibleText(source, "title"))).toEqual(result.sources.map(source => source.title));
     expect(JSON.stringify(sent)).not.toContain("RESULT_19_");
   });
 
@@ -186,7 +193,7 @@ describe("book internet research evidence and read-only scope", () => {
     expect(result.sources.map(source => source.title)).toEqual(results.map(source => source.title));
     expect(result.sources).toHaveLength(3); // unselected evidence is still inspectable
     const sent = userPayload(s.provider.mock.calls[0][0]).sources;
-    expect(sent.map((source: BookWebResearchSource) => source.excerpt)).toEqual(results.map(source => source.excerpt));
+    expect(sent.map((source: ProviderSource) => visibleText(source, "excerpt"))).toEqual(results.map(source => source.excerpt));
     expect(JSON.stringify(result)).not.toContain("1937年再版");
   });
 
