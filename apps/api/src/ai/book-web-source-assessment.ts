@@ -86,7 +86,8 @@ export function parseBookWebSourceAssessments(
       seen.add(id);
     }
     const evidence = candidates.filter(candidate => seen.has(candidate.id)).map(candidate => ({ ...candidate }));
-    if (!evidence.some(candidate => candidate.field === "excerpt")) return null;
+    if (!evidence.some(candidate => candidate.field === "excerpt")
+      || evidence.some(candidate => !candidate.text.trim())) return null;
     result.push({
       sourceId: selectedIds[index],
       relationship: item.relationship as BookWebResearchAssessment["relationship"],

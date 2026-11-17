@@ -202,6 +202,23 @@ describe("book source assessment selection contract", () => {
     expect(result).not.toHaveProperty("assessments");
   });
 
+  it("keeps complete blank candidate slices but rejects one used as classification evidence", async () => {
+    const s = setup({ sourceIds: ["W1"], insufficientEvidence: false,
+      assessments: [row("W1", "unclear", "other", ["W1:E2"])] });
+    const excerpt = "开头正文。" + " ".repeat(900) + "尾部正文。";
+    s.search.mockResolvedValueOnce({ ok: true, queries: ["query"], searchCalls: 1, results: [
+      { title: "长空白资料", url: "https://example.test/spaces", excerpt, pageAge: null },
+    ] });
+    const result = await s.service.research(bookId, { question });
+    const evidence = payload(s.provider.mock.calls[0][0]).sources[0].evidence as Array<{ id: string; field: string; text: string }>;
+    expect(evidence.find(part => part.id === "W1:E2")!.text.trim()).toBe("");
+    expect(evidence.filter(part => part.field === "excerpt").map(part => part.text).join("")).toBe(excerpt);
+    expect(result).toMatchObject({ source: "unselected_sources", citedSourceIds: [] });
+    expect(result.sources[0].excerpt).toBe(excerpt);
+    expect(result).not.toHaveProperty("assessments");
+    expect(s.search).toHaveBeenCalledOnce(); expect(s.provider).toHaveBeenCalledOnce();
+  });
+
   it("never revives a cancelled response as a classified result", async () => {
     const s = setup(), controller = new AbortController();
     s.provider.mockImplementationOnce(async () => {
