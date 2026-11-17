@@ -626,3 +626,25 @@ describe("strict direct-book-review transport", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("strict review clipboard regression", () => {
+  it.each(["web_research", "insufficient_sources", "unselected_sources"] as const)(
+    "copies a valid strict response for %s with its scope notice", source => {
+      const value = source === "unselected_sources" ? unselected() : result();
+      value.scope = "direct_book_review";
+      if (source === "insufficient_sources") {
+        value.source = source; value.citedSourceIds = [];
+        value.draft = { title: "查到的相关资料", content: INSUFFICIENT };
+      }
+      const copied = bookWebResearchContent(value);
+      expect(copied).toContain("严格本书书评");
+      expect(copied).toContain(value.sources[0].excerpt);
+      expect(copied).toContain(value.sources[0].url);
+      expect(copied).not.toContain("readToken");
+    });
+  it("still rejects an unknown scope when copying", () => {
+    const value = result();
+    Object.assign(value, { scope: "untrusted_scope" });
+    expect(() => bookWebResearchContent(value)).toThrow();
+  });
+});

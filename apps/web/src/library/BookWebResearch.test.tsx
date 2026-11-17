@@ -920,3 +920,23 @@ describe("explicit strict direct-book-review UI mode", () => {
     expect(generateBookWebResearch).toHaveBeenCalledOnce();
   });
 });
+
+describe("strict review sidebar copying", () => {
+  it.each(["web_research", "insufficient_sources", "unselected_sources"] as const)(
+    "copies %s in strict mode without clearing sources or private drafts", async kind => {
+      const value = answer({ scope: "direct_book_review", question: "查找直接评论这本书的书评或研究，并提供可核对的网页来源。" });
+      if (kind === "insufficient_sources") Object.assign(value, { source: kind, citedSourceIds: [], draft: { title: "查到的相关资料", content: INSUFFICIENT } });
+      if (kind === "unselected_sources") Object.assign(value, { source: kind, citedSourceIds: [], draft: { title: "待核对的网页资料", content: UNSELECTED } });
+      vi.mocked(generateBookWebResearch).mockResolvedValueOnce(value);
+      render(<>{privateEditors()}{view()}</>);
+      await click("联网研究"); await click("本书书评"); await click("联网查资料");
+      await click(kind === "insufficient_sources" ? "复制现有来源" : "复制结果与来源");
+      expect(writeClipboard).toHaveBeenCalledOnce();
+      expect(writeClipboard.mock.calls[0][0]).toContain("严格本书书评");
+      expect(writeClipboard.mock.calls[0][0]).toContain(value.sources[0].excerpt);
+      expect(field("个人介绍草稿").value).toBe("尚未保存的个人介绍");
+      expect(field("个人笔记草稿").value).toBe("尚未保存的个人笔记");
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(generateBookWebResearch).toHaveBeenCalledOnce();
+    });
+});
