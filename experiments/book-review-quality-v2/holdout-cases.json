@@ -1,0 +1,186 @@
+{
+  "schemaVersion": 1,
+  "taskId": "BOOK_REVIEW_EVIDENCE_P3_HOLDOUT",
+  "baselineCommit": "ce420a3c010b4a6bf1b261df374baf1d1cd85ef7",
+  "annotationStatus": "ASSISTANT_PROVISIONAL_HUMAN_REVIEW_PENDING",
+  "originalDatasetSha256": "97fc786e0928dd2ab19a1be6808d9c44a211c9201e36af5d4fdc523ad5e5f90f",
+  "books": {
+    "river": {
+      "title": "江城",
+      "author": "彼得·海斯勒",
+      "isbn": "9787532756728"
+    },
+    "possible": {
+      "title": "可能性的艺术：比较政治学30讲",
+      "author": "刘瑜",
+      "isbn": "9787559848048"
+    },
+    "dawn": {
+      "title": "The Dawn of Everything",
+      "author": "David Graeber; David Wengrow",
+      "isbn": "9781250858801"
+    },
+    "righteous": {
+      "title": "The Righteous Mind",
+      "author": "Jonathan Haidt",
+      "isbn": "9780307377906"
+    },
+    "warmth": {
+      "title": "The Warmth of Other Suns",
+      "author": "Isabel Wilkerson",
+      "isbn": "9780679763888"
+    }
+  },
+  "cases": [
+    {
+      "id": "holdout-river-review",
+      "bookKey": "river",
+      "origin": "page_excerpt",
+      "source": {
+        "title": "当“蓝眼睛”遇见乡土中国（江城）书评",
+        "excerpt": "作者: [美] 彼得·海斯勒 / 个人鲜明特色",
+        "url": "https://book.douban.com/review/5331789/"
+      },
+      "label": "yes",
+      "editionStatus": "bibliographically_compatible",
+      "labelReason": "Original user review evaluates the target work's style and compares it with a later book. Associated book record agrees on author, publisher and year; ISBN is not visible on this review page.",
+      "humanReview": "pending",
+      "assessor": "assistant"
+    },
+    {
+      "id": "holdout-river-product",
+      "bookKey": "river",
+      "origin": "page_excerpt",
+      "source": {
+        "title": "《江城》【正版图书 折扣 优惠 详情 书评 试读】 - 新华书店网上商城",
+        "excerpt": "(美)彼得·海斯勒 / 商品编码（ISBN） 9787532756728 / 加入购物车",
+        "url": "https://item.xhsd.com/items/1010000103119024"
+      },
+      "label": "no",
+      "editionStatus": "same_isbn",
+      "labelReason": "Product page has the target ISBN and a document title containing 书评, but its visible purpose is selling the book, not publishing an independent review.",
+      "humanReview": "pending",
+      "assessor": "assistant"
+    },
+    {
+      "id": "holdout-possible-review",
+      "bookKey": "possible",
+      "origin": "page_excerpt",
+      "source": {
+        "title": "全球性的裂痕（可能性的艺术）书评",
+        "excerpt": "作者: 刘瑜 / 这本书谈的是比较政治学",
+        "url": "https://book.douban.com/review/17886225/"
+      },
+      "label": "yes",
+      "editionStatus": "bibliographically_compatible",
+      "labelReason": "Original user review interprets the book and explicitly disagrees with part of its argument. The associated record matches author, publisher and publication month; exact ISBN is not visible.",
+      "humanReview": "pending",
+      "assessor": "assistant"
+    },
+    {
+      "id": "holdout-possible-interview",
+      "bookKey": "possible",
+      "origin": "page_excerpt",
+      "source": {
+        "title": "刘瑜：对这个世界，我依然抱有谨慎的乐观 | 南方周末",
+        "excerpt": "《可能性的艺术——比较政治学30讲》 / 南方人物周刊记者 蒯乐昊 / 南方人物周刊： / 刘瑜：",
+        "url": "https://www.infzm.com/contents/231762?source=131"
+      },
+      "label": "no",
+      "editionStatus": "unconfirmed",
+      "labelReason": "Public introduction identifies the book, followed by interviewer questions and author answers about politics. It is an author interview rather than an independent review of the work.",
+      "humanReview": "pending",
+      "assessor": "assistant"
+    },
+    {
+      "id": "holdout-dawn-review",
+      "bookKey": "dawn",
+      "origin": "page_excerpt",
+      "source": {
+        "title": "THE DAWN OF EVERYTHING | Kirkus Reviews",
+        "excerpt": "by David Graeber & David Wengrow / A fascinating, intellectually challenging big book about big ideas.",
+        "url": "https://www.kirkusreviews.com/book-reviews/david-graeber/the-dawn-of-everything/"
+      },
+      "label": "yes",
+      "editionStatus": "different_release",
+      "labelReason": "Original critical review of the same work. Its listed edition is 2021, ISBN 9780374157357, whereas the target reference is a 2023 paperback.",
+      "humanReview": "pending",
+      "assessor": "assistant"
+    },
+    {
+      "id": "holdout-dawn-publisher",
+      "bookKey": "dawn",
+      "origin": "page_excerpt",
+      "source": {
+        "title": "The Dawn of Everything",
+        "excerpt": "Author: David Graeber and David Wengrow / Buy This Book From: / Kirkus Reviews [starred review]",
+        "url": "https://us.macmillan.com/books/9781250858801/thedawnofeverything/"
+      },
+      "label": "no",
+      "editionStatus": "same_isbn",
+      "labelReason": "Publisher's product and excerpt page, with retailers and quoted endorsements. An embedded review attribution does not turn the overall page into an independent review.",
+      "humanReview": "pending",
+      "assessor": "assistant"
+    },
+    {
+      "id": "holdout-righteous-review",
+      "bookKey": "righteous",
+      "origin": "page_excerpt",
+      "source": {
+        "title": "THE RIGHTEOUS MIND | Kirkus Reviews",
+        "excerpt": "by Jonathan Haidt / A well-informed tour of contemporary moral psychology.",
+        "url": "https://www.kirkusreviews.com/book-reviews/jonathan-haidt/righteous-mind/"
+      },
+      "label": "yes",
+      "editionStatus": "same_isbn",
+      "labelReason": "Original review evaluates the target book; the page's bibliographic record exactly matches the reference ISBN.",
+      "humanReview": "pending",
+      "assessor": "assistant"
+    },
+    {
+      "id": "holdout-righteous-other-work",
+      "bookKey": "righteous",
+      "origin": "page_excerpt",
+      "source": {
+        "title": "THE ANXIOUS GENERATION | Kirkus Reviews",
+        "excerpt": "by Jonathan Haidt / Psychologist Haidt, author of The Righteous Mind",
+        "url": "https://www.kirkusreviews.com/book-reviews/jonathan-haidt/the-anxious-generation/"
+      },
+      "label": "no",
+      "editionStatus": "different_work",
+      "labelReason": "This is an original review of The Anxious Generation. The target title appears only as a prior work in the author's identification.",
+      "humanReview": "pending",
+      "assessor": "assistant"
+    },
+    {
+      "id": "holdout-warmth-review",
+      "bookKey": "warmth",
+      "origin": "page_excerpt",
+      "source": {
+        "title": "THE WARMTH OF OTHER SUNS | Kirkus Reviews",
+        "excerpt": "by Isabel Wilkerson / An impressive take on the Great Migration, and a truly auspicious debut.",
+        "url": "https://www.kirkusreviews.com/book-reviews/isabel-wilkerson-65858/the-warmth-of-other-suns/"
+      },
+      "label": "yes",
+      "editionStatus": "different_release",
+      "labelReason": "Original review of the target work. It lists the 2010 hardcover ISBN 9780679444329; the reference book is the 2011 paperback.",
+      "humanReview": "pending",
+      "assessor": "assistant"
+    },
+    {
+      "id": "holdout-warmth-publisher",
+      "bookKey": "warmth",
+      "origin": "page_excerpt",
+      "source": {
+        "title": "The Warmth of Other Suns by Isabel Wilkerson: 9780679763888 | PenguinRandomHouse.com: Books",
+        "excerpt": "Paperback / Published on Oct 04, 2011 / Add to Cart",
+        "url": "https://www.penguinrandomhouse.com/books/190696/the-warmth-of-other-suns-by-isabel-wilkerson/9780679763888/"
+      },
+      "label": "no",
+      "editionStatus": "same_isbn",
+      "labelReason": "Publisher's product page with format choices, retailer links and book description; not an independent review.",
+      "humanReview": "pending",
+      "assessor": "assistant"
+    }
+  ]
+}

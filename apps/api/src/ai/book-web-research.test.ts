@@ -1,5 +1,6 @@
+import { assessBookReviewCandidate } from "./book-web-review-candidate.js";
 import { describe, expect, it, vi } from "vitest";
-import { createBookWebResearchService, isDirectBookReviewCandidate, type BookWebResearchSource } from "./book-web-research.js";
+import { createBookWebResearchService, type BookWebResearchSource } from "./book-web-research.js";
 import type { chatCompletion, ChatMessage } from "./minimax.js";
 import type { searchMiniMaxWeb, MiniMaxWebSearchResponse } from "./minimax-web-search.js";
 
@@ -524,10 +525,10 @@ describe("strict direct-book-review candidate guard", () => {
     expect(output.source).toBe("web_research");
     expect(output.citedSourceIds).toEqual(["W4"]);
     expect(output.draft.content).toContain("建议先查看：[W4]");
-    expect(isDirectBookReviewCandidate(output.sources[3], book.title)).toBe(true);
-    expect(isDirectBookReviewCandidate(output.sources[0], book.title)).toBe(false);
-    expect(isDirectBookReviewCandidate(output.sources[1], book.title)).toBe(false);
-    expect(isDirectBookReviewCandidate(output.sources[2], book.title)).toBe(false);
+    expect(assessBookReviewCandidate(output.sources[3], book).eligible).toBe(true);
+    expect(assessBookReviewCandidate(output.sources[0], book).eligible).toBe(false);
+    expect(assessBookReviewCandidate(output.sources[1], book).eligible).toBe(false);
+    expect(assessBookReviewCandidate(output.sources[2], book).eligible).toBe(false);
     expect(s.search).toHaveBeenCalledOnce();
     expect(s.provider).toHaveBeenCalledOnce();
   });
@@ -538,5 +539,62 @@ describe("strict direct-book-review candidate guard", () => {
     expect(s.getCatalogDocument).not.toHaveBeenCalled();
     expect(s.search).not.toHaveBeenCalled();
     expect(s.provider).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("separate work, genre and edition cues in strict selection", () => {
+  const book = { ...catalog, title: "Seeing Like a State", author: "James C. Scott", isbn: "9780300078152" };
+  const results = [
+    { title: "Seeing Like a State", excerpt: "James C. Scott. Review by A Reader. ISBN:9787112124534.",
+      url: "https://example.test/work-review", pageAge: "x".repeat(101) },
+    { title: "Seeing Like a State: Book Review", excerpt: "James C. Scott.",
+      url: "https://example.test/not-selected", pageAge: null },
+    { title: "A Different Book: review", excerpt: "ISBN:9780300078152. James C. Scott.",
+      url: "https://example.test/another-work", pageAge: null },
+    { title: "Seeing Like a State: Book Review", excerpt: "James C. Scott. Product details. Add to cart.",
+      url: "https://example.test/product", pageAge: null },
+  ];
+  it("only filters selected IDs, preserves all sources, and keeps other-edition ISBN text explicit", async () => {
+    const s = setup();
+    s.getCatalogDocument.mockResolvedValueOnce(book);
+    s.search.mockResolvedValueOnce({ ...searchResult(), results });
+    s.provider.mockResolvedValueOnce({ ok: true, model: "fixture",
+      content: JSON.stringify({ sourceIds: ["W3", "W1", "W4"], insufficientEvidence: false }) });
+    const output = await s.service.research(A, { question, scope: "direct_book_review" });
+    expect(output.source).toBe("web_research");
+    expect(output.citedSourceIds).toEqual(["W1"]);
+    expect(output.sources).toHaveLength(4);
+    expect(output.sources.map(source => source.title)).toEqual(results.map(source => source.title));
+    expect(output.sources[0]).toMatchObject({ truncated: true, bookClues: { isbn: "other_only" } });
+    for (const source of output.sources) {
+      expect(source).not.toHaveProperty("reviewEvidence");
+      expect(source).not.toHaveProperty("eligible");
+      expect(source).not.toHaveProperty("work");
+    }
+    expect(s.search).toHaveBeenCalledOnce(); expect(s.provider).toHaveBeenCalledOnce();
+    expect(s.search.mock.calls[0][0][0].content).toContain("作品身份、文章文体、具体版本分别核对");
+    expect(s.search.mock.calls[0][0][0].content).not.toContain("可辨识为指定版次图书");
+    expect(s.provider.mock.calls[0][0][0].content).toContain("不把 ISBN 混列当作版本确认");
+  });
+  it("keeps the general research selection behavior", async () => {
+    const s = setup();
+    s.getCatalogDocument.mockResolvedValueOnce(book);
+    s.search.mockResolvedValueOnce({ ...searchResult(), results });
+    s.provider.mockResolvedValueOnce({ ok: true, model: "fixture",
+      content: JSON.stringify({ sourceIds: ["W3", "W4"], insufficientEvidence: false }) });
+    expect((await s.service.research(A, { question })).citedSourceIds).toEqual(["W3", "W4"]);
+  });
+  it("does not use a cut headline as a complete target-work cue", async () => {
+    const s = setup();
+    s.getCatalogDocument.mockResolvedValueOnce(book);
+    s.search.mockResolvedValueOnce({ ...searchResult(),
+      results: [{ ...results[1], title: results[1].title + " ".repeat(10) + "long ".repeat(100) }] });
+    s.provider.mockResolvedValueOnce({ ok: true, model: "fixture",
+      content: JSON.stringify({ sourceIds: ["W1"], insufficientEvidence: false }) });
+    const output = await s.service.research(A, { question, scope: "direct_book_review" });
+    expect(output.source).toBe("insufficient_sources");
+    expect(output.sources).toHaveLength(1);
+    expect(output.sources[0].truncated).toBe(true);
   });
 });

@@ -1,0 +1,1475 @@
+{
+  "task_id": "BOOK_REVIEW_EVIDENCE_P4",
+  "status": "OBSERVED_LIMITS; NOT_A_QUALITY_PASS",
+  "policy_changed": false,
+  "results": [
+    {
+      "task": "P4-B1",
+      "receipt_sha256": "d8ba849be90a9e29510c77ab242b7af6da2c49a4b3492ee73f159e72fa03ada7",
+      "capture_commit": "d690f86650d2a488e9ec0932e85ec393a7db70e2",
+      "catalog": {
+        "id": "14322052_000016990400",
+        "title": "枢纽  3000年的中国",
+        "author": "施展著",
+        "publisher": "桂林：广西师范大学出版社",
+        "year": 2018,
+        "pages": 697,
+        "isbn": "9787549586080"
+      },
+      "counts": {
+        "public_catalog": 1,
+        "search_requests": 1,
+        "selection_requests": 1,
+        "page_read_attempts": 1,
+        "page_fetch_calls": 1,
+        "search_latency_ms": 16268,
+        "selection_latency_ms": 1051
+      },
+      "search_client_sources": 81,
+      "search_calls": 10,
+      "search_limited": true,
+      "status": "INSUFFICIENT_SOURCES",
+      "model_selected_ids": [
+        "W4",
+        "W10",
+        "W9",
+        "W6"
+      ],
+      "retained_ids": [],
+      "guard_replay_matches": true,
+      "read_summary": {
+        "requested_limit": 1,
+        "attempted": 1,
+        "succeeded": 1,
+        "failed": 0
+      },
+      "sources": [
+        {
+          "id": "W1",
+          "url": "https://history.ifeng.com/c/7eoBira6ibb",
+          "title": "2018开年之书:《枢纽——3000年的中国》从过去看见未来,从世界发现中国",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "full",
+              "titleAmbiguous": false,
+              "authorTextSeen": true
+            },
+            "genre": {
+              "reviewTextSeen": false,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": false
+          },
+          "modelSelected": false,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B1",
+            "sourceId": "W1",
+            "work": "支持",
+            "review": "不足",
+            "edition": "未见",
+            "snippetCandidate": "uncertain",
+            "reason": "书名与施展对应；摘要主要介绍论旨并转引名人推荐，尚不足区分独立书评和新书宣传。",
+            "input_sha256": "8a01934edd3d1d35f3d334cdf0a9ed405017fb060c9823edfd0c6be452ed8fff"
+          }
+        },
+        {
+          "id": "W2",
+          "url": "https://www.jxrd.gov.cn/system/2020/05/11/018883584.shtml",
+          "title": "《枢纽:3000年的中国》:新视角看历史 新视野品中国",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "full",
+              "titleAmbiguous": false,
+              "authorTextSeen": true
+            },
+            "genre": {
+              "reviewTextSeen": false,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": false
+          },
+          "modelSelected": false,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B1",
+            "sourceId": "W2",
+            "work": "支持",
+            "review": "支持",
+            "edition": "未见",
+            "snippetCandidate": "yes",
+            "reason": "明确书名、作者，并围绕书中观点作评价和解释，支持作品评论候选；未核对全文或具体版本。",
+            "input_sha256": "8a01934edd3d1d35f3d334cdf0a9ed405017fb060c9823edfd0c6be452ed8fff"
+          }
+        },
+        {
+          "id": "W3",
+          "url": "https://www.ctaxnews.net.cn/paper/pc/con/201904/24/content_149754.html",
+          "title": "“枢纽”角色的启示",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "not_seen",
+              "titleAmbiguous": false,
+              "authorTextSeen": true
+            },
+            "genre": {
+              "reviewTextSeen": false,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": false
+          },
+          "modelSelected": false,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B1",
+            "sourceId": "W3",
+            "work": "支持",
+            "review": "支持",
+            "edition": "未见",
+            "snippetCandidate": "yes",
+            "reason": "明确书名、作者，文章以个人读后评价联系税收工作，具有具体评论与应用反思。",
+            "input_sha256": "8a01934edd3d1d35f3d334cdf0a9ed405017fb060c9823edfd0c6be452ed8fff"
+          }
+        },
+        {
+          "id": "W4",
+          "url": "https://www.cqrb.cn/content/2020-07/03/content_258434.htm",
+          "title": "在历史时空的交汇点读懂中国",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "not_seen",
+              "titleAmbiguous": false,
+              "authorTextSeen": true
+            },
+            "genre": {
+              "reviewTextSeen": false,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": false
+          },
+          "modelSelected": true,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B1",
+            "sourceId": "W4",
+            "work": "支持",
+            "review": "支持",
+            "edition": "未见",
+            "snippetCandidate": "yes",
+            "reason": "书名与作者明确，并讨论全书篇章比例是否失衡及其组织逻辑，具有具体评论内容。",
+            "input_sha256": "8a01934edd3d1d35f3d334cdf0a9ed405017fb060c9823edfd0c6be452ed8fff"
+          }
+        },
+        {
+          "id": "W5",
+          "url": "https://www.peopleapp.com/rmharticle/30034960468",
+          "title": "｢好书推荐｣《枢纽:3000年的中国》:从历史中回答“何谓中国”",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "full",
+              "titleAmbiguous": false,
+              "authorTextSeen": true
+            },
+            "genre": {
+              "reviewTextSeen": false,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": false
+          },
+          "modelSelected": false,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B1",
+            "sourceId": "W5",
+            "work": "支持",
+            "review": "支持",
+            "edition": "未见",
+            "snippetCandidate": "yes",
+            "reason": "书名与作者明确，围绕解释框架、学科跨度及作品定位作解读与评价；独立性仍未由全文核实。",
+            "input_sha256": "8a01934edd3d1d35f3d334cdf0a9ed405017fb060c9823edfd0c6be452ed8fff"
+          }
+        },
+        {
+          "id": "W6",
+          "url": "https://hajh.jsjc.gov.cn/zt/dszl/201901/t20190129_767895.shtml",
+          "title": "从历史中回答“何谓中国”",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "not_seen",
+              "titleAmbiguous": false,
+              "authorTextSeen": true
+            },
+            "genre": {
+              "reviewTextSeen": false,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": false
+          },
+          "modelSelected": true,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B1",
+            "sourceId": "W6",
+            "work": "支持",
+            "review": "支持",
+            "edition": "未见",
+            "snippetCandidate": "yes",
+            "reason": "直接讨论施展这部作品，将其解释为未来学并评述历史叙事方法，具有作品评论线索。",
+            "input_sha256": "8a01934edd3d1d35f3d334cdf0a9ed405017fb060c9823edfd0c6be452ed8fff"
+          }
+        },
+        {
+          "id": "W7",
+          "url": "https://zuizhongguo.blogchina.com/658409522.html",
+          "title": "2018开年之书:《枢纽——3000年的中国》从过去看见未来,从世界发现中国",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "full",
+              "titleAmbiguous": false,
+              "authorTextSeen": true
+            },
+            "genre": {
+              "reviewTextSeen": false,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": false
+          },
+          "modelSelected": false,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B1",
+            "sourceId": "W7",
+            "work": "支持",
+            "review": "不足",
+            "edition": "未见",
+            "snippetCandidate": "uncertain",
+            "reason": "书名与作者明确，但摘要集中转述作者目标和第三方推荐；尚不能区分评论文章与宣传介绍。",
+            "input_sha256": "8a01934edd3d1d35f3d334cdf0a9ed405017fb060c9823edfd0c6be452ed8fff"
+          }
+        },
+        {
+          "id": "W8",
+          "url": "https://www.icswb.com/h/100884/20180113/519333.html",
+          "title": "《枢纽:3000年的中国》从过去看见未来 从世界发现中国",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "full",
+              "titleAmbiguous": false,
+              "authorTextSeen": true
+            },
+            "genre": {
+              "reviewTextSeen": false,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": false
+          },
+          "modelSelected": false,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B1",
+            "sourceId": "W8",
+            "work": "支持",
+            "review": "不足",
+            "edition": "未见",
+            "snippetCandidate": "uncertain",
+            "reason": "书名与作者明确，所见主要为作者观点和推荐语，缺少足够证据判断是否独立评述文章。",
+            "input_sha256": "8a01934edd3d1d35f3d334cdf0a9ed405017fb060c9823edfd0c6be452ed8fff"
+          }
+        },
+        {
+          "id": "W9",
+          "url": "https://m.thepaper.cn/baijiahao_5188918",
+          "title": "《枢纽:3000年的中国》:从历史中回答“何谓中国”",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "full",
+              "titleAmbiguous": false,
+              "authorTextSeen": true
+            },
+            "genre": {
+              "reviewTextSeen": false,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": false
+          },
+          "modelSelected": true,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B1",
+            "sourceId": "W9",
+            "work": "支持",
+            "review": "支持",
+            "edition": "未见",
+            "snippetCandidate": "yes",
+            "reason": "书名与作者明确，围绕作品的解释体系和学科跨度作解读、评价，支持作品评论候选。",
+            "input_sha256": "8a01934edd3d1d35f3d334cdf0a9ed405017fb060c9823edfd0c6be452ed8fff"
+          }
+        },
+        {
+          "id": "W10",
+          "url": "https://book.youth.cn/xstj/202008/t20200803_12435146.htm",
+          "title": "《枢纽:3000年的中国》:探究历史的如其所是",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "full",
+              "titleAmbiguous": false,
+              "authorTextSeen": true
+            },
+            "genre": {
+              "reviewTextSeen": false,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": false
+          },
+          "modelSelected": true,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B1",
+            "sourceId": "W10",
+            "work": "支持",
+            "review": "支持",
+            "edition": "未见",
+            "snippetCandidate": "yes",
+            "reason": "书名与作者明确，文章分析作品的历史哲学逻辑并评价其论述；出现出版年不等于确认版次。",
+            "input_sha256": "8a01934edd3d1d35f3d334cdf0a9ed405017fb060c9823edfd0c6be452ed8fff"
+          }
+        },
+        {
+          "id": "W11",
+          "url": "http://www.dashujia.com/book-content-2533.html",
+          "title": "枢纽:3000年的中国",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "full",
+              "titleAmbiguous": false,
+              "authorTextSeen": true
+            },
+            "genre": {
+              "reviewTextSeen": true,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "matched"
+            },
+            "eligible": true
+          },
+          "modelSelected": false,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B1",
+            "sourceId": "W11",
+            "work": "支持",
+            "review": "冲突",
+            "edition": "出现匹配",
+            "snippetCandidate": "no",
+            "reason": "包含目标ISBN，但主体结构为书籍元数据、下载入口和聚合用户短评，不是单篇独立评论文章。",
+            "input_sha256": "8a01934edd3d1d35f3d334cdf0a9ed405017fb060c9823edfd0c6be452ed8fff"
+          }
+        },
+        {
+          "id": "W12",
+          "url": "https://duozhuayu.com/books/823013197408770993",
+          "title": "枢纽:3000年的中国",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "full",
+              "titleAmbiguous": false,
+              "authorTextSeen": true
+            },
+            "genre": {
+              "reviewTextSeen": true,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": true
+          },
+          "modelSelected": false,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B1",
+            "sourceId": "W12",
+            "work": "支持",
+            "review": "冲突",
+            "edition": "不明确",
+            "snippetCandidate": "no",
+            "reason": "可见图书元数据、评分和内容简介，未见独立评述；标注2023年且未见ISBN，不能对应目录2018版。",
+            "input_sha256": "8a01934edd3d1d35f3d334cdf0a9ed405017fb060c9823edfd0c6be452ed8fff"
+          }
+        }
+      ],
+      "annotation_summary": {
+        "task": "P4-B1",
+        "labels": {
+          "uncertain": 3,
+          "yes": 7,
+          "no": 2
+        },
+        "model_selected_labels": {
+          "yes": 4
+        },
+        "guard_eligible_labels": {
+          "no": 2
+        },
+        "retained_labels": {}
+      }
+    },
+    {
+      "task": "P4-B3-CATALOG",
+      "receipt_sha256": "6f40324fd75f79f12741230bf6a1f4020a2385b7a8646a91b7044f242ed489d6",
+      "capture_commit": "d690f86650d2a488e9ec0932e85ec393a7db70e2",
+      "catalog": {
+        "id": "40752262_164020014290",
+        "title": "THE GREAT DIVERGENCE  CHINA",
+        "author": "EUROPE,AND THE MAKING OF THE MODERN WORLD ECONOMY,KENNETH POMERANZ,PRINCETON UNIVERSITY PRESS,2000,",
+        "publisher": "",
+        "year": null,
+        "pages": 382,
+        "isbn": "0691090106"
+      },
+      "counts": {
+        "public_catalog": 1,
+        "search_requests": 1,
+        "selection_requests": 1,
+        "page_read_attempts": 1,
+        "page_fetch_calls": 1,
+        "search_latency_ms": 26717,
+        "selection_latency_ms": 1292
+      },
+      "search_client_sources": 69,
+      "search_calls": 10,
+      "search_limited": true,
+      "status": "INSUFFICIENT_SOURCES",
+      "model_selected_ids": [
+        "W4",
+        "W6",
+        "W9",
+        "W12"
+      ],
+      "retained_ids": [],
+      "guard_replay_matches": true,
+      "read_summary": {
+        "requested_limit": 1,
+        "attempted": 1,
+        "succeeded": 0,
+        "failed": 1
+      },
+      "sources": [
+        {
+          "id": "W1",
+          "url": "https://medium.com/@tamburrini.giulio12/book-review-the-great-divergence-by-kenneth-pomeranz-fc8c551f2e54",
+          "title": "Review: Kenneth Pomeranz’s ‘The Great Divergence’",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "not_seen",
+              "titleAmbiguous": false,
+              "authorTextSeen": false
+            },
+            "genre": {
+              "reviewTextSeen": true,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": false
+          },
+          "modelSelected": false,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B3-CATALOG",
+            "sourceId": "W1",
+            "work": "支持",
+            "review": "支持",
+            "edition": "未见",
+            "snippetCandidate": "yes",
+            "reason": "标题直接标示评论、书名与作者，摘要评价其论证和贡献，支持作品评论候选。",
+            "input_sha256": "8cc6501562307aeeeb99a7dc8c58eab7cd446acfc91c9769d6f37994b09f794c"
+          }
+        },
+        {
+          "id": "W2",
+          "url": "http://www.reviewfocus.com/cat592/prod280558/review1.html",
+          "title": "The Great Divergence: China, Europe, and the Making of the Modern World Economy.",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "full",
+              "titleAmbiguous": false,
+              "authorTextSeen": false
+            },
+            "genre": {
+              "reviewTextSeen": false,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": false
+          },
+          "modelSelected": false,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B3-CATALOG",
+            "sourceId": "W2",
+            "work": "支持",
+            "review": "不足",
+            "edition": "未见",
+            "snippetCandidate": "uncertain",
+            "reason": "完整书名和Pomeranz支持作品身份；片段主要解释书中经济机制，尚不足区分独立评论与摘要。",
+            "input_sha256": "8cc6501562307aeeeb99a7dc8c58eab7cd446acfc91c9769d6f37994b09f794c"
+          }
+        },
+        {
+          "id": "W3",
+          "url": "https://theworthyhouse.com/?p=1259/",
+          "title": "The Great Divergence (Kenneth Pomeranz)",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "not_seen",
+              "titleAmbiguous": false,
+              "authorTextSeen": false
+            },
+            "genre": {
+              "reviewTextSeen": false,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": false
+          },
+          "modelSelected": false,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B3-CATALOG",
+            "sourceId": "W3",
+            "work": "支持",
+            "review": "不足",
+            "edition": "未见",
+            "snippetCandidate": "uncertain",
+            "reason": "标题含书名和作者；所见正文仍在铺陈大分流问题，未提供足够的文章文体证据。",
+            "input_sha256": "8cc6501562307aeeeb99a7dc8c58eab7cd446acfc91c9769d6f37994b09f794c"
+          }
+        },
+        {
+          "id": "W4",
+          "url": "https://www.independent.org/tir/2003-04-winter/the-great-divergence/",
+          "title": "The Great Divergence",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "not_seen",
+              "titleAmbiguous": false,
+              "authorTextSeen": false
+            },
+            "genre": {
+              "reviewTextSeen": true,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": false
+          },
+          "modelSelected": true,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B3-CATALOG",
+            "sourceId": "W4",
+            "work": "支持",
+            "review": "支持",
+            "edition": "未见",
+            "snippetCandidate": "yes",
+            "reason": "摘要明确列出书评、书名、作者、评论者，并直接评价该书是否回答核心问题。",
+            "input_sha256": "8cc6501562307aeeeb99a7dc8c58eab7cd446acfc91c9769d6f37994b09f794c"
+          }
+        },
+        {
+          "id": "W5",
+          "url": "https://ocw.iti.hr/courses/history/21h-383-technology-and-the-global-economy-1000-2000-fall-2016/assignments/pomeranz",
+          "title": "Student Book Review",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "not_seen",
+              "titleAmbiguous": false,
+              "authorTextSeen": false
+            },
+            "genre": {
+              "reviewTextSeen": true,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": false
+          },
+          "modelSelected": false,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B3-CATALOG",
+            "sourceId": "W5",
+            "work": "支持",
+            "review": "支持",
+            "edition": "未见",
+            "snippetCandidate": "yes",
+            "reason": "标题标示学生书评，摘要明确作品与作者，并评述论点强弱和方法贡献。",
+            "input_sha256": "8cc6501562307aeeeb99a7dc8c58eab7cd446acfc91c9769d6f37994b09f794c"
+          }
+        },
+        {
+          "id": "W6",
+          "url": "http://rrojas.powweb.com/agfrank/pomeranz.html",
+          "title": "Review of The Great Divergence",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "not_seen",
+              "titleAmbiguous": false,
+              "authorTextSeen": false
+            },
+            "genre": {
+              "reviewTextSeen": true,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": false
+          },
+          "modelSelected": true,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B3-CATALOG",
+            "sourceId": "W6",
+            "work": "支持",
+            "review": "支持",
+            "edition": "未见",
+            "snippetCandidate": "yes",
+            "reason": "明确书评及所评作品和作者，包含具体学术贡献评价，支持作品评论候选。",
+            "input_sha256": "8cc6501562307aeeeb99a7dc8c58eab7cd446acfc91c9769d6f37994b09f794c"
+          }
+        },
+        {
+          "id": "W7",
+          "url": "https://sobrief.com/books/the-great-divergence",
+          "title": "The Great Divergence",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "not_seen",
+              "titleAmbiguous": false,
+              "authorTextSeen": false
+            },
+            "genre": {
+              "reviewTextSeen": false,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": false
+          },
+          "modelSelected": false,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B3-CATALOG",
+            "sourceId": "W7",
+            "work": "不足",
+            "review": "支持",
+            "edition": "未见",
+            "snippetCandidate": "uncertain",
+            "reason": "片段确有对证据和方法的批评，但仅见通用书名而未见作者或其他身份锚点，作品对应尚不足。",
+            "input_sha256": "8cc6501562307aeeeb99a7dc8c58eab7cd446acfc91c9769d6f37994b09f794c"
+          }
+        },
+        {
+          "id": "W8",
+          "url": "https://ocw.tau.edu.ng/courses/history/21h-383-technology-and-the-global-economy-1000-2000-fall-2016/assignments/pomeranz/",
+          "title": "The Great Divergence: China, Europe, and the Making of the Modern World Economy",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "full",
+              "titleAmbiguous": false,
+              "authorTextSeen": false
+            },
+            "genre": {
+              "reviewTextSeen": false,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": false
+          },
+          "modelSelected": false,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B3-CATALOG",
+            "sourceId": "W8",
+            "work": "支持",
+            "review": "支持",
+            "edition": "未见",
+            "snippetCandidate": "yes",
+            "reason": "完整书名和作者明确，摘要讨论论证强弱与方法贡献，具有具体评论内容。",
+            "input_sha256": "8cc6501562307aeeeb99a7dc8c58eab7cd446acfc91c9769d6f37994b09f794c"
+          }
+        },
+        {
+          "id": "W9",
+          "url": "https://www.xyc.tsinghua.edu.cn/info/1113/1466.htm",
+          "title": "王静姝:评彭慕兰《大分流》",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "not_seen",
+              "titleAmbiguous": false,
+              "authorTextSeen": false
+            },
+            "genre": {
+              "reviewTextSeen": false,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": false
+          },
+          "modelSelected": true,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B3-CATALOG",
+            "sourceId": "W9",
+            "work": "支持",
+            "review": "支持",
+            "edition": "不明确",
+            "snippetCandidate": "yes",
+            "reason": "片段自带中英文书名及作者对应，并明确评述该书；注明引文来自中文译本，未见ISBN，不能确认目录版本。",
+            "input_sha256": "8cc6501562307aeeeb99a7dc8c58eab7cd446acfc91c9769d6f37994b09f794c"
+          }
+        },
+        {
+          "id": "W10",
+          "url": "https://amazon4trader.com/product/kenneth-pomeranz-great-divergence",
+          "title": "Kenneth Pomeranz – The Great Divergence",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "not_seen",
+              "titleAmbiguous": false,
+              "authorTextSeen": false
+            },
+            "genre": {
+              "reviewTextSeen": false,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": false
+          },
+          "modelSelected": false,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B3-CATALOG",
+            "sourceId": "W10",
+            "work": "支持",
+            "review": "不足",
+            "edition": "未见",
+            "snippetCandidate": "uncertain",
+            "reason": "书名与作者明确；所见为Description和内容概述，不能仅凭URL或站点认定为商品页或独立书评。",
+            "input_sha256": "8cc6501562307aeeeb99a7dc8c58eab7cd446acfc91c9769d6f37994b09f794c"
+          }
+        },
+        {
+          "id": "W11",
+          "url": "https://www.abebooks.fr/servlet/BookDetailsPL?bi=30275698262",
+          "title": "Great Divergence : China, Europe, and the Making of the Modern World Economy",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "not_seen",
+              "titleAmbiguous": false,
+              "authorTextSeen": false
+            },
+            "genre": {
+              "reviewTextSeen": false,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "other_only"
+            },
+            "eligible": false
+          },
+          "modelSelected": false,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B3-CATALOG",
+            "sourceId": "W11",
+            "work": "支持",
+            "review": "冲突",
+            "edition": "出现匹配",
+            "snippetCandidate": "no",
+            "reason": "ISBN-10及等价ISBN-13与目标相符，但文本明确为二手书销售、品相和卖家信息，不是独立书评。",
+            "input_sha256": "8cc6501562307aeeeb99a7dc8c58eab7cd446acfc91c9769d6f37994b09f794c"
+          }
+        },
+        {
+          "id": "W12",
+          "url": "https://ocw.mit.edu/courses/21h-383-technology-and-the-global-economy-1000-2000-fall-2016/pages/assignments/pomeranz",
+          "title": "Student Book Review",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "not_seen",
+              "titleAmbiguous": false,
+              "authorTextSeen": false
+            },
+            "genre": {
+              "reviewTextSeen": true,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": false
+          },
+          "modelSelected": true,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B3-CATALOG",
+            "sourceId": "W12",
+            "work": "支持",
+            "review": "支持",
+            "edition": "未见",
+            "snippetCandidate": "yes",
+            "reason": "标题及摘要明确学生书评，作品与作者对应，包含论证强弱与方法评价。",
+            "input_sha256": "8cc6501562307aeeeb99a7dc8c58eab7cd446acfc91c9769d6f37994b09f794c"
+          }
+        }
+      ],
+      "annotation_summary": {
+        "task": "P4-B3-CATALOG",
+        "labels": {
+          "yes": 7,
+          "uncertain": 4,
+          "no": 1
+        },
+        "model_selected_labels": {
+          "yes": 4
+        },
+        "guard_eligible_labels": {},
+        "retained_labels": {}
+      }
+    },
+    {
+      "task": "P4-B5-CATALOG",
+      "receipt_sha256": "c627c2d56b403521f0cb10418c3f6374e568f8d1f448ea2919e825eea67e3731",
+      "capture_commit": "d690f86650d2a488e9ec0932e85ec393a7db70e2",
+      "catalog": {
+        "id": "40752266_164020014141",
+        "title": "WHY NATIONS FAIL  THE ORIGINS OF POWER",
+        "author": "PROSPERITY,AND POVERTY,DARON ACEMOGLU AND JAMES A.ROBINSON,CROWN BUSINESS,2012,",
+        "publisher": "",
+        "year": null,
+        "pages": 529,
+        "isbn": "0307719219"
+      },
+      "counts": {
+        "public_catalog": 1,
+        "search_requests": 1,
+        "selection_requests": 1,
+        "page_read_attempts": 1,
+        "page_fetch_calls": 1,
+        "search_latency_ms": 26584,
+        "selection_latency_ms": 966
+      },
+      "search_client_sources": 92,
+      "search_calls": 10,
+      "search_limited": true,
+      "status": "INSUFFICIENT_SOURCES",
+      "model_selected_ids": [
+        "W5",
+        "W3",
+        "W10",
+        "W11"
+      ],
+      "retained_ids": [],
+      "guard_replay_matches": true,
+      "read_summary": {
+        "requested_limit": 1,
+        "attempted": 1,
+        "succeeded": 0,
+        "failed": 1
+      },
+      "sources": [
+        {
+          "id": "W1",
+          "url": "https://www.thenile.co.nz/books/daron-acemoglu/why-nations-fail-the-origins-of-power-prosperity-and-pove/9780307719225",
+          "title": "Why Nations Fail",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "not_seen",
+              "titleAmbiguous": false,
+              "authorTextSeen": false
+            },
+            "genre": {
+              "reviewTextSeen": true,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "other_only"
+            },
+            "eligible": false
+          },
+          "modelSelected": false,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B5-CATALOG",
+            "sourceId": "W1",
+            "work": "支持",
+            "review": "冲突",
+            "edition": "不同ISBN",
+            "snippetCandidate": "no",
+            "reason": "作品及两位作者明确，但结构为商品元数据和聚合推荐语；所列平装ISBN与目录ISBN不同。",
+            "input_sha256": "9b2adfd6c56630c1bdbd6da7aeb78177344299e33f1493eeb9c40ed6f7a1efed"
+          }
+        },
+        {
+          "id": "W2",
+          "url": "https://readersspacenepal.com/?p=5024",
+          "title": "Why Nations Fail Book Review : Unveiling the Real Keys to National Success",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "not_seen",
+              "titleAmbiguous": false,
+              "authorTextSeen": false
+            },
+            "genre": {
+              "reviewTextSeen": true,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": false
+          },
+          "modelSelected": false,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B5-CATALOG",
+            "sourceId": "W2",
+            "work": "支持",
+            "review": "支持",
+            "edition": "未见",
+            "snippetCandidate": "yes",
+            "reason": "标题明确书评，书名及两位作者对应，摘要评价本书研究和解释框架。",
+            "input_sha256": "9b2adfd6c56630c1bdbd6da7aeb78177344299e33f1493eeb9c40ed6f7a1efed"
+          }
+        },
+        {
+          "id": "W3",
+          "url": "https://yris.yira.org/reviews/book-review-why-nations-fail/",
+          "title": "Review: Why Nations Fail",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "not_seen",
+              "titleAmbiguous": false,
+              "authorTextSeen": false
+            },
+            "genre": {
+              "reviewTextSeen": true,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": false
+          },
+          "modelSelected": true,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B5-CATALOG",
+            "sourceId": "W3",
+            "work": "支持",
+            "review": "支持",
+            "edition": "未见",
+            "snippetCandidate": "yes",
+            "reason": "标题明确评论，摘要给出两位作者并评述作品论题和叙述方式，支持作品评论候选。",
+            "input_sha256": "9b2adfd6c56630c1bdbd6da7aeb78177344299e33f1493eeb9c40ed6f7a1efed"
+          }
+        },
+        {
+          "id": "W4",
+          "url": "https://winchellhouse.com/2026/10/30/book-review-why-nations-fail-by-daron-acemoglu-and-james-a-robinson/",
+          "title": "Book Review: Why Nations Fail by Daron Acemoglu and James A. Robinson",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "not_seen",
+              "titleAmbiguous": false,
+              "authorTextSeen": false
+            },
+            "genre": {
+              "reviewTextSeen": true,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": false
+          },
+          "modelSelected": false,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B5-CATALOG",
+            "sourceId": "W4",
+            "work": "支持",
+            "review": "支持",
+            "edition": "未见",
+            "snippetCandidate": "yes",
+            "reason": "标题明确为两位作者该书的书评；摘要主要为作者介绍，具体评论质量仍需正文核对。",
+            "input_sha256": "9b2adfd6c56630c1bdbd6da7aeb78177344299e33f1493eeb9c40ed6f7a1efed"
+          }
+        },
+        {
+          "id": "W5",
+          "url": "https://docslib.org/doc/2662525/why-nations-fail-the-origins-of-power-prosperity-and-poverty-by-daron-acemoglu-and-james-a",
+          "title": "Why Nations Fail - the Origins of Power, Prosperity and Poverty by Daron Acemoglu and James A",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "full",
+              "titleAmbiguous": false,
+              "authorTextSeen": false
+            },
+            "genre": {
+              "reviewTextSeen": true,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "other_only"
+            },
+            "eligible": false
+          },
+          "modelSelected": true,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B5-CATALOG",
+            "sourceId": "W5",
+            "work": "支持",
+            "review": "支持",
+            "edition": "出现匹配",
+            "snippetCandidate": "yes",
+            "reason": "片段明确期刊书评、评论者、作品及两位作者，并指出论证不足；ISBN-13与目标ISBN-10等价。",
+            "input_sha256": "9b2adfd6c56630c1bdbd6da7aeb78177344299e33f1493eeb9c40ed6f7a1efed"
+          }
+        },
+        {
+          "id": "W6",
+          "url": "https://northshire.com/book/9780307719225",
+          "title": "Why Nations Fail: The Origins of Power, Prosperity, and Poverty",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "full",
+              "titleAmbiguous": false,
+              "authorTextSeen": false
+            },
+            "genre": {
+              "reviewTextSeen": false,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": false
+          },
+          "modelSelected": false,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B5-CATALOG",
+            "sourceId": "W6",
+            "work": "支持",
+            "review": "支持",
+            "edition": "不同ISBN",
+            "snippetCandidate": "uncertain",
+            "reason": "可见实质的店员个人读后评论，但嵌在商品元数据之后，尚不清楚是否为独立文章；所列ISBN不同。",
+            "input_sha256": "9b2adfd6c56630c1bdbd6da7aeb78177344299e33f1493eeb9c40ed6f7a1efed"
+          }
+        },
+        {
+          "id": "W7",
+          "url": "https://www.words-and-dirt.com/?p=8057",
+          "title": "Review: Daron Acemoglu and James Robinson’s “Why Nations Fail”",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "not_seen",
+              "titleAmbiguous": false,
+              "authorTextSeen": false
+            },
+            "genre": {
+              "reviewTextSeen": true,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": false
+          },
+          "modelSelected": false,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B5-CATALOG",
+            "sourceId": "W7",
+            "work": "支持",
+            "review": "支持",
+            "edition": "未见",
+            "snippetCandidate": "yes",
+            "reason": "标题明确评论及两位作者，摘要围绕书中汲取性增长论点展开，支持作品评论候选。",
+            "input_sha256": "9b2adfd6c56630c1bdbd6da7aeb78177344299e33f1493eeb9c40ed6f7a1efed"
+          }
+        },
+        {
+          "id": "W8",
+          "url": "https://www.univ.ox.ac.uk/book/why-nations-fail/",
+          "title": "Why Nations Fail",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "not_seen",
+              "titleAmbiguous": false,
+              "authorTextSeen": false
+            },
+            "genre": {
+              "reviewTextSeen": true,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": false
+          },
+          "modelSelected": false,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B5-CATALOG",
+            "sourceId": "W8",
+            "work": "支持",
+            "review": "支持",
+            "edition": "未见",
+            "snippetCandidate": "yes",
+            "reason": "书名、两位作者及评论者明确，带有个人阅读动机和论旨解释，支持作品评论候选。",
+            "input_sha256": "9b2adfd6c56630c1bdbd6da7aeb78177344299e33f1493eeb9c40ed6f7a1efed"
+          }
+        },
+        {
+          "id": "W9",
+          "url": "https://mashpee.clamsnet.org/Record/280148",
+          "title": "Why nations fail : the origins of power, prosperity and poverty(Book)",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "full",
+              "titleAmbiguous": false,
+              "authorTextSeen": false
+            },
+            "genre": {
+              "reviewTextSeen": false,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "other_only"
+            },
+            "eligible": false
+          },
+          "modelSelected": false,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B5-CATALOG",
+            "sourceId": "W9",
+            "work": "支持",
+            "review": "冲突",
+            "edition": "出现匹配",
+            "snippetCandidate": "no",
+            "reason": "ISBN两种格式与目录相符，但可见馆藏、索书号、可借状态和书目简介，属于目录记录。",
+            "input_sha256": "9b2adfd6c56630c1bdbd6da7aeb78177344299e33f1493eeb9c40ed6f7a1efed"
+          }
+        },
+        {
+          "id": "W10",
+          "url": "https://www.rand.org/blog/2012/04/book-review-why-nations-fail-by-daron-acemoglu-and.html",
+          "title": "Book Review: 'Why Nations Fail' by Daron Acemoglu and James A. Robinson",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "not_seen",
+              "titleAmbiguous": false,
+              "authorTextSeen": false
+            },
+            "genre": {
+              "reviewTextSeen": true,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": false
+          },
+          "modelSelected": true,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B5-CATALOG",
+            "sourceId": "W10",
+            "work": "支持",
+            "review": "支持",
+            "edition": "未见",
+            "snippetCandidate": "yes",
+            "reason": "标题明确该书书评和两位作者，片段具体讨论作者关于外援与制度的建议。",
+            "input_sha256": "9b2adfd6c56630c1bdbd6da7aeb78177344299e33f1493eeb9c40ed6f7a1efed"
+          }
+        },
+        {
+          "id": "W11",
+          "url": "https://www.martenscentre.eu/blog/why-nations-fail-a-book-review?noamp=mobile",
+          "title": "Why nations fail: A book review",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "not_seen",
+              "titleAmbiguous": false,
+              "authorTextSeen": false
+            },
+            "genre": {
+              "reviewTextSeen": true,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": false
+          },
+          "modelSelected": true,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B5-CATALOG",
+            "sourceId": "W11",
+            "work": "支持",
+            "review": "支持",
+            "edition": "未见",
+            "snippetCandidate": "yes",
+            "reason": "标题明确书评并出现两位作者，摘要讨论全书如何安排和反驳相关理论。",
+            "input_sha256": "9b2adfd6c56630c1bdbd6da7aeb78177344299e33f1493eeb9c40ed6f7a1efed"
+          }
+        },
+        {
+          "id": "W12",
+          "url": "https://us-wikipedia.com/wiki/Inclusive_institutions",
+          "title": "Why Nations Fail",
+          "cut": {
+            "title": false,
+            "excerpt": false
+          },
+          "evidence": {
+            "work": {
+              "titleForm": "not_seen",
+              "titleAmbiguous": false,
+              "authorTextSeen": false
+            },
+            "genre": {
+              "reviewTextSeen": false,
+              "nonReviewTextSeen": false
+            },
+            "edition": {
+              "isbnText": "not_seen"
+            },
+            "eligible": false
+          },
+          "modelSelected": false,
+          "retained": false,
+          "snippet_annotation": {
+            "task": "P4-B5-CATALOG",
+            "sourceId": "W12",
+            "work": "支持",
+            "review": "不足",
+            "edition": "未见",
+            "snippetCandidate": "uncertain",
+            "reason": "书名及两位作者对应，但片段主要转述Sachs的批评，尚不足判定来源自身是否为独立评论文章。",
+            "input_sha256": "9b2adfd6c56630c1bdbd6da7aeb78177344299e33f1493eeb9c40ed6f7a1efed"
+          }
+        }
+      ],
+      "annotation_summary": {
+        "task": "P4-B5-CATALOG",
+        "labels": {
+          "no": 2,
+          "yes": 8,
+          "uncertain": 2
+        },
+        "model_selected_labels": {
+          "yes": 4
+        },
+        "guard_eligible_labels": {},
+        "retained_labels": {}
+      }
+    }
+  ],
+  "annotation_status": "assistant-provisional / human-review-pending; input-only labels frozen before reader disclosure",
+  "snippet_label_file_sha256": "0422cdd854e9eb69bac1e210aa31a181669f9c34321d6c3830852fa980df5d1b"
+}

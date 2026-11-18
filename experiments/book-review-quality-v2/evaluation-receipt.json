@@ -1,0 +1,35 @@
+{
+  "taskId": "BOOK_REVIEW_EVIDENCE_P3",
+  "completedAt": "2026-11-18T07:58:23+08:00",
+  "freezeCommit": "8899d3092df5fbbcbbc397cffc259c68c736a7da",
+  "ruleFrozenBeforeHoldoutDisclosure": true,
+  "rawHoldoutSha256": "97fc786e0928dd2ab19a1be6808d9c44a211c9201e36af5d4fdc523ad5e5f90f",
+  "adaptedHoldoutSha256": "6f040e79f0482f17308d4f161272be74175c613001c6ae8ed824a769bf5cac68",
+  "firstFrozenHoldoutReportSha256": "19d914f9664373edea27d6202278fb74cc4a6866bc55a075f9f2fffe7b1a4bce",
+  "finalHoldoutReportSha256": "aa1f5117b902ec7873a8a2d668750098eaa924e5f75c95290bbde7d121aa3027",
+  "candidateSourceSha256": "4e8759223b75656a7f9cf9fe26a5ec8c7f26523bf795fed1d9902c6d5abfe503",
+  "postFreezeChanges": {
+    "type": "diagnostic_field_name_only",
+    "from": "work.multipleQuotedTitles",
+    "to": "work.titleAmbiguous",
+    "reason": "The flag also covers malformed brackets and conflicting subtitle text; the original name was too narrow.",
+    "scope": [
+      "apps/api/src/ai/book-web-review-candidate.ts",
+      "apps/api/src/ai/book-web-review-candidate.test.ts"
+    ],
+    "all13FrozenFilesMatchAfterReversingNameOnly": true,
+    "all36CaseEligibilityDecisionsAndMetricsUnchanged": true,
+    "additionalMatcherTestsPassed": 39
+  },
+  "verification": {
+    "nativeFocusedTests": 433,
+    "nativeFocusedFiles": 8,
+    "apiBuild": "PASS",
+    "webBuild": "PASS",
+    "rootSuite": "NOT_RERUN; PR86 16 failures and 1 unhandled error retained"
+  },
+  "newModelCalls": 0,
+  "productionAccess": 0,
+  "merged": false,
+  "deployed": false
+}

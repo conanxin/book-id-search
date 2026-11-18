@@ -1,0 +1,84 @@
+{
+  "task_id": "BOOK_REVIEW_EVIDENCE_P4",
+  "captured_commit": "d690f86650d2a488e9ec0932e85ec393a7db70e2",
+  "started_at": "2026-11-18T01:32:59.156586+00:00",
+  "finished_at": "2026-11-18T01:34:35.865581+00:00",
+  "protocol_sha256": "d19317fea69f96e96c5a4524c9a13804db97a61b2db98585f1ea7e1fa74c2fbd",
+  "candidate_policy_sha256": "4e8759223b75656a7f9cf9fe26a5ec8c7f26523bf795fed1d9902c6d5abfe503",
+  "sampling": "three predeclared actual catalog records; fixed first application source per task",
+  "provider_requests": {
+    "search": 3,
+    "selector": 3,
+    "completed_web_search_calls": 30,
+    "automatic_retries": 0,
+    "new_passage_selection_requests": 0
+  },
+  "remote_access": {
+    "readonly_identity_container_check": 1,
+    "readonly_application_provider_configuration_read": 1,
+    "remote_writes": 0,
+    "credentials_persisted": false
+  },
+  "catalog_requests": {
+    "screening": 17,
+    "live_exact_id_lookups": 3
+  },
+  "native_verification": {
+    "focused_passed": 250,
+    "focused_files": 6,
+    "api_build": "PASS",
+    "web_build": "PASS",
+    "root_suite": "NOT_RERUN; PR86 16 failures and 1 unhandled error retained"
+  },
+  "receipts": [
+    {
+      "task": "P4-B1",
+      "receipt_sha256": "d8ba849be90a9e29510c77ab242b7af6da2c49a4b3492ee73f159e72fa03ada7",
+      "receipt_relative_path": "progress/review-evidence-p4/live/P4-B1/2026-11-18T01-33-01-529Z-qKsnsq/receipt.json",
+      "catalog_matches_frozen_fields": true,
+      "capture_commit": "d690f86650d2a488e9ec0932e85ec393a7db70e2",
+      "dirty": false,
+      "snippet_input_sha256": "8a01934edd3d1d35f3d334cdf0a9ed405017fb060c9823edfd0c6be452ed8fff",
+      "status": "INSUFFICIENT_SOURCES",
+      "read_summary": {
+        "requested_limit": 1,
+        "attempted": 1,
+        "succeeded": 1,
+        "failed": 0
+      }
+    },
+    {
+      "task": "P4-B3-CATALOG",
+      "receipt_sha256": "6f40324fd75f79f12741230bf6a1f4020a2385b7a8646a91b7044f242ed489d6",
+      "receipt_relative_path": "progress/review-evidence-p4/live/P4-B3-CATALOG/2026-11-18T01-33-20-196Z-toP7ep/receipt.json",
+      "catalog_matches_frozen_fields": true,
+      "capture_commit": "d690f86650d2a488e9ec0932e85ec393a7db70e2",
+      "dirty": false,
+      "snippet_input_sha256": "8cc6501562307aeeeb99a7dc8c58eab7cd446acfc91c9769d6f37994b09f794c",
+      "status": "INSUFFICIENT_SOURCES",
+      "read_summary": {
+        "requested_limit": 1,
+        "attempted": 1,
+        "succeeded": 0,
+        "failed": 1
+      }
+    },
+    {
+      "task": "P4-B5-CATALOG",
+      "receipt_sha256": "c627c2d56b403521f0cb10418c3f6374e568f8d1f448ea2919e825eea67e3731",
+      "receipt_relative_path": "progress/review-evidence-p4/live/P4-B5-CATALOG/2026-11-18T01-34-06-608Z-7aHdbP/receipt.json",
+      "catalog_matches_frozen_fields": true,
+      "capture_commit": "d690f86650d2a488e9ec0932e85ec393a7db70e2",
+      "dirty": false,
+      "snippet_input_sha256": "9b2adfd6c56630c1bdbd6da7aeb78177344299e33f1493eeb9c40ed6f7a1efed",
+      "status": "INSUFFICIENT_SOURCES",
+      "read_summary": {
+        "requested_limit": 1,
+        "attempted": 1,
+        "succeeded": 0,
+        "failed": 1
+      }
+    }
+  ],
+  "reader_packet_sha256": "414ff4c079c46f88d4b0fced1d40160488220cc0b2e1088dda2a13c0fbe67bee"
+}

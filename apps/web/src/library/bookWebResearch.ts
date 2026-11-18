@@ -44,7 +44,7 @@ export interface BookWebResearchResponse {
   generatedAt: string;
 }
 export interface BookWebResearchInput { question: string; scope?: "direct_book_review" }
-export const BOOK_WEB_DIRECT_REVIEW_NOTICE = "严格本书书评：仅推荐能在搜索节选中同时找到目标书身份与书评性质线索的候选；不代表已确认书评全文，未入选来源仍可查看。";
+export const BOOK_WEB_DIRECT_REVIEW_NOTICE = "严格本书书评：按作品身份与评论性质线索挑选候选；不代表已核实书评全文。具体版本需另行核对，即使出现本书 ISBN 也不等于版本已确认；未入选来源仍可查看。";
 
 export class BookWebResearchError extends Error {
   constructor(public status: number, message: string, public code?: string) {
@@ -299,7 +299,7 @@ function oneLine(value: string): string { return value.replace(/\s+/g, " ").repl
 
 /** Copy validated source excerpts, retaining available snapshots when selection is incomplete or insufficient. */
 export function bookWebResearchContent(result: BookWebResearchResponse): string {
-  assertBookWebResearchResponse(result, result.bookId, result.question);
+  assertBookWebResearchResponse(result, result.bookId, result.question, result.scope);
   if (result.source === "insufficient_sources" && result.sources.length === 0) throw new BookWebResearchError(400, "本次资料不足，请调整问题后继续查找。");
   const sources = result.source === "web_research"
     ? result.citedSourceIds.map(id => result.sources.find(source => source.id === id)!) : result.sources;
@@ -311,7 +311,8 @@ export function bookWebResearchContent(result: BookWebResearchResponse): string 
     + "\n\n" + bookWebSourceTextContextsContent(source),
   ).join("\n\n");
   const limitedNotice = result.search.limited === true ? `${BOOK_WEB_RESEARCH_LIMITED_NOTICE}\n\n` : "";
+  const scopeNotice = result.scope === "direct_book_review" ? `\n\n${BOOK_WEB_DIRECT_REVIEW_NOTICE}` : "";
   const title = result.source === "insufficient_sources" ? "本次搜索资料不足" : result.draft.title;
   const selectedNotice = bookWebResearchNeedsIsbnReview(result) ? `\n\n${BOOK_WEB_RESEARCH_SELECTED_ISBN_NOTICE}` : "";
-  return `# ${oneLine(title)}\n\n问题：${result.question}\n\n${result.draft.content}\n\n${BOOK_WEB_RESEARCH_BOOK_CLUES_NOTICE}${selectedNotice}\n\n---\n\n### 联网研究来源（搜索时摘录）\n\n生成时间：${result.generatedAt}\n\n${limitedNotice}本次搜索：\n${result.search.queries.map(query => `- ${oneLine(query)}`).join("\n")}\n\n${references}`;
+  return `# ${oneLine(title)}\n\n问题：${result.question}${scopeNotice}\n\n${result.draft.content}\n\n${BOOK_WEB_RESEARCH_BOOK_CLUES_NOTICE}${selectedNotice}\n\n---\n\n### 联网研究来源（搜索时摘录）\n\n生成时间：${result.generatedAt}\n\n${limitedNotice}本次搜索：\n${result.search.queries.map(query => `- ${oneLine(query)}`).join("\n")}\n\n${references}`;
 }

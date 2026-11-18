@@ -1,6 +1,14 @@
 # BOOK-ID-SEARCH status
 
-## Current — 2026-11-17 — Show exact title and edition wording in web sources
+## Current — 2026-11-18 — Named-work questions for explicit webpage evidence
+
+- `task_id=BOOK_REVIEW_EVIDENCE_P4`; builds on unmerged PR #87 / `7138bc7`, including PR #86. Development candidate; no merge or deployment in this phase.
+- Strict searches now carry the displayed public title/author/ISBN into editable work-identity, review-content and edition questions after explicit page reading. Presets fill the question only; existing Find/locate/copy actions retain their request and personal-content boundaries.
+- P3 API policy stays unchanged. Three real catalog trials each preserved 12 sources, selected four IDs and retained none after filtering. Fixed first-source reads: one success, one timeout, one unavailable. Keep these limitations; no quality-pass or online-recall claim.
+- Native integrated 250 tests / 6 files and API/Web builds passed. Independent provisional snippet labels: 22 yes / 5 no / 9 uncertain; all 12 model choices are yes, while the guard only admits two negative aggregators that the model did not choose. Exact final-head CI and publication state are tracked in the phase PR; prior root-suite failures remain.
+- Method, frozen task selection and evidence: [P4 report](../experiments/book-review-quality-v3/README.md).
+
+## 2026-11-17 — Show exact title and edition wording in web sources (historical development record)
 
 - `task_id=BOOK_AI_WEB_SOURCE_TEXT_EVIDENCE_V1`; continues draft PR #84 on branch `feat/book-web-source-relevance`, based on deployed PR #83 `7cf7297f5c2f29936fe3b6f6f515134c44f5b1cb`.
 - The previous classification candidate passed engineering checks but failed three real semantic reviews. Those failures remain recorded in PR #84; model relationship/material labels are removed from this revised scope.
