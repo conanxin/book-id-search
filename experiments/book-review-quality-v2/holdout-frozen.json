@@ -1,0 +1,372 @@
+{
+  "schemaVersion": 1,
+  "datasetId": "book-review-quality-p3-independent-holdout-20261118",
+  "frozenAt": "2026-11-17T23:37:40Z",
+  "collectedDateShanghai": "2026-11-18",
+  "annotation": {
+    "assessor": "assistant-independent-subagent",
+    "status": "assistant-provisional",
+    "humanReview": "pending",
+    "target": "work-level independent review of the target work; edition correspondence is separate",
+    "notRepresentative": true,
+    "notLiveSearchRecall": true
+  },
+  "method": {
+    "selection": "Ten deliberately chosen public pages for five works absent from PR86; five provisional positives and five provisional negatives. Titles and examples were not disclosed to the rule author before freezing.",
+    "inputKind": "page_excerpt",
+    "excerptPolicy": "Actual page-title metadata and short verbatim fragments, joined by / where non-contiguous. Not search-provider snippets, not complete page bodies, and not model-generated summaries.",
+    "referencePolicy": "Book identities and edition metadata checked against original review pages, a publisher product page, the publishing brand's shop, or a bookseller's bibliographic record. Edition evidence from pages is retained separately from the title and excerpt passed to a candidate classifier.",
+    "retrievalPolicy": "Every included candidate page was opened with the current web tool. Interview access was partial but public Q&A and author/book identification were visible. No login or access-control bypass.",
+    "limitations": [
+      "Small purposive sample, not a random sample of search results.",
+      "Agent labels are provisional; no independent human adjudication.",
+      "A classifier receives the selected title and excerpt only, so source-page evidence outside them is not available to it.",
+      "Original reviews can contain shop links and book metadata; these alone do not make a review a product page.",
+      "A source can be an independent review of a different work while mentioning the target book.",
+      "Kirkus examples have similar templates, so five works do not imply five independent document-layout families."
+    ]
+  },
+  "books": {
+    "river": {
+      "id": "holdout-river-town",
+      "title": "江城",
+      "author": "彼得·海斯勒",
+      "isbn": "9787532756728",
+      "publisher": "上海译文出版社",
+      "publishYear": "2012",
+      "metadataStatus": "title_author_isbn_publisher_year_verified",
+      "reference": {
+        "url": "https://item.xhsd.com/items/1010000103119024",
+        "ref": "turn979513497view6",
+        "evidenceLocation": "product heading and bibliographic fields, lines 432-434 and 487-492",
+        "note": "Bookseller record gives publication 2012-02-01; the review's associated record gives 2012-1. Treat edition compatibility cautiously."
+      }
+    },
+    "possible": {
+      "id": "holdout-art-of-the-possible",
+      "title": "可能性的艺术：比较政治学30讲",
+      "author": "刘瑜",
+      "isbn": "9787559848048",
+      "publisher": "广西师范大学出版社",
+      "publishYear": "2022",
+      "metadataStatus": "title_author_isbn_publisher_year_verified",
+      "reference": {
+        "url": "https://detail.youzan.com/show/goods?alias=2xdwgj0bi468nlq&from_source=gbox_seo",
+        "ref": "turn807262370view5",
+        "evidenceLocation": "publishing brand 理想国imaginist shop bibliographic fields, lines 47-55",
+        "corroboratingUrl": "https://www.chinawriter.com.cn/n1/2022/0624/c405072-32455464.html",
+        "corroboratingRef": "turn979513497view4"
+      }
+    },
+    "dawn": {
+      "id": "holdout-dawn-of-everything",
+      "title": "The Dawn of Everything",
+      "author": "David Graeber; David Wengrow",
+      "isbn": "9781250858801",
+      "publisher": "Picador",
+      "publishYear": "2023",
+      "metadataStatus": "title_authors_isbn_publisher_year_verified",
+      "reference": {
+        "url": "https://us.macmillan.com/books/9781250858801/thedawnofeverything/",
+        "ref": "turn645597199view2",
+        "additionalRefs": [
+          "turn645597199view1",
+          "turn979513497view2"
+        ],
+        "evidenceLocation": "title/authors lines 6-10; sale date 144-146; imprint and ISBN 154-160",
+        "note": "Reference is 2023 paperback; the positive review is of a 2021 release. Work-level review positive is intentionally separate from exact-edition correspondence."
+      }
+    },
+    "righteous": {
+      "id": "holdout-righteous-mind",
+      "title": "The Righteous Mind",
+      "author": "Jonathan Haidt",
+      "isbn": "9780307377906",
+      "publisher": "Pantheon",
+      "publishYear": "2012",
+      "metadataStatus": "title_author_isbn_publisher_year_verified",
+      "reference": {
+        "url": "https://www.kirkusreviews.com/book-reviews/jonathan-haidt/righteous-mind/",
+        "ref": "turn979513497view1",
+        "evidenceLocation": "author/date at 134; ISBN/publisher at 149-155",
+        "note": "Original review supplies the reference edition's bibliographic facts."
+      }
+    },
+    "warmth": {
+      "id": "holdout-warmth-of-other-suns",
+      "title": "The Warmth of Other Suns",
+      "author": "Isabel Wilkerson",
+      "isbn": "9780679763888",
+      "publisher": "Vintage",
+      "publishYear": "2011",
+      "metadataStatus": "title_author_isbn_publisher_year_verified",
+      "reference": {
+        "url": "https://www.penguinrandomhouse.com/books/190696/the-warmth-of-other-suns-by-isabel-wilkerson/9780679763888/",
+        "ref": "turn645597199view0",
+        "corroboratingUrl": "https://penguinrandomhousehighereducation.com/book/?isbn=9780679763888",
+        "corroboratingRef": "turn807262370search3",
+        "evidenceLocation": "title/author/ISBN in page title; paperback publication 2011-10-04 in visible format panel",
+        "note": "Reference is 2011 paperback; the positive review is of a 2010 hardcover. Publisher imprint corroborated by publisher guide/search record."
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "holdout-river-review",
+      "bookKey": "river",
+      "origin": "page_excerpt",
+      "title": "当“蓝眼睛”遇见乡土中国（江城）书评",
+      "url": "https://book.douban.com/review/5331789/",
+      "excerpt": "作者: [美] 彼得·海斯勒 / 个人鲜明特色",
+      "label": "yes",
+      "editionStatus": "bibliographically_compatible",
+      "axes": {
+        "work": "target_work_is_primary_subject",
+        "genre": "independent_review",
+        "edition": "unconfirmed_compatible_metadata"
+      },
+      "reason": "Original user review evaluates the target work's style and compares it with a later book. Associated book record agrees on author, publisher and year; ISBN is not visible on this review page.",
+      "provenance": {
+        "ref": "turn979513497view5",
+        "additionalRefs": [
+          "turn645597199view4"
+        ],
+        "access": "public_page_opened",
+        "excerptLocations": "associated author at line 70; selected evaluation phrase in line 45",
+        "titleKind": "document_title",
+        "quotedFragmentNote": "Non-contiguous short fragments; not a search result."
+      }
+    },
+    {
+      "id": "holdout-river-product",
+      "bookKey": "river",
+      "origin": "page_excerpt",
+      "title": "《江城》【正版图书 折扣 优惠 详情 书评 试读】 - 新华书店网上商城",
+      "url": "https://item.xhsd.com/items/1010000103119024",
+      "excerpt": "(美)彼得·海斯勒 / 商品编码（ISBN） 9787532756728 / 加入购物车",
+      "label": "no",
+      "editionStatus": "same_isbn",
+      "axes": {
+        "work": "target_work_is_primary_subject",
+        "genre": "bookseller_product",
+        "edition": "same_isbn"
+      },
+      "reason": "Product page has the target ISBN and a document title containing 书评, but its visible purpose is selling the book, not publishing an independent review.",
+      "provenance": {
+        "ref": "turn979513497view6",
+        "access": "public_page_opened",
+        "excerptLocations": "author and ISBN at lines 488-491; shopping action at 456",
+        "titleKind": "document_title"
+      }
+    },
+    {
+      "id": "holdout-possible-review",
+      "bookKey": "possible",
+      "origin": "page_excerpt",
+      "title": "全球性的裂痕（可能性的艺术）书评",
+      "url": "https://book.douban.com/review/17886225/",
+      "excerpt": "作者: 刘瑜 / 这本书谈的是比较政治学",
+      "label": "yes",
+      "editionStatus": "bibliographically_compatible",
+      "axes": {
+        "work": "target_work_is_primary_subject",
+        "genre": "independent_review",
+        "edition": "unconfirmed_compatible_metadata"
+      },
+      "reason": "Original user review interprets the book and explicitly disagrees with part of its argument. The associated record matches author, publisher and publication month; exact ISBN is not visible.",
+      "provenance": {
+        "ref": "turn574668119view3",
+        "additionalRefs": [
+          "turn645597199view5",
+          "turn645597199view6"
+        ],
+        "access": "public_page_opened",
+        "excerptLocations": "selected sentence fragment in line 42; author at line 55",
+        "titleKind": "document_title",
+        "publicationDateVisible": "2026-11-03"
+      }
+    },
+    {
+      "id": "holdout-possible-interview",
+      "bookKey": "possible",
+      "origin": "page_excerpt",
+      "title": "刘瑜：对这个世界，我依然抱有谨慎的乐观 | 南方周末",
+      "url": "https://www.infzm.com/contents/231762?source=131",
+      "excerpt": "《可能性的艺术——比较政治学30讲》 / 南方人物周刊记者 蒯乐昊 / 南方人物周刊： / 刘瑜：",
+      "label": "no",
+      "editionStatus": "unconfirmed",
+      "axes": {
+        "work": "target_work_mentioned",
+        "genre": "author_interview",
+        "edition": "not_established"
+      },
+      "reason": "Public introduction identifies the book, followed by interviewer questions and author answers about politics. It is an author interview rather than an independent review of the work.",
+      "provenance": {
+        "ref": "turn574668119view0",
+        "additionalRefs": [
+          "turn645597199view3"
+        ],
+        "access": "public_partial_page_opened",
+        "excerptLocations": "book reference at line 23; reporter at 15; Q&A speaker labels at 50 and 52",
+        "titleKind": "document_title",
+        "accessNote": "Login prompt follows public Q&A. No access beyond the visible portion was attempted."
+      }
+    },
+    {
+      "id": "holdout-dawn-review",
+      "bookKey": "dawn",
+      "origin": "page_excerpt",
+      "title": "THE DAWN OF EVERYTHING | Kirkus Reviews",
+      "url": "https://www.kirkusreviews.com/book-reviews/david-graeber/the-dawn-of-everything/",
+      "excerpt": "by David Graeber & David Wengrow / A fascinating, intellectually challenging big book about big ideas.",
+      "label": "yes",
+      "editionStatus": "different_release",
+      "axes": {
+        "work": "target_work_is_primary_subject",
+        "genre": "independent_review",
+        "edition": "different_release"
+      },
+      "reason": "Original critical review of the same work. Its listed edition is 2021, ISBN 9780374157357, whereas the target reference is a 2023 paperback.",
+      "provenance": {
+        "ref": "turn979513497view0",
+        "additionalRefs": [
+          "turn807262370view0",
+          "turn574668119view5"
+        ],
+        "access": "public_page_opened",
+        "excerptLocations": "byline and verdict at lines 149-151",
+        "titleKind": "document_title",
+        "editionEvidence": "2021-11-09; ISBN 9780374157357"
+      }
+    },
+    {
+      "id": "holdout-dawn-publisher",
+      "bookKey": "dawn",
+      "origin": "page_excerpt",
+      "title": "The Dawn of Everything",
+      "url": "https://us.macmillan.com/books/9781250858801/thedawnofeverything/",
+      "excerpt": "Author: David Graeber and David Wengrow / Buy This Book From: / Kirkus Reviews [starred review]",
+      "label": "no",
+      "editionStatus": "same_isbn",
+      "axes": {
+        "work": "target_work_is_primary_subject",
+        "genre": "publisher_product_with_review_blurbs",
+        "edition": "same_isbn"
+      },
+      "reason": "Publisher's product and excerpt page, with retailers and quoted endorsements. An embedded review attribution does not turn the overall page into an independent review.",
+      "provenance": {
+        "ref": "turn979513497view2",
+        "additionalRefs": [
+          "turn645597199view1",
+          "turn645597199view2"
+        ],
+        "access": "public_page_opened",
+        "excerptLocations": "author at 10; buy heading at 118; review attribution at 215",
+        "titleKind": "document_title",
+        "editionEvidence": "2023-04-04; ISBN 9781250858801"
+      }
+    },
+    {
+      "id": "holdout-righteous-review",
+      "bookKey": "righteous",
+      "origin": "page_excerpt",
+      "title": "THE RIGHTEOUS MIND | Kirkus Reviews",
+      "url": "https://www.kirkusreviews.com/book-reviews/jonathan-haidt/righteous-mind/",
+      "excerpt": "by Jonathan Haidt / A well-informed tour of contemporary moral psychology.",
+      "label": "yes",
+      "editionStatus": "same_isbn",
+      "axes": {
+        "work": "target_work_is_primary_subject",
+        "genre": "independent_review",
+        "edition": "same_isbn"
+      },
+      "reason": "Original review evaluates the target book; the page's bibliographic record exactly matches the reference ISBN.",
+      "provenance": {
+        "ref": "turn979513497view1",
+        "access": "public_page_opened",
+        "excerptLocations": "byline at 134; verdict at 142",
+        "titleKind": "document_title",
+        "editionEvidence": "2012-03-13; ISBN 9780307377906"
+      }
+    },
+    {
+      "id": "holdout-righteous-other-work",
+      "bookKey": "righteous",
+      "origin": "page_excerpt",
+      "title": "THE ANXIOUS GENERATION | Kirkus Reviews",
+      "url": "https://www.kirkusreviews.com/book-reviews/jonathan-haidt/the-anxious-generation/",
+      "excerpt": "by Jonathan Haidt / Psychologist Haidt, author of The Righteous Mind",
+      "label": "no",
+      "editionStatus": "different_work",
+      "axes": {
+        "work": "different_work_is_primary_subject",
+        "genre": "independent_review_of_another_work",
+        "edition": "not_applicable_different_work"
+      },
+      "reason": "This is an original review of The Anxious Generation. The target title appears only as a prior work in the author's identification.",
+      "provenance": {
+        "ref": "turn574668119view1",
+        "additionalRefs": [
+          "turn979513497search3"
+        ],
+        "access": "public_page_opened",
+        "excerptLocations": "byline and opening body paragraph; snippet ends at the italicized target-title boundary before 'and co-author'",
+        "titleKind": "document_title",
+        "editionEvidence": "Review subject: 2024-03-26; ISBN 9780593655030",
+        "extractionNote": "The web renderer concatenates Mindand across an inline boundary. The fragment stops at the end of the book title; no semantic text is rewritten."
+      }
+    },
+    {
+      "id": "holdout-warmth-review",
+      "bookKey": "warmth",
+      "origin": "page_excerpt",
+      "title": "THE WARMTH OF OTHER SUNS | Kirkus Reviews",
+      "url": "https://www.kirkusreviews.com/book-reviews/isabel-wilkerson-65858/the-warmth-of-other-suns/",
+      "excerpt": "by Isabel Wilkerson / An impressive take on the Great Migration, and a truly auspicious debut.",
+      "label": "yes",
+      "editionStatus": "different_release",
+      "axes": {
+        "work": "target_work_is_primary_subject",
+        "genre": "independent_review",
+        "edition": "different_release"
+      },
+      "reason": "Original review of the target work. It lists the 2010 hardcover ISBN 9780679444329; the reference book is the 2011 paperback.",
+      "provenance": {
+        "ref": "turn574668119view2",
+        "additionalRefs": [
+          "turn979513497search4"
+        ],
+        "access": "public_page_opened",
+        "excerptLocations": "byline and verdict at lines 134-136",
+        "titleKind": "document_title",
+        "editionEvidence": "2010-09-07; ISBN 9780679444329"
+      }
+    },
+    {
+      "id": "holdout-warmth-publisher",
+      "bookKey": "warmth",
+      "origin": "page_excerpt",
+      "title": "The Warmth of Other Suns by Isabel Wilkerson: 9780679763888 | PenguinRandomHouse.com: Books",
+      "url": "https://www.penguinrandomhouse.com/books/190696/the-warmth-of-other-suns-by-isabel-wilkerson/9780679763888/",
+      "excerpt": "Paperback / Published on Oct 04, 2011 / Add to Cart",
+      "label": "no",
+      "editionStatus": "same_isbn",
+      "axes": {
+        "work": "target_work_is_primary_subject",
+        "genre": "publisher_product",
+        "edition": "same_isbn"
+      },
+      "reason": "Publisher's product page with format choices, retailer links and book description; not an independent review.",
+      "provenance": {
+        "ref": "turn645597199view0",
+        "additionalRefs": [
+          "turn807262370search0"
+        ],
+        "access": "public_page_opened",
+        "excerptLocations": "paperback format panel at 178-186",
+        "titleKind": "document_title",
+        "editionEvidence": "2011-10-04; ISBN 9780679763888"
+      }
+    }
+  ]
+}

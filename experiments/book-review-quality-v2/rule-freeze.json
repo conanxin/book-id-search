@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "taskId": "BOOK_REVIEW_EVIDENCE_P3",
+  "frozenAt": "2026-11-18T07:53:06+08:00",
+  "parentCommit": "3d796eaa7464def61a088142270729bdf99e52c0",
+  "holdoutDatasetSha256Announced": "97fc786e0928dd2ab19a1be6808d9c44a211c9201e36af5d4fdc523ad5e5f90f",
+  "holdoutDetailsDisclosedToRuleAuthor": false,
+  "policyAndTestFiles": {
+    "apps/api/src/ai/book-web-review-candidate.ts": "c267717aef338073a34f760c01d56d38219fcc657c178c22ebb675a9950a2890",
+    "apps/api/src/ai/book-web-review-candidate.test.ts": "b73a2bfd3e7e0d98b47ac3463a29fd95efed94cc2fc0bedca073a96050e9b817",
+    "apps/api/src/ai/book-web-source-clues.ts": "fb2f55e494457c8211306cf4fea3a7acfda7c05348652262ed0d09108fe28aa4",
+    "apps/api/src/ai/book-web-research.ts": "5d13968eba7b4481724e425d4ad6dc4db09ebb0ca8c630bf0bad1254adcc8600",
+    "apps/api/src/ai/book-web-research.test.ts": "f5569fba9ba1434e8e0062e561802ba5443679e95141d03e1f0b75b340ac4f52",
+    "apps/web/src/library/bookWebResearch.ts": "5b1db2d904cc685bc06f1dda6b1b87b2789245bb26cc2bae2d43b30e2601b683",
+    "apps/web/src/library/bookWebResearch.test.ts": "775608b4cc6cc5a817f77493e41df253f63bc33f916ed7e2a1a1d59a361917e0",
+    "apps/web/src/library/BookWebResearch.test.tsx": "deb637f975bdabf99ee9d23a7b8606ec8d3c11c565427ff4c73ef9e2c9ccaf7e",
+    "experiments/book-review-quality-v1/baseline-guard.ts": "026b5d02d68d427eebaf9a37faa0707f249f2741d9bb4efe93accce7a706f474",
+    "experiments/book-review-quality-v1/evaluate.ts": "2f4a2f794c13563483afa090ec05701fd368712e560853caeb401e66bd9474a7",
+    "experiments/book-review-quality-v2/evaluate.ts": "8c596d08997abc8533d0cf2d8d9a78ed44694ff90249550aaf37d738439ef298",
+    "experiments/book-review-quality-v2/evaluate.test.ts": "2082e3a2966a8fa3c2e14aeead2883198d4fdb50d22283e464922489fe3ca5f2",
+    ".github/workflows/book-library.yml": "9416aab4a160ba7bea6aea623c9e1c1c63c80f8a147cc87ebd603ec7dcf64d70"
+  },
+  "diagnosticDatasetSha256": "2f0fe7d9544523f65fc68e640fed9685951c8185d9a6daa0c31fe26381ec534b",
+  "sourceAuditSha256": "8327622c31ccfda185592dc332881e2c2e10c9be9528c6ac98483be7862c3a8c",
+  "verification": {
+    "focusedTests": 433,
+    "focusedFiles": 8,
+    "apiBuild": "PASS",
+    "webBuild": "PASS",
+    "testLogSha256": "e06429fa72dd6e708bd39bd8752ce153e588bab0706a1019ac1b3a668a6f93c6"
+  },
+  "trainingAdjustments": [
+    "10 independent static-review counterexamples reproduced before correction",
+    "Original historical catalog W5 rejected after removing generic excerpt commentary words and detecting explicit stock/rating text"
+  ],
+  "scope": "Frozen rule before holdout disclosure; assistant-provisional labels; no human adjudication, live provider, merge or deployment."
+}

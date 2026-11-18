@@ -1,0 +1,415 @@
+{
+  "taskId": "BOOK_REVIEW_EVIDENCE_P3",
+  "baselineCommit": "ce420a3c010b4a6bf1b261df374baf1d1cd85ef7",
+  "annotationStatus": "ASSISTANT_PROVISIONAL_HUMAN_REVIEW_PENDING",
+  "metricTarget": "post-selection work-review candidate coverage on curated inputs; not live search or final recommendation quality",
+  "inputLimit": "Whole-page labels can be positive while the provided excerpt lacks genre cues.",
+  "newModelCalls": 0,
+  "productionAccess": 0,
+  "observed": {
+    "baseline": {
+      "total": 10,
+      "judged": 10,
+      "excluded": 0,
+      "tp": 0,
+      "fp": 1,
+      "tn": 4,
+      "fn": 5,
+      "precision": 0,
+      "recall": 0,
+      "falsePositiveRate": 0.2
+    },
+    "candidate": {
+      "total": 10,
+      "judged": 10,
+      "excluded": 0,
+      "tp": 2,
+      "fp": 0,
+      "tn": 5,
+      "fn": 3,
+      "precision": 1,
+      "recall": 0.4,
+      "falsePositiveRate": 0
+    }
+  },
+  "synthetic": {
+    "baseline": {
+      "total": 0,
+      "judged": 0,
+      "excluded": 0,
+      "tp": 0,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "precision": null,
+      "recall": null,
+      "falsePositiveRate": null
+    },
+    "candidate": {
+      "total": 0,
+      "judged": 0,
+      "excluded": 0,
+      "tp": 0,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "precision": null,
+      "recall": null,
+      "falsePositiveRate": null
+    }
+  },
+  "byOrigin": {
+    "page_excerpt": {
+      "baseline": {
+        "total": 10,
+        "judged": 10,
+        "excluded": 0,
+        "tp": 0,
+        "fp": 1,
+        "tn": 4,
+        "fn": 5,
+        "precision": 0,
+        "recall": 0,
+        "falsePositiveRate": 0.2
+      },
+      "candidate": {
+        "total": 10,
+        "judged": 10,
+        "excluded": 0,
+        "tp": 2,
+        "fp": 0,
+        "tn": 5,
+        "fn": 3,
+        "precision": 1,
+        "recall": 0.4,
+        "falsePositiveRate": 0
+      }
+    }
+  },
+  "rows": [
+    {
+      "id": "holdout-river-review",
+      "bookKey": "river",
+      "origin": "page_excerpt",
+      "label": "yes",
+      "editionStatus": "bibliographically_compatible",
+      "labelReason": "Original user review evaluates the target work's style and compares it with a later book. Associated book record agrees on author, publisher and year; ISBN is not visible on this review page.",
+      "baseline": {
+        "admitted": false,
+        "verdict": "FN"
+      },
+      "candidate": {
+        "admitted": true,
+        "verdict": "TP",
+        "evidence": {
+          "work": {
+            "titleForm": "full",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": true,
+            "nonReviewTextSeen": false
+          },
+          "edition": {
+            "isbnText": "not_seen"
+          },
+          "eligible": true
+        }
+      },
+      "sourceUrl": "https://book.douban.com/review/5331789/"
+    },
+    {
+      "id": "holdout-river-product",
+      "bookKey": "river",
+      "origin": "page_excerpt",
+      "label": "no",
+      "editionStatus": "same_isbn",
+      "labelReason": "Product page has the target ISBN and a document title containing 书评, but its visible purpose is selling the book, not publishing an independent review.",
+      "baseline": {
+        "admitted": true,
+        "verdict": "FP"
+      },
+      "candidate": {
+        "admitted": false,
+        "verdict": "TN",
+        "evidence": {
+          "work": {
+            "titleForm": "full",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": true,
+            "nonReviewTextSeen": true
+          },
+          "edition": {
+            "isbnText": "matched"
+          },
+          "eligible": false
+        }
+      },
+      "sourceUrl": "https://item.xhsd.com/items/1010000103119024"
+    },
+    {
+      "id": "holdout-possible-review",
+      "bookKey": "possible",
+      "origin": "page_excerpt",
+      "label": "yes",
+      "editionStatus": "bibliographically_compatible",
+      "labelReason": "Original user review interprets the book and explicitly disagrees with part of its argument. The associated record matches author, publisher and publication month; exact ISBN is not visible.",
+      "baseline": {
+        "admitted": false,
+        "verdict": "FN"
+      },
+      "candidate": {
+        "admitted": true,
+        "verdict": "TP",
+        "evidence": {
+          "work": {
+            "titleForm": "main_title",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": true,
+            "nonReviewTextSeen": false
+          },
+          "edition": {
+            "isbnText": "not_seen"
+          },
+          "eligible": true
+        }
+      },
+      "sourceUrl": "https://book.douban.com/review/17886225/"
+    },
+    {
+      "id": "holdout-possible-interview",
+      "bookKey": "possible",
+      "origin": "page_excerpt",
+      "label": "no",
+      "editionStatus": "unconfirmed",
+      "labelReason": "Public introduction identifies the book, followed by interviewer questions and author answers about politics. It is an author interview rather than an independent review of the work.",
+      "baseline": {
+        "admitted": false,
+        "verdict": "TN"
+      },
+      "candidate": {
+        "admitted": false,
+        "verdict": "TN",
+        "evidence": {
+          "work": {
+            "titleForm": "not_seen",
+            "titleAmbiguous": true,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": false,
+            "nonReviewTextSeen": false
+          },
+          "edition": {
+            "isbnText": "not_seen"
+          },
+          "eligible": false
+        }
+      },
+      "sourceUrl": "https://www.infzm.com/contents/231762?source=131"
+    },
+    {
+      "id": "holdout-dawn-review",
+      "bookKey": "dawn",
+      "origin": "page_excerpt",
+      "label": "yes",
+      "editionStatus": "different_release",
+      "labelReason": "Original critical review of the same work. Its listed edition is 2021, ISBN 9780374157357, whereas the target reference is a 2023 paperback.",
+      "baseline": {
+        "admitted": false,
+        "verdict": "FN"
+      },
+      "candidate": {
+        "admitted": false,
+        "verdict": "FN",
+        "evidence": {
+          "work": {
+            "titleForm": "full",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": false,
+            "nonReviewTextSeen": false
+          },
+          "edition": {
+            "isbnText": "not_seen"
+          },
+          "eligible": false
+        }
+      },
+      "sourceUrl": "https://www.kirkusreviews.com/book-reviews/david-graeber/the-dawn-of-everything/"
+    },
+    {
+      "id": "holdout-dawn-publisher",
+      "bookKey": "dawn",
+      "origin": "page_excerpt",
+      "label": "no",
+      "editionStatus": "same_isbn",
+      "labelReason": "Publisher's product and excerpt page, with retailers and quoted endorsements. An embedded review attribution does not turn the overall page into an independent review.",
+      "baseline": {
+        "admitted": false,
+        "verdict": "TN"
+      },
+      "candidate": {
+        "admitted": false,
+        "verdict": "TN",
+        "evidence": {
+          "work": {
+            "titleForm": "full",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": false,
+            "nonReviewTextSeen": false
+          },
+          "edition": {
+            "isbnText": "not_seen"
+          },
+          "eligible": false
+        }
+      },
+      "sourceUrl": "https://us.macmillan.com/books/9781250858801/thedawnofeverything/"
+    },
+    {
+      "id": "holdout-righteous-review",
+      "bookKey": "righteous",
+      "origin": "page_excerpt",
+      "label": "yes",
+      "editionStatus": "same_isbn",
+      "labelReason": "Original review evaluates the target book; the page's bibliographic record exactly matches the reference ISBN.",
+      "baseline": {
+        "admitted": false,
+        "verdict": "FN"
+      },
+      "candidate": {
+        "admitted": false,
+        "verdict": "FN",
+        "evidence": {
+          "work": {
+            "titleForm": "full",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": false,
+            "nonReviewTextSeen": false
+          },
+          "edition": {
+            "isbnText": "not_seen"
+          },
+          "eligible": false
+        }
+      },
+      "sourceUrl": "https://www.kirkusreviews.com/book-reviews/jonathan-haidt/righteous-mind/"
+    },
+    {
+      "id": "holdout-righteous-other-work",
+      "bookKey": "righteous",
+      "origin": "page_excerpt",
+      "label": "no",
+      "editionStatus": "different_work",
+      "labelReason": "This is an original review of The Anxious Generation. The target title appears only as a prior work in the author's identification.",
+      "baseline": {
+        "admitted": false,
+        "verdict": "TN"
+      },
+      "candidate": {
+        "admitted": false,
+        "verdict": "TN",
+        "evidence": {
+          "work": {
+            "titleForm": "not_seen",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": false,
+            "nonReviewTextSeen": false
+          },
+          "edition": {
+            "isbnText": "not_seen"
+          },
+          "eligible": false
+        }
+      },
+      "sourceUrl": "https://www.kirkusreviews.com/book-reviews/jonathan-haidt/the-anxious-generation/"
+    },
+    {
+      "id": "holdout-warmth-review",
+      "bookKey": "warmth",
+      "origin": "page_excerpt",
+      "label": "yes",
+      "editionStatus": "different_release",
+      "labelReason": "Original review of the target work. It lists the 2010 hardcover ISBN 9780679444329; the reference book is the 2011 paperback.",
+      "baseline": {
+        "admitted": false,
+        "verdict": "FN"
+      },
+      "candidate": {
+        "admitted": false,
+        "verdict": "FN",
+        "evidence": {
+          "work": {
+            "titleForm": "full",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": false,
+            "nonReviewTextSeen": false
+          },
+          "edition": {
+            "isbnText": "not_seen"
+          },
+          "eligible": false
+        }
+      },
+      "sourceUrl": "https://www.kirkusreviews.com/book-reviews/isabel-wilkerson-65858/the-warmth-of-other-suns/"
+    },
+    {
+      "id": "holdout-warmth-publisher",
+      "bookKey": "warmth",
+      "origin": "page_excerpt",
+      "label": "no",
+      "editionStatus": "same_isbn",
+      "labelReason": "Publisher's product page with format choices, retailer links and book description; not an independent review.",
+      "baseline": {
+        "admitted": false,
+        "verdict": "TN"
+      },
+      "candidate": {
+        "admitted": false,
+        "verdict": "TN",
+        "evidence": {
+          "work": {
+            "titleForm": "full",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": false,
+            "nonReviewTextSeen": true
+          },
+          "edition": {
+            "isbnText": "matched"
+          },
+          "eligible": false
+        }
+      },
+      "sourceUrl": "https://www.penguinrandomhouse.com/books/190696/the-warmth-of-other-suns-by-isabel-wilkerson/9780679763888/"
+    }
+  ],
+  "datasetSha256": "6f040e79f0482f17308d4f161272be74175c613001c6ae8ed824a769bf5cac68",
+  "candidateSourceSha256": "4e8759223b75656a7f9cf9fe26a5ec8c7f26523bf795fed1d9902c6d5abfe503",
+  "baselineSourceSha256": "026b5d02d68d427eebaf9a37faa0707f249f2741d9bb4efe93accce7a706f474",
+  "clueSourceSha256": "fb2f55e494457c8211306cf4fea3a7acfda7c05348652262ed0d09108fe28aa4"
+}

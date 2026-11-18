@@ -1,0 +1,530 @@
+{
+  "schemaVersion": 1,
+  "taskId": "BOOK_REVIEW_QUALITY_P2",
+  "baselineCommit": "ce420a3c010b4a6bf1b261df374baf1d1cd85ef7",
+  "annotationStatus": "ASSISTANT_PROVISIONAL_HUMAN_REVIEW_PENDING",
+  "metricTarget": "work-level independent review candidate, NOT exact-edition verification or live retrieval quality",
+  "sampling": "purposive diagnostic cases; no held-out generalization claim",
+  "books": {
+    "liang": {
+      "title": "梁思成",
+      "author": "林洙著；杨永生主编",
+      "isbn": "9787112124534",
+      "year": 2012,
+      "identitySource": "prior-public-catalog-snapshot",
+      "identityMode": "app_catalog_capture"
+    },
+    "zsn": {
+      "title": "置身事内",
+      "author": "兰小欢",
+      "isbn": "9787208171336",
+      "year": 2021,
+      "identitySource": "https://ci.nii.ac.jp/ncid/BC15914198",
+      "identityMode": "curated_short_work_title; not app catalog record"
+    },
+    "jiaohun": {
+      "title": "叫魂",
+      "author": "孔飞力",
+      "isbn": "",
+      "year": 1999,
+      "identitySource": "https://www.thepaper.cn/newsDetail_forward_5897144",
+      "identityMode": "curated_short_work_title; ISBN unavailable; not app catalog record"
+    },
+    "soul": {
+      "title": "The Soul of A New Machine",
+      "author": "Tracy Kidder",
+      "isbn": "9780316491976",
+      "year": 2000,
+      "identitySource": "https://www.hachettebookgroup.com/titles/tracy-kidder/the-soul-of-a-new-machine/9780316491976/",
+      "identityMode": "publisher metadata; not app catalog record"
+    },
+    "seeing": {
+      "title": "Seeing Like a State",
+      "author": "James C. Scott",
+      "isbn": "9780300078152",
+      "year": 1999,
+      "identitySource": "https://yalebooks.yale.edu/book/9780300078152/seeing-like-a-state/",
+      "identityMode": "publisher metadata; not app catalog record"
+    }
+  },
+  "cases": [
+    {
+      "id": "captured-liang-W3",
+      "bookKey": "liang",
+      "bookOverride": null,
+      "origin": "historical_search",
+      "source": {
+        "title": "《大拙至美》梁思成",
+        "excerpt": "《大拙至美》梁思成 今日头条。本书由梁思成遗孀林洙整理的梁思成部分随笔、讲座和谈话,没有太过深入的专业知识,但足以给予部分非专业读者一些了作“谈资”的理念和概念。 我首先是被书名吸引的,“大拙至美”是一种颇具中国哲学意味的审美境界。但是读完之后细细回味,貌似用它形容中国古典建筑并不十分妥当,中国古典建筑单从造型看精美绝伦、气势恢宏,美在其表,由内而发,至美之极,大致不是“大拙”之象。如果用其表达中国古典建筑的“含蓄”之美,尚且贴点边。无论如何,并不影响书中梁先生内容层面的价值。 我一直没深究自己为什么对这类书开始感兴趣,直到看到这句话: “读懂了古建筑,也就读懂了一个民族在历史的长河中,一路披荆斩棘,追求真善美的生命历程”。 随着年龄和见识的增长,对自己国家和民族的历史文化的方方面面越发自信。 梁思成作为中国建筑教育的奠基人,更是对中国建筑学科的起源和发展,具有划时代的意义。 作为一名文化有限的非专业人士,透过此书,我想梁先生至少有两点遗憾: 其一,虽经百般努力,老北京还有城墙还是拆了; 其二,建筑学全面西化,对中国传统建筑关注缺位,信心不足; 到底有多遗憾呢?我想越专业越遗憾吧! 以梁思成当时在建筑领域的造诣,说领先当时50年并不过分,这份遗憾恐怕当时没人能理解。 不仅是遗憾,也是孤独。 现在的建筑大都追求造型上的奇特,本质上并无差别,无论中外建筑师在这点上都非常的一致。 梁思成曾说: 建筑师的知识要广博,要有哲学家的头脑,社会学家的眼光,工程师的精准与实践、心理学家的敏感、文学家的洞察力……但最本质的他应该是一个有文化修养的综合艺术家。 1944年,梁思成先生总结多年来调查古建筑的成果,完成了《中国建筑史》的写作。时至今日,关于中国古建筑的书籍种类繁多。但若要领悟中国古建筑的精髓,不在这些书里,而是在中国哲学的书里,在社会学研究的书里,在文人骚客的诗词歌赋里... 不知...",
+        "url": "https://www.toutiao.com/article/7188417387346248207/"
+      },
+      "label": "no",
+      "editionStatus": "unresolved",
+      "labelReason": "Visible discussion concerns 大拙至美, not the selected 2012 梁思成.",
+      "assessor": "assistant",
+      "humanReview": "pending",
+      "observedOn": "2026-11-17",
+      "inputConstruction": "unmodified prior provider snapshot",
+      "captureSha256": "737b81d1cd7fd4e171d9b97aa0620d56c3e7ae5f46af0e31c5c6a2e231846945",
+      "captureSourceId": "W3"
+    },
+    {
+      "id": "captured-liang-W4",
+      "bookKey": "liang",
+      "bookOverride": null,
+      "origin": "historical_search",
+      "source": {
+        "title": "“笔耕不辍”的真相----林洙书籍出版汇总",
+        "excerpt": "“笔耕不辍”的真相----林洙书籍出版汇总 百度贴吧。) 14楼2018-11-28 17:53 贴吧用户_QS962Jb 富有名气 8 数据统计: 一份书稿,大陆共使用7家出版社,出了9版,用繁体字,在港台至少出了2版: 1991年,作家出版社, 《大匠的困惑》 1996年,天津科技出版社,《建筑师 梁思成》 2001年,山东画报出版社,《困惑的大匠 梁思成》 2002年,河北教育出版社,《梁思成》 2004年,清华出版社, 《梁思成林徽因和我》 2004年,繁体本,《梁思成林徽因和我》 2011年,中国青年出版社,《梁思成林徽因和我》 2011年,香港三联,繁体本,《梁思成林徽因和我》 2011年,河北教育出版社,《梁思成》再版 2012年,建筑工业出版社,《梁思成》 2013年,中国青年出版社,《梁思成林徽因和我》再版 林洙关于梁思成的回忆录,一份书稿,共出版了11个版本,这还不算《建筑四杰》和《建筑五宗师》里的梁思成部分。 这样的情况,是林洙笔耕不辍?还是她比较会折腾? 15楼2018-11-28 17:54 贴吧用户_QS962Jb 富有名气 8 另外2本书 《建筑四杰》,副标题: 刘敦桢·童寯·梁思成·杨廷宝 1998年,建筑工业出版社 全书98页,平均每人25页都不到,还有些图。字数不多,是辛亥革命以后第一代建筑大师们的简单小传。 其他人都由孩子编写,比如刘敦桢的妻子在世,但刘敦桢的部分由儿子刘叙杰撰写,童雋由他孙子写。 而梁思成部分由林洙撰写,虽然梁思成如今所有被人记住的功绩和成果,都是在林徽因的陪伴和支持下完成的,但由林洙撰写的梁思成生平,不仅故意淡化林徽因的存在,而且,明明是林徽因的付出,也被刻意抹煞消解了,选配图片中的林徽因,没有丝毫风采,或生病,或背影,或小得完全看不出谁是谁。 2005年,百花文艺出版社加了个人,再版了一次,书名改为:《建筑五宗师》...",
+        "url": "https://static.tieba.baidu.com/p/5955793438?"
+      },
+      "label": "no",
+      "editionStatus": "unresolved",
+      "labelReason": "Multi-work publication roundup. It mentions the target edition, but is not a focused review of that work; alleged edition equivalences are not adopted.",
+      "assessor": "assistant",
+      "humanReview": "pending",
+      "observedOn": "2026-11-17",
+      "inputConstruction": "unmodified prior provider snapshot",
+      "captureSha256": "737b81d1cd7fd4e171d9b97aa0620d56c3e7ae5f46af0e31c5c6a2e231846945",
+      "captureSourceId": "W4"
+    },
+    {
+      "id": "captured-liang-W5",
+      "bookKey": "liang",
+      "bookOverride": null,
+      "origin": "historical_search",
+      "source": {
+        "title": "梁思成",
+        "excerpt": "梁思成 国家出版发行信息公共服务平台。梁思成 书名: 梁思成 著者: 林洙 编者: 译者: 出版社: 中国建筑工业出版社 责任编辑: 出版时间: 2012年05月 ISBN: 9787112124534 读者范围: 广大社会读者,建筑院校师生,历史研究者 中图分类: TU 电子书格式: 目录 1.内容提要 2.本书目录 3.作者简介 4.关键词 内容提要 自改革开放以来,中国建筑学界就一直十分关注国外著名建筑师的设计作品、设计思想及其相关建筑理论,也有许许多多的相关图书出版。近年来,本土的一些先锋建筑师也渐渐被国内外媒体所关注。而开创中国建筑学界之先河的第一、二代建筑师们却渐渐被人们所淡忘了。为了铭记这些先辈们为中国建筑所作的贡献,了解和学习他们的建筑思想和人文精神,抓住当前稍纵即逝的时机,我社拟出版一套“建筑名师丛书”。 “建筑名师丛书”旨在为广大社会读者提供一套了解第一、二代建筑师的传记读物。每册书记录一位建筑师的一生,从人文与建筑两条线撰写,以纪实的手法对建筑师的生活经历、建筑作品、建筑成就以及著作作出客观评述。这套丛书力求严格遵循史料记载,尊重史实,实事求是,通过建筑作品及著作,结合建筑师经历的历史事件,突出建筑师的个人特色。 本书目录 作者简介 关键词 本书标签 建筑师 建筑 中国建筑 丛书 名师 学界 作品 一套 本书口碑 综合口碑 京东 当当 豆瓣 好评率 100.00% 1 人评价 5星 100% 4星 0% 3星 0% 2星 0% 1星 0% 好评 差评 2020-04-18 19:13:00 书角有破损 查看更多 库存信息 线下库存 线上库存 本地暂无库存信息...",
+        "url": "https://book.cppinfo.cn/Encyclopedias/home/index?id=3039360"
+      },
+      "label": "no",
+      "editionStatus": "unresolved",
+      "labelReason": "Bibliographic/product entry with synopsis and buying feedback, not an independent review.",
+      "assessor": "assistant",
+      "humanReview": "pending",
+      "observedOn": "2026-11-17",
+      "inputConstruction": "unmodified prior provider snapshot",
+      "captureSha256": "737b81d1cd7fd4e171d9b97aa0620d56c3e7ae5f46af0e31c5c6a2e231846945",
+      "captureSourceId": "W5"
+    },
+    {
+      "id": "zsn-yan-review",
+      "bookKey": "zsn",
+      "bookOverride": null,
+      "origin": "page_excerpt",
+      "source": {
+        "title": "《置身事内：中国政府与经济发展》书评",
+        "excerpt": "兰小欢 著，上海人民出版社，2021年8月出版。",
+        "url": "https://yanlinlin.cn/2022/08/26/inside-chinese-government-and-economic-development-book-review/"
+      },
+      "label": "yes",
+      "editionStatus": "bibliographically_compatible",
+      "labelReason": "Original author explicitly evaluates this book; title includes subtitle while reference title is short. Edition details are compatible, exact ISBN not established.",
+      "assessor": "assistant",
+      "humanReview": "pending",
+      "observedOn": "2026-11-17",
+      "inputConstruction": "exact visible page title plus short selected verbatim text, NOT a search-provider response"
+    },
+    {
+      "id": "zsn-cui-review",
+      "bookKey": "zsn",
+      "bookOverride": null,
+      "origin": "page_excerpt",
+      "source": {
+        "title": "委员之我见 | 崔媛媛：用通俗易懂的语言，帮助理解政府施政思路",
+        "excerpt": "《置身事内：中国政府与经济发展》 兰小欢 著 上海人民出版社",
+        "url": "https://www.thepaper.cn/newsDetail_forward_25432542"
+      },
+      "label": "yes",
+      "editionStatus": "unresolved",
+      "labelReason": "First-person review discusses structure and reading gains; not an author interview. Headline lacks review keyword.",
+      "assessor": "assistant",
+      "humanReview": "pending",
+      "observedOn": "2026-11-17",
+      "inputConstruction": "exact visible page title plus short selected verbatim text, NOT a search-provider response"
+    },
+    {
+      "id": "zsn-author-interview",
+      "bookKey": "zsn",
+      "bookOverride": null,
+      "origin": "page_excerpt",
+      "source": {
+        "title": "兰小欢谈地方政府与经济发展",
+        "excerpt": "《上海书评》请兰小欢谈谈他对中国经济模式的理解。",
+        "url": "https://www.thepaper.cn/newsDetail_forward_16097384"
+      },
+      "label": "no",
+      "editionStatus": "unresolved",
+      "labelReason": "Question-and-answer author interview. 上海书评 is a section name, not proof that the article is a review.",
+      "assessor": "assistant",
+      "humanReview": "pending",
+      "observedOn": "2026-11-17",
+      "inputConstruction": "exact visible page title plus short selected verbatim text, NOT a search-provider response"
+    },
+    {
+      "id": "zsn-library-entry",
+      "bookKey": "zsn",
+      "bookOverride": null,
+      "origin": "page_excerpt",
+      "source": {
+        "title": "置身事内 : 中国政府与经济发展",
+        "excerpt": "兰小欢著\n上海人民出版社, 2021.8\n9787208171336",
+        "url": "https://ci.nii.ac.jp/ncid/BC15914198"
+      },
+      "label": "no",
+      "editionStatus": "isbn_supported",
+      "labelReason": "Library bibliographic entry; matching ISBN does not make it a review.",
+      "assessor": "assistant",
+      "humanReview": "pending",
+      "observedOn": "2026-11-17",
+      "inputConstruction": "exact visible page title plus short selected verbatim text, NOT a search-provider response"
+    },
+    {
+      "id": "zsn-quote-notebook",
+      "bookKey": "zsn",
+      "bookOverride": null,
+      "origin": "page_excerpt",
+      "source": {
+        "title": "书评：《置身事内》",
+        "excerpt": "介绍国内政府、经济最好的一本书。\n原文摘录",
+        "url": "https://rucer.cn/2023-07/%E4%B9%A6%E8%AF%84-%E7%BD%AE%E8%BA%AB%E4%BA%8B%E5%86%85/"
+      },
+      "label": "uncertain",
+      "editionStatus": "unresolved",
+      "labelReason": "Mostly extracts with a short evaluation; independent substantive review versus reading notebook requires agreed annotation policy.",
+      "assessor": "assistant",
+      "humanReview": "pending",
+      "observedOn": "2026-11-17",
+      "inputConstruction": "exact visible page title plus short selected verbatim text, NOT a search-provider response"
+    },
+    {
+      "id": "jiaohun-reading-essay",
+      "bookKey": "jiaohun",
+      "bookOverride": null,
+      "origin": "page_excerpt",
+      "source": {
+        "title": "《叫魂》——他们都在怕什么",
+        "excerpt": "孔飞力（Philip Alden Kuhn）著，陈兼译，上海三联书店1999年出版。",
+        "url": "https://www.thepaper.cn/newsDetail_forward_5897144"
+      },
+      "label": "yes",
+      "editionStatus": "bibliographically_compatible",
+      "labelReason": "Signed analytical reading essay about this work. No explicit 书评 keyword in headline. Exact ISBN was not supplied.",
+      "assessor": "assistant",
+      "humanReview": "pending",
+      "observedOn": "2026-11-17",
+      "inputConstruction": "exact visible page title plus short selected verbatim text, NOT a search-provider response"
+    },
+    {
+      "id": "jiaohun-author-interview",
+      "bookKey": "jiaohun",
+      "bookOverride": null,
+      "origin": "page_excerpt",
+      "source": {
+        "title": "一段孔飞力生前专访：因中美对立隔绝，几乎放弃中国研究日本",
+        "excerpt": "孔飞力正在接受采访。",
+        "url": "https://www.thepaper.cn/newsdetail_forward_1436669"
+      },
+      "label": "no",
+      "editionStatus": "unresolved",
+      "labelReason": "Explicit author interview covering multiple works, not a focused review.",
+      "assessor": "assistant",
+      "humanReview": "pending",
+      "observedOn": "2026-11-17",
+      "inputConstruction": "exact visible page title plus short selected verbatim text, NOT a search-provider response"
+    },
+    {
+      "id": "jiaohun-other-book",
+      "bookKey": "jiaohun",
+      "bookOverride": null,
+      "origin": "page_excerpt",
+      "source": {
+        "title": "邹贺评《如临大敌》｜听与信之间：谣言呈现的宋代历史",
+        "excerpt": "《如临大敌：谣言恐慌与大宋王朝1054》，黄博著，中华书局，2025年6月出版",
+        "url": "https://www.thepaper.cn/newsDetail_forward_31751175"
+      },
+      "label": "no",
+      "editionStatus": "unresolved",
+      "labelReason": "A genuine review of another book. Discussing 叫魂 for comparison does not change the principal reviewed work.",
+      "assessor": "assistant",
+      "humanReview": "pending",
+      "observedOn": "2026-11-17",
+      "inputConstruction": "exact visible page title plus short selected verbatim text, NOT a search-provider response"
+    },
+    {
+      "id": "jiaohun-translator-memoir",
+      "bookKey": "jiaohun",
+      "bookOverride": null,
+      "origin": "page_excerpt",
+      "source": {
+        "title": "陈兼︱追忆孔飞力②：翻译《叫魂》《中国现代国家的起源》",
+        "excerpt": "全文分三部分刊出。",
+        "url": "https://www.thepaper.cn/newsDetail_forward_1988949"
+      },
+      "label": "uncertain",
+      "editionStatus": "unresolved",
+      "labelReason": "Translator memoir includes substantive evaluation and publication history. Genre policy unresolved; excluded from precision/recall.",
+      "assessor": "assistant",
+      "humanReview": "pending",
+      "observedOn": "2026-11-17",
+      "inputConstruction": "exact visible page title plus short selected verbatim text, NOT a search-provider response"
+    },
+    {
+      "id": "soul-kirkus-review",
+      "bookKey": "soul",
+      "bookOverride": null,
+      "origin": "page_excerpt",
+      "source": {
+        "title": "THE SOUL OF A NEW MACHINE",
+        "excerpt": "by Tracy Kidder ‧ RELEASE DATE: Aug. 26, 1981",
+        "url": "https://www.kirkusreviews.com/book-reviews/a/tracy-kidder-2/the-soul-of-a-new-machine/"
+      },
+      "label": "yes",
+      "editionStatus": "different_release",
+      "labelReason": "Original Kirkus review evaluates Kidder’s narrative. Work-level positive; 1981 reviewed release is not the target 2000 paperback.",
+      "assessor": "assistant",
+      "humanReview": "pending",
+      "observedOn": "2026-11-17",
+      "inputConstruction": "exact visible page title plus short selected verbatim text, NOT a search-provider response"
+    },
+    {
+      "id": "soul-publisher",
+      "bookKey": "soul",
+      "bookOverride": null,
+      "origin": "page_excerpt",
+      "source": {
+        "title": "The Soul of A New Machine",
+        "excerpt": "By Tracy Kidder\nISBN-13\n9780316491976",
+        "url": "https://www.hachettebookgroup.com/titles/tracy-kidder/the-soul-of-a-new-machine/9780316491976/"
+      },
+      "label": "no",
+      "editionStatus": "isbn_supported",
+      "labelReason": "Publisher sales/description page, even though it reproduces blurbs from reviews.",
+      "assessor": "assistant",
+      "humanReview": "pending",
+      "observedOn": "2026-11-17",
+      "inputConstruction": "exact visible page title plus short selected verbatim text, NOT a search-provider response"
+    },
+    {
+      "id": "seeing-gia-review",
+      "bookKey": "seeing",
+      "bookOverride": null,
+      "origin": "page_excerpt",
+      "source": {
+        "title": "Seeing Like a State",
+        "excerpt": "James C. Scott\nReview by John Kreidler, San Francisco Foundation",
+        "url": "https://www.giarts.org/article/seeing-state"
+      },
+      "label": "yes",
+      "editionStatus": "different_release",
+      "labelReason": "Signed original review with analysis and criticism. Page cites 1998 publication; exact 1999 paperback identity is not established.",
+      "assessor": "assistant",
+      "humanReview": "pending",
+      "observedOn": "2026-11-17",
+      "inputConstruction": "exact visible page title plus short selected verbatim text, NOT a search-provider response"
+    },
+    {
+      "id": "seeing-publisher",
+      "bookKey": "seeing",
+      "bookOverride": null,
+      "origin": "page_excerpt",
+      "source": {
+        "title": "Seeing Like a State",
+        "excerpt": "by James C. Scott\n9780300078152",
+        "url": "https://yalebooks.yale.edu/book/9780300078152/seeing-like-a-state/"
+      },
+      "label": "no",
+      "editionStatus": "isbn_supported",
+      "labelReason": "Publisher bibliographic/marketing page, not the original reviews quoted by it.",
+      "assessor": "assistant",
+      "humanReview": "pending",
+      "observedOn": "2026-11-17",
+      "inputConstruction": "exact visible page title plus short selected verbatim text, NOT a search-provider response"
+    },
+    {
+      "id": "synthetic-short-title-positive",
+      "bookKey": "zsn",
+      "bookOverride": null,
+      "origin": "synthetic",
+      "source": {
+        "title": "读《置身事内》：书评",
+        "excerpt": "兰小欢的这部作品值得讨论。",
+        "url": "https://example.test/short-title-positive"
+      },
+      "label": "yes",
+      "editionStatus": "unresolved",
+      "labelReason": "clean short title and bare author control",
+      "assessor": "assistant",
+      "humanReview": "pending",
+      "observedOn": "2026-11-17",
+      "inputConstruction": "constructed diagnostic control"
+    },
+    {
+      "id": "synthetic-catalog-false-positive",
+      "bookKey": "zsn",
+      "bookOverride": null,
+      "origin": "synthetic",
+      "source": {
+        "title": "《置身事内》书评目录与购买信息",
+        "excerpt": "兰小欢 ISBN:9787208171336。仅有购买入口，不提供评论正文。",
+        "url": "https://example.test/catalog-false-positive"
+      },
+      "label": "no",
+      "editionStatus": "unresolved",
+      "labelReason": "review keyword and ISBN do not prove independent review",
+      "assessor": "assistant",
+      "humanReview": "pending",
+      "observedOn": "2026-11-17",
+      "inputConstruction": "constructed diagnostic control"
+    },
+    {
+      "id": "synthetic-other-work-mixed-isbn",
+      "bookKey": "liang",
+      "bookOverride": null,
+      "origin": "synthetic",
+      "source": {
+        "title": "《大拙至美》书评",
+        "excerpt": "本文评论《大拙至美》。推荐清单还列 ISBN:9787112124534 与 ISBN:9787208171336。",
+        "url": "https://example.test/other-work-mixed-isbn"
+      },
+      "label": "no",
+      "editionStatus": "unresolved",
+      "labelReason": "mixed target ISBN is incidental, not identity of reviewed work",
+      "assessor": "assistant",
+      "humanReview": "pending",
+      "observedOn": "2026-11-17",
+      "inputConstruction": "constructed diagnostic control"
+    },
+    {
+      "id": "synthetic-author-role-suffix",
+      "bookKey": "zsn",
+      "bookOverride": {
+        "author": "兰小欢著"
+      },
+      "origin": "synthetic",
+      "source": {
+        "title": "读《置身事内》：书评",
+        "excerpt": "兰小欢的这部作品值得讨论。",
+        "url": "https://example.test/author-role-suffix"
+      },
+      "label": "yes",
+      "editionStatus": "unresolved",
+      "labelReason": "adding catalog responsibility suffix should not erase author identity",
+      "assessor": "assistant",
+      "humanReview": "pending",
+      "observedOn": "2026-11-17",
+      "inputConstruction": "constructed diagnostic control"
+    },
+    {
+      "id": "synthetic-author-multiple-roles",
+      "bookKey": "liang",
+      "bookOverride": null,
+      "origin": "synthetic",
+      "source": {
+        "title": "读《梁思成》：书评",
+        "excerpt": "这篇文章评论林洙的《梁思成》。",
+        "url": "https://example.test/author-multiple-roles"
+      },
+      "label": "yes",
+      "editionStatus": "unresolved",
+      "labelReason": "catalog author/editor roles versus visible author name",
+      "assessor": "assistant",
+      "humanReview": "pending",
+      "observedOn": "2026-11-17",
+      "inputConstruction": "constructed diagnostic control"
+    },
+    {
+      "id": "synthetic-subtitle-short-target",
+      "bookKey": "zsn",
+      "bookOverride": null,
+      "origin": "synthetic",
+      "source": {
+        "title": "《置身事内：中国政府与经济发展》书评",
+        "excerpt": "兰小欢的这部作品值得讨论。",
+        "url": "https://example.test/subtitle-short-target"
+      },
+      "label": "yes",
+      "editionStatus": "unresolved",
+      "labelReason": "subtitle boundary prevents exact quoted title match",
+      "assessor": "assistant",
+      "humanReview": "pending",
+      "observedOn": "2026-11-17",
+      "inputConstruction": "constructed diagnostic control"
+    },
+    {
+      "id": "synthetic-subtitle-full-target",
+      "bookKey": "zsn",
+      "bookOverride": {
+        "title": "置身事内：中国政府与经济发展"
+      },
+      "origin": "synthetic",
+      "source": {
+        "title": "《置身事内：中国政府与经济发展》书评",
+        "excerpt": "兰小欢的这部作品值得讨论。",
+        "url": "https://example.test/subtitle-full-target"
+      },
+      "label": "yes",
+      "editionStatus": "unresolved",
+      "labelReason": "same source accepted when catalog title includes subtitle",
+      "assessor": "assistant",
+      "humanReview": "pending",
+      "observedOn": "2026-11-17",
+      "inputConstruction": "constructed diagnostic control"
+    },
+    {
+      "id": "synthetic-english-review",
+      "bookKey": "soul",
+      "bookOverride": null,
+      "origin": "synthetic",
+      "source": {
+        "title": "The Soul of a New Machine: Book Review",
+        "excerpt": "Tracy Kidder. ISBN:9780316491976. This is a constructed independent book review.",
+        "url": "https://example.test/english-review"
+      },
+      "label": "yes",
+      "editionStatus": "unresolved",
+      "labelReason": "English review cue absent from Chinese regex",
+      "assessor": "assistant",
+      "humanReview": "pending",
+      "observedOn": "2026-11-17",
+      "inputConstruction": "constructed diagnostic control"
+    },
+    {
+      "id": "synthetic-traditional-review",
+      "bookKey": "jiaohun",
+      "bookOverride": null,
+      "origin": "synthetic",
+      "source": {
+        "title": "讀《叫魂》書評",
+        "excerpt": "这篇评论讨论孔飞力的著作。",
+        "url": "https://example.test/traditional-review"
+      },
+      "label": "yes",
+      "editionStatus": "unresolved",
+      "labelReason": "traditional Chinese review cue absent",
+      "assessor": "assistant",
+      "humanReview": "pending",
+      "observedOn": "2026-11-17",
+      "inputConstruction": "constructed diagnostic control"
+    },
+    {
+      "id": "synthetic-interview-review-word",
+      "bookKey": "zsn",
+      "bookOverride": null,
+      "origin": "synthetic",
+      "source": {
+        "title": "访谈：关于《置身事内》的书评与写作",
+        "excerpt": "兰小欢回答采访者的问题；这不是第三方书评。",
+        "url": "https://example.test/interview-review-word"
+      },
+      "label": "no",
+      "editionStatus": "unresolved",
+      "labelReason": "substring 书评 in interview heading can pass gate",
+      "assessor": "assistant",
+      "humanReview": "pending",
+      "observedOn": "2026-11-17",
+      "inputConstruction": "constructed diagnostic control"
+    }
+  ]
+}

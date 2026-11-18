@@ -1,0 +1,979 @@
+{
+  "taskId": "BOOK_REVIEW_EVIDENCE_P3",
+  "baselineCommit": "ce420a3c010b4a6bf1b261df374baf1d1cd85ef7",
+  "annotationStatus": "ASSISTANT_PROVISIONAL_HUMAN_REVIEW_PENDING",
+  "metricTarget": "post-selection work-review candidate coverage on curated inputs; not live search or final recommendation quality",
+  "inputLimit": "Whole-page labels can be positive while the provided excerpt lacks genre cues.",
+  "newModelCalls": 0,
+  "productionAccess": 0,
+  "observed": {
+    "baseline": {
+      "total": 16,
+      "judged": 14,
+      "excluded": 2,
+      "tp": 0,
+      "fp": 0,
+      "tn": 9,
+      "fn": 5,
+      "precision": null,
+      "recall": 0,
+      "falsePositiveRate": 0
+    },
+    "candidate": {
+      "total": 16,
+      "judged": 14,
+      "excluded": 2,
+      "tp": 2,
+      "fp": 0,
+      "tn": 9,
+      "fn": 3,
+      "precision": 1,
+      "recall": 0.4,
+      "falsePositiveRate": 0
+    }
+  },
+  "synthetic": {
+    "baseline": {
+      "total": 10,
+      "judged": 10,
+      "excluded": 0,
+      "tp": 2,
+      "fp": 3,
+      "tn": 0,
+      "fn": 5,
+      "precision": 0.4,
+      "recall": 0.2857142857142857,
+      "falsePositiveRate": 1
+    },
+    "candidate": {
+      "total": 10,
+      "judged": 10,
+      "excluded": 0,
+      "tp": 7,
+      "fp": 0,
+      "tn": 3,
+      "fn": 0,
+      "precision": 1,
+      "recall": 1,
+      "falsePositiveRate": 0
+    }
+  },
+  "byOrigin": {
+    "historical_search": {
+      "baseline": {
+        "total": 3,
+        "judged": 3,
+        "excluded": 0,
+        "tp": 0,
+        "fp": 0,
+        "tn": 3,
+        "fn": 0,
+        "precision": null,
+        "recall": null,
+        "falsePositiveRate": 0
+      },
+      "candidate": {
+        "total": 3,
+        "judged": 3,
+        "excluded": 0,
+        "tp": 0,
+        "fp": 0,
+        "tn": 3,
+        "fn": 0,
+        "precision": null,
+        "recall": null,
+        "falsePositiveRate": 0
+      }
+    },
+    "page_excerpt": {
+      "baseline": {
+        "total": 13,
+        "judged": 11,
+        "excluded": 2,
+        "tp": 0,
+        "fp": 0,
+        "tn": 6,
+        "fn": 5,
+        "precision": null,
+        "recall": 0,
+        "falsePositiveRate": 0
+      },
+      "candidate": {
+        "total": 13,
+        "judged": 11,
+        "excluded": 2,
+        "tp": 2,
+        "fp": 0,
+        "tn": 6,
+        "fn": 3,
+        "precision": 1,
+        "recall": 0.4,
+        "falsePositiveRate": 0
+      }
+    },
+    "synthetic": {
+      "baseline": {
+        "total": 10,
+        "judged": 10,
+        "excluded": 0,
+        "tp": 2,
+        "fp": 3,
+        "tn": 0,
+        "fn": 5,
+        "precision": 0.4,
+        "recall": 0.2857142857142857,
+        "falsePositiveRate": 1
+      },
+      "candidate": {
+        "total": 10,
+        "judged": 10,
+        "excluded": 0,
+        "tp": 7,
+        "fp": 0,
+        "tn": 3,
+        "fn": 0,
+        "precision": 1,
+        "recall": 1,
+        "falsePositiveRate": 0
+      }
+    }
+  },
+  "rows": [
+    {
+      "id": "captured-liang-W3",
+      "bookKey": "liang",
+      "origin": "historical_search",
+      "label": "no",
+      "editionStatus": "unresolved",
+      "labelReason": "Visible discussion concerns 大拙至美, not the selected 2012 梁思成.",
+      "baseline": {
+        "admitted": false,
+        "verdict": "TN"
+      },
+      "candidate": {
+        "admitted": false,
+        "verdict": "TN",
+        "evidence": {
+          "work": {
+            "titleForm": "not_seen",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": false,
+            "nonReviewTextSeen": false
+          },
+          "edition": {
+            "isbnText": "not_seen"
+          },
+          "eligible": false
+        }
+      },
+      "sourceUrl": "https://www.toutiao.com/article/7188417387346248207/"
+    },
+    {
+      "id": "captured-liang-W4",
+      "bookKey": "liang",
+      "origin": "historical_search",
+      "label": "no",
+      "editionStatus": "unresolved",
+      "labelReason": "Multi-work publication roundup. It mentions the target edition, but is not a focused review of that work; alleged edition equivalences are not adopted.",
+      "baseline": {
+        "admitted": false,
+        "verdict": "TN"
+      },
+      "candidate": {
+        "admitted": false,
+        "verdict": "TN",
+        "evidence": {
+          "work": {
+            "titleForm": "not_seen",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": false,
+            "nonReviewTextSeen": true
+          },
+          "edition": {
+            "isbnText": "not_seen"
+          },
+          "eligible": false
+        }
+      },
+      "sourceUrl": "https://static.tieba.baidu.com/p/5955793438?"
+    },
+    {
+      "id": "captured-liang-W5",
+      "bookKey": "liang",
+      "origin": "historical_search",
+      "label": "no",
+      "editionStatus": "unresolved",
+      "labelReason": "Bibliographic/product entry with synopsis and buying feedback, not an independent review.",
+      "baseline": {
+        "admitted": false,
+        "verdict": "TN"
+      },
+      "candidate": {
+        "admitted": false,
+        "verdict": "TN",
+        "evidence": {
+          "work": {
+            "titleForm": "full",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": false,
+            "nonReviewTextSeen": true
+          },
+          "edition": {
+            "isbnText": "matched"
+          },
+          "eligible": false
+        }
+      },
+      "sourceUrl": "https://book.cppinfo.cn/Encyclopedias/home/index?id=3039360"
+    },
+    {
+      "id": "zsn-yan-review",
+      "bookKey": "zsn",
+      "origin": "page_excerpt",
+      "label": "yes",
+      "editionStatus": "bibliographically_compatible",
+      "labelReason": "Original author explicitly evaluates this book; title includes subtitle while reference title is short. Edition details are compatible, exact ISBN not established.",
+      "baseline": {
+        "admitted": false,
+        "verdict": "FN"
+      },
+      "candidate": {
+        "admitted": true,
+        "verdict": "TP",
+        "evidence": {
+          "work": {
+            "titleForm": "main_title",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": true,
+            "nonReviewTextSeen": false
+          },
+          "edition": {
+            "isbnText": "not_seen"
+          },
+          "eligible": true
+        }
+      },
+      "sourceUrl": "https://yanlinlin.cn/2022/08/26/inside-chinese-government-and-economic-development-book-review/"
+    },
+    {
+      "id": "zsn-cui-review",
+      "bookKey": "zsn",
+      "origin": "page_excerpt",
+      "label": "yes",
+      "editionStatus": "unresolved",
+      "labelReason": "First-person review discusses structure and reading gains; not an author interview. Headline lacks review keyword.",
+      "baseline": {
+        "admitted": false,
+        "verdict": "FN"
+      },
+      "candidate": {
+        "admitted": false,
+        "verdict": "FN",
+        "evidence": {
+          "work": {
+            "titleForm": "not_seen",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": false,
+            "nonReviewTextSeen": false
+          },
+          "edition": {
+            "isbnText": "not_seen"
+          },
+          "eligible": false
+        }
+      },
+      "sourceUrl": "https://www.thepaper.cn/newsDetail_forward_25432542"
+    },
+    {
+      "id": "zsn-author-interview",
+      "bookKey": "zsn",
+      "origin": "page_excerpt",
+      "label": "no",
+      "editionStatus": "unresolved",
+      "labelReason": "Question-and-answer author interview. 上海书评 is a section name, not proof that the article is a review.",
+      "baseline": {
+        "admitted": false,
+        "verdict": "TN"
+      },
+      "candidate": {
+        "admitted": false,
+        "verdict": "TN",
+        "evidence": {
+          "work": {
+            "titleForm": "not_seen",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": true,
+            "nonReviewTextSeen": false
+          },
+          "edition": {
+            "isbnText": "not_seen"
+          },
+          "eligible": false
+        }
+      },
+      "sourceUrl": "https://www.thepaper.cn/newsDetail_forward_16097384"
+    },
+    {
+      "id": "zsn-library-entry",
+      "bookKey": "zsn",
+      "origin": "page_excerpt",
+      "label": "no",
+      "editionStatus": "isbn_supported",
+      "labelReason": "Library bibliographic entry; matching ISBN does not make it a review.",
+      "baseline": {
+        "admitted": false,
+        "verdict": "TN"
+      },
+      "candidate": {
+        "admitted": false,
+        "verdict": "TN",
+        "evidence": {
+          "work": {
+            "titleForm": "full",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": false,
+            "nonReviewTextSeen": false
+          },
+          "edition": {
+            "isbnText": "not_seen"
+          },
+          "eligible": false
+        }
+      },
+      "sourceUrl": "https://ci.nii.ac.jp/ncid/BC15914198"
+    },
+    {
+      "id": "zsn-quote-notebook",
+      "bookKey": "zsn",
+      "origin": "page_excerpt",
+      "label": "uncertain",
+      "editionStatus": "unresolved",
+      "labelReason": "Mostly extracts with a short evaluation; independent substantive review versus reading notebook requires agreed annotation policy.",
+      "baseline": {
+        "admitted": false,
+        "verdict": "UNJUDGED"
+      },
+      "candidate": {
+        "admitted": false,
+        "verdict": "UNJUDGED",
+        "evidence": {
+          "work": {
+            "titleForm": "full",
+            "titleAmbiguous": false,
+            "authorTextSeen": false
+          },
+          "genre": {
+            "reviewTextSeen": true,
+            "nonReviewTextSeen": false
+          },
+          "edition": {
+            "isbnText": "not_seen"
+          },
+          "eligible": false
+        }
+      },
+      "sourceUrl": "https://rucer.cn/2023-07/%E4%B9%A6%E8%AF%84-%E7%BD%AE%E8%BA%AB%E4%BA%8B%E5%86%85/"
+    },
+    {
+      "id": "jiaohun-reading-essay",
+      "bookKey": "jiaohun",
+      "origin": "page_excerpt",
+      "label": "yes",
+      "editionStatus": "bibliographically_compatible",
+      "labelReason": "Signed analytical reading essay about this work. No explicit 书评 keyword in headline. Exact ISBN was not supplied.",
+      "baseline": {
+        "admitted": false,
+        "verdict": "FN"
+      },
+      "candidate": {
+        "admitted": false,
+        "verdict": "FN",
+        "evidence": {
+          "work": {
+            "titleForm": "full",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": false,
+            "nonReviewTextSeen": false
+          },
+          "edition": {
+            "isbnText": "unavailable"
+          },
+          "eligible": false
+        }
+      },
+      "sourceUrl": "https://www.thepaper.cn/newsDetail_forward_5897144"
+    },
+    {
+      "id": "jiaohun-author-interview",
+      "bookKey": "jiaohun",
+      "origin": "page_excerpt",
+      "label": "no",
+      "editionStatus": "unresolved",
+      "labelReason": "Explicit author interview covering multiple works, not a focused review.",
+      "baseline": {
+        "admitted": false,
+        "verdict": "TN"
+      },
+      "candidate": {
+        "admitted": false,
+        "verdict": "TN",
+        "evidence": {
+          "work": {
+            "titleForm": "not_seen",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": false,
+            "nonReviewTextSeen": true
+          },
+          "edition": {
+            "isbnText": "unavailable"
+          },
+          "eligible": false
+        }
+      },
+      "sourceUrl": "https://www.thepaper.cn/newsdetail_forward_1436669"
+    },
+    {
+      "id": "jiaohun-other-book",
+      "bookKey": "jiaohun",
+      "origin": "page_excerpt",
+      "label": "no",
+      "editionStatus": "unresolved",
+      "labelReason": "A genuine review of another book. Discussing 叫魂 for comparison does not change the principal reviewed work.",
+      "baseline": {
+        "admitted": false,
+        "verdict": "TN"
+      },
+      "candidate": {
+        "admitted": false,
+        "verdict": "TN",
+        "evidence": {
+          "work": {
+            "titleForm": "not_seen",
+            "titleAmbiguous": false,
+            "authorTextSeen": false
+          },
+          "genre": {
+            "reviewTextSeen": true,
+            "nonReviewTextSeen": false
+          },
+          "edition": {
+            "isbnText": "unavailable"
+          },
+          "eligible": false
+        }
+      },
+      "sourceUrl": "https://www.thepaper.cn/newsDetail_forward_31751175"
+    },
+    {
+      "id": "jiaohun-translator-memoir",
+      "bookKey": "jiaohun",
+      "origin": "page_excerpt",
+      "label": "uncertain",
+      "editionStatus": "unresolved",
+      "labelReason": "Translator memoir includes substantive evaluation and publication history. Genre policy unresolved; excluded from precision/recall.",
+      "baseline": {
+        "admitted": false,
+        "verdict": "UNJUDGED"
+      },
+      "candidate": {
+        "admitted": false,
+        "verdict": "UNJUDGED",
+        "evidence": {
+          "work": {
+            "titleForm": "full",
+            "titleAmbiguous": true,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": false,
+            "nonReviewTextSeen": false
+          },
+          "edition": {
+            "isbnText": "unavailable"
+          },
+          "eligible": false
+        }
+      },
+      "sourceUrl": "https://www.thepaper.cn/newsDetail_forward_1988949"
+    },
+    {
+      "id": "soul-kirkus-review",
+      "bookKey": "soul",
+      "origin": "page_excerpt",
+      "label": "yes",
+      "editionStatus": "different_release",
+      "labelReason": "Original Kirkus review evaluates Kidder’s narrative. Work-level positive; 1981 reviewed release is not the target 2000 paperback.",
+      "baseline": {
+        "admitted": false,
+        "verdict": "FN"
+      },
+      "candidate": {
+        "admitted": false,
+        "verdict": "FN",
+        "evidence": {
+          "work": {
+            "titleForm": "full",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": false,
+            "nonReviewTextSeen": false
+          },
+          "edition": {
+            "isbnText": "not_seen"
+          },
+          "eligible": false
+        }
+      },
+      "sourceUrl": "https://www.kirkusreviews.com/book-reviews/a/tracy-kidder-2/the-soul-of-a-new-machine/"
+    },
+    {
+      "id": "soul-publisher",
+      "bookKey": "soul",
+      "origin": "page_excerpt",
+      "label": "no",
+      "editionStatus": "isbn_supported",
+      "labelReason": "Publisher sales/description page, even though it reproduces blurbs from reviews.",
+      "baseline": {
+        "admitted": false,
+        "verdict": "TN"
+      },
+      "candidate": {
+        "admitted": false,
+        "verdict": "TN",
+        "evidence": {
+          "work": {
+            "titleForm": "full",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": false,
+            "nonReviewTextSeen": false
+          },
+          "edition": {
+            "isbnText": "matched"
+          },
+          "eligible": false
+        }
+      },
+      "sourceUrl": "https://www.hachettebookgroup.com/titles/tracy-kidder/the-soul-of-a-new-machine/9780316491976/"
+    },
+    {
+      "id": "seeing-gia-review",
+      "bookKey": "seeing",
+      "origin": "page_excerpt",
+      "label": "yes",
+      "editionStatus": "different_release",
+      "labelReason": "Signed original review with analysis and criticism. Page cites 1998 publication; exact 1999 paperback identity is not established.",
+      "baseline": {
+        "admitted": false,
+        "verdict": "FN"
+      },
+      "candidate": {
+        "admitted": true,
+        "verdict": "TP",
+        "evidence": {
+          "work": {
+            "titleForm": "full",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": true,
+            "nonReviewTextSeen": false
+          },
+          "edition": {
+            "isbnText": "not_seen"
+          },
+          "eligible": true
+        }
+      },
+      "sourceUrl": "https://www.giarts.org/article/seeing-state"
+    },
+    {
+      "id": "seeing-publisher",
+      "bookKey": "seeing",
+      "origin": "page_excerpt",
+      "label": "no",
+      "editionStatus": "isbn_supported",
+      "labelReason": "Publisher bibliographic/marketing page, not the original reviews quoted by it.",
+      "baseline": {
+        "admitted": false,
+        "verdict": "TN"
+      },
+      "candidate": {
+        "admitted": false,
+        "verdict": "TN",
+        "evidence": {
+          "work": {
+            "titleForm": "full",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": false,
+            "nonReviewTextSeen": false
+          },
+          "edition": {
+            "isbnText": "matched"
+          },
+          "eligible": false
+        }
+      },
+      "sourceUrl": "https://yalebooks.yale.edu/book/9780300078152/seeing-like-a-state/"
+    },
+    {
+      "id": "synthetic-short-title-positive",
+      "bookKey": "zsn",
+      "origin": "synthetic",
+      "label": "yes",
+      "editionStatus": "unresolved",
+      "labelReason": "clean short title and bare author control",
+      "baseline": {
+        "admitted": true,
+        "verdict": "TP"
+      },
+      "candidate": {
+        "admitted": true,
+        "verdict": "TP",
+        "evidence": {
+          "work": {
+            "titleForm": "full",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": true,
+            "nonReviewTextSeen": false
+          },
+          "edition": {
+            "isbnText": "not_seen"
+          },
+          "eligible": true
+        }
+      },
+      "sourceUrl": "https://example.test/short-title-positive"
+    },
+    {
+      "id": "synthetic-catalog-false-positive",
+      "bookKey": "zsn",
+      "origin": "synthetic",
+      "label": "no",
+      "editionStatus": "unresolved",
+      "labelReason": "review keyword and ISBN do not prove independent review",
+      "baseline": {
+        "admitted": true,
+        "verdict": "FP"
+      },
+      "candidate": {
+        "admitted": false,
+        "verdict": "TN",
+        "evidence": {
+          "work": {
+            "titleForm": "full",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": true,
+            "nonReviewTextSeen": true
+          },
+          "edition": {
+            "isbnText": "matched"
+          },
+          "eligible": false
+        }
+      },
+      "sourceUrl": "https://example.test/catalog-false-positive"
+    },
+    {
+      "id": "synthetic-other-work-mixed-isbn",
+      "bookKey": "liang",
+      "origin": "synthetic",
+      "label": "no",
+      "editionStatus": "unresolved",
+      "labelReason": "mixed target ISBN is incidental, not identity of reviewed work",
+      "baseline": {
+        "admitted": true,
+        "verdict": "FP"
+      },
+      "candidate": {
+        "admitted": false,
+        "verdict": "TN",
+        "evidence": {
+          "work": {
+            "titleForm": "not_seen",
+            "titleAmbiguous": false,
+            "authorTextSeen": false
+          },
+          "genre": {
+            "reviewTextSeen": true,
+            "nonReviewTextSeen": false
+          },
+          "edition": {
+            "isbnText": "mixed"
+          },
+          "eligible": false
+        }
+      },
+      "sourceUrl": "https://example.test/other-work-mixed-isbn"
+    },
+    {
+      "id": "synthetic-author-role-suffix",
+      "bookKey": "zsn",
+      "origin": "synthetic",
+      "label": "yes",
+      "editionStatus": "unresolved",
+      "labelReason": "adding catalog responsibility suffix should not erase author identity",
+      "baseline": {
+        "admitted": false,
+        "verdict": "FN"
+      },
+      "candidate": {
+        "admitted": true,
+        "verdict": "TP",
+        "evidence": {
+          "work": {
+            "titleForm": "full",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": true,
+            "nonReviewTextSeen": false
+          },
+          "edition": {
+            "isbnText": "not_seen"
+          },
+          "eligible": true
+        }
+      },
+      "sourceUrl": "https://example.test/author-role-suffix"
+    },
+    {
+      "id": "synthetic-author-multiple-roles",
+      "bookKey": "liang",
+      "origin": "synthetic",
+      "label": "yes",
+      "editionStatus": "unresolved",
+      "labelReason": "catalog author/editor roles versus visible author name",
+      "baseline": {
+        "admitted": false,
+        "verdict": "FN"
+      },
+      "candidate": {
+        "admitted": true,
+        "verdict": "TP",
+        "evidence": {
+          "work": {
+            "titleForm": "full",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": true,
+            "nonReviewTextSeen": false
+          },
+          "edition": {
+            "isbnText": "not_seen"
+          },
+          "eligible": true
+        }
+      },
+      "sourceUrl": "https://example.test/author-multiple-roles"
+    },
+    {
+      "id": "synthetic-subtitle-short-target",
+      "bookKey": "zsn",
+      "origin": "synthetic",
+      "label": "yes",
+      "editionStatus": "unresolved",
+      "labelReason": "subtitle boundary prevents exact quoted title match",
+      "baseline": {
+        "admitted": false,
+        "verdict": "FN"
+      },
+      "candidate": {
+        "admitted": true,
+        "verdict": "TP",
+        "evidence": {
+          "work": {
+            "titleForm": "main_title",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": true,
+            "nonReviewTextSeen": false
+          },
+          "edition": {
+            "isbnText": "not_seen"
+          },
+          "eligible": true
+        }
+      },
+      "sourceUrl": "https://example.test/subtitle-short-target"
+    },
+    {
+      "id": "synthetic-subtitle-full-target",
+      "bookKey": "zsn",
+      "origin": "synthetic",
+      "label": "yes",
+      "editionStatus": "unresolved",
+      "labelReason": "same source accepted when catalog title includes subtitle",
+      "baseline": {
+        "admitted": true,
+        "verdict": "TP"
+      },
+      "candidate": {
+        "admitted": true,
+        "verdict": "TP",
+        "evidence": {
+          "work": {
+            "titleForm": "full",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": true,
+            "nonReviewTextSeen": false
+          },
+          "edition": {
+            "isbnText": "not_seen"
+          },
+          "eligible": true
+        }
+      },
+      "sourceUrl": "https://example.test/subtitle-full-target"
+    },
+    {
+      "id": "synthetic-english-review",
+      "bookKey": "soul",
+      "origin": "synthetic",
+      "label": "yes",
+      "editionStatus": "unresolved",
+      "labelReason": "English review cue absent from Chinese regex",
+      "baseline": {
+        "admitted": false,
+        "verdict": "FN"
+      },
+      "candidate": {
+        "admitted": true,
+        "verdict": "TP",
+        "evidence": {
+          "work": {
+            "titleForm": "full",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": true,
+            "nonReviewTextSeen": false
+          },
+          "edition": {
+            "isbnText": "matched"
+          },
+          "eligible": true
+        }
+      },
+      "sourceUrl": "https://example.test/english-review"
+    },
+    {
+      "id": "synthetic-traditional-review",
+      "bookKey": "jiaohun",
+      "origin": "synthetic",
+      "label": "yes",
+      "editionStatus": "unresolved",
+      "labelReason": "traditional Chinese review cue absent",
+      "baseline": {
+        "admitted": false,
+        "verdict": "FN"
+      },
+      "candidate": {
+        "admitted": true,
+        "verdict": "TP",
+        "evidence": {
+          "work": {
+            "titleForm": "full",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": true,
+            "nonReviewTextSeen": false
+          },
+          "edition": {
+            "isbnText": "unavailable"
+          },
+          "eligible": true
+        }
+      },
+      "sourceUrl": "https://example.test/traditional-review"
+    },
+    {
+      "id": "synthetic-interview-review-word",
+      "bookKey": "zsn",
+      "origin": "synthetic",
+      "label": "no",
+      "editionStatus": "unresolved",
+      "labelReason": "substring 书评 in interview heading can pass gate",
+      "baseline": {
+        "admitted": true,
+        "verdict": "FP"
+      },
+      "candidate": {
+        "admitted": false,
+        "verdict": "TN",
+        "evidence": {
+          "work": {
+            "titleForm": "full",
+            "titleAmbiguous": false,
+            "authorTextSeen": true
+          },
+          "genre": {
+            "reviewTextSeen": true,
+            "nonReviewTextSeen": true
+          },
+          "edition": {
+            "isbnText": "not_seen"
+          },
+          "eligible": false
+        }
+      },
+      "sourceUrl": "https://example.test/interview-review-word"
+    }
+  ],
+  "datasetSha256": "2f0fe7d9544523f65fc68e640fed9685951c8185d9a6daa0c31fe26381ec534b",
+  "candidateSourceSha256": "4e8759223b75656a7f9cf9fe26a5ec8c7f26523bf795fed1d9902c6d5abfe503",
+  "baselineSourceSha256": "026b5d02d68d427eebaf9a37faa0707f249f2741d9bb4efe93accce7a706f474",
+  "clueSourceSha256": "fb2f55e494457c8211306cf4fea3a7acfda7c05348652262ed0d09108fe28aa4"
+}
