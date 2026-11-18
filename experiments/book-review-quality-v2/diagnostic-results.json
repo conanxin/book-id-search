@@ -156,7 +156,7 @@
         "evidence": {
           "work": {
             "titleForm": "not_seen",
-            "multipleQuotedTitles": false,
+            "titleAmbiguous": false,
             "authorTextSeen": true
           },
           "genre": {
@@ -188,7 +188,7 @@
         "evidence": {
           "work": {
             "titleForm": "not_seen",
-            "multipleQuotedTitles": false,
+            "titleAmbiguous": false,
             "authorTextSeen": true
           },
           "genre": {
@@ -220,7 +220,7 @@
         "evidence": {
           "work": {
             "titleForm": "full",
-            "multipleQuotedTitles": false,
+            "titleAmbiguous": false,
             "authorTextSeen": true
           },
           "genre": {
@@ -252,7 +252,7 @@
         "evidence": {
           "work": {
             "titleForm": "main_title",
-            "multipleQuotedTitles": false,
+            "titleAmbiguous": false,
             "authorTextSeen": true
           },
           "genre": {
@@ -284,7 +284,7 @@
         "evidence": {
           "work": {
             "titleForm": "not_seen",
-            "multipleQuotedTitles": false,
+            "titleAmbiguous": false,
             "authorTextSeen": true
           },
           "genre": {
@@ -316,7 +316,7 @@
         "evidence": {
           "work": {
             "titleForm": "not_seen",
-            "multipleQuotedTitles": false,
+            "titleAmbiguous": false,
             "authorTextSeen": true
           },
           "genre": {
@@ -348,7 +348,7 @@
         "evidence": {
           "work": {
             "titleForm": "full",
-            "multipleQuotedTitles": false,
+            "titleAmbiguous": false,
             "authorTextSeen": true
           },
           "genre": {
@@ -380,7 +380,7 @@
         "evidence": {
           "work": {
             "titleForm": "full",
-            "multipleQuotedTitles": false,
+            "titleAmbiguous": false,
             "authorTextSeen": false
           },
           "genre": {
@@ -412,7 +412,7 @@
         "evidence": {
           "work": {
             "titleForm": "full",
-            "multipleQuotedTitles": false,
+            "titleAmbiguous": false,
             "authorTextSeen": true
           },
           "genre": {
@@ -444,7 +444,7 @@
         "evidence": {
           "work": {
             "titleForm": "not_seen",
-            "multipleQuotedTitles": false,
+            "titleAmbiguous": false,
             "authorTextSeen": true
           },
           "genre": {
@@ -476,7 +476,7 @@
         "evidence": {
           "work": {
             "titleForm": "not_seen",
-            "multipleQuotedTitles": false,
+            "titleAmbiguous": false,
             "authorTextSeen": false
           },
           "genre": {
@@ -508,7 +508,7 @@
         "evidence": {
           "work": {
             "titleForm": "full",
-            "multipleQuotedTitles": true,
+            "titleAmbiguous": true,
             "authorTextSeen": true
           },
           "genre": {
@@ -540,7 +540,7 @@
         "evidence": {
           "work": {
             "titleForm": "full",
-            "multipleQuotedTitles": false,
+            "titleAmbiguous": false,
             "authorTextSeen": true
           },
           "genre": {
@@ -572,7 +572,7 @@
         "evidence": {
           "work": {
             "titleForm": "full",
-            "multipleQuotedTitles": false,
+            "titleAmbiguous": false,
             "authorTextSeen": true
           },
           "genre": {
@@ -604,7 +604,7 @@
         "evidence": {
           "work": {
             "titleForm": "full",
-            "multipleQuotedTitles": false,
+            "titleAmbiguous": false,
             "authorTextSeen": true
           },
           "genre": {
@@ -636,7 +636,7 @@
         "evidence": {
           "work": {
             "titleForm": "full",
-            "multipleQuotedTitles": false,
+            "titleAmbiguous": false,
             "authorTextSeen": true
           },
           "genre": {
@@ -668,7 +668,7 @@
         "evidence": {
           "work": {
             "titleForm": "full",
-            "multipleQuotedTitles": false,
+            "titleAmbiguous": false,
             "authorTextSeen": true
           },
           "genre": {
@@ -700,7 +700,7 @@
         "evidence": {
           "work": {
             "titleForm": "full",
-            "multipleQuotedTitles": false,
+            "titleAmbiguous": false,
             "authorTextSeen": true
           },
           "genre": {
@@ -732,7 +732,7 @@
         "evidence": {
           "work": {
             "titleForm": "not_seen",
-            "multipleQuotedTitles": false,
+            "titleAmbiguous": false,
             "authorTextSeen": false
           },
           "genre": {
@@ -764,7 +764,7 @@
         "evidence": {
           "work": {
             "titleForm": "full",
-            "multipleQuotedTitles": false,
+            "titleAmbiguous": false,
             "authorTextSeen": true
           },
           "genre": {
@@ -796,7 +796,7 @@
         "evidence": {
           "work": {
             "titleForm": "full",
-            "multipleQuotedTitles": false,
+            "titleAmbiguous": false,
             "authorTextSeen": true
           },
           "genre": {
@@ -828,7 +828,7 @@
         "evidence": {
           "work": {
             "titleForm": "main_title",
-            "multipleQuotedTitles": false,
+            "titleAmbiguous": false,
             "authorTextSeen": true
           },
           "genre": {
@@ -860,7 +860,7 @@
         "evidence": {
           "work": {
             "titleForm": "full",
-            "multipleQuotedTitles": false,
+            "titleAmbiguous": false,
             "authorTextSeen": true
           },
           "genre": {
@@ -892,7 +892,7 @@
         "evidence": {
           "work": {
             "titleForm": "full",
-            "multipleQuotedTitles": false,
+            "titleAmbiguous": false,
             "authorTextSeen": true
           },
           "genre": {
@@ -924,7 +924,7 @@
         "evidence": {
           "work": {
             "titleForm": "full",
-            "multipleQuotedTitles": false,
+            "titleAmbiguous": false,
             "authorTextSeen": true
           },
           "genre": {
@@ -956,7 +956,7 @@
         "evidence": {
           "work": {
             "titleForm": "full",
-            "multipleQuotedTitles": false,
+            "titleAmbiguous": false,
             "authorTextSeen": true
           },
           "genre": {
@@ -973,7 +973,7 @@
     }
   ],
   "datasetSha256": "2f0fe7d9544523f65fc68e640fed9685951c8185d9a6daa0c31fe26381ec534b",
-  "candidateSourceSha256": "c267717aef338073a34f760c01d56d38219fcc657c178c22ebb675a9950a2890",
+  "candidateSourceSha256": "4e8759223b75656a7f9cf9fe26a5ec8c7f26523bf795fed1d9902c6d5abfe503",
   "baselineSourceSha256": "026b5d02d68d427eebaf9a37faa0707f249f2741d9bb4efe93accce7a706f474",
   "clueSourceSha256": "fb2f55e494457c8211306cf4fea3a7acfda7c05348652262ed0d09108fe28aa4"
 }

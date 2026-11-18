@@ -7,7 +7,7 @@ const source = { title: "读《置身事内》：书评", excerpt: "兰小欢的
 describe("work, document cues and edition text remain separate", () => {
   it("accepts explicit main-title compatibility plus the author responsibility segment", () => {
     expect(assess(source, book)).toEqual({
-      work: { titleForm: "main_title", authorTextSeen: true, multipleQuotedTitles: false },
+      work: { titleForm: "main_title", authorTextSeen: true, titleAmbiguous: false },
       genre: { reviewTextSeen: true, nonReviewTextSeen: false },
       edition: { isbnText: "not_seen" }, eligible: true,
     });

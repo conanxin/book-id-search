@@ -8,7 +8,7 @@ export interface BookReviewCandidateEvidence {
   work: {
     titleForm: "full" | "main_title" | "not_seen";
     authorTextSeen: boolean;
-    multipleQuotedTitles: boolean;
+    titleAmbiguous: boolean;
   };
   genre: { reviewTextSeen: boolean; nonReviewTextSeen: boolean };
   edition: { isbnText: BookWebSourceClues["isbn"] };
@@ -49,7 +49,7 @@ function wholeText(haystack: string, needle: string): boolean {
 function headlineTitle(source: string, target: string) {
   const quoted: string[] = [];
   let open = -1;
-  const unclear = { titleForm: "not_seen" as const, multipleQuotedTitles: true };
+  const unclear = { titleForm: "not_seen" as const, titleAmbiguous: true };
   for (let index = 0; index < source.length; index++) {
     if (source[index] === "《") {
       if (open >= 0) return unclear;
@@ -65,17 +65,17 @@ function headlineTitle(source: string, target: string) {
     const forms = quoted.map(value => titleForm(value, target));
     return { titleForm: forms.includes("full") ? "full" as const
       : forms.includes("main_title") ? "main_title" as const : "not_seen" as const,
-    multipleQuotedTitles: new Set(quoted.map(titleText)).size > 1 };
+    titleAmbiguous: new Set(quoted.map(titleText)).size > 1 };
   }
   const headline = titleText(source);
-  if (wholeText(headline, titleText(target))) return { titleForm: "full" as const, multipleQuotedTitles: false };
+  if (wholeText(headline, titleText(target))) return { titleForm: "full" as const, titleAmbiguous: false };
   const unframed = normalized(source)
     .replace(/^(?:book review|review|书评|書評)\s*[:：]\s*/iu, "")
     .replace(/\s*[:：|—–-]\s*(?:book review|review|书评|書評|读后感|讀後感)\s*$/iu, "");
   if (/[:：]/u.test(target) && /[:：]/u.test(unframed)) return unclear;
   const main = titleText(mainTitle(target));
   return { titleForm: main.length >= 2 && wholeText(headline, main) ? "main_title" as const : "not_seen" as const,
-    multipleQuotedTitles: false };
+    titleAmbiguous: false };
 }
 function authors(value: string): string[] {
   // Explicit responsibility segments only. Editors/translators do not become
@@ -109,7 +109,7 @@ export function assessBookReviewCandidate(source: Source, book: Book, cut?: Cut)
   // When only the aggregate flag survives, be conservative. snapshotSources
   // supplies the precise cut flags, so an old pageAge cut cannot hide a review.
   const cuts = cut ?? { title: !!source.truncated, excerpt: !!source.truncated };
-  const title = cuts.title ? { titleForm: "not_seen" as const, multipleQuotedTitles: false }
+  const title = cuts.title ? { titleForm: "not_seen" as const, titleAmbiguous: false }
     : headlineTitle(source.title, book.title);
   const authorTextSeen = authors(book.author).some(author =>
     deriveBookWebSourceClues({ title: "", author, isbn: "" }, source, cuts).text.includes("author"));
@@ -123,7 +123,7 @@ export function assessBookReviewCandidate(source: Source, book: Book, cut?: Cut)
   const genre = { reviewTextSeen: reviewHeading || reviewExcerpt, nonReviewTextSeen: nonReviewHeading || nonReviewExcerpt };
   // Main-title compatibility always needs an author cue. Even an exact ISBN
   // cannot bypass a missing/wrong headline, or certify a mixed-ISBN page.
-  const identityCue = title.titleForm !== "not_seen" && !title.multipleQuotedTitles
+  const identityCue = title.titleForm !== "not_seen" && !title.titleAmbiguous
     && (authorTextSeen || (title.titleForm === "full" && isbnText === "matched"));
   return { work: { ...title, authorTextSeen }, genre, edition: { isbnText },
     eligible: identityCue && genre.reviewTextSeen && !genre.nonReviewTextSeen };
