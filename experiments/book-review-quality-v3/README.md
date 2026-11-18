@@ -105,7 +105,7 @@ The integrated candidate passed **250 tests in 6 files**: Web research 73, evide
 
 An independent harness review reproduced the initial exported read-budget bypass using injected fixtures; out-of-range and noninteger budgets now reject before any IO. Missing-catalog fixtures and the CLI now follow the existing document_not_found contract. A first harness run had one wrong fixture expectation; two Web runs had incorrect button-label/clipboard-format expectations. Those failed logs are retained, and the final integrated run passes. Application readers/copiers were not altered to satisfy those expectations.
 
-The harness joins the existing library workflow; new Web cases are in test files already covered there. Final-head remote CI evidence belongs in the PR.
+The harness and new Web cases are in paths already covered by the existing library workflow. A redundant duplicate harness argument was removed after checking the successful CI log; no workflow configuration change relative to PR87 is needed. Final-head remote CI evidence belongs in the PR.
 
 The full root suite was not rerun. PR #86's 16 failures and one unhandled error remain unresolved and cannot be described as a green repository. Frozen SQL, dependencies, schemas, API policy/response contracts, authentication and production settings were not changed. No human Google-login production UI flow was exercised.
 
