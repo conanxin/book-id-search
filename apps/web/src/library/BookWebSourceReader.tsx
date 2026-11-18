@@ -8,9 +8,10 @@ import {
 import { BookWebSourceEvidence } from "./BookWebSourceEvidence";
 import { useBookWebSourceComparisonRegistration } from "./BookWebSourceComparisonScope";
 import type { BookWebSourcePassage } from "./bookWebSourceEvidence";
+import type { BookWebReviewQuestions } from "./bookWebReviewQuestions";
 import { useLibraryScope } from "./useLibraryScope";
 
-interface Props { bookId: string; generation: number; source: BookWebResearchSource; researchQuestion?: string }
+interface Props { bookId: string; generation: number; source: BookWebResearchSource; researchQuestion?: string; reviewQuestions?: BookWebReviewQuestions | null }
 
 /** Each source belongs to one search result; older responses without a read token remain excerpt-only. */
 export function BookWebSourceReader(props: Props) {
@@ -18,7 +19,7 @@ export function BookWebSourceReader(props: Props) {
   return <SourceReader key={JSON.stringify([props.bookId, props.generation, props.source.id, props.source.url, props.source.readToken])} {...props} />;
 }
 
-function SourceReader({ bookId, generation, source, researchQuestion = "" }: Props) {
+function SourceReader({ bookId, generation, source, researchQuestion = "", reviewQuestions }: Props) {
   const { run, current } = useLibraryScope(generation);
   const [response, setResponse] = useState<BookWebSourceReadResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -154,7 +155,7 @@ function SourceReader({ bookId, generation, source, researchQuestion = "" }: Pro
         <button type="button" className="library-text-button" aria-label={"清除网页正文 " + source.id} onClick={clear}>清除已读文字</button>
       </div>
       {!loading && <BookWebSourceEvidence key={readRevision} snapshot={response} source={source} generation={generation}
-        initialQuestion={researchQuestion} onLocate={locate} />}
+        initialQuestion={reviewQuestions?.initialQuestion ?? researchQuestion} questionPresets={reviewQuestions?.presets} onLocate={locate} />}
     </section>}
     {copyFallback !== null && <label className="library-field"><span>可复制的网页文字 {source.id}</span>
       <textarea ref={copyField} rows={8} value={copyFallback} readOnly onFocus={event => event.currentTarget.select()} />

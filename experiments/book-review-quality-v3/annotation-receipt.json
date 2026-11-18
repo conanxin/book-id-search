@@ -1,0 +1,63 @@
+{
+  "task_id": "BOOK_REVIEW_EVIDENCE_P4",
+  "snippet_label_file": "snippet-labels-frozen.json",
+  "snippet_label_sha256": "0422cdd854e9eb69bac1e210aa31a181669f9c34321d6c3830852fa980df5d1b",
+  "raw_label_task_id": "BOOK_REVIEW_READER_P4",
+  "task_id_note": "The independent annotator used this metadata alias by mistake; raw frozen bytes and all 36 labels are preserved. All phase tracking uses BOOK_REVIEW_EVIDENCE_P4.",
+  "summaries": [
+    {
+      "task": "P4-B1",
+      "labels": {
+        "uncertain": 3,
+        "yes": 7,
+        "no": 2
+      },
+      "model_selected_labels": {
+        "yes": 4
+      },
+      "guard_eligible_labels": {
+        "no": 2
+      },
+      "retained_labels": {}
+    },
+    {
+      "task": "P4-B3-CATALOG",
+      "labels": {
+        "yes": 7,
+        "uncertain": 4,
+        "no": 1
+      },
+      "model_selected_labels": {
+        "yes": 4
+      },
+      "guard_eligible_labels": {},
+      "retained_labels": {}
+    },
+    {
+      "task": "P4-B5-CATALOG",
+      "labels": {
+        "no": 2,
+        "yes": 8,
+        "uncertain": 2
+      },
+      "model_selected_labels": {
+        "yes": 4
+      },
+      "guard_eligible_labels": {},
+      "retained_labels": {}
+    }
+  ],
+  "labels_frozen_before_reader_disclosure": true,
+  "model_guard_outcomes_withheld": true,
+  "human_review": "PENDING",
+  "candidate_policy_changed": false,
+  "reader_label_file": "reader-labels-frozen.json",
+  "reader_label_sha256": "3b6404b3b4f3ba22742901803238810574bdcc4b836aeef0b6751bc9da6c58ff",
+  "snippet_labels_unmodified": true,
+  "reader_outcomes": {
+    "read": 1,
+    "unavailable": 2,
+    "positive_reviews_confirmed": 0,
+    "snippet_uncertain_to_page_negative": 1
+  }
+}

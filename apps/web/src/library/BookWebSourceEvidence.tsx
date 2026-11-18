@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Copy, ExternalLink } from "lucide-react";
 import { isBookWebResearchAbort, type BookWebResearchSource } from "./bookWebResearch";
 import type { BookWebSourceReadResponse } from "./bookWebSourceReader";
+import type { BookWebReviewQuestionPreset } from "./bookWebReviewQuestions";
 import {
   assertBookWebSourceEvidenceResponse, bookWebSourceEvidenceContent, bookWebSourceEvidenceErrorMessage,
   findBookWebSourceEvidence, type BookWebSourceEvidenceResponse, type BookWebSourcePassage,
@@ -13,11 +14,12 @@ interface Props {
   source: BookWebResearchSource;
   generation: number;
   initialQuestion: string;
+  questionPresets?: BookWebReviewQuestionPreset[];
   onLocate: (passage: BookWebSourcePassage | null) => void;
 }
 
 /** Lives only inside one read snapshot; editing the question never changes personal book content. */
-export function BookWebSourceEvidence({ snapshot, source, generation, initialQuestion, onLocate }: Props) {
+export function BookWebSourceEvidence({ snapshot, source, generation, initialQuestion, questionPresets, onLocate }: Props) {
   const { run, current } = useLibraryScope(generation);
   const [question, setQuestion] = useState(initialQuestion);
   const [response, setResponse] = useState<BookWebSourceEvidenceResponse | null>(null);
@@ -34,6 +36,7 @@ export function BookWebSourceEvidence({ snapshot, source, generation, initialQue
   const root = useRef<HTMLDivElement>(null);
   const resultHeading = useRef<HTMLParagraphElement>(null);
   const copyField = useRef<HTMLTextAreaElement>(null);
+  const questionField = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => () => { sequence.current += 1; active.current?.abort(); }, []);
   useEffect(() => {
@@ -49,6 +52,9 @@ export function BookWebSourceEvidence({ snapshot, source, generation, initialQue
     sequence.current += 1; active.current?.abort(); active.current = null;
     setLoading(false); setResponse(null); setError(null); setCopying(false);
     setCopyFallback(null); setMessage(""); setExpanded([]); onLocate(null);
+  }
+  function chooseQuestion(value: string) {
+    clear(); setQuestion(value); questionField.current?.focus();
   }
   async function find(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -110,10 +116,18 @@ export function BookWebSourceEvidence({ snapshot, source, generation, initialQue
   return <div ref={root} className="book-web-source-evidence" aria-busy={loading}>
     <form className="book-web-evidence-form" onSubmit={event => void find(event)}>
       <p className="book-web-excerpt-label">从这篇网页找原文依据</p>
-      <p className="library-meta">填写要核对的问题，AI 会从当前已读文字中挑选相关原句。只在点击查找后运行。</p>
+      <p className="library-meta">{questionPresets
+        ? "选择核对方面后可编辑问题，点击“查找原文依据”才会从当前已读文字中挑选相关原句。"
+        : "填写要核对的问题，AI 会从当前已读文字中挑选相关原句。只在点击查找后运行。"}</p>
+      {questionPresets && <>
+        <div className="library-actions" role="group" aria-label={"书评原文核对 " + source.id}>
+          {questionPresets.map(preset => <button key={preset.id} type="button" className="library-text-button"
+            aria-label={preset.label + "核对 " + source.id} onClick={() => chooseQuestion(preset.question)}>{preset.label}</button>)}
+        </div>
+      </>}
       <label className="library-field" htmlFor={questionId}>
         <span>原文依据问题 {source.id}</span>
-        <textarea id={questionId} rows={3} maxLength={1000} value={question}
+        <textarea ref={questionField} id={questionId} rows={questionPresets ? 6 : 3} maxLength={1000} value={question}
           onChange={event => { clear(); setQuestion(event.currentTarget.value); }} />
       </label>
       <div className="library-actions">

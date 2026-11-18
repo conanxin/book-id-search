@@ -1,0 +1,380 @@
+{
+  "task_id": "BOOK_REVIEW_READER_P4",
+  "layer": "search_snippet_only",
+  "label_status": "assistant-provisional / human-review-pending",
+  "frozen_at": "2026-11-18T01:42:19.158780+00:00",
+  "blindness": {
+    "candidate_implementation_read": false,
+    "selector_or_filter_results_read": false,
+    "webpages_browsed": false,
+    "reader_outputs_read": false
+  },
+  "definitions": {
+    "work": "仅由所给标题、摘要与公开目标目录支持的作品对应；支持不等于全文或精确版本核实。",
+    "review": "支持表示可见文章自称书评或有具体评述；冲突表示可见目录、商品或聚合结构；不足保留不确定。",
+    "edition": "出现匹配/不同ISBN/混列描述所见ISBN；ISBN-10及等价ISBN-13按同号码处理。不明确用于可见版次或译本差异但缺少ISBN；任何匹配均不确认具体版本。",
+    "snippetCandidate": "yes表示摘要足以支持作品评论候选；no仅用于明确文体冲突；uncertain不计作负例。"
+  },
+  "labels": [
+    {
+      "task": "P4-B1",
+      "sourceId": "W1",
+      "work": "支持",
+      "review": "不足",
+      "edition": "未见",
+      "snippetCandidate": "uncertain",
+      "reason": "书名与施展对应；摘要主要介绍论旨并转引名人推荐，尚不足区分独立书评和新书宣传。",
+      "input_sha256": "8a01934edd3d1d35f3d334cdf0a9ed405017fb060c9823edfd0c6be452ed8fff"
+    },
+    {
+      "task": "P4-B1",
+      "sourceId": "W2",
+      "work": "支持",
+      "review": "支持",
+      "edition": "未见",
+      "snippetCandidate": "yes",
+      "reason": "明确书名、作者，并围绕书中观点作评价和解释，支持作品评论候选；未核对全文或具体版本。",
+      "input_sha256": "8a01934edd3d1d35f3d334cdf0a9ed405017fb060c9823edfd0c6be452ed8fff"
+    },
+    {
+      "task": "P4-B1",
+      "sourceId": "W3",
+      "work": "支持",
+      "review": "支持",
+      "edition": "未见",
+      "snippetCandidate": "yes",
+      "reason": "明确书名、作者，文章以个人读后评价联系税收工作，具有具体评论与应用反思。",
+      "input_sha256": "8a01934edd3d1d35f3d334cdf0a9ed405017fb060c9823edfd0c6be452ed8fff"
+    },
+    {
+      "task": "P4-B1",
+      "sourceId": "W4",
+      "work": "支持",
+      "review": "支持",
+      "edition": "未见",
+      "snippetCandidate": "yes",
+      "reason": "书名与作者明确，并讨论全书篇章比例是否失衡及其组织逻辑，具有具体评论内容。",
+      "input_sha256": "8a01934edd3d1d35f3d334cdf0a9ed405017fb060c9823edfd0c6be452ed8fff"
+    },
+    {
+      "task": "P4-B1",
+      "sourceId": "W5",
+      "work": "支持",
+      "review": "支持",
+      "edition": "未见",
+      "snippetCandidate": "yes",
+      "reason": "书名与作者明确，围绕解释框架、学科跨度及作品定位作解读与评价；独立性仍未由全文核实。",
+      "input_sha256": "8a01934edd3d1d35f3d334cdf0a9ed405017fb060c9823edfd0c6be452ed8fff"
+    },
+    {
+      "task": "P4-B1",
+      "sourceId": "W6",
+      "work": "支持",
+      "review": "支持",
+      "edition": "未见",
+      "snippetCandidate": "yes",
+      "reason": "直接讨论施展这部作品，将其解释为未来学并评述历史叙事方法，具有作品评论线索。",
+      "input_sha256": "8a01934edd3d1d35f3d334cdf0a9ed405017fb060c9823edfd0c6be452ed8fff"
+    },
+    {
+      "task": "P4-B1",
+      "sourceId": "W7",
+      "work": "支持",
+      "review": "不足",
+      "edition": "未见",
+      "snippetCandidate": "uncertain",
+      "reason": "书名与作者明确，但摘要集中转述作者目标和第三方推荐；尚不能区分评论文章与宣传介绍。",
+      "input_sha256": "8a01934edd3d1d35f3d334cdf0a9ed405017fb060c9823edfd0c6be452ed8fff"
+    },
+    {
+      "task": "P4-B1",
+      "sourceId": "W8",
+      "work": "支持",
+      "review": "不足",
+      "edition": "未见",
+      "snippetCandidate": "uncertain",
+      "reason": "书名与作者明确，所见主要为作者观点和推荐语，缺少足够证据判断是否独立评述文章。",
+      "input_sha256": "8a01934edd3d1d35f3d334cdf0a9ed405017fb060c9823edfd0c6be452ed8fff"
+    },
+    {
+      "task": "P4-B1",
+      "sourceId": "W9",
+      "work": "支持",
+      "review": "支持",
+      "edition": "未见",
+      "snippetCandidate": "yes",
+      "reason": "书名与作者明确，围绕作品的解释体系和学科跨度作解读、评价，支持作品评论候选。",
+      "input_sha256": "8a01934edd3d1d35f3d334cdf0a9ed405017fb060c9823edfd0c6be452ed8fff"
+    },
+    {
+      "task": "P4-B1",
+      "sourceId": "W10",
+      "work": "支持",
+      "review": "支持",
+      "edition": "未见",
+      "snippetCandidate": "yes",
+      "reason": "书名与作者明确，文章分析作品的历史哲学逻辑并评价其论述；出现出版年不等于确认版次。",
+      "input_sha256": "8a01934edd3d1d35f3d334cdf0a9ed405017fb060c9823edfd0c6be452ed8fff"
+    },
+    {
+      "task": "P4-B1",
+      "sourceId": "W11",
+      "work": "支持",
+      "review": "冲突",
+      "edition": "出现匹配",
+      "snippetCandidate": "no",
+      "reason": "包含目标ISBN，但主体结构为书籍元数据、下载入口和聚合用户短评，不是单篇独立评论文章。",
+      "input_sha256": "8a01934edd3d1d35f3d334cdf0a9ed405017fb060c9823edfd0c6be452ed8fff"
+    },
+    {
+      "task": "P4-B1",
+      "sourceId": "W12",
+      "work": "支持",
+      "review": "冲突",
+      "edition": "不明确",
+      "snippetCandidate": "no",
+      "reason": "可见图书元数据、评分和内容简介，未见独立评述；标注2023年且未见ISBN，不能对应目录2018版。",
+      "input_sha256": "8a01934edd3d1d35f3d334cdf0a9ed405017fb060c9823edfd0c6be452ed8fff"
+    },
+    {
+      "task": "P4-B3-CATALOG",
+      "sourceId": "W1",
+      "work": "支持",
+      "review": "支持",
+      "edition": "未见",
+      "snippetCandidate": "yes",
+      "reason": "标题直接标示评论、书名与作者，摘要评价其论证和贡献，支持作品评论候选。",
+      "input_sha256": "8cc6501562307aeeeb99a7dc8c58eab7cd446acfc91c9769d6f37994b09f794c"
+    },
+    {
+      "task": "P4-B3-CATALOG",
+      "sourceId": "W2",
+      "work": "支持",
+      "review": "不足",
+      "edition": "未见",
+      "snippetCandidate": "uncertain",
+      "reason": "完整书名和Pomeranz支持作品身份；片段主要解释书中经济机制，尚不足区分独立评论与摘要。",
+      "input_sha256": "8cc6501562307aeeeb99a7dc8c58eab7cd446acfc91c9769d6f37994b09f794c"
+    },
+    {
+      "task": "P4-B3-CATALOG",
+      "sourceId": "W3",
+      "work": "支持",
+      "review": "不足",
+      "edition": "未见",
+      "snippetCandidate": "uncertain",
+      "reason": "标题含书名和作者；所见正文仍在铺陈大分流问题，未提供足够的文章文体证据。",
+      "input_sha256": "8cc6501562307aeeeb99a7dc8c58eab7cd446acfc91c9769d6f37994b09f794c"
+    },
+    {
+      "task": "P4-B3-CATALOG",
+      "sourceId": "W4",
+      "work": "支持",
+      "review": "支持",
+      "edition": "未见",
+      "snippetCandidate": "yes",
+      "reason": "摘要明确列出书评、书名、作者、评论者，并直接评价该书是否回答核心问题。",
+      "input_sha256": "8cc6501562307aeeeb99a7dc8c58eab7cd446acfc91c9769d6f37994b09f794c"
+    },
+    {
+      "task": "P4-B3-CATALOG",
+      "sourceId": "W5",
+      "work": "支持",
+      "review": "支持",
+      "edition": "未见",
+      "snippetCandidate": "yes",
+      "reason": "标题标示学生书评，摘要明确作品与作者，并评述论点强弱和方法贡献。",
+      "input_sha256": "8cc6501562307aeeeb99a7dc8c58eab7cd446acfc91c9769d6f37994b09f794c"
+    },
+    {
+      "task": "P4-B3-CATALOG",
+      "sourceId": "W6",
+      "work": "支持",
+      "review": "支持",
+      "edition": "未见",
+      "snippetCandidate": "yes",
+      "reason": "明确书评及所评作品和作者，包含具体学术贡献评价，支持作品评论候选。",
+      "input_sha256": "8cc6501562307aeeeb99a7dc8c58eab7cd446acfc91c9769d6f37994b09f794c"
+    },
+    {
+      "task": "P4-B3-CATALOG",
+      "sourceId": "W7",
+      "work": "不足",
+      "review": "支持",
+      "edition": "未见",
+      "snippetCandidate": "uncertain",
+      "reason": "片段确有对证据和方法的批评，但仅见通用书名而未见作者或其他身份锚点，作品对应尚不足。",
+      "input_sha256": "8cc6501562307aeeeb99a7dc8c58eab7cd446acfc91c9769d6f37994b09f794c"
+    },
+    {
+      "task": "P4-B3-CATALOG",
+      "sourceId": "W8",
+      "work": "支持",
+      "review": "支持",
+      "edition": "未见",
+      "snippetCandidate": "yes",
+      "reason": "完整书名和作者明确，摘要讨论论证强弱与方法贡献，具有具体评论内容。",
+      "input_sha256": "8cc6501562307aeeeb99a7dc8c58eab7cd446acfc91c9769d6f37994b09f794c"
+    },
+    {
+      "task": "P4-B3-CATALOG",
+      "sourceId": "W9",
+      "work": "支持",
+      "review": "支持",
+      "edition": "不明确",
+      "snippetCandidate": "yes",
+      "reason": "片段自带中英文书名及作者对应，并明确评述该书；注明引文来自中文译本，未见ISBN，不能确认目录版本。",
+      "input_sha256": "8cc6501562307aeeeb99a7dc8c58eab7cd446acfc91c9769d6f37994b09f794c"
+    },
+    {
+      "task": "P4-B3-CATALOG",
+      "sourceId": "W10",
+      "work": "支持",
+      "review": "不足",
+      "edition": "未见",
+      "snippetCandidate": "uncertain",
+      "reason": "书名与作者明确；所见为Description和内容概述，不能仅凭URL或站点认定为商品页或独立书评。",
+      "input_sha256": "8cc6501562307aeeeb99a7dc8c58eab7cd446acfc91c9769d6f37994b09f794c"
+    },
+    {
+      "task": "P4-B3-CATALOG",
+      "sourceId": "W11",
+      "work": "支持",
+      "review": "冲突",
+      "edition": "出现匹配",
+      "snippetCandidate": "no",
+      "reason": "ISBN-10及等价ISBN-13与目标相符，但文本明确为二手书销售、品相和卖家信息，不是独立书评。",
+      "input_sha256": "8cc6501562307aeeeb99a7dc8c58eab7cd446acfc91c9769d6f37994b09f794c"
+    },
+    {
+      "task": "P4-B3-CATALOG",
+      "sourceId": "W12",
+      "work": "支持",
+      "review": "支持",
+      "edition": "未见",
+      "snippetCandidate": "yes",
+      "reason": "标题及摘要明确学生书评，作品与作者对应，包含论证强弱与方法评价。",
+      "input_sha256": "8cc6501562307aeeeb99a7dc8c58eab7cd446acfc91c9769d6f37994b09f794c"
+    },
+    {
+      "task": "P4-B5-CATALOG",
+      "sourceId": "W1",
+      "work": "支持",
+      "review": "冲突",
+      "edition": "不同ISBN",
+      "snippetCandidate": "no",
+      "reason": "作品及两位作者明确，但结构为商品元数据和聚合推荐语；所列平装ISBN与目录ISBN不同。",
+      "input_sha256": "9b2adfd6c56630c1bdbd6da7aeb78177344299e33f1493eeb9c40ed6f7a1efed"
+    },
+    {
+      "task": "P4-B5-CATALOG",
+      "sourceId": "W2",
+      "work": "支持",
+      "review": "支持",
+      "edition": "未见",
+      "snippetCandidate": "yes",
+      "reason": "标题明确书评，书名及两位作者对应，摘要评价本书研究和解释框架。",
+      "input_sha256": "9b2adfd6c56630c1bdbd6da7aeb78177344299e33f1493eeb9c40ed6f7a1efed"
+    },
+    {
+      "task": "P4-B5-CATALOG",
+      "sourceId": "W3",
+      "work": "支持",
+      "review": "支持",
+      "edition": "未见",
+      "snippetCandidate": "yes",
+      "reason": "标题明确评论，摘要给出两位作者并评述作品论题和叙述方式，支持作品评论候选。",
+      "input_sha256": "9b2adfd6c56630c1bdbd6da7aeb78177344299e33f1493eeb9c40ed6f7a1efed"
+    },
+    {
+      "task": "P4-B5-CATALOG",
+      "sourceId": "W4",
+      "work": "支持",
+      "review": "支持",
+      "edition": "未见",
+      "snippetCandidate": "yes",
+      "reason": "标题明确为两位作者该书的书评；摘要主要为作者介绍，具体评论质量仍需正文核对。",
+      "input_sha256": "9b2adfd6c56630c1bdbd6da7aeb78177344299e33f1493eeb9c40ed6f7a1efed"
+    },
+    {
+      "task": "P4-B5-CATALOG",
+      "sourceId": "W5",
+      "work": "支持",
+      "review": "支持",
+      "edition": "出现匹配",
+      "snippetCandidate": "yes",
+      "reason": "片段明确期刊书评、评论者、作品及两位作者，并指出论证不足；ISBN-13与目标ISBN-10等价。",
+      "input_sha256": "9b2adfd6c56630c1bdbd6da7aeb78177344299e33f1493eeb9c40ed6f7a1efed"
+    },
+    {
+      "task": "P4-B5-CATALOG",
+      "sourceId": "W6",
+      "work": "支持",
+      "review": "支持",
+      "edition": "不同ISBN",
+      "snippetCandidate": "uncertain",
+      "reason": "可见实质的店员个人读后评论，但嵌在商品元数据之后，尚不清楚是否为独立文章；所列ISBN不同。",
+      "input_sha256": "9b2adfd6c56630c1bdbd6da7aeb78177344299e33f1493eeb9c40ed6f7a1efed"
+    },
+    {
+      "task": "P4-B5-CATALOG",
+      "sourceId": "W7",
+      "work": "支持",
+      "review": "支持",
+      "edition": "未见",
+      "snippetCandidate": "yes",
+      "reason": "标题明确评论及两位作者，摘要围绕书中汲取性增长论点展开，支持作品评论候选。",
+      "input_sha256": "9b2adfd6c56630c1bdbd6da7aeb78177344299e33f1493eeb9c40ed6f7a1efed"
+    },
+    {
+      "task": "P4-B5-CATALOG",
+      "sourceId": "W8",
+      "work": "支持",
+      "review": "支持",
+      "edition": "未见",
+      "snippetCandidate": "yes",
+      "reason": "书名、两位作者及评论者明确，带有个人阅读动机和论旨解释，支持作品评论候选。",
+      "input_sha256": "9b2adfd6c56630c1bdbd6da7aeb78177344299e33f1493eeb9c40ed6f7a1efed"
+    },
+    {
+      "task": "P4-B5-CATALOG",
+      "sourceId": "W9",
+      "work": "支持",
+      "review": "冲突",
+      "edition": "出现匹配",
+      "snippetCandidate": "no",
+      "reason": "ISBN两种格式与目录相符，但可见馆藏、索书号、可借状态和书目简介，属于目录记录。",
+      "input_sha256": "9b2adfd6c56630c1bdbd6da7aeb78177344299e33f1493eeb9c40ed6f7a1efed"
+    },
+    {
+      "task": "P4-B5-CATALOG",
+      "sourceId": "W10",
+      "work": "支持",
+      "review": "支持",
+      "edition": "未见",
+      "snippetCandidate": "yes",
+      "reason": "标题明确该书书评和两位作者，片段具体讨论作者关于外援与制度的建议。",
+      "input_sha256": "9b2adfd6c56630c1bdbd6da7aeb78177344299e33f1493eeb9c40ed6f7a1efed"
+    },
+    {
+      "task": "P4-B5-CATALOG",
+      "sourceId": "W11",
+      "work": "支持",
+      "review": "支持",
+      "edition": "未见",
+      "snippetCandidate": "yes",
+      "reason": "标题明确书评并出现两位作者，摘要讨论全书如何安排和反驳相关理论。",
+      "input_sha256": "9b2adfd6c56630c1bdbd6da7aeb78177344299e33f1493eeb9c40ed6f7a1efed"
+    },
+    {
+      "task": "P4-B5-CATALOG",
+      "sourceId": "W12",
+      "work": "支持",
+      "review": "不足",
+      "edition": "未见",
+      "snippetCandidate": "uncertain",
+      "reason": "书名及两位作者对应，但片段主要转述Sachs的批评，尚不足判定来源自身是否为独立评论文章。",
+      "input_sha256": "9b2adfd6c56630c1bdbd6da7aeb78177344299e33f1493eeb9c40ed6f7a1efed"
+    }
+  ]
+}

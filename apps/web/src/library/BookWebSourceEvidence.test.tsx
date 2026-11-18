@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { bookWebReviewQuestions, type BookWebReviewTarget } from "./bookWebReviewQuestions";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
@@ -49,7 +50,7 @@ function evidence(read = snapshot(), question = QUESTION): BookWebSourceEvidence
     passages: [{ id: "P2", start, end, text: read.text.slice(start, end) }], generatedAt: "2026-11-13T12:02:00.000Z",
   };
 }
-const view = (bookId = A) => <MemoryRouter><BookAiAssistant bookId={bookId} /></MemoryRouter>;
+const view = (bookId = A, reviewBook?: BookWebReviewTarget) => <MemoryRouter><BookAiAssistant bookId={bookId} reviewBook={reviewBook} /></MemoryRouter>;
 const click = async (name: string) => { await act(async () => { fireEvent.click(screen.getByRole("button", { name, exact: true })); }); };
 const parentQuestion = () => screen.getByLabelText("联网研究问题") as HTMLTextAreaElement;
 const question = () => screen.getByLabelText("原文依据问题 W1") as HTMLTextAreaElement;
@@ -266,5 +267,134 @@ describe("original webpage evidence in the read-only research sidebar", () => {
     await click("关闭 AI 助手"); await click("打开 AI 助手");
     expect(result()).toBeTruthy(); expect(findBookWebSourceEvidence).toHaveBeenCalledOnce();
     expect(readBookWebSource).toHaveBeenCalledOnce();
+  });
+});
+
+
+const REVIEW_BOOK = { title: "河流与城市：历史研究", author: "目标作者", isbn: "9780000000001" };
+const STRICT_QUESTION = "查找直接评论这本书的书评或研究，并提供可核对的网页来源。";
+async function mountStrict(kind: BookWebResearchResponse["source"] = "web_research", reviewBook?: BookWebReviewTarget) {
+  vi.mocked(generateBookWebResearch).mockImplementation(async (bookId, input) => {
+    const result = { ...answer(bookId, input.question.trim()), scope: input.scope };
+    if (kind !== "web_research") {
+      result.source = kind; result.citedSourceIds = [];
+      result.draft = kind === "insufficient_sources"
+        ? { title: "查到的相关资料", content: "本次已执行联网搜索，但没有选出与问题充分相关的资料。下方如有搜索结果，可以打开原链接核对，或调整问题后再查。" }
+        : { title: "待核对的网页资料", content: "已完成网页搜索，但本次自动挑选未完成。下方保留搜索返回的资料，可以打开原链接核对或读取网页正文。" };
+    }
+    return result;
+  });
+  const rendered = render(view(A, reviewBook));
+  await click("联网研究"); await click("本书书评"); await click("联网查资料");
+  if (kind === "insufficient_sources") {
+    await act(async () => { fireEvent.click(screen.getByText("查看本次网页来源（2）")); });
+  }
+  await click("读取网页正文 W1");
+  return rendered;
+}
+
+describe("explicit review checking after webpage reading", () => {
+  it("fills a named work question and editable presets without another fetch or automatic evidence request", async () => {
+    await mountStrict("web_research", REVIEW_BOOK);
+    const expected = bookWebReviewQuestions(REVIEW_BOOK)!;
+    expect(question().value).toBe(expected.initialQuestion);
+    expect(question().value).not.toBe(STRICT_QUESTION);
+    expect(screen.getByRole("group", { name: "书评原文核对 W1" })).toBeTruthy();
+    expect(findBookWebSourceEvidence).not.toHaveBeenCalled();
+    expect(generateBookWebResearch).toHaveBeenCalledOnce();
+    expect(readBookWebSource).toHaveBeenCalledOnce();
+    await click("评论内容核对 W1");
+    expect(question().value).toBe(expected.presets[1].question);
+    expect(document.activeElement).toBe(question());
+    expect(findBookWebSourceEvidence).not.toHaveBeenCalled();
+    fireEvent.change(question(), { target: { value: question().value + "\n请同时保留批评意见。" } });
+    const asked = question().value;
+    await click("查找原文依据 W1");
+    expect(findBookWebSourceEvidence).toHaveBeenCalledExactlyOnceWith(snapshot(), answer().sources[0], asked, expect.any(AbortSignal));
+    expect(result().textContent).toContain(asked);
+    await click("复制原文依据与来源 W1");
+    for (const expected of [REVIEW_BOOK.title, REVIEW_BOOK.author, REVIEW_BOOK.isbn, "请同时保留批评意见。"]) {
+      expect(writeClipboard.mock.calls.at(-1)?.[0]).toContain(expected);
+    }
+    expect(writeClipboard.mock.calls.at(-1)?.[0]).toContain(snapshot().finalUrl);
+    expect(pageText()?.textContent).toBe(snapshot().text);
+    expect(screen.getByRole("region", { name: "联网研究结果" }).textContent).toContain(answer().sources[0].excerpt);
+    expect(generateBookWebResearch).toHaveBeenCalledOnce();
+    expect(readBookWebSource).toHaveBeenCalledOnce();
+  });
+
+  it.each(["unselected_sources", "insufficient_sources"] as const)("also permits explicit checking of %s without promoting sources", async kind => {
+    await mountStrict(kind, REVIEW_BOOK);
+    await click("作品身份核对 W1"); await click("查找原文依据 W1");
+    expect(findBookWebSourceEvidence).toHaveBeenCalledOnce();
+    expect(question().value).toContain(REVIEW_BOOK.title);
+    expect(document.querySelector("[data-web-excerpt-source-id]")).toBeNull();
+    expect(screen.queryByText("已选中", { exact: true })).toBeNull();
+    expect(document.querySelector('[data-web-source-id="W1"] blockquote')?.textContent).toBe(answer().sources[0].excerpt);
+    expect(generateBookWebResearch).toHaveBeenCalledOnce();
+  });
+
+  it("provides the same target for an unselected source beside selected sources", async () => {
+    await mountStrict("web_research", REVIEW_BOOK);
+    await click("查看网页依据 W1"); await click("读取网页正文 W2"); await click("版本线索核对 W2");
+    expect((screen.getByLabelText("原文依据问题 W2") as HTMLTextAreaElement).value).toBe(bookWebReviewQuestions(REVIEW_BOOK)!.presets[2].question);
+    expect(question().value).toBe(bookWebReviewQuestions(REVIEW_BOOK)!.initialQuestion);
+    expect(findBookWebSourceEvidence).not.toHaveBeenCalled();
+    expect(document.querySelectorAll("[data-web-excerpt-source-id]")).toHaveLength(1);
+  });
+
+  it("aborts a pending lookup when a preset changes and ignores its late response", async () => {
+    const pending = deferred<BookWebSourceEvidenceResponse>();
+    vi.mocked(findBookWebSourceEvidence).mockReturnValueOnce(pending.promise);
+    await mountStrict("web_research", REVIEW_BOOK);
+    const asked = question().value;
+    await click("查找原文依据 W1");
+    const signal = vi.mocked(findBookWebSourceEvidence).mock.calls[0][3]!;
+    await click("版本线索核对 W1");
+    expect(signal.aborted).toBe(true);
+    expect(findBookWebSourceEvidence).toHaveBeenCalledOnce();
+    await act(async () => pending.resolve(evidence(snapshot(), asked)));
+    expect(screen.queryByRole("region", { name: "原文依据 W1", exact: true })).toBeNull();
+    expect(question().value).toBe(bookWebReviewQuestions(REVIEW_BOOK)!.presets[2].question);
+    expect(document.activeElement).toBe(question());
+    expect(pageText()?.textContent).toBe(snapshot().text);
+  });
+
+  it("clears previous evidence, highlighting and copy fallback when a preset changes", async () => {
+    await mountStrict("web_research", REVIEW_BOOK); await click("查找原文依据 W1");
+    await click("在网页正文中定位 P2 W1");
+    writeClipboard.mockRejectedValueOnce(new Error("clipboard unavailable"));
+    await click("复制原文依据与来源 W1");
+    expect(document.querySelector("[data-web-source-highlight]")).not.toBeNull();
+    expect(screen.getByLabelText("可复制的原文依据 W1")).toBeTruthy();
+    await click("作品身份核对 W1");
+    expect(screen.queryByRole("region", { name: "原文依据 W1", exact: true })).toBeNull();
+    expect(document.querySelector("[data-web-source-highlight]")).toBeNull();
+    expect(screen.queryByLabelText("可复制的原文依据 W1")).toBeNull();
+    expect(findBookWebSourceEvidence).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the public target captured for the search when catalog props later change", async () => {
+    const rendered = await mountStrict("web_research", REVIEW_BOOK);
+    rendered.rerender(view(A, { ...REVIEW_BOOK, title: "后来改变的书名" }));
+    await click("作品身份核对 W1");
+    expect(question().value).toContain(REVIEW_BOOK.title);
+    expect(question().value).not.toContain("后来改变的书名");
+    expect(readBookWebSource).toHaveBeenCalledOnce();
+    expect(generateBookWebResearch).toHaveBeenCalledOnce();
+  });
+
+  it("keeps general research free-form even when public target fields are available", async () => {
+    render(view(A, REVIEW_BOOK)); await click("联网研究"); await search(); await click("读取网页正文 W1");
+    expect(question().value).toBe(QUESTION);
+    expect(screen.queryByRole("group", { name: "书评原文核对 W1" })).toBeNull();
+    expect(findBookWebSourceEvidence).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, { title: "", author: "作者", isbn: "" }])("keeps legacy strict reading when no usable target exists %#", async reviewBook => {
+    await mountStrict("web_research", reviewBook);
+    expect(question().value).toBe(STRICT_QUESTION);
+    expect(screen.queryByRole("group", { name: "书评原文核对 W1" })).toBeNull();
+    expect(findBookWebSourceEvidence).not.toHaveBeenCalled();
   });
 });

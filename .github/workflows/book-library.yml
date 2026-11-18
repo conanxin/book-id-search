@@ -69,6 +69,7 @@ jobs:
           apps/api/src/ai/book-web-review-candidate.test.ts
           experiments/book-review-quality-v1/evaluate.test.ts
           experiments/book-review-quality-v2/evaluate.test.ts
+          scripts/book-web-research-live-trial.test.ts
           apps/api/src/ai/book-web-source-clues.test.ts
           apps/api/src/ai/book-web-source-text-context.test.ts
           apps/api/src/ai/book-web-research-routes.test.ts

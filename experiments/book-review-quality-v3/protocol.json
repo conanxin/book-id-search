@@ -1,0 +1,101 @@
+{
+  "task_id": "BOOK_REVIEW_EVIDENCE_P4",
+  "protocol_version": 1,
+  "status": "FROZEN_BEFORE_PROVIDER_CALLS",
+  "time_zone": "Asia/Shanghai",
+  "candidate_policy": "P3 unchanged; no tuning from these returns",
+  "question": "查找直接评论这本书的书评或研究，并提供可核对的网页来源。",
+  "scope": "direct_book_review",
+  "read_first": 1,
+  "budgets": {
+    "search_requests": 3,
+    "selection_requests": 3,
+    "page_read_attempts": 3,
+    "automatic_retries": 0
+  },
+  "source_choice": "First application source for each trial, independent of model/guard selection; no replacement after failed read.",
+  "labels": "assistant-provisional / human-review-pending; snippet first, page text second, outcomes withheld from evaluator",
+  "reference_catalog_screening": {
+    "queries": 17,
+    "http_200": 17,
+    "failed": 0,
+    "decisions_sha256": "1dae3ffc25f78da9781d4ae50c65c8fb487dc01001adea735ba6915bbf3496a5"
+  },
+  "task_selection_decision": "Include the one reference-edition match and the two existing English same-work catalog records as explicitly documented alternate-edition/dirty-field cases. This selection precedes live provider results. Do not clean their catalog fields or claim the initially requested editions were found.",
+  "tasks": [
+    {
+      "task": "P4-B1",
+      "query": "枢纽",
+      "book_id": "14322052_000016990400",
+      "catalog_status": "REFERENCE_ISBN_MATCH",
+      "reference_isbn": "9787549586080",
+      "expected_catalog": {
+        "id": "14322052_000016990400",
+        "title": "枢纽  3000年的中国",
+        "author": "施展著",
+        "publisher": "桂林：广西师范大学出版社",
+        "year": 2018,
+        "pages": 697,
+        "isbn": "9787549586080"
+      }
+    },
+    {
+      "task": "P4-B3-CATALOG",
+      "query": "THE GREAT DIVERGENCE",
+      "book_id": "40752262_164020014290",
+      "catalog_status": "EXPLICIT_ALTERNATE_ISBN_DIRTY_FIELDS",
+      "reference_isbn": "9780691217185",
+      "notes": "Reference 2021 paperback ISBN not located. Keep title/author field spillover and year=null exactly as returned; do not infer structured year from author text.",
+      "expected_catalog": {
+        "id": "40752262_164020014290",
+        "title": "THE GREAT DIVERGENCE  CHINA",
+        "author": "EUROPE,AND THE MAKING OF THE MODERN WORLD ECONOMY,KENNETH POMERANZ,PRINCETON UNIVERSITY PRESS,2000,",
+        "publisher": "",
+        "year": null,
+        "pages": 382,
+        "isbn": "0691090106"
+      }
+    },
+    {
+      "task": "P4-B5-CATALOG",
+      "query": "WHY NATIONS FAIL",
+      "book_id": "40752266_164020014141",
+      "catalog_status": "EXPLICIT_ALTERNATE_ISBN_DIRTY_FIELDS",
+      "reference_isbn": "9780307719225",
+      "notes": "Reference 2013 paperback ISBN not located. Keep title/author field spillover and year=null exactly as returned.",
+      "expected_catalog": {
+        "id": "40752266_164020014141",
+        "title": "WHY NATIONS FAIL  THE ORIGINS OF POWER",
+        "author": "PROSPERITY,AND POVERTY,DARON ACEMOGLU AND JAMES A.ROBINSON,CROWN BUSINESS,2012,",
+        "publisher": "",
+        "year": null,
+        "pages": 529,
+        "isbn": "0307719219"
+      }
+    }
+  ],
+  "unlocated": [
+    {
+      "task": "P4-B2",
+      "title": "祥瑞：王莽和他的时代",
+      "author": "张向荣",
+      "reference_isbn": "9787208172036",
+      "status": "NOT_LOCATED_IN_BOUNDED_PUBLIC_SEARCH"
+    },
+    {
+      "task": "P4-B4",
+      "title": "A Little History of the World",
+      "author": "E. H. Gombrich",
+      "reference_isbn": "9780300143324",
+      "status": "ENGLISH_ORIGINAL_NOT_LOCATED_IN_BOUNDED_PUBLIC_SEARCH",
+      "notes": "Chinese translations were not substituted."
+    }
+  ],
+  "frozen_source_hashes": {
+    "apps/api/src/ai/book-web-research.ts": "5d13968eba7b4481724e425d4ad6dc4db09ebb0ca8c630bf0bad1254adcc8600",
+    "apps/api/src/ai/book-web-review-candidate.ts": "4e8759223b75656a7f9cf9fe26a5ec8c7f26523bf795fed1d9902c6d5abfe503",
+    "apps/api/src/ai/book-web-source.ts": "e97aa0546e6cd2083f1a7d19d07233d20ad76813526f52740fbad282d3af6a62",
+    "apps/api/src/ai/book-web-source-evidence.ts": "3d59c27ebcc97305f3b63cb6065a59aaf37a50448c89b8101559fdb7addae8ef",
+    "scripts/book-web-research-live-trial.ts": "8ca6f8676efac009faf2a38d907bfc15e253959ebfc0d1a77386bfa0838de4ef"
+  }
+}

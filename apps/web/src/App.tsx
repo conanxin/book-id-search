@@ -1330,7 +1330,7 @@ function DetailPage() {
             />
           </details> : null}
         </article>
-        <BookAiAssistant key={book.id} bookId={book.id} />
+        <BookAiAssistant key={book.id} bookId={book.id} reviewBook={{ title: book.title, author: book.author, isbn: book.isbn }} />
         </div>
       ) : null}
     </main>

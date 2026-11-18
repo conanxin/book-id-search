@@ -9,10 +9,11 @@ import {
 import { useLibraryScope } from "./useLibraryScope";
 import { BookProse } from "./BookProse";
 import { BookWebResearch } from "./BookWebResearch";
+import type { BookWebReviewTarget } from "./bookWebReviewQuestions";
 import "./library.css";
 import "./book-ai.css";
 
-interface BookAiAssistantProps { bookId: string }
+interface BookAiAssistantProps { bookId: string; reviewBook?: BookWebReviewTarget }
 
 const MODES: { action: BookAiAction; label: string; description: string; generate: string }[] = [
   { action: "introduction", label: "参考介绍", description: "根据已有资料，整理这本书的介绍与阅读线索。", generate: "生成参考介绍" },
@@ -22,11 +23,11 @@ const MODES: { action: BookAiAction; label: string; description: string; generat
 const SOURCE_LABELS = { catalog: "书目信息", introduction: "补充介绍", note: "我的笔记", weread: "微信读书" };
 
 /** Requests and transient results belong to one book and one Google session. */
-export function BookAiAssistant({ bookId }: BookAiAssistantProps) {
+export function BookAiAssistant({ bookId, reviewBook }: BookAiAssistantProps) {
   const session = useWebAuthSession();
   if (session.status !== "authenticated") return null;
   const generation = getWebAuthAuthGeneration();
-  return <BookAiPanel key={JSON.stringify([bookId, generation])} bookId={bookId} generation={generation} />;
+  return <BookAiPanel key={JSON.stringify([bookId, generation])} bookId={bookId} generation={generation} reviewBook={reviewBook} />;
 }
 
 function BookAiPanel(props: BookAiAssistantProps & { generation: number }) {

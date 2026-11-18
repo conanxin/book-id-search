@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Copy, ExternalLink, Globe } from "lucide-react";
 import { useLibraryScope } from "./useLibraryScope";
 import { BookWebSourceReader } from "./BookWebSourceReader";
+import { bookWebReviewQuestions, type BookWebReviewQuestions, type BookWebReviewTarget } from "./bookWebReviewQuestions";
 import { BookWebSourceComparison } from "./BookWebSourceComparison";
 import { BookWebSourceComparisonProvider } from "./BookWebSourceComparisonScope";
 import {
@@ -45,7 +46,7 @@ function SourceTextContexts({ source }: { source: BookWebResearchSource }) {
   </section>;
 }
 
-function SelectedSourceExcerpt({ source, bookId, generation, researchQuestion }: { source: BookWebResearchSource; bookId: string; generation: number; researchQuestion: string }) {
+function SelectedSourceExcerpt({ source, bookId, generation, researchQuestion, reviewQuestions }: { source: BookWebResearchSource; bookId: string; generation: number; researchQuestion: string; reviewQuestions: BookWebReviewQuestions | null }) {
   const [expanded, setExpanded] = useState(false);
   const excerptId = useId();
   return <li className="book-ai-source book-web-selected-source" data-web-excerpt-source-id={source.id}
@@ -64,16 +65,17 @@ function SelectedSourceExcerpt({ source, bookId, generation, researchQuestion }:
       onClick={() => setExpanded(value => !value)}>{expanded ? "收起搜索节选" : "展开完整搜索节选"}</button>
     {source.truncated && <p className="library-meta">本条搜索节选已截短，可打开网页进一步核对。</p>}
     <SourceTextContexts source={source} />
-    <BookWebSourceReader bookId={bookId} generation={generation} source={source} researchQuestion={researchQuestion} />
+    <BookWebSourceReader bookId={bookId} generation={generation} source={source} researchQuestion={researchQuestion} reviewQuestions={reviewQuestions} />
   </li>;
 }
 
 /** A read-only research task, unmounted when its book, session or sidebar scope changes. */
-export function BookWebResearch({ bookId, generation }: { bookId: string; generation: number }) {
+export function BookWebResearch({ bookId, generation, reviewBook }: { bookId: string; generation: number; reviewBook?: BookWebReviewTarget }) {
   const { run, current } = useLibraryScope(generation);
   const [question, setQuestion] = useState("");
   const [researchScope, setResearchScope] = useState<"general" | "direct_book_review">("general");
   const [response, setResponse] = useState<BookWebResearchResponse | null>(null);
+  const [reviewQuestions, setReviewQuestions] = useState<BookWebReviewQuestions | null>(null);
   const [resultRevision, setResultRevision] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -106,7 +108,7 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
 
   function clearResult() {
     setResultRevision(value => value + 1);
-    setResponse(null); setCopying(false); setCopyFallback(null); setMessage("");
+    setResponse(null); setReviewQuestions(null); setCopying(false); setCopyFallback(null); setMessage("");
     setSourcesOpen(false); setActiveSource(null);
   }
   function cancel() {
@@ -120,6 +122,8 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
     const asked = question.trim();
     if (!asked || asked.length > 1000) { setError("请填写想研究的问题，最多 1,000 字符。"); return; }
     clearResult(); setError(null); setLoading(true);
+    // Capture only this request's public target; later prop changes cannot relabel its results.
+    const nextReviewQuestions = researchScope === "direct_book_review" ? bookWebReviewQuestions(reviewBook) : null;
     const request = ++sequence.current, controller = new AbortController();
     active.current = controller;
     try {
@@ -133,7 +137,7 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
       if (request !== sequence.current || controller.signal.aborted || !current()) return;
       assertBookWebResearchResponse(value, bookId, asked,
         researchScope === "direct_book_review" ? researchScope : undefined);
-      setResponse(value);
+      setResponse(value); setReviewQuestions(nextReviewQuestions);
     } catch (e) {
       if (request === sequence.current && current() && !controller.signal.aborted && !isBookWebResearchAbort(e)) setError(bookWebResearchErrorMessage(e));
     } finally {
@@ -179,7 +183,7 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
       <blockquote>{source.excerpt}</blockquote>
       {source.truncated && <p className="library-meta">本条搜索节选已截短，可打开网页进一步核对。</p>}
       <SourceTextContexts source={source} />
-      {!response.citedSourceIds.includes(source.id) && <BookWebSourceReader bookId={bookId} generation={generation} source={source} researchQuestion={response.question} />}
+      {!response.citedSourceIds.includes(source.id) && <BookWebSourceReader bookId={bookId} generation={generation} source={source} researchQuestion={response.question} reviewQuestions={reviewQuestions} />}
     </li>)}
   </ol> : null;
 
@@ -235,7 +239,7 @@ export function BookWebResearch({ bookId, generation }: { bookId: string; genera
         <div role="region" aria-label="联网研究结果">
           <p className="book-web-selection-notice">{BOOK_WEB_RESEARCH_EXCERPTS_NOTICE}</p>
           <ol className="book-ai-source-list">
-            {response.citedSourceIds.map(id => <SelectedSourceExcerpt key={id} bookId={bookId} generation={generation} researchQuestion={response.question} source={response.sources.find(source => source.id === id)!} />)}
+            {response.citedSourceIds.map(id => <SelectedSourceExcerpt key={id} bookId={bookId} generation={generation} researchQuestion={response.question} reviewQuestions={reviewQuestions} source={response.sources.find(source => source.id === id)!} />)}
           </ol>
         </div>
         <div className="book-ai-citations" aria-label="AI 选中的网页资料">

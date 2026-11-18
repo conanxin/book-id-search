@@ -1,3 +1,4 @@
+import { bookWebReviewQuestions } from "./bookWebReviewQuestions";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __resetWebAuthStoreForTests, __setWebAuthSnapshotForTests, ensureAuthSessionLoaded } from "../auth/session";
 import type { BookWebResearchSource } from "./bookWebResearch";
@@ -165,6 +166,51 @@ describe("book webpage evidence client", () => {
       if (change === "cancel") controller.abort(); else login("new-csrf");
       decoded.resolve(result());
       await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    }
+  });
+});
+
+
+describe("explicit work-review questions from public catalog fields", () => {
+  it("keeps work, review and edition questions distinct and only includes the three public target fields", () => {
+    const book = { title: "示例作品：历史与方法", author: "示例作者", isbn: "9780000000001",
+      rawInfo: "PRIVATE_RAW", introduction: "PRIVATE_INTRODUCTION", notes: "PRIVATE_NOTES", resources: "PRIVATE_RESOURCE" };
+    const result = bookWebReviewQuestions(book)!;
+    expect(result.presets.map(value => value.id)).toEqual(["identity", "review", "edition"]);
+    for (const question of [result.initialQuestion, ...result.presets.map(value => value.question)]) {
+      expect(question).toContain("书名：" + book.title);
+      expect(question).toContain("作者：" + book.author);
+      expect(question).toContain("ISBN：" + book.isbn);
+      expect(question).toContain("不是网页原文");
+      expect(question).not.toContain("PRIVATE_");
+      expect(question.length).toBeLessThanOrEqual(1000);
+    }
+    expect(result.initialQuestion).toContain("辨认作品和评论内容");
+    expect(result.presets[0].question).toContain("仅提及本书");
+    expect(result.presets[1].question).toContain("商品简介");
+    expect(result.presets[2].question).toContain("不要把出现 ISBN");
+  });
+
+  it("does not invent a target for legacy or blank titles, and preserves missing author and ISBN explicitly", () => {
+    expect(bookWebReviewQuestions()).toBeNull();
+    expect(bookWebReviewQuestions({ title: " \n\t", author: "作者", isbn: "" })).toBeNull();
+    const result = bookWebReviewQuestions({ title: "真实标题", author: "", isbn: "" })!;
+    expect(result.initialQuestion).toContain("作者：未提供");
+    expect(result.initialQuestion).toContain("ISBN：未提供");
+    expect(result.initialQuestion).toContain("书名：真实标题");
+  });
+
+  it("bounds long catalog text to valid editable questions and marks truncation without splitting Unicode", () => {
+    const result = bookWebReviewQuestions({
+      title: "题".repeat(299) + "😀" + "尾".repeat(500) + "\u0000",
+      author: "作".repeat(199) + "😀" + "者".repeat(500) + "\ud800",
+      isbn: "9780000000001 ".repeat(100),
+    })!;
+    for (const question of [result.initialQuestion, ...result.presets.map(value => value.question)]) {
+      expect(question.length).toBeLessThanOrEqual(1000);
+      expect(question).toContain("…（已截短）");
+      expect(question).not.toMatch(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/);
+      expect(question).not.toMatch(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/);
     }
   });
 });
